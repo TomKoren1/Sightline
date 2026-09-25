@@ -20,7 +20,8 @@
     "scan": "npm run scan -w @daveio/api",
     "dev:api": "npm run dev -w @daveio/api",
     "dev:web": "npm run dev -w @daveio/web",
-    "evals": "npm run evals -w @daveio/api"
+    "evals": "npm run evals -w @daveio/api",
+    "verify": "npm run typecheck && npm run lint && vitest run --exclude '**/evals/**' && npm run build -w @daveio/web"
   },
   "devDependencies": {
     "@types/node": "^22.10.2",

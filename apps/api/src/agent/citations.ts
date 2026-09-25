@@ -33,8 +33,7 @@ import type { Citation } from "@daveio/shared";
  * section and produces exactly the false positive this class exists to avoid.
  * A trailing colon is instead removed by TRAILING_NOISE below.
  */
-const ARN_PATTERN =
-  /arn:[a-z0-9-]*:[a-z0-9-]*:[a-z0-9-]*:[0-9]*:[^\s,;!?()"'`*<>|[\]{}]+/gi;
+const ARN_PATTERN = /arn:[a-z0-9-]*:[a-z0-9-]*:[a-z0-9-]*:[0-9]*:[^\s,;!?()"'`*<>|[\]{}]+/gi;
 
 /** Trailing punctuation that is sentence or Markdown syntax, never part of an ARN. */
 const TRAILING_NOISE = /[.,;:!?)\]}`*_~>]+$/;

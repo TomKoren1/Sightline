@@ -116,7 +116,9 @@ describe("ARNs embedded in Markdown", () => {
   it("handles a backtick-wrapped ARN", () => expectClean(`The bucket \`${ARN}\` is public.`));
 
   it("handles the exact shape the agent produced", () =>
-    expectClean(`- **northwind-public-assets** (\`${ARN}\`, us-east-1) — bucket policy allows \`*\``));
+    expectClean(
+      `- **northwind-public-assets** (\`${ARN}\`, us-east-1) — bucket policy allows \`*\``,
+    ));
 
   it("handles bold, parenthesised, and end-of-sentence forms", () => {
     expectClean(`**${ARN}** is public.`);

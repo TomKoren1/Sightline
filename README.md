@@ -75,7 +75,8 @@ same code in both modes.
 | `npm run scan`                              | Scan, persist, project the graph                       |
 | `npm run inspect -w @daveio/api`            | Scan and print findings without touching the databases |
 | `npm run query -w @daveio/api`              | Run every curated query against the graph              |
-| `npm test`                                  | 78 unit tests                                          |
+| `npm test`                                  | 95 unit tests                                          |
+| `npm run verify`                            | Everything CI's static job runs — use before pushing   |
 | `npm run evals:ground-truth -w @daveio/api` | Tier-1 evals — no API key needed                       |
 | `npm run evals -w @daveio/api`              | Tier-2 agent evals — needs a key                       |
 
