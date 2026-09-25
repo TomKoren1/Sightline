@@ -1,8 +1,14 @@
 # Secret-scanning rules.
 #
-# The default rule set did not flag a committed `.env.mock-backup` containing a
-# live Anthropic key and a per-customer ExternalId, so both are covered
-# explicitly here alongside the defaults.
+# The default rule set did not flag a committed `.env.mock-backup` holding a
+# live Anthropic key and a per-customer ExternalId (engineering log #26), so
+# both are covered explicitly here alongside the defaults.
+#
+# Note on regex syntax: gitleaks uses Go's RE2, which has **no lookarounds**.
+# An earlier version of this file used `(?!replace-me|...)` to exclude
+# placeholders; RE2 rejected it and gitleaks panicked, which meant the secret
+# scan was not running at all. Exclusions belong in an allowlist, not a
+# lookahead.
 
 [extend]
 useDefault = true
@@ -16,9 +22,20 @@ keywords = ["sk-ant-"]
 [[rules]]
 id = "daveio-external-id"
 description = "Per-customer AWS ExternalId, which the role template treats as a credential"
-regex = '''(?i)aws_external_id\s*=\s*(?!replace-me|local-dev|<)[^\s"']{12,}'''
+regex = '''(?i)aws_external_id\s*=\s*[^\s"'#]{12,}'''
 keywords = ["aws_external_id"]
 
+  # Placeholders are not secrets. Expressed as an allowlist because RE2 cannot
+  # do the negative lookahead this would otherwise want.
+  [rules.allowlist]
+  regexTarget = "line"
+  regexes = [
+    '''(?i)aws_external_id\s*=\s*replace-me''',
+    '''(?i)aws_external_id\s*=\s*local-dev''',
+    '''(?i)aws_external_id\s*=\s*<''',
+    '''(?i)aws_external_id\s*=\s*\$\{''',
+  ]
+
 [allowlist]
-description = "The committed example carries placeholders only"
+description = "The committed example carries placeholders only, and this file quotes the patterns it matches"
 paths = ['''\.env\.example$''', '''\.gitleaks\.toml$''']
