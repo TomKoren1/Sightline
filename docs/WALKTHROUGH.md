@@ -72,6 +72,11 @@ paraphrasing an AWS field.
 npm run drift && npm run scan
 ```
 
+If the tab shows everything as added and removed, moto was re-seeded between
+the two scans and every ARN changed. Run `npm run seed && npm run scan` once,
+then `npm run drift && npm run scan`, with nothing in between — the
+ground-truth test suite re-seeds moto, so it counts as something in between.
+
 Open the **Changes** tab. Five things changed; three are grouped as _worth
 looking at_ and the rest as routine.
 
@@ -275,13 +280,14 @@ against a stub instead) and has no Resource Explorer.
 
 ## 5. If something goes wrong mid-demo
 
-| Symptom                     | Cause                              | Fix                                                                                            |
-| --------------------------- | ---------------------------------- | ---------------------------------------------------------------------------------------------- |
-| Chat returns 401            | Bad or missing `ANTHROPIC_API_KEY` | `curl localhost:3000/api/health` says so directly                                              |
-| Chat refuses to answer      | No scan yet                        | Run a scan; it refuses rather than answering from an empty graph                               |
-| Graph is empty after a scan | Account id mismatch                | `MOCK_AWS_ACCOUNT_ID` must match the account in `AWS_TARGET_ROLE_ARN` — see engineering log #2 |
-| Scan finds nothing          | moto was reset                     | `npm run seed` again; moto is in-memory                                                        |
-| A service shows as failed   | Fault injection left on            | Clear `SCAN_FAULT_INJECTION` in `.env`                                                         |
+| Symptom                                        | Cause                                                         | Fix                                                                                                                                                   |
+| ---------------------------------------------- | ------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Chat returns 401                               | Bad or missing `ANTHROPIC_API_KEY`                            | `curl localhost:3000/api/health` says so directly                                                                                                     |
+| Chat refuses to answer                         | No scan yet                                                   | Run a scan; it refuses rather than answering from an empty graph                                                                                      |
+| Graph is empty after a scan                    | Account id mismatch                                           | `MOCK_AWS_ACCOUNT_ID` must match the account in `AWS_TARGET_ROLE_ARN` — see engineering log #2                                                        |
+| Scan finds nothing                             | moto was reset                                                | `npm run seed` again; moto is in-memory                                                                                                               |
+| A service shows as failed                      | Fault injection left on                                       | Clear `SCAN_FAULT_INJECTION` in `.env`                                                                                                                |
+| Changes tab shows everything added and removed | moto was re-seeded between the two scans, so every ARN is new | Re-seed once, then `scan` → `drift` → `scan` with nothing in between. The ground-truth test suite re-seeds moto, so it counts as something in between |
 
 Diagnosing a wrong answer, in order:
 
