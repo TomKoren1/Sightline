@@ -87,3 +87,118 @@ are stated as gaps rather than hidden.
 `DECISIONS.md` — six ADRs covering the stack, the mock, the two-database split,
 and the three decisions that define the agent: deterministic security analysis,
 a curated tool library, and mechanical citation validation.
+
+---
+
+### `feat(api): cross-account credentials, instrumented clients, region discovery`
+
+The infra layer.
+
+`credentials.ts` assumes the customer's role with its per-customer external
+id, caches the session, and renews it **five minutes before** expiry rather
+than on failure — a scan of a large estate can outlive a one-hour session, and
+an `ExpiredToken` surfacing halfway through a region is a confusing way to
+find that out. Concurrent callers share one in-flight `AssumeRole` instead of
+stampeding STS, because a fan-out across regions misses the cache
+simultaneously.
+
+`clients.ts` builds every client identically, with `retryMode: "adaptive"` so
+throttling backs off rather than escalates, and attaches a middleware that
+counts API calls per service and region. That count is what a scan reports as
+its cost, and the first thing to look at when a real account starts throttling.
+
+`regions.ts` prefers an explicit region list and otherwise asks
+`DescribeRegions`, falling back to the home region — one region scanned beats
+nothing scanned.
+
+The only difference between mock and production is an endpoint override.
+
+---
+
+### `feat(api): service collectors for EC2, VPC, S3, IAM, RDS and Lambda`
+
+Six collectors, each returning resources and the relationships between them.
+
+Two are more than transcription:
+
+**IAM** fetches every policy document — managed and inline — because the
+question it serves cannot be answered from a listing, and a policy's *name*
+tells you nothing. Managed documents are cached, since `AdministratorAccess`
+is attached to several roles here and to hundreds on a real account.
+
+**S3** needs four calls per bucket, three of which routinely fail in ways that
+are not errors: no policy, no public access block, no tag set. Each is caught
+individually so one bucket missing a policy never costs the rest of the
+inventory. The bucket namespace is global, so the collector runs once and
+resolves each bucket's home region rather than listing per region.
+
+The VPC collector derives subnet public/private from **route tables** — a
+subnet is public because something routes `0.0.0.0/0` to an internet gateway,
+not because of its name.
+
+---
+
+### `feat(api): deterministic security analysers`
+
+Where ADR-004 becomes code. Four analysers compute the facts the agent is
+later only allowed to *read*:
+
+- `policy.ts` — effective administrator, by evaluating documents. Conditioned
+  statements and `NotAction` are deliberately excluded rather than guessed at,
+  and an unreadable policy produces "could not be read" rather than a silent
+  "no".
+- `publicAccess.ts` — the four-way interaction of bucket policy, ACL, and the
+  two public-access-block settings that can each neutralise one of them.
+- `reachability.ts` — turns security group rules into `CAN_REACH` edges. An
+  open rule on a host in a private subnet produces **no** edge: that is a
+  latent risk, not a live path, and reporting it would bury the real findings.
+- `idle.ts` — structural signals only (attached to nothing, associated with
+  nothing, stopped), with list-price estimates used purely to rank findings.
+
+Every verdict carries a `reason` naming its evidence, so the agent quotes the
+basis and a reviewer can disagree with it.
+
+---
+
+### `feat(api): scan orchestration with first-class partial failure`
+
+`runner.ts` builds the full list of `(service, region)` units up front — so
+the UI can render the whole plan immediately and fill it in — then runs them
+with bounded concurrency.
+
+**A scan does not fail.** Each unit succeeds or fails alone, and a failure is
+translated into something actionable: `UnauthorizedOperation` becomes "the
+role is missing a Describe/List permission for this service", not an SDK
+stack trace. The only fatal error is failing to assume the role, because
+without credentials there is nothing to report on.
+
+`SCAN_FAULT_INJECTION` is a documented testing hook that makes a chosen unit
+fail, so the partial-failure UI can be demonstrated on a mock that is
+otherwise too well behaved to break.
+
+---
+
+### `feat(api): inspect CLI`
+
+`npm run inspect -w @daveio/api` runs a scan and prints what it found without
+touching either database. It isolates "did we collect this correctly" from
+"did we project it correctly", which is the first question worth asking when a
+graph query returns something surprising.
+
+It also enumerates every path from the internet to the production database,
+which is the single most important thing the graph knows.
+
+---
+
+### `test: 41 unit tests over the analysers, paginator and limiter`
+
+The analysers are where correctness has to live, so this is where the tests
+are. The public-access tests include the pair of buckets with byte-identical
+policies and opposite verdicts; the reachability tests include the three-hop
+chain, the open-rule-in-a-private-subnet case that must produce no edge, and
+mutually-referencing security groups that must not loop forever.
+
+The pagination tests stand in for something the mock cannot demonstrate at all
+(engineering log #3): a stub that really does page, driven through the same
+SDK paginator the collectors use, including a throttle partway through that
+must surface as an error rather than silently truncating an inventory.

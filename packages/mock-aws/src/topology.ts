@@ -91,14 +91,20 @@ export const GROUND_TRUTH = {
   /** EC2 instances outside a private subnet. */
   instancesInPublicSubnets: ["prod-web-1", "prod-web-2", "prod-bastion", "staging-rdp-host"],
 
-  /** Billable but idle. */
+  /**
+   * Billable but idle, by structural signal alone (attached to nothing,
+   * associated with nothing, or stopped).
+   *
+   * `northwind-logs-archive` is deliberately NOT here. It is genuinely
+   * unused, but proving that needs CloudWatch request metrics that this
+   * scanner does not collect - so it would be a lucky guess, not a finding.
+   */
   idleResources: [
     "orphaned-vol-1",
     "orphaned-vol-2",
     "legacy-orphaned-vol",
     "old-jenkins",
     "legacy-nat",
-    "northwind-logs-archive",
   ],
 
   /** Security groups exposing sensitive ports to the whole internet. */

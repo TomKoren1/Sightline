@@ -7,7 +7,7 @@ export const SCANNABLE_SERVICES = ["ec2", "vpc", "s3", "iam", "rds", "lambda"] a
 export type ScannableService = (typeof SCANNABLE_SERVICES)[number];
 
 /** Services whose resources are global; scanned once, not once per region. */
-export const GLOBAL_SERVICES: ReadonlySet<ScannableService> = new Set(["iam"]);
+export const GLOBAL_SERVICES: ReadonlySet<ScannableService> = new Set(["iam", "s3"]);
 
 export type ScanUnitStatus = "pending" | "running" | "succeeded" | "failed" | "skipped";
 

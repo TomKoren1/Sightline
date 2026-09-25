@@ -111,3 +111,26 @@ typed `string` widens it, and the union no longer accepts it.
 **Why it is worth recording.** This is the ergonomic tax of AWS SDK v3's
 generated enums, and it recurs. The habit that avoids it: take types *from the
 SDK* rather than restating them as `string`.
+
+---
+
+## #6 — The SDK paginator refuses a hand-rolled fake client
+
+**Symptom.** The pagination tests promised in #3 failed with
+`Invalid client, expected instance of EC2Client`, from inside
+`@smithy/core`'s `paginateOperation`.
+
+**Diagnosis.** The generated paginators do a real `instanceof` check on the
+client. A structurally-compatible object with a `send` method is rejected, so
+the obvious way to write this test does not work.
+
+**Fix.** Construct a genuine `EC2Client` and replace only its `send` method.
+
+**Why the result is better than what was intended.** The original stub faked
+the whole client. This version keeps command construction, input
+serialisation and token threading real, and fakes only the wire — so the test
+exercises considerably more of the path the collectors actually take.
+
+A second, smaller trap on the way: `EC2Client` had been imported as
+`import type`, which erases at run time. It has to be a value import to be
+constructed.
