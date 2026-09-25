@@ -134,3 +134,47 @@ exercises considerably more of the path the collectors actually take.
 A second, smaller trap on the way: `EC2Client` had been imported as
 `import type`, which erases at run time. It has to be a value import to be
 constructed.
+
+---
+
+## #7 — Neo4j Community cannot enforce a read-only database user
+
+**Context.** The brief's one hard rule is that the agent must never change
+anything. Defence in depth for that ends at the database: even if every other
+layer were bypassed, the connection the agent's queries run on should be
+incapable of writing.
+
+**Problem.** Role-based access control is a Neo4j **Enterprise** feature. The
+community edition in `docker-compose.yml` has exactly one user, `neo4j`, and
+that user is an administrator. There is no `GRANT MATCH` to hand out.
+
+**What was done instead.** Two layers that Community does support:
+
+1. Every agent-facing query runs through `readQuery`, which opens a session
+   with `defaultAccessMode: READ` and uses `executeRead`. This is not
+   advisory - Neo4j fails a write attempted inside a read transaction.
+2. The Cypher escape hatch additionally passes through a validator that
+   rejects write clauses before the query is ever sent.
+
+**What is still true.** The *credentials* the process holds could write if
+some other code path used them. In production this would be an Enterprise
+read-only role, or a read replica the agent talks to exclusively. Recorded
+here rather than glossed over, because "the agent cannot write" is a claim
+the brief asks us to make and it deserves an honest boundary.
+
+---
+
+## #8 — `LIMIT $limit` rejected with "found 100.0"
+
+**Symptom.** Every curated query failed with
+`Expected 'value' to be of type INTEGER and in the range 0 to 9223372036854775807 but found 100.0`.
+
+**Diagnosis.** The driver is configured with `disableLosslessIntegers: true`,
+which is what makes results come back as ordinary JS numbers instead of
+`Integer` objects - convenient everywhere else. But it applies to parameters
+too: a JS `100` goes out as the float `100.0`, and `LIMIT` requires an
+integer.
+
+**Fix.** The `clamp` helper that bounds every limit now returns
+`neo4j.int(...)`. Doing it there rather than at each call site means a new
+query cannot forget.

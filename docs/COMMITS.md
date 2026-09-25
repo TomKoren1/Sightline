@@ -202,3 +202,70 @@ The pagination tests stand in for something the mock cannot demonstrate at all
 (engineering log #3): a stub that really does page, driven through the same
 SDK paginator the collectors use, including a throttle partway through that
 must surface as an error rather than silently truncating an inventory.
+
+---
+
+### `feat(api): Postgres persistence with scan history and diffing`
+
+The system of record. Append-only per scan: a scan never updates a previous
+scan's rows, which is what makes "what changed since the last scan?" a query
+rather than a guess, and means a bad scan can be discarded without corrupting
+history.
+
+`resource_snapshots.fingerprint` is a hash of the *queryable* state — it
+deliberately excludes the raw API response, because AWS returns fields that
+change on every call without anything having actually changed, and diffing on
+those would report noise as change. Diffing is then an index-backed join, and
+the expensive field-by-field JSONB comparison runs only on rows whose
+fingerprints already disagree.
+
+Writes are batched and transactional: a scan is either entirely persisted or
+not at all, because a half-written scan is worse than none — the UI would
+present it as complete.
+
+---
+
+### `feat(api): Neo4j projection`
+
+The derived graph. Rebuilt wholesale from one scan's Postgres snapshots inside
+a single transaction, so a reader sees either the old graph or the new one,
+and a failed rebuild leaves the previous one intact.
+
+Every node carries two labels: `:Resource` for the uniqueness constraint and
+generic queries, plus its kind for specific ones. Labels cannot be
+parameterised in Cypher, so writes are grouped by kind and the label
+interpolated — safe because it comes from a closed enum, and guarded by an
+explicit check that refuses to project an unknown kind.
+
+Edges whose endpoints were not collected are skipped rather than creating
+placeholder nodes: a partial scan should produce a graph with missing edges,
+not one full of phantom resources.
+
+---
+
+### `feat(api): curated query library`
+
+Nine hand-written queries, one per question the agent can ask (ADR-005). Every
+row carries an ARN, because ARNs are what the agent may cite and what the UI
+highlights — a query that cannot return ARNs does not belong here.
+
+`findNetworkPaths` is the important one. It collapses routes that differ only
+by port, so a security group with five rules stops looking like five separate
+ways in, and it caps hop count because an uncapped variable-length match over
+a dense security group graph is how you hang a Neo4j instance.
+
+`findAdminPrincipals` returns not just the admin roles but **what uses them**,
+which is the half that makes the answer actionable: an admin role on a running
+instance is an incident, one nothing references is cleanup.
+
+---
+
+### `feat(api): scan and query CLIs`
+
+`npm run scan` runs a scan, persists it, and rebuilds the graph — Postgres
+first, so a failed projection still leaves the scan durable and re-projectable
+without going back to AWS.
+
+`npm run query -w @daveio/api` runs every curated query and prints the rows.
+It answers the question "is this the model's fault or the query's?", which is
+the first thing worth knowing when an agent answer looks wrong.
