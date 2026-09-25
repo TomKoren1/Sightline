@@ -17,7 +17,7 @@ export interface FindingsProps {
   onHighlight: (arns: string[]) => void;
 }
 
-type Tab = "overview" | "exposed" | "admin" | "idle" | "changes";
+type Tab = "overview" | "exposed" | "admin" | "idle" | "changes" | "unprotected";
 
 export function Findings({ summary, findings, loading, onHighlight }: FindingsProps) {
   const [tab, setTab] = useState<Tab>("overview");
@@ -45,6 +45,7 @@ export function Findings({ summary, findings, loading, onHighlight }: FindingsPr
     { id: "exposed", label: "Exposed", count: summary.publicCount, tone: "text-danger" },
     { id: "admin", label: "Admin", count: summary.adminCount, tone: "text-warn" },
     { id: "idle", label: "Idle", count: summary.idleCount },
+    { id: "unprotected", label: "Unguarded", count: summary.unprotectedCount, tone: "text-warn" },
     { id: "changes", label: "Changes" },
   ];
 
@@ -76,6 +77,7 @@ export function Findings({ summary, findings, loading, onHighlight }: FindingsPr
               <Stat label="Exposed" value={summary.publicCount} tone="text-danger" />
               <Stat label="Admin roles" value={summary.adminCount} tone="text-warn" />
               <Stat label="Idle" value={summary.idleCount} />
+              <Stat label="Unguarded" value={summary.unprotectedCount} tone="text-warn" />
               <Stat
                 label="Idle cost"
                 value={`$${Math.round(summary.idleCost)}/mo`}
@@ -115,6 +117,33 @@ export function Findings({ summary, findings, loading, onHighlight }: FindingsPr
                 : `Used by ${used.map((u) => u.name).join(", ")}`;
             }}
           />
+        )}
+
+        {tab === "unprotected" && (
+          <div className="space-y-2">
+            {/*
+              The distinction this tab exists for. Switching Block Public Access
+              off grants nobody anything - it removes the guardrail that would
+              neutralise a permissive policy. Buckets here are NOT public, and
+              saying so plainly is the point: a real user expected the opposite.
+            */}
+            <p className="rounded border border-ink-800 bg-ink-850 px-2 py-1.5 text-[11px] leading-relaxed text-ink-400">
+              <span className="text-ink-300">Not public — missing a guardrail.</span> These buckets
+              have Block Public Access off or incomplete. Nothing grants anonymous access today, so
+              a request still gets 403. What is missing is the setting that would neutralise a
+              permissive policy if one were ever added.
+            </p>
+            <FindingList
+              items={findings.unprotected}
+              empty="Every bucket has Block Public Access fully enabled."
+              onHighlight={onHighlight}
+              extra={(item) =>
+                (item as { isPublic?: boolean }).isPublic
+                  ? "Also publicly reachable right now — see the Exposed tab"
+                  : undefined
+              }
+            />
+          </div>
         )}
 
         {tab === "changes" && <ChangesPanel onHighlight={onHighlight} />}

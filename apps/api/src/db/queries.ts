@@ -234,6 +234,27 @@ export async function findIdleResources(params: { limit?: number } = {}) {
   );
 }
 
+/**
+ * Buckets nothing would stop from being made public.
+ *
+ * Distinct from `findPublicResources`, and the distinction matters: these are
+ * not public. Block Public Access being off grants nobody anything - it removes
+ * the setting that would neutralise a permissive policy if one were added. A
+ * posture finding, not an exposure finding.
+ */
+export async function findUnprotectedBuckets(params: { limit?: number } = {}) {
+  return readQuery<ResourceRow>(
+    `MATCH (r:Resource:S3Bucket)
+     WHERE r.isUnprotected = true
+     RETURN r.arn AS arn, 'S3Bucket' AS kind, r.name AS name, r.region AS region,
+            r.unprotectedReason AS reason,
+            coalesce(r.isPublic, false) AS isPublic
+     ORDER BY r.name
+     LIMIT $limit`,
+    { limit: clamp(params.limit) },
+  );
+}
+
 /** Security groups exposing a port to the whole internet. */
 export async function findOpenSecurityGroups(params: { limit?: number } = {}) {
   return readQuery<ResourceRow>(
@@ -273,11 +294,18 @@ export async function summariseAccount() {
       `MATCH (r:Resource) WHERE r.region IS NOT NULL
        RETURN r.region AS region, count(*) AS count ORDER BY count DESC`,
     ),
-    readQuery<{ publicCount: number; adminCount: number; idleCount: number; idleCost: number }>(
+    readQuery<{
+      publicCount: number;
+      adminCount: number;
+      idleCount: number;
+      idleCost: number;
+      unprotectedCount: number;
+    }>(
       `MATCH (r:Resource)
        RETURN count(CASE WHEN r.isPublic = true THEN 1 END) AS publicCount,
               count(CASE WHEN r.isAdmin  = true THEN 1 END) AS adminCount,
               count(CASE WHEN r.isIdle   = true THEN 1 END) AS idleCount,
+              count(CASE WHEN r.isUnprotected = true THEN 1 END) AS unprotectedCount,
               sum(CASE WHEN r.isIdle = true
                        THEN coalesce(r.estimatedMonthlyCostUsd, 0) ELSE 0 END) AS idleCost`,
     ),
@@ -295,8 +323,9 @@ export async function fetchGraph(
        AND ($kinds  IS NULL OR r.kind IN $kinds)
      RETURN r.arn AS arn, r.kind AS kind, r.name AS name, r.region AS region,
             r.isPublic AS isPublic, r.isAdmin AS isAdmin, r.isIdle AS isIdle,
+            r.isUnprotected AS isUnprotected,
             r.estimatedMonthlyCostUsd AS estimatedMonthlyCostUsd,
-            coalesce(r.publicReason, r.adminReason, r.idleReason) AS reason
+            coalesce(r.publicReason, r.adminReason, r.idleReason, r.unprotectedReason) AS reason
      LIMIT $limit`,
     { region: params.region ?? null, kinds: params.kinds ?? null, limit: clamp(params.limit, 500) },
   );

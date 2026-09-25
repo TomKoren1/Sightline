@@ -44,7 +44,7 @@ export function registerEvalRoutes(app: FastifyInstance): void {
     // The expected answers describe the seeded mock account. Against a real
     // customer they are meaningless, and pretending otherwise would be worse
     // than not offering the check at all.
-    if (!isMock) {
+    if (!isMock()) {
       return reply.code(409).send({
         error:
           "Ground-truth checks are defined against the seeded mock account and do not apply to a real AWS account.",

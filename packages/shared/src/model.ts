@@ -89,6 +89,22 @@ export interface DerivedFacts {
   isIdle?: boolean;
   idleReason?: string;
 
+  /**
+   * Nothing prevents this resource from being made public.
+   *
+   * Deliberately separate from `isPublic`, because they answer different
+   * questions and conflating them is the most common misreading in this whole
+   * area. An S3 bucket with Block Public Access switched off is **not** public:
+   * it has no policy or ACL granting anonymous access, and an anonymous request
+   * gets 403. What it has lost is the guardrail that would stop a future policy
+   * from working.
+   *
+   * So this is a posture finding, not an exposure finding - worth reporting,
+   * never worth reporting as "public".
+   */
+  isUnprotected?: boolean;
+  unprotectedReason?: string;
+
   /** Rough monthly USD, for the "costing money but not used" question. */
   estimatedMonthlyCostUsd?: number;
 }

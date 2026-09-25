@@ -10,6 +10,7 @@ export interface GraphNode {
   isPublic?: boolean | null;
   isAdmin?: boolean | null;
   isIdle?: boolean | null;
+  isUnprotected?: boolean | null;
   estimatedMonthlyCostUsd?: number | null;
   reason?: string | null;
 }
@@ -28,10 +29,13 @@ export interface Summary {
   adminCount: number;
   idleCount: number;
   idleCost: number;
+  unprotectedCount: number;
 }
 
 export interface Findings {
   publicResources: GraphNode[];
+  /** Not public, but nothing would stop them becoming public. */
+  unprotected: GraphNode[];
   adminRoles: Array<GraphNode & { reason?: string; usedBy?: GraphNode[]; useCount?: number }>;
   idle: GraphNode[];
   exposed: Array<GraphNode & { ports?: string[]; securityGroup?: string }>;
@@ -83,6 +87,9 @@ export interface Connection {
   /** The identity this backend runs as, which the trust policy must name. */
   callerIdentity: string | null;
   mode: "mock" | "real";
+  /** What .env says, so the UI can show when the toggle has diverged. */
+  configuredMode: "mock" | "real";
+  realAccountConfigured: boolean;
   roleArn: string;
   accountId: string | null;
   externalIdMasked: string;
@@ -151,6 +158,16 @@ export const api = {
   },
 
   connection: () => get<Connection>("/api/connection"),
+  setMode: async (mode: "mock" | "real") => {
+    const res = await fetch("/api/connection/mode", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ mode }),
+    });
+    const body = (await res.json()) as { error?: string; note?: string; accountId?: string };
+    if (!res.ok) throw new Error(body.error ?? `${res.status} ${res.statusText}`);
+    return body;
+  },
   newExternalId: () => get<{ externalId: string; note: string }>("/api/connection/external-id"),
   testConnection: async (): Promise<ConnectionTest> => {
     const res = await fetch("/api/connection/test", { method: "POST" });

@@ -414,3 +414,77 @@ worse than absent.
 refuses when `AWS_MODE=real` rather than showing a real customer assertions
 about a fictional account. A production version would need per-customer
 expectations, which is a different and larger feature.
+
+---
+
+## ADR-012 — "Public" and "unprotected" are separate verdicts
+
+**Context.** A user created an S3 bucket, switched all four Block Public Access
+settings off, expected it to be reported as public, and it was not. Reasonable
+confusion — and the tool was right: the bucket had no policy and an owner-only
+ACL, and an anonymous request returned 403.
+
+**The distinction.** Turning Block Public Access off grants nobody anything. It
+removes the setting that would neutralise a permissive policy _if one were ever
+added_. A bucket can be unprotected and entirely private, and that is the common
+case.
+
+**The trap on both sides.** Reporting such a bucket as public would be a false
+positive on the most consequential verdict this project makes, and a
+security tool that cries wolf about exposure gets muted. Reporting nothing left
+a real posture finding invisible — Block Public Access being off is something
+AWS Security Hub flags, and something a DevOps engineer wants to know.
+
+**Decision.** Two independent derived facts. `isPublic` means anonymous access
+is granted **now**. `isUnprotected` means nothing would stop it being granted.
+They are computed together, surfaced in separate tabs, and the agent has a
+separate tool for each, whose description tells it never to describe an
+unprotected bucket as public.
+
+**Why this is the interesting case.** Almost every security tool gets asked to
+collapse a spectrum into a boolean, and the temptation is to widen the boolean
+until it catches everything anyone might care about. That produces alert
+fatigue, which is how the true positives stop being read — the same failure the
+citation validator had with Markdown backticks (engineering log #12) and the
+Trust panel had with drift (ADR-011). Three separate features, one lesson:
+**an indicator is only as useful as its false-positive rate, and the fix is
+usually another indicator rather than a wider one.**
+
+**Cost.** One more concept for a user to hold, and a sixth tab. The prompt
+carries an explicit paragraph on the distinction because the model would
+otherwise conflate them too — it is a genuinely easy mistake.
+
+---
+
+## ADR-013 — The account toggle switches at runtime and never writes .env
+
+**Context.** Demonstrating this means showing the seeded fixture, where the
+interesting findings live; using it means showing a real account. Restarting
+the backend to move between them is friction in a demo and confusing in use.
+
+**Decision.** A toggle in the header switches the active connection at runtime.
+`.env` is never rewritten.
+
+**Why not persist the choice.** A UI control that silently edits configuration
+is a nasty surprise for whoever next reads the file, and being able to return to
+a known state by restarting is worth more than remembering the toggle. The UI
+shows an "overridden" marker when the toggle and `.env` disagree, so the
+divergence is visible rather than mysterious.
+
+**What it required.** `isMock` had to stop being a module-level constant
+captured at import, which is what it had always been. It became a function, and
+TypeScript then found all nine call sites — except one, in a test, where
+`!isMock` on a function is valid TypeScript that is always `false`. That
+silently disabled the guard stopping the ground-truth suite from scanning a real
+account (engineering log #23), and it was caught by the suite failing rather
+than by the compiler.
+
+The endpoint override and placeholder credentials are now stripped from
+`process.env` **unconditionally** at startup, not only in real mode, and the
+mock's endpoint is passed explicitly instead. Otherwise starting in mock mode
+would leave a landmine for a later switch to real — the same bug as engineering
+log #17, arriving by a different route.
+
+**Cost.** Switching does not rescan, so the graph still shows the previous
+account until one runs. The UI says so rather than letting someone read one
+account's inventory under another's name.

@@ -51,6 +51,33 @@ export interface BucketPublicInput {
 export interface PublicVerdict {
   isPublic: boolean;
   reason: string;
+  /**
+   * True when nothing would stop this bucket being made public.
+   *
+   * Independent of `isPublic`. A bucket can be unprotected and entirely
+   * private, which is the common case and the one that confuses people: turning
+   * Block Public Access off grants nobody anything, it only removes the setting
+   * that would neutralise a permissive policy if one were ever added.
+   */
+  isUnprotected: boolean;
+  unprotectedReason?: string;
+}
+
+/**
+ * Which of the four Block Public Access settings are switched off.
+ *
+ * An absent configuration counts as all four off, because that is what it
+ * means: buckets created before the account-level default, or with it
+ * explicitly cleared, have no bucket-level block at all.
+ */
+export function disabledBlockSettings(pab: PublicAccessBlock | null): string[] {
+  const settings: Array<[keyof PublicAccessBlock, string]> = [
+    ["BlockPublicAcls", "BlockPublicAcls"],
+    ["IgnorePublicAcls", "IgnorePublicAcls"],
+    ["BlockPublicPolicy", "BlockPublicPolicy"],
+    ["RestrictPublicBuckets", "RestrictPublicBuckets"],
+  ];
+  return settings.filter(([key]) => pab?.[key] !== true).map(([, label]) => label);
 }
 
 /** Does a policy document allow a wildcard principal? */
@@ -86,6 +113,18 @@ export function policyAllowsWildcardPrincipal(policyJson: string | null): boolea
 export function evaluateBucketPublicAccess(input: BucketPublicInput): PublicVerdict {
   const pab = input.publicAccessBlock;
 
+  const disabled = disabledBlockSettings(pab);
+  const protection =
+    disabled.length === 0
+      ? { isUnprotected: false as const }
+      : {
+          isUnprotected: true as const,
+          unprotectedReason:
+            disabled.length === 4
+              ? "Block Public Access is entirely off for this bucket, so a policy or ACL granting anonymous access would take effect immediately. The bucket is not public today - this is a missing guardrail, not exposure."
+              : `Block Public Access is partially off (${disabled.join(", ")} not enabled), so some routes to making this bucket public are unguarded. The bucket is not public today - this is a missing guardrail, not exposure.`,
+        };
+
   const publicAcl = input.aclGrants.find(
     (g) => g.granteeUri === ALL_USERS || g.granteeUri === AUTHENTICATED_USERS,
   );
@@ -97,6 +136,7 @@ export function evaluateBucketPublicAccess(input: BucketPublicInput): PublicVerd
 
   if (wildcardPolicy && !policyRestricted) {
     return {
+      ...protection,
       isPublic: true,
       reason:
         'Its bucket policy allows a wildcard principal ("*") and no public access block restricts policy-based access',
@@ -106,6 +146,7 @@ export function evaluateBucketPublicAccess(input: BucketPublicInput): PublicVerd
   if (publicAcl && !aclRestricted) {
     const who = publicAcl.granteeUri === ALL_USERS ? "AllUsers (anonymous)" : "AuthenticatedUsers";
     return {
+      ...protection,
       isPublic: true,
       reason: `Its ACL grants ${publicAcl.permission ?? "access"} to ${who} and no public access block ignores public ACLs`,
     };
@@ -114,6 +155,7 @@ export function evaluateBucketPublicAccess(input: BucketPublicInput): PublicVerd
   if (wildcardPolicy && policyRestricted) {
     const setting = pab?.RestrictPublicBuckets ? "RestrictPublicBuckets" : "BlockPublicPolicy";
     return {
+      ...protection,
       isPublic: false,
       reason: `Its bucket policy allows a wildcard principal, but ${setting} is enabled, so the grant has no effect`,
     };
@@ -121,12 +163,14 @@ export function evaluateBucketPublicAccess(input: BucketPublicInput): PublicVerd
 
   if (publicAcl && aclRestricted) {
     return {
+      ...protection,
       isPublic: false,
       reason: "Its ACL grants public access, but the public access block ignores public ACLs",
     };
   }
 
   return {
+    ...protection,
     isPublic: false,
     reason: "No bucket policy or ACL grants access to an anonymous or wildcard principal",
   };

@@ -21,7 +21,15 @@ import { randomBytes } from "node:crypto";
 import type { FastifyInstance } from "fastify";
 import { STSClient, GetCallerIdentityCommand } from "@aws-sdk/client-sts";
 
-import { cfg, configuredRegions, isMock } from "../config.js";
+import {
+  activeConnection,
+  cfg,
+  configuredMode,
+  configuredRegions,
+  currentMode,
+  isMock,
+  setMode,
+} from "../config.js";
 import { accountIdFromArn, getSession, resetSession } from "../aws/credentials.js";
 import { getLatestScan } from "../db/repository.js";
 
@@ -89,7 +97,8 @@ export function registerConnectionRoutes(app: FastifyInstance): void {
   /** Current connection state, with nothing secret in the response. */
   app.get("/api/connection", async () => {
     const latest = await getLatestScan().catch(() => null);
-    const accountId = accountIdFromArn(cfg.AWS_TARGET_ROLE_ARN);
+    const connection = activeConnection();
+    const accountId = accountIdFromArn(connection.roleArn);
 
     /**
      * The identity this backend runs as, before assuming anything.
@@ -102,7 +111,7 @@ export function registerConnectionRoutes(app: FastifyInstance): void {
     try {
       const sts = new STSClient({
         region: cfg.AWS_REGION,
-        ...(isMock ? { endpoint: cfg.AWS_ENDPOINT_URL } : {}),
+        ...(connection.endpoint ? { endpoint: connection.endpoint } : {}),
       });
       callerIdentity = (await sts.send(new GetCallerIdentityCommand({}))).Arn ?? null;
     } catch {
@@ -111,17 +120,63 @@ export function registerConnectionRoutes(app: FastifyInstance): void {
 
     return {
       callerIdentity,
-      mode: cfg.AWS_MODE,
-      roleArn: cfg.AWS_TARGET_ROLE_ARN,
+      mode: currentMode(),
+      // What .env says, so the UI can show when the toggle has diverged from it.
+      configuredMode,
+      /** Whether a real account is configured at all; the toggle needs it. */
+      realAccountConfigured:
+        cfg.AWS_TARGET_ROLE_ARN !== "arn:aws:iam::123456789012:role/DaveIoReadOnlyRole" &&
+        !cfg.AWS_TARGET_ROLE_ARN.includes("000000000000"),
+      roleArn: connection.roleArn,
       accountId,
-      externalIdMasked: mask(cfg.AWS_EXTERNAL_ID),
+      externalIdMasked: mask(connection.externalId),
       externalIdIsPlaceholder:
-        cfg.AWS_EXTERNAL_ID === "replace-me-per-customer" || cfg.AWS_EXTERNAL_ID.length < 16,
+        connection.externalId === "replace-me-per-customer" || connection.externalId.length < 16,
       homeRegion: cfg.AWS_REGION,
       regions: configuredRegions(),
-      endpointOverride: isMock ? cfg.AWS_ENDPOINT_URL : null,
+      endpointOverride: connection.endpoint,
       lastScan: latest ? { id: latest.id, at: latest.startedAt, status: latest.status } : null,
     };
+  });
+
+  /**
+   * Switch between the seeded mock account and the configured real one.
+   *
+   * Runtime-only: `.env` is untouched, so a restart returns to whatever it
+   * says. That is deliberate - a UI toggle that silently rewrites
+   * configuration is a nasty surprise, and being able to get back to a known
+   * state by restarting is worth more than persistence here.
+   *
+   * The cached STS session is dropped, so the next call assumes the right role
+   * rather than reusing credentials for the account we just left.
+   */
+  app.post<{ Body: { mode?: string } }>("/api/connection/mode", async (req, reply) => {
+    const mode = req.body?.mode;
+    if (mode !== "mock" && mode !== "real") {
+      return reply.code(400).send({ error: 'mode must be "mock" or "real"' });
+    }
+
+    if (mode === "real" && !cfg.AWS_TARGET_ROLE_ARN) {
+      return reply.code(409).send({
+        error:
+          "No real account is configured. Set AWS_TARGET_ROLE_ARN and AWS_EXTERNAL_ID in .env.",
+        code: "NOT_CONFIGURED",
+      });
+    }
+
+    setMode(mode);
+    resetSession();
+
+    const connection = activeConnection();
+    return reply.send({
+      mode,
+      roleArn: connection.roleArn,
+      accountId: accountIdFromArn(connection.roleArn),
+      // The graph still holds whatever the last scan found, which is now the
+      // other account's data. Saying so is better than letting the user read
+      // one account's inventory under the other's name.
+      note: "Switched. The graph still shows the previous scan - run a scan to load this account.",
+    });
   });
 
   /**
@@ -152,7 +207,7 @@ export function registerConnectionRoutes(app: FastifyInstance): void {
       const sts = new STSClient({
         region: cfg.AWS_REGION,
         credentials: session.credentials,
-        ...(isMock ? { endpoint: cfg.AWS_ENDPOINT_URL } : {}),
+        ...(isMock() ? { endpoint: cfg.AWS_ENDPOINT_URL } : {}),
       });
       const identity = await sts.send(new GetCallerIdentityCommand({}));
 
@@ -167,7 +222,7 @@ export function registerConnectionRoutes(app: FastifyInstance): void {
         // Reported explicitly because a successful test against the mock while
         // believing you are on a real account is the worst outcome this
         // endpoint can produce - see engineering log #17.
-        endpoint: isMock ? cfg.AWS_ENDPOINT_URL : "AWS (no endpoint override)",
+        endpoint: isMock() ? cfg.AWS_ENDPOINT_URL : "AWS (no endpoint override)",
       });
     } catch (err) {
       app.log.warn({ err }, "connection test failed");

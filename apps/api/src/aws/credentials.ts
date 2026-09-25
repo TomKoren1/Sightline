@@ -15,7 +15,7 @@
 
 import { STSClient, AssumeRoleCommand } from "@aws-sdk/client-sts";
 import type { AwsCredentialIdentity } from "@aws-sdk/types";
-import { cfg, isMock, sourceCredentials } from "../config.js";
+import { activeConnection, cfg, isMock, sourceCredentials } from "../config.js";
 
 /**
  * Renew this long before expiry. A scan unit can run for a while, and a
@@ -37,7 +37,9 @@ let inFlight: Promise<AssumedSession> | null = null;
 function stsClient(): STSClient {
   return new STSClient({
     region: cfg.AWS_REGION,
-    ...(isMock ? { endpoint: cfg.AWS_ENDPOINT_URL } : {}),
+    // Passed explicitly rather than via AWS_ENDPOINT_URL, which is stripped from
+    // the environment at startup so it cannot leak across a mode switch.
+    ...(activeConnection().endpoint ? { endpoint: activeConnection().endpoint! } : {}),
     // Omitted entirely in `real` mode unless genuine keys were configured, so
     // the SDK falls back to its standard chain: environment, shared config,
     // container role, instance role. In production that is dave.io's own task
@@ -58,13 +60,14 @@ function isFresh(session: AssumedSession): boolean {
 
 async function assume(): Promise<AssumedSession> {
   const client = stsClient();
+  const connection = activeConnection();
   const res = await client.send(
     new AssumeRoleCommand({
-      RoleArn: cfg.AWS_TARGET_ROLE_ARN,
+      RoleArn: connection.roleArn,
       // Surfaces in the customer's own CloudTrail, so they can see exactly
       // which dave.io process touched their account and when.
       RoleSessionName: "daveio-inventory-scanner",
-      ExternalId: cfg.AWS_EXTERNAL_ID,
+      ExternalId: connection.externalId,
       DurationSeconds: 3600,
     }),
   );
@@ -74,10 +77,10 @@ async function assume(): Promise<AssumedSession> {
     throw new Error("AssumeRole returned an incomplete credential set");
   }
 
-  const assumedRoleArn = res.AssumedRoleUser?.Arn ?? cfg.AWS_TARGET_ROLE_ARN;
-  const accountId = accountIdFromArn(assumedRoleArn) ?? accountIdFromArn(cfg.AWS_TARGET_ROLE_ARN);
+  const assumedRoleArn = res.AssumedRoleUser?.Arn ?? connection.roleArn;
+  const accountId = accountIdFromArn(assumedRoleArn) ?? accountIdFromArn(connection.roleArn);
   if (!accountId) {
-    throw new Error(`Could not determine account id from role ARN ${cfg.AWS_TARGET_ROLE_ARN}`);
+    throw new Error(`Could not determine account id from role ARN ${connection.roleArn}`);
   }
 
   return {

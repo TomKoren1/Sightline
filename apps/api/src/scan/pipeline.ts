@@ -121,6 +121,10 @@ export function annotate(
     });
     resource.derived.isPublic = verdict.isPublic;
     resource.derived.publicReason = verdict.reason;
+    resource.derived.isUnprotected = verdict.isUnprotected;
+    if (verdict.unprotectedReason) {
+      resource.derived.unprotectedReason = verdict.unprotectedReason;
+    }
   }
 
   // --- What is billable and doing nothing? --------------------------------

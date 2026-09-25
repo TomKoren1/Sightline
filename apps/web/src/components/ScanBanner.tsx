@@ -8,6 +8,8 @@
 
 import type { ScanRun, ScanUnit } from "@daveio/shared";
 
+import { ModeToggle } from "./ModeToggle.js";
+
 /** Beyond this, the inventory is old enough that the user should be told. */
 const STALE_AFTER_MS = 60 * 60 * 1000;
 
@@ -30,6 +32,8 @@ export interface ScanBannerProps {
   onScan: () => void;
   onOpenTrust: () => void;
   onOpenConnection: () => void;
+  onModeSwitched: (note: string) => void;
+  modeNote: string | null;
 }
 
 export function ScanBanner({
@@ -41,6 +45,8 @@ export function ScanBanner({
   onScan,
   onOpenTrust,
   onOpenConnection,
+  onModeSwitched,
+  modeNote,
 }: ScanBannerProps) {
   const units = scanning ? liveUnits : (scan?.units ?? []);
   const failed = units.filter((u) => u.status === "failed");
@@ -89,6 +95,8 @@ export function ScanBanner({
         </div>
 
         <div className="flex items-center gap-1.5">
+          <ModeToggle onSwitched={onModeSwitched} />
+          <span className="mx-0.5 h-4 w-px bg-ink-700" aria-hidden />
           <button
             onClick={onOpenConnection}
             className="rounded border border-ink-700 bg-ink-800 px-2 py-1 text-[11px] text-ink-300 transition hover:border-ink-600 hover:text-ink-100"
@@ -110,6 +118,13 @@ export function ScanBanner({
           </button>
         </div>
       </div>
+
+      {/* After a switch the graph still holds the previous account's scan. */}
+      {modeNote && !scanning && (
+        <div className="border-t border-accent/30 bg-accent/10 px-3 py-1.5 text-[11px] text-accent">
+          {modeNote}
+        </div>
+      )}
 
       {error && (
         <div className="border-t border-danger/30 bg-danger/10 px-3 py-1.5 text-[11px] text-danger">

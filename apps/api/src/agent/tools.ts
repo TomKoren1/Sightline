@@ -167,6 +167,17 @@ export const TOOL_DEFINITIONS: Anthropic.Tool[] = [
     input_schema: { type: "object", properties: { limit: { type: "number" } } },
   },
   {
+    name: "find_unprotected_buckets",
+    description:
+      "S3 buckets whose Block Public Access settings are off or incomplete. These buckets are " +
+      "NOT public - nothing grants anonymous access - but nothing would stop a future policy or " +
+      "ACL from making them public. Use for 'which buckets could be made public?', 'is Block " +
+      "Public Access enabled?', and when a user expects a bucket to be public because they " +
+      "disabled the block. Never describe these as public: that is a different question, " +
+      "answered by find_public_resources.",
+    input_schema: { type: "object", properties: { limit: { type: "number" } } },
+  },
+  {
     name: "find_open_security_groups",
     description:
       "Resources directly exposed to 0.0.0.0/0, with the ports and the security group " +
@@ -281,6 +292,9 @@ export async function runTool(name: string, input: ToolInput): Promise<ToolResul
 
     case "find_idle_resources":
       return wrap(await q.findIdleResources(input));
+
+    case "find_unprotected_buckets":
+      return wrap(await q.findUnprotectedBuckets(input));
 
     case "find_open_security_groups":
       return wrap(await q.findOpenSecurityGroups(input));

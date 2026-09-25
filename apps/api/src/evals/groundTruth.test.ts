@@ -44,7 +44,7 @@ beforeAll(async () => {
      * A test run must never touch a real cloud account, however read-only the
      * calls are. Checked before anything else happens.
      */
-    if (!isMock) {
+    if (!isMock()) {
       skipReason =
         "AWS_MODE is not 'mock'. This suite seeds a fixture and scans it, so it refuses " +
         "to run against a real account. Set AWS_MODE=mock to exercise it.";

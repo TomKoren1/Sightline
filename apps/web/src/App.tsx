@@ -36,6 +36,7 @@ export function App() {
   const [visibleKinds, setVisibleKinds] = useState<string[]>(DEFAULT_VISIBLE_KINDS);
   const [showFilters, setShowFilters] = useState(false);
   const [modal, setModal] = useState<"trust" | "connection" | null>(null);
+  const [modeNote, setModeNote] = useState<string | null>(null);
 
   const latest = useQuery({ queryKey: ["latestScan"], queryFn: api.latestScan });
   const hasScan = Boolean(latest.data?.scan);
@@ -49,6 +50,7 @@ export function App() {
   const runScan = useCallback(async () => {
     setScanning(true);
     setScanError(null);
+    setModeNote(null);
     setLiveUnits([]);
     setProgress(null);
     setCitedArns([]);
@@ -108,6 +110,12 @@ export function App() {
         onScan={() => void runScan()}
         onOpenTrust={() => setModal("trust")}
         onOpenConnection={() => setModal("connection")}
+        modeNote={modeNote}
+        onModeSwitched={(note) => {
+          setModeNote(note);
+          setCitedArns([]);
+          setSelectedArn(null);
+        }}
       />
 
       {modal === "trust" && (

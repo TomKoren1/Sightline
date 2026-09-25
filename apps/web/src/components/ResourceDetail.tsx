@@ -93,7 +93,9 @@ export function ResourceDetail({
             </div>
 
             {/* Security verdicts first: they are why someone opened this panel. */}
-            {["isPublic", "isAdmin", "isIdle"].some((k) => resource.props[k] === true) && (
+            {["isPublic", "isAdmin", "isIdle", "isUnprotected"].some(
+              (k) => resource.props[k] === true,
+            ) && (
               <div className="space-y-1">
                 {resource.props["isPublic"] === true && (
                   <Verdict
@@ -107,6 +109,13 @@ export function ResourceDetail({
                     tone="warn"
                     label="Administrator access"
                     reason={String(resource.props["adminReason"] ?? "")}
+                  />
+                )}
+                {resource.props["isUnprotected"] === true && (
+                  <Verdict
+                    tone="warn"
+                    label="Block Public Access not fully enabled"
+                    reason={String(resource.props["unprotectedReason"] ?? "")}
                   />
                 )}
                 {resource.props["isIdle"] === true && (

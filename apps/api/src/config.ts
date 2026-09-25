@@ -60,7 +60,53 @@ if (!parsed.success) {
 
 export const cfg = parsed.data;
 
-export const isMock = cfg.AWS_MODE === "mock";
+/**
+ * The mode the process started in. `.env` decides this; the toggle does not
+ * change it, so a restart always returns to a known state.
+ */
+export const configuredMode = cfg.AWS_MODE;
+
+/**
+ * The mode currently in effect.
+ *
+ * Switchable at runtime so the UI can move between the seeded demo account and
+ * a real one without a restart. Everything that depends on it reads
+ * `isMock()` per call rather than capturing a boolean at import, and the AWS
+ * clients are constructed per request, so a switch takes effect immediately -
+ * after the cached STS session is dropped, which `setMode` handles.
+ */
+let activeMode: "mock" | "real" = cfg.AWS_MODE;
+
+export const isMock = (): boolean => activeMode === "mock";
+export const currentMode = (): "mock" | "real" => activeMode;
+
+export function setMode(mode: "mock" | "real"): void {
+  activeMode = mode;
+}
+
+/**
+ * Connection settings for the mode in effect.
+ *
+ * The mock's role ARN and external id are fixed by the seeder, so they are
+ * derived rather than read from `.env` - which leaves `.env` free to hold the
+ * real account's settings permanently, and makes the toggle lossless in both
+ * directions.
+ */
+export function activeConnection(): {
+  roleArn: string;
+  externalId: string;
+  endpoint: string | null;
+} {
+  if (activeMode === "mock") {
+    const account = process.env["MOCK_AWS_ACCOUNT_ID"] ?? "123456789012";
+    return {
+      roleArn: `arn:aws:iam::${account}:role/DaveIoReadOnlyRole`,
+      externalId: "local-dev-external-id-0000",
+      endpoint: cfg.AWS_ENDPOINT_URL,
+    };
+  }
+  return { roleArn: cfg.AWS_TARGET_ROLE_ARN, externalId: cfg.AWS_EXTERNAL_ID, endpoint: null };
+}
 
 /**
  * Does this look like a genuine AWS access key id?
@@ -112,15 +158,14 @@ const SDK_ENV_OVERRIDES = [
   "AWS_USE_FIPS_ENDPOINT",
 ];
 
-if (!isMock) {
+{
   const leaked = SDK_ENV_OVERRIDES.filter((key) => process.env[key]);
   if (leaked.length > 0) {
     console.warn(
-      `\n  AWS_MODE=real, but ${leaked.join(", ")} is set in the environment.\n` +
-        "  The AWS SDK reads these directly and would send every request - including\n" +
-        "  sts:AssumeRole - to that endpoint instead of to AWS, producing an inventory\n" +
-        "  of the mock labelled with your real account id. They are being removed.\n" +
-        "  Set AWS_MODE=mock to use the mock deliberately.\n",
+      `\n  ${leaked.join(", ")} is set in the environment.\n` +
+        "  The AWS SDK reads these directly, so they would override the endpoint for\n" +
+        "  every request - including sts:AssumeRole - regardless of AWS_MODE. They are\n" +
+        "  being removed; the mock endpoint is passed explicitly instead.\n",
     );
     for (const key of leaked) delete process.env[key];
   }
@@ -130,10 +175,10 @@ if (!isMock) {
 
   if (hasPlaceholder) {
     console.warn(
-      `\n  AWS_MODE=real, but AWS_ACCESS_KEY_ID="${cfg.AWS_ACCESS_KEY_ID}" is not a real AWS key.\n` +
-        "  It is the placeholder used for the mock, and it would shadow your real credentials,\n" +
-        "  so it is being ignored. Remove AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY from .env\n" +
-        "  to silence this - the standard AWS credential chain will be used instead.\n",
+      `  AWS_ACCESS_KEY_ID="${cfg.AWS_ACCESS_KEY_ID}" is not a real AWS key. It is the\n` +
+        "  placeholder used for the mock, and being first in the SDK's credential chain it\n" +
+        "  would shadow real credentials, so it is being removed from the environment. The\n" +
+        "  mock's credentials are passed explicitly instead.\n",
     );
     delete process.env["AWS_ACCESS_KEY_ID"];
     delete process.env["AWS_SECRET_ACCESS_KEY"];
@@ -149,7 +194,7 @@ if (!isMock) {
  * they are only honoured if they look like genuine AWS keys.
  */
 export function sourceCredentials(): { accessKeyId: string; secretAccessKey: string } | undefined {
-  if (isMock) {
+  if (isMock()) {
     return cfg.AWS_ACCESS_KEY_ID && cfg.AWS_SECRET_ACCESS_KEY
       ? { accessKeyId: cfg.AWS_ACCESS_KEY_ID, secretAccessKey: cfg.AWS_SECRET_ACCESS_KEY }
       : { accessKeyId: "mock", secretAccessKey: "mock" };

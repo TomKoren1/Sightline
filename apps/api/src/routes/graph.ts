@@ -30,12 +30,13 @@ export function registerGraphRoutes(app: FastifyInstance): void {
 
   /** Findings, for the dashboard panels. */
   app.get("/api/findings", async () => {
-    const [publicResources, adminRoles, idle, exposed] = await Promise.all([
+    const [publicResources, adminRoles, idle, exposed, unprotected] = await Promise.all([
       q.findPublicResources({ limit: 50 }),
       q.findAdminPrincipals({ limit: 50 }),
       q.findIdleResources({ limit: 50 }),
       q.findOpenSecurityGroups({ limit: 50 }),
+      q.findUnprotectedBuckets({ limit: 50 }),
     ]);
-    return { publicResources, adminRoles, idle, exposed };
+    return { publicResources, adminRoles, idle, exposed, unprotected };
   });
 }

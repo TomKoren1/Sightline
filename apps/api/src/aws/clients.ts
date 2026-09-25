@@ -14,7 +14,7 @@ import { RDSClient } from "@aws-sdk/client-rds";
 import { LambdaClient } from "@aws-sdk/client-lambda";
 import { ResourceExplorer2Client } from "@aws-sdk/client-resource-explorer-2";
 
-import { cfg, isMock } from "../config.js";
+import { activeConnection, isMock } from "../config.js";
 import { credentialProvider } from "./credentials.js";
 
 /**
@@ -56,7 +56,9 @@ function baseConfig(region: string) {
      */
     retryMode: "adaptive" as const,
     maxAttempts: 5,
-    ...(isMock ? { endpoint: cfg.AWS_ENDPOINT_URL } : {}),
+    // Explicit, never via AWS_ENDPOINT_URL: that variable is stripped from the
+    // environment at startup so a mode switch cannot leave one behind.
+    ...(activeConnection().endpoint ? { endpoint: activeConnection().endpoint! } : {}),
   };
 }
 
@@ -108,7 +110,7 @@ export const resourceExplorerClient = (region: string) =>
 /** moto serves S3 from a single host, so path-style addressing is required. */
 export const s3Client = (region: string) =>
   instrument(
-    new S3Client({ ...baseConfig(region), ...(isMock ? { forcePathStyle: true } : {}) }),
+    new S3Client({ ...baseConfig(region), ...(isMock() ? { forcePathStyle: true } : {}) }),
     `s3:${region}`,
   );
 
