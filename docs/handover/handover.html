@@ -386,10 +386,10 @@
       </dl>
 
       <div class="metrics">
-        <div><b>218</b><span>unit tests</span></div>
+        <div><b>234</b><span>unit tests</span></div>
         <div><b>21/21</b><span>agent evals · F1 1.0</span></div>
         <div><b>14</b><span>decision records</span></div>
-        <div><b>34</b><span>logged problems</span></div>
+        <div><b>35</b><span>logged problems</span></div>
       </div>
     </div>
 
@@ -442,7 +442,7 @@
           </ul>
         </li>
         <li>
-          <span>8</span>The thirty-four problems
+          <span>8</span>The thirty-five problems
           <ul>
             <li>Symptom, cause, fix and lesson for every one</li>
           </ul>
@@ -1175,7 +1175,7 @@ npm run dev:api &amp; npm run dev:web
 
     <!-- =================== 8 =================== -->
     <div class="section">
-      <h2><span class="num">8</span>The thirty-four problems</h2>
+      <h2><span class="num">8</span>The thirty-five problems</h2>
       <p class="muted small">
         Full write-ups in <code>docs/ENGINEERING-LOG.md</code>. Each entry below gives the symptom,
         the cause, the fix, and what it generalises to.
@@ -1983,13 +1983,45 @@ npm run dev:api &amp; npm run dev:web
           </dd>
         </dl>
       </div>
+
+      <div class="log">
+        <h3><span class="id">#35</span>A documented command that did not exist</h3>
+        <dl class="row">
+          <dt>Symptom</dt>
+          <dd>
+            <code>npm run query -w @daveio/api</code>, documented in the README's command table,
+            failed: no such script.
+          </dd>
+          <dt>Cause</dt>
+          <dd>
+            The CLI file existed, worked, and its own header comment gave that exact invocation. The
+            npm script was simply never added — so the tool had been written, documented in two
+            places, and was unreachable by the command both of them named.
+          </dd>
+          <dt>Fix</dt>
+          <dd>
+            The script, plus a guard of the same shape as the template tests:
+            <code>readme.test.ts</code> extracts every <code>npm run …</code> the README tells you
+            to type and asserts it exists, then checks the counts it quotes — ADRs, agent tools,
+            eval cases, tier-1 checks — against the files they describe. Verified to fire rather
+            than pass vacuously.
+          </dd>
+          <dt>Lesson</dt>
+          <dd>
+            The third documentation failure here that nothing could catch (see #20, #22).
+            Instructions are an interface, and an interface with no tests drifts. Eight lines of
+            regex replaced two full manual audits — both of which I had already done, and both of
+            which missed this.
+          </dd>
+        </dl>
+      </div>
     </div>
 
     <!-- =================== 9 =================== -->
     <div class="section">
       <h2><span class="num">9</span>Recurring failure patterns</h2>
       <p>
-        Thirty-four entries reduce to about five shapes. If you are asked "what did you learn
+        Thirty-five entries reduce to about five shapes. If you are asked "what did you learn
         building this?", this section is the answer — it is more convincing than any individual bug.
       </p>
 
@@ -2272,7 +2304,7 @@ npm run dev:api &amp; npm run dev:web
         <div class="q">What went wrong while you built it?</div>
         <div class="a">
           <p>
-            Thirty-four logged problems, and they reduce to about five shapes. The one I would lead
+            Thirty-five logged problems, and they reduce to about five shapes. The one I would lead
             with: three separate times I built a route to the same catastrophic output — a complete,
             confident, entirely fictional inventory of a real AWS account. Once from a leaked
             <code>AWS_ENDPOINT_URL</code> that the SDK reads directly from the environment, once
