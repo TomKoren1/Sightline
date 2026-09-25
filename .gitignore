@@ -1,7 +1,13 @@
 # Secrets
+#
+# Deliberately broad. The narrow version of this list (.env, .env.local,
+# .env.*.local) let a file called `.env.mock-backup` be committed with a live
+# API key and a per-customer ExternalId in it - see engineering log #26.
+# Anything env-shaped is ignored; the example is re-included explicitly.
 .env
-.env.local
-.env.*.local
+.env.*
+*.env
+!.env.example
 
 # Node
 node_modules/

@@ -133,3 +133,30 @@ jobs:
       - uses: gitleaks/gitleaks-action@v2
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITLEAKS_CONFIG: .gitleaks.toml
+
+      # A deterministic backstop for the failure that actually happened: a
+      # file called `.env.mock-backup`, holding a live API key, tracked because
+      # .gitignore listed exact filenames. Pattern matching can miss a secret;
+      # this cannot miss the file.
+      - name: No environment files may be tracked
+        run: |
+          tracked=$(git ls-files | grep -E '(^|/)\.env($|\.)|\.env$' | grep -v '^\.env\.example$' || true)
+          if [ -n "$tracked" ]; then
+            echo "Environment files are tracked, which is how secrets leak:"
+            echo "$tracked"
+            echo
+            echo "Remove them from the index and confirm .gitignore covers them."
+            exit 1
+          fi
+          echo "Only .env.example is tracked."
+
+      - name: Example env must not contain real secrets
+        run: |
+          if grep -qE 'sk-ant-[a-zA-Z0-9_-]{20,}' .env.example; then
+            echo ".env.example contains what looks like a real Anthropic key"; exit 1
+          fi
+          if grep -qE '^AWS_EXTERNAL_ID=(?!replace-me|local-dev)' -P .env.example; then
+            echo ".env.example contains what looks like a real ExternalId"; exit 1
+          fi
+          echo ".env.example carries placeholders only."

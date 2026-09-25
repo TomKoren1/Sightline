@@ -804,3 +804,58 @@ rescan.
 siblings is how the second instance gets found in production. Both commands read
 application configuration and assert against a fixture; that shape is the thing
 to search for, not the specific file.
+
+---
+
+## #26 — A live API key reached git history, and the secret scan passed
+
+**The most serious mistake in this project, and mine.**
+
+**Symptom.** Found by auditing `.gitignore` coverage during a review, not by any
+tool. A file called `.env.mock-backup` — which I created while switching the
+project between the mock and a real AWS account — had been **committed**, across
+three commits. It contained a live `ANTHROPIC_API_KEY` and a per-customer
+`AWS_EXTERNAL_ID`, which the role template itself describes as a credential.
+
+**Diagnosis.** Two independent failures, and it needed both.
+
+`.gitignore` listed exact filenames — `.env`, `.env.local`, `.env.*.local`.
+`.env.mock-backup` matches none of them. The pattern covered the files someone
+had thought of, which is the wrong basis for a rule whose whole job is catching
+what you did not think of.
+
+And CI's gitleaks step passed on every one of those commits. Its default rules
+did not match the Anthropic key format, and nothing checked the simpler,
+stronger invariant: that no environment file should be tracked at all.
+
+**Fix (partial — the rest is not mine to do).**
+
+`.gitignore` now ignores anything env-shaped (`.env`, `.env.*`, `*.env`) and
+re-includes `.env.example` explicitly. A `.gitleaks.toml` adds rules for
+`sk-ant-` keys and for a non-placeholder `AWS_EXTERNAL_ID`. And CI gained a
+deterministic backstop that does not depend on pattern matching at all: if
+`git ls-files` returns any env file other than the example, the build fails.
+Verified locally against the current tree.
+
+**What it does not fix.** The secrets remain in history. Rewriting it requires a
+force-push, which is the repository owner's decision, and the key needs rotating
+regardless — a leaked credential is leaked the moment it is pushed, whatever
+happens to the commit afterwards.
+
+**What to take from it.** Three things, and the second is the one worth
+remembering.
+
+A denylist of filenames fails exactly when it matters. `.gitignore` for secrets
+should describe the _shape_ of the thing, and re-admit the exceptions.
+
+A green security check is not evidence of absence — it is evidence that the
+rules you configured did not match. gitleaks was in CI from the first day
+precisely because this repository holds credentials, and it passed while a live
+key sat in the tree. The backstop that would have caught it is trivial and does
+not involve detecting secrets at all: _no environment files may be tracked._
+When a probabilistic check guards something important, pair it with a
+deterministic one covering the common case.
+
+And the file was created by a convenience step, during work on something else,
+named in a hurry. It was not part of any feature. The riskiest artefacts are
+usually the incidental ones, because nobody reviews them.

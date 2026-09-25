@@ -1,0 +1,24 @@
+# Secret-scanning rules.
+#
+# The default rule set did not flag a committed `.env.mock-backup` containing a
+# live Anthropic key and a per-customer ExternalId, so both are covered
+# explicitly here alongside the defaults.
+
+[extend]
+useDefault = true
+
+[[rules]]
+id = "anthropic-api-key"
+description = "Anthropic API key"
+regex = '''sk-ant-[a-zA-Z0-9_\-]{20,}'''
+keywords = ["sk-ant-"]
+
+[[rules]]
+id = "daveio-external-id"
+description = "Per-customer AWS ExternalId, which the role template treats as a credential"
+regex = '''(?i)aws_external_id\s*=\s*(?!replace-me|local-dev|<)[^\s"']{12,}'''
+keywords = ["aws_external_id"]
+
+[allowlist]
+description = "The committed example carries placeholders only"
+paths = ['''\.env\.example$''', '''\.gitleaks\.toml$''']
