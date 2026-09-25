@@ -1,0 +1,83 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: >
+  dave.io read-only access role.
+
+  This template provisions a cross-account IAM role that dave.io assumes in
+  order to discover and inventory AWS resources in a customer account. It
+  grants the AWS-managed ReadOnlyAccess policy and nothing else. dave.io
+  cannot create, modify, or delete any resource via this role.
+
+  Trust model: dave.io's platform account assumes this role using an
+  ExternalId that is unique per customer, mitigating the confused-deputy
+  attack pattern (see AWS docs on cross-account access).
+
+  --------------------------------------------------------------------------
+  NOTE TO CANDIDATE
+  --------------------------------------------------------------------------
+  You do NOT need to deploy this template. It describes how dave.io obtains
+  access to a customer AWS account in production today. You can use it as
+  is, modify it, or replace it with something better. If you change it,
+  tell us why.
+  --------------------------------------------------------------------------
+
+Parameters:
+  DaveIoAccountId:
+    Type: String
+    Description: The dave.io platform AWS account ID that will assume this role.
+    Default: "123456789012"
+    AllowedPattern: "^[0-9]{12}$"
+    ConstraintDescription: Must be a 12-digit AWS account ID.
+
+  ExternalId:
+    Type: String
+    Description: >
+      A unique, per-customer secret shared between dave.io and this account.
+      dave.io issues this value at onboarding. Treat it as a credential.
+    NoEcho: true
+    MinLength: 16
+    MaxLength: 128
+
+  RoleName:
+    Type: String
+    Description: Name of the IAM role to create.
+    Default: "DaveIoReadOnlyRole"
+
+Resources:
+  DaveIoReadOnlyRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Ref RoleName
+      Description: >
+        Allows dave.io to read AWS resource metadata for inventory and
+        visualization. Grants no write or delete permissions.
+      MaxSessionDuration: 3600
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              AWS: !Sub "arn:aws:iam::${DaveIoAccountId}:root"
+            Action: sts:AssumeRole
+            Condition:
+              StringEquals:
+                sts:ExternalId: !Ref ExternalId
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/ReadOnlyAccess
+      Tags:
+        - Key: ManagedBy
+          Value: dave.io
+        - Key: Purpose
+          Value: read-only-inventory
+
+Outputs:
+  RoleArn:
+    Description: ARN of the role dave.io should assume. Share this with onboarding.
+    Value: !GetAtt DaveIoReadOnlyRole.Arn
+    Export:
+      Name: !Sub "${AWS::StackName}-RoleArn"
+
+  ExternalIdReminder:
+    Description: >
+      The ExternalId you provided at stack creation. dave.io needs both this
+      and the RoleArn above to complete onboarding.
+    Value: "Provided at stack creation — see your dave.io onboarding email."
