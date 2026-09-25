@@ -1,0 +1,2265 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>dave.io Engineering Assignment — Project Handover</title>
+    <style>
+      /* Margins and the page number come from the print job (see render.js),
+         not from @page — declaring a counter here as well renders it twice. */
+      @page {
+        size: A4;
+      }
+
+      :root {
+        --ink: #14171a;
+        --muted: #5b6570;
+        --faint: #8a949e;
+        --rule: #d8dde2;
+        --bg-soft: #f6f7f9;
+        --accent: #0f5c8c;
+        --danger: #9b2c2c;
+        --good: #216e39;
+        --mono: ui-monospace, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        font-family: "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, serif;
+        font-size: 10.5pt;
+        line-height: 1.52;
+        color: var(--ink);
+        -webkit-font-smoothing: antialiased;
+      }
+
+      h1,
+      h2,
+      h3,
+      h4 {
+        font-family: -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+        line-height: 1.22;
+        margin: 0;
+        page-break-after: avoid;
+      }
+
+      /* ---------- cover ---------- */
+      .cover {
+        height: 245mm;
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        page-break-after: always;
+      }
+      .cover .eyebrow {
+        font-family: var(--mono);
+        font-size: 8.5pt;
+        letter-spacing: 0.14em;
+        text-transform: uppercase;
+        color: var(--accent);
+        margin-bottom: 10mm;
+      }
+      .cover h1 {
+        font-size: 30pt;
+        letter-spacing: -0.02em;
+        margin-bottom: 5mm;
+      }
+      .cover .sub {
+        font-size: 13pt;
+        color: var(--muted);
+        max-width: 135mm;
+        line-height: 1.45;
+      }
+      .cover .rule {
+        height: 3px;
+        width: 52mm;
+        background: var(--accent);
+        margin: 11mm 0;
+      }
+      .cover dl {
+        display: grid;
+        grid-template-columns: 34mm 1fr;
+        gap: 2.2mm 6mm;
+        margin: 0;
+        font-family: -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
+        font-size: 9.5pt;
+      }
+      .cover dt {
+        color: var(--faint);
+        font-variant: small-caps;
+        letter-spacing: 0.04em;
+      }
+      .cover dd {
+        margin: 0;
+      }
+
+      .metrics {
+        display: grid;
+        grid-template-columns: repeat(4, 1fr);
+        gap: 4mm;
+        margin-top: 12mm;
+        padding-top: 7mm;
+        border-top: 1px solid var(--rule);
+      }
+      .metrics div {
+        font-family: -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
+      }
+      .metrics b {
+        display: block;
+        font-size: 19pt;
+        letter-spacing: -0.02em;
+        color: var(--accent);
+        font-weight: 600;
+      }
+      .metrics span {
+        font-size: 8pt;
+        color: var(--faint);
+        text-transform: uppercase;
+        letter-spacing: 0.07em;
+      }
+
+      /* ---------- structure ---------- */
+      .section {
+        page-break-before: always;
+      }
+      h2 {
+        font-size: 17pt;
+        letter-spacing: -0.015em;
+        padding-bottom: 3mm;
+        border-bottom: 2px solid var(--ink);
+        margin-bottom: 6mm;
+      }
+      h2 .num {
+        font-family: var(--mono);
+        font-size: 11pt;
+        color: var(--accent);
+        margin-right: 4mm;
+        font-weight: 400;
+      }
+      h3 {
+        font-size: 12pt;
+        margin-top: 8mm;
+        margin-bottom: 2.5mm;
+      }
+      h4 {
+        font-size: 10.5pt;
+        margin-top: 5mm;
+        margin-bottom: 1.5mm;
+        color: var(--muted);
+      }
+      p {
+        margin: 0 0 3.2mm;
+        orphans: 2;
+        widows: 2;
+      }
+      ul,
+      ol {
+        margin: 0 0 3.2mm;
+        padding-left: 6mm;
+      }
+      li {
+        margin-bottom: 1.4mm;
+      }
+      strong {
+        font-weight: 600;
+      }
+      a {
+        color: var(--accent);
+        text-decoration: none;
+      }
+
+      code {
+        font-family: var(--mono);
+        font-size: 8.8pt;
+        background: var(--bg-soft);
+        padding: 0.4mm 1.1mm;
+        border-radius: 2px;
+        border: 1px solid #e6e9ec;
+      }
+      pre {
+        font-family: var(--mono);
+        font-size: 8.3pt;
+        line-height: 1.45;
+        background: var(--bg-soft);
+        border: 1px solid var(--rule);
+        border-left: 3px solid var(--accent);
+        padding: 3mm 3.5mm;
+        margin: 0 0 3.5mm;
+        overflow-x: auto;
+        white-space: pre-wrap;
+        page-break-inside: avoid;
+      }
+      pre code {
+        background: none;
+        border: none;
+        padding: 0;
+        font-size: inherit;
+      }
+
+      table {
+        width: 100%;
+        border-collapse: collapse;
+        font-family: -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
+        font-size: 9pt;
+        margin: 0 0 4mm;
+        page-break-inside: avoid;
+      }
+      th {
+        text-align: left;
+        font-weight: 600;
+        border-bottom: 1.5px solid var(--ink);
+        padding: 1.8mm 2.5mm 1.8mm 0;
+        vertical-align: bottom;
+      }
+      td {
+        border-bottom: 1px solid var(--rule);
+        padding: 1.8mm 2.5mm 1.8mm 0;
+        vertical-align: top;
+      }
+      td:last-child,
+      th:last-child {
+        padding-right: 0;
+      }
+
+      /* ---------- TOC ---------- */
+      .toc {
+        page-break-after: always;
+      }
+      .toc ol {
+        list-style: none;
+        padding: 0;
+        margin: 0;
+        font-family: -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
+      }
+      .toc > ol > li {
+        margin-bottom: 3mm;
+        font-size: 11pt;
+      }
+      .toc > ol > li > span:first-child {
+        font-family: var(--mono);
+        color: var(--accent);
+        margin-right: 3.5mm;
+        font-size: 9.5pt;
+      }
+      .toc ul {
+        list-style: none;
+        padding-left: 11mm;
+        margin: 1.5mm 0 0;
+        font-size: 9pt;
+        color: var(--muted);
+      }
+      .toc ul li {
+        margin-bottom: 0.7mm;
+      }
+
+      /* ---------- callouts ---------- */
+      .box {
+        border: 1px solid var(--rule);
+        background: var(--bg-soft);
+        padding: 3.5mm 4mm;
+        margin: 0 0 4mm;
+        page-break-inside: avoid;
+      }
+      .box.lesson {
+        border-left: 3px solid var(--good);
+        background: #f2f8f4;
+      }
+      .box.warn {
+        border-left: 3px solid var(--danger);
+        background: #fdf4f4;
+      }
+      .box.key {
+        border-left: 3px solid var(--accent);
+      }
+      .box h4 {
+        margin: 0 0 1.5mm;
+        color: var(--ink);
+        font-size: 9.5pt;
+        text-transform: uppercase;
+        letter-spacing: 0.06em;
+      }
+      .box p:last-child,
+      .box ul:last-child {
+        margin-bottom: 0;
+      }
+
+      /* ---------- log entries ---------- */
+      .log {
+        page-break-inside: avoid;
+        margin-bottom: 6mm;
+        padding-bottom: 5mm;
+        border-bottom: 1px solid var(--rule);
+      }
+      .log:last-child {
+        border-bottom: none;
+      }
+      .log h3 {
+        margin-top: 0;
+        font-size: 11pt;
+      }
+      .log h3 .id {
+        font-family: var(--mono);
+        color: var(--accent);
+        margin-right: 2.5mm;
+        font-size: 10pt;
+      }
+      .log .row {
+        display: grid;
+        grid-template-columns: 22mm 1fr;
+        gap: 1.2mm 4mm;
+        font-size: 9.5pt;
+      }
+      .log .row dt {
+        font-family: -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
+        font-size: 8pt;
+        text-transform: uppercase;
+        letter-spacing: 0.06em;
+        color: var(--faint);
+        padding-top: 0.6mm;
+      }
+      .log .row dd {
+        margin: 0;
+      }
+
+      .qa {
+        margin-bottom: 5mm;
+        page-break-inside: avoid;
+      }
+      .qa .q {
+        font-family: -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
+        font-weight: 600;
+        font-size: 10pt;
+        margin-bottom: 1.5mm;
+      }
+      .qa .q::before {
+        content: "Q";
+        font-family: var(--mono);
+        color: var(--accent);
+        margin-right: 2.5mm;
+      }
+      .qa .a {
+        padding-left: 6mm;
+        border-left: 2px solid var(--rule);
+      }
+      .qa .a p:last-child {
+        margin-bottom: 0;
+      }
+
+      .tight li {
+        margin-bottom: 0.6mm;
+      }
+      .muted {
+        color: var(--muted);
+      }
+      .small {
+        font-size: 9pt;
+      }
+      .nobreak {
+        page-break-inside: avoid;
+      }
+    </style>
+  </head>
+  <body>
+    <!-- =================== COVER =================== -->
+    <div class="cover">
+      <div class="eyebrow">Project handover &amp; knowledge transfer</div>
+      <h1>AWS Inventory, Graph&nbsp;&amp; Agent</h1>
+      <div class="sub">
+        A thin slice of the dave.io product: connect to a customer's AWS account with a read-only
+        role, ingest what is there and how it fits together, and put an agent on top that answers
+        questions a DevOps engineer would act on.
+      </div>
+      <div class="rule"></div>
+      <dl>
+        <dt>Prepared for</dt>
+        <dd>Tom Koren</dd>
+        <dt>Purpose</dt>
+        <dd>dave.io engineering assignment — presentation &amp; defence</dd>
+        <dt>Repository</dt>
+        <dd>github.com/TomKoren1/dave.io_home-assignment</dd>
+        <dt>Stack</dt>
+        <dd>TypeScript · Fastify · Postgres · Neo4j · React Flow · Anthropic</dd>
+        <dt>Verified against</dt>
+        <dd>A real AWS account (672299759593) and a mocked one (moto)</dd>
+      </dl>
+
+      <div class="metrics">
+        <div><b>176</b><span>unit tests</span></div>
+        <div><b>18/18</b><span>agent evals · F1 1.0</span></div>
+        <div><b>13</b><span>decision records</span></div>
+        <div><b>32</b><span>logged problems</span></div>
+      </div>
+    </div>
+
+    <!-- =================== TOC =================== -->
+    <div class="toc">
+      <h2>Contents</h2>
+      <ol>
+        <li>
+          <span>1</span>What was asked, and what was built
+          <ul>
+            <li>The brief · Scope delivered · How to demo it in ten minutes</li>
+          </ul>
+        </li>
+        <li>
+          <span>2</span>Architecture
+          <ul>
+            <li>The pipeline · Why two databases · The domain model</li>
+          </ul>
+        </li>
+        <li>
+          <span>3</span>The infrastructure half
+          <ul>
+            <li>
+              Cross-account assume-role · Why the supplied IAM role was replaced · Partial failure
+            </li>
+          </ul>
+        </li>
+        <li>
+          <span>4</span>Deterministic analysis
+          <ul>
+            <li>The four analysers · Why verdicts are computed, not inferred · The traps</li>
+          </ul>
+        </li>
+        <li>
+          <span>5</span>The agent
+          <ul>
+            <li>Fifteen curated tools · Citation validation · Four layers of read-only</li>
+          </ul>
+        </li>
+        <li>
+          <span>6</span>How correctness is established
+          <ul>
+            <li>Two eval tiers · What they caught · What they still cannot catch</li>
+          </ul>
+        </li>
+        <li>
+          <span>7</span>The thirteen decisions
+          <ul>
+            <li>Each ADR, the alternative rejected, and the reason</li>
+          </ul>
+        </li>
+        <li>
+          <span>8</span>The thirty-two problems
+          <ul>
+            <li>Symptom, cause, fix and lesson for every one</li>
+          </ul>
+        </li>
+        <li>
+          <span>9</span>Recurring failure patterns
+          <ul>
+            <li>The five shapes most of the bugs share</li>
+          </ul>
+        </li>
+        <li>
+          <span>10</span>Limits, and what comes next
+          <ul>
+            <li>What breaks first at scale · Deliberate gaps · The next week of work</li>
+          </ul>
+        </li>
+        <li>
+          <span>11</span>Interview preparation
+          <ul>
+            <li>Likely questions, with answers grounded in the code</li>
+          </ul>
+        </li>
+      </ol>
+    </div>
+
+    <!-- =================== 1 =================== -->
+    <div class="section">
+      <h2><span class="num">1</span>What was asked, and what was built</h2>
+
+      <h3>The brief</h3>
+      <p>
+        Connect to a customer's AWS account using a read-only role, ingest the resources and the
+        relationships between them into a store, put an LLM agent on top that answers questions
+        about that account, and visualise the result in React Flow with a chat interface. Graded
+        roughly equally across three axes — infrastructure, data engineering, and AI — with UX and
+        production thinking on top. One hard rule:
+        <strong>the agent must never change anything</strong>.
+      </p>
+
+      <h3>What is delivered</h3>
+      <table>
+        <tr>
+          <th style="width: 34mm">Axis</th>
+          <th>Delivered</th>
+        </tr>
+        <tr>
+          <td><strong>Infrastructure</strong></td>
+          <td>
+            Cross-account <code>sts:AssumeRole</code> with an ExternalId, per-service and per-region
+            scan units with independent failure, adaptive retry, SDK paginators, region discovery
+            with a Resource Explorer fast path, and a replacement CloudFormation role that grants
+            strictly less than the one supplied.
+          </td>
+        </tr>
+        <tr>
+          <td><strong>Data</strong></td>
+          <td>
+            Six collectors producing a typed resource model with explicit relationships; Postgres as
+            the immutable system of record; Neo4j as a rebuildable graph projection; four
+            deterministic analysers that compute security verdicts with evidence attached; scan
+            diffing for change detection.
+          </td>
+        </tr>
+        <tr>
+          <td><strong>AI</strong></td>
+          <td>
+            A tool-calling agent over fifteen curated, parameterised tools; mechanical citation
+            validation against the ARNs each tool actually returned; a read-only refusal enforced in
+            code rather than prompted; and two eval tiers, one of which needs no API key and runs in
+            CI.
+          </td>
+        </tr>
+        <tr>
+          <td><strong>UX</strong></td>
+          <td>
+            React Flow graph with dagre layout, streaming chat with per-tool progress, a findings
+            sidebar, a changes tab, a trust panel, a runtime mock/real account toggle, and a
+            step-by-step guide for connecting a real AWS account safely.
+          </td>
+        </tr>
+      </table>
+
+      <div class="box key">
+        <h4>The claim worth making</h4>
+        <p>
+          It runs end to end with <strong>no AWS account and no cloud spend</strong> — a mocked
+          account seeded with deliberately non-obvious traps — and it has also been run against a
+          real AWS account, where it found two genuine administrator users that an earlier version
+          of the analysis had missed entirely. Both paths are the same code.
+        </p>
+      </div>
+
+      <h3>Demo in ten minutes</h3>
+      <pre><code>git clone &lt;repo&gt; &amp;&amp; cd dave.io_home-assignment
+cp .env.example .env            # add ANTHROPIC_API_KEY for the chat
+docker compose up -d            # Postgres, Neo4j, moto
+npm install
+
+npm run seed                    # build the fictional customer account
+npm run scan                    # discover it, persist it, project the graph
+npm run dev:api &amp; npm run dev:web
+# open http://localhost:5173</code></pre>
+
+      <p>The order to show things in, and the point each one makes:</p>
+      <ol>
+        <li>
+          <strong>The graph.</strong> Click a red node — a public bucket. The side panel shows the
+          verdict and the <em>reason</em>: which policy statement, which access block.
+        </li>
+        <li>
+          <strong>Ask "which S3 buckets are public?"</strong> Two buckets carry byte-identical
+          wildcard policies and only one is public. The answer names one and explains why the other
+          is not. This is the single best demonstration in the project.
+        </li>
+        <li>
+          <strong>Ask "what can reach the production database?"</strong> It is
+          <code>PubliclyAccessible: false</code> in a private subnet, and reachable by two distinct
+          chains. Watch the tool calls stream as it works.
+        </li>
+        <li>
+          <strong>Ask it to delete something.</strong> It refuses, in code, not because the prompt
+          asked nicely.
+        </li>
+        <li>
+          <strong>Run <code>npm run drift</code> then scan again.</strong> The Changes tab separates
+          what matters from bookkeeping.
+        </li>
+        <li>
+          <strong>Open the Trust panel.</strong> Fifteen data checks run on demand in milliseconds
+          with no API key, and the last agent eval run is shown in the product.
+        </li>
+      </ol>
+    </div>
+
+    <!-- =================== 2 =================== -->
+    <div class="section">
+      <h2><span class="num">2</span>Architecture</h2>
+
+      <pre><code>AWS (real or mock)
+      │  assume-role per service, per region
+      ▼
+  scanner ──▶ 6 collectors ──▶ 4 analysers ──▶ Postgres  (system of record)
+                                                   │
+                                                   ▼
+                                               Neo4j     (graph projection)
+                                                   │
+                                     15 curated tools ──▶ agent ──▶ React UI</code></pre>
+
+      <h3>Why two databases, and why that is not over-engineering</h3>
+      <p>
+        There is a strict hierarchy:
+        <strong>Postgres is authoritative, Neo4j is a rebuildable projection of it.</strong> Each
+        scan writes immutable snapshots to Postgres, then rebuilds the graph in one transaction. One
+        writer, one direction of flow.
+      </p>
+      <p>
+        <strong>Neo4j earns its place</strong> because the brief's questions are overwhelmingly
+        about relationships, and one of them — <em>what can reach the production database?</em> — is
+        a variable-length path query. In Cypher that is one <code>MATCH</code> with a
+        <code>*1..n</code> hop. In SQL it is a recursive CTE over a junction table that nobody will
+        enjoy maintaining. The graph is the shape of the problem, not decoration.
+      </p>
+      <p><strong>Postgres earns its place</strong> because three things fit badly in a graph:</p>
+      <ul>
+        <li>
+          <strong>Scan history.</strong> "What changed since the last scan?" needs immutable
+          snapshots over time, not a mutable current-state graph.
+        </li>
+        <li>
+          <strong>Partial failure.</strong> Per-(service, region) status, error codes, durations and
+          API-call counts are a plain relational fact table.
+        </li>
+        <li>
+          <strong>Agent traces.</strong> Conversations, tool calls and eval results are relational
+          and high-volume, and must never compete with the queries the agent runs.
+        </li>
+      </ul>
+      <div class="box key">
+        <h4>The answer to "why not just one?"</h4>
+        <p>
+          The hierarchy is what makes two stores tolerable. If Neo4j is lost, or the graph model
+          changes, it replays from Postgres with no rescan and no further AWS calls. That makes the
+          graph <em>disposable</em>, and therefore safe to change — which is the property you want
+          from the component whose schema you understand least well at the start.
+        </p>
+      </div>
+
+      <h3>The domain model</h3>
+      <p>
+        One <code>Resource</code> type across every service, carrying <code>arn</code>,
+        <code>kind</code>, <code>name</code>, <code>region</code>, <code>accountId</code>,
+        <code>tags</code>, raw <code>properties</code>, and a <code>derived</code> block. Analysers
+        write only into <code>derived</code>, and every verdict is paired with a reason:
+      </p>
+      <pre><code>derived: {
+  isPublic, publicReason,          // anonymous access granted now
+  isUnprotected, unprotectedReason, // nothing would stop it being granted
+  isAdmin, adminReason,             // effective *:* on *:*
+  isIdle, idleReason, estimatedMonthlyCostUsd
+}</code></pre>
+      <p>
+        Relationships are explicit and typed — <code>IN_VPC</code>, <code>IN_SUBNET</code>,
+        <code>HAS_POLICY</code>, <code>EXECUTES_AS</code>, <code>ATTACHED_TO</code>,
+        <code>CAN_REACH</code> — and the internet is a first-class node
+        (<code>arn:aws:daveio:::internet</code>), so "reachable from the internet" is an ordinary
+        graph traversal rather than a special case.
+      </p>
+    </div>
+
+    <!-- =================== 3 =================== -->
+    <div class="section">
+      <h2><span class="num">3</span>The infrastructure half</h2>
+
+      <h3>Cross-account access</h3>
+      <p>
+        The customer deploys one CloudFormation stack creating one IAM role. dave.io assumes it with
+        <code>sts:AssumeRole</code> plus a per-customer <strong>ExternalId</strong>, which is the
+        documented mitigation for the confused-deputy problem: knowing the role's ARN is not
+        sufficient to assume it. Sessions are cached and renewed; role chaining caps at one hour, so
+        the role asks for exactly that rather than pretending to more.
+      </p>
+
+      <h3>Why the supplied role was replaced</h3>
+      <p>
+        This is the sharpest thing in the brief, and probably deliberately so: the supplied template
+        grants <code>ReadOnlyAccess</code> while the evaluation criteria ask whether candidates
+        understand what read-only really means.
+      </p>
+      <div class="box warn">
+        <h4>
+          <code>ReadOnlyAccess</code> is not read-only in the sense an inventory product needs
+        </h4>
+        <p>
+          It grants roughly 7,000 actions including <code>s3:GetObject</code>,
+          <code>dynamodb:GetItem</code>, <code>secretsmanager:GetSecretValue</code>,
+          <code>ssm:GetParameter</code>, <code>kinesis:GetRecords</code> and
+          <code>lambda:GetFunction</code> — which returns a presigned URL to the function's source.
+          An inventory product needs to know that a bucket exists, who can reach it, and how it is
+          configured. It never needs to read an object out of it. Granting the ability turns a
+          compromise of dave.io's platform account into a compromise of every customer's
+          <em>data</em>.
+        </p>
+        <p>
+          <strong>And <code>sqs:ReceiveMessage</code> is not even read-only literally.</strong>
+          Receiving a message starts its visibility timeout and can hide it from the consumer that
+          should have processed it. A scanner holding that permission can breach the brief's own
+          hard rule through a permission nobody thinks of as a write. This is the detail to raise in
+          the interview.
+        </p>
+      </div>
+      <p>The replacement grants strictly less, and three things changed:</p>
+      <ul>
+        <li>
+          <strong>Permissions:</strong> <code>SecurityAudit</code> +
+          <code>job-function/ViewOnlyAccess</code>, plus an explicit <code>Deny</code> on data-plane
+          reads. A Deny cannot be overridden by any Allow, including one a future AWS managed-policy
+          update might introduce — which is what makes "we can see your infrastructure but not your
+          data" a guarantee rather than a promise about today's policies.
+        </li>
+        <li>
+          <strong>Trust:</strong> the scanner principal is named directly rather than
+          <code>Principal: …:root</code>. That <code>:root</code> does not mean "the root user" — it
+          means every principal in the account that IAM permits to call AssumeRole. It is a common
+          misreading, and worth flagging in the brief itself.
+        </li>
+        <li>
+          <strong>Attribution:</strong> <code>sts:SetSourceIdentity</code> constrained to
+          <code>daveio:*</code>, so the customer's own CloudTrail records which operator triggered a
+          scan, immutably for the life of the session. A customer granting a third party standing
+          access should not have to take our word for who did what.
+        </li>
+      </ul>
+      <p>
+        The original template is kept alongside for comparison, and the role emits a
+        <code>VerifyCommand</code> output so the customer can prove the Deny works from their own
+        account with <code>aws iam simulate-principal-policy</code>.
+      </p>
+
+      <h3>Partial failure is the normal case</h3>
+      <p>
+        The unit of work is a <code>(service, region)</code> pair, and each one succeeds or fails
+        independently with its own status, error, duration and API-call count. A scan of seventeen
+        regions where <code>rds:eu-west-1</code> is throttled returns everything else and says
+        precisely what is missing. The agent's system prompt carries the failed units, so it can
+        warn that an answer may be incomplete without being asked. <code>SCAN_FAULT_INJECTION</code>
+        exists to demonstrate this deterministically.
+      </p>
+      <p>
+        Region handling degrades the same way: Resource Explorer is tried as a fast path to learn
+        which regions actually hold resources, falls back to <code>ec2:DescribeRegions</code>, and
+        falls back again to a configured list. Every failure path widens the scan rather than
+        narrowing it — the failure mode is "slower", never "silently incomplete".
+      </p>
+    </div>
+
+    <!-- =================== 4 =================== -->
+    <div class="section">
+      <h2><span class="num">4</span>Deterministic analysis</h2>
+
+      <p>
+        This is the decision that matters most in the whole project, and it is worth being able to
+        state in one sentence:
+        <strong
+          >questions like "which buckets are public?" are security reasoning, not data lookup, and
+          the reasoning is done in code at ingest time — never by the model.</strong
+        >
+      </p>
+      <p>
+        A bucket is public if its policy or ACL grants a wildcard principal <strong>and</strong>
+        neither the bucket-level nor the account-level public access block overrides it. That is a
+        four-input boolean with a precedence rule. A language model can usually get it right, and
+        "usually" is not a property you want in a security verdict. A unit test can get it right
+        every time.
+      </p>
+
+      <table>
+        <tr>
+          <th style="width: 32mm">Analyser</th>
+          <th>Computes</th>
+        </tr>
+        <tr>
+          <td><strong>Public access</strong></td>
+          <td>
+            <code>isPublic</code> — anonymous access is granted <em>now</em> — and separately
+            <code>isUnprotected</code> — nothing would stop it being granted. Both with reasons.
+          </td>
+        </tr>
+        <tr>
+          <td><strong>Policy</strong></td>
+          <td>
+            <code>isAdmin</code> for roles <em>and</em> users, by reading policy documents rather
+            than policy names, and attributing the grant to the specific managed or inline policy.
+          </td>
+        </tr>
+        <tr>
+          <td><strong>Reachability</strong></td>
+          <td>
+            <code>CAN_REACH</code> edges derived from security group rules, subnet routing and the
+            internet node, so path queries traverse justified edges only.
+          </td>
+        </tr>
+        <tr>
+          <td><strong>Idle</strong></td>
+          <td>
+            <code>isIdle</code> from structural signals — attached to nothing, associated with
+            nothing, stopped — with a list-price cost estimate for ranking.
+          </td>
+        </tr>
+      </table>
+
+      <div class="box key">
+        <h4>Public vs unprotected — the distinction to lead with</h4>
+        <p>
+          Turning off S3 Block Public Access grants nobody anything. It removes the guardrail that
+          would neutralise a permissive policy; an anonymous request still gets 403. Conflating the
+          two is the most common misreading in this area, so they are separate verdicts, separate
+          tabs, separate agent tools, and a paragraph of the system prompt — because the model
+          conflates them too. Being able to explain this well is worth more than any feature in the
+          project.
+        </p>
+      </div>
+
+      <h3>The traps in the mock account</h3>
+      <p>
+        The fixture is built to defeat a naive lookup. The answer key is written by hand in
+        <code>topology.ts</code> rather than generated from the code under test, so an analyser bug
+        cannot grade itself correct.
+      </p>
+      <table>
+        <tr>
+          <th style="width: 42mm">Trap</th>
+          <th>Why a naive answer fails</th>
+        </tr>
+        <tr>
+          <td><strong>Two buckets, one policy</strong></td>
+          <td>
+            Byte-identical wildcard policies; only one is public. The other is neutralised by
+            <code>RestrictPublicBuckets</code>. Naming both is the classic false positive.
+          </td>
+        </tr>
+        <tr>
+          <td><strong>A private database anyone can reach</strong></td>
+          <td>
+            <code>PubliclyAccessible: false</code> in a private subnet, reachable by two chains —
+            three hops through the web and app tiers, two through a bastion with SSH open to the
+            world.
+          </td>
+        </tr>
+        <tr>
+          <td><strong>A public database nobody can reach</strong></td>
+          <td>
+            <code>PubliclyAccessible: true</code> and its security group opens no ports. The obvious
+            answer is wrong.
+          </td>
+        </tr>
+        <tr>
+          <td><strong>Admin hiding in plain sight</strong></td>
+          <td>
+            Three roles and two users are effectively admin. One grants <code>*:*</code> inline
+            under the name <code>LegacyDeployRole</code>; a user grants it inline under
+            <code>BackupHelper</code>. Only findable by reading policy documents.
+          </td>
+        </tr>
+        <tr>
+          <td><strong>Money going nowhere</strong></td>
+          <td>
+            Unattached volumes, an unassociated elastic IP, a stopped instance, a NAT gateway in an
+            abandoned region — about $103/month.
+          </td>
+        </tr>
+        <tr>
+          <td><strong>A deliberate non-finding</strong></td>
+          <td>
+            <code>northwind-logs-archive</code> is genuinely unused, and is <em>not</em> in the
+            answer key: proving it needs CloudWatch metrics the scanner does not collect, so
+            reporting it would be a lucky guess rather than a finding.
+          </td>
+        </tr>
+      </table>
+    </div>
+
+    <!-- =================== 5 =================== -->
+    <div class="section">
+      <h2><span class="num">5</span>The agent</h2>
+
+      <h3>A plain tool-calling loop, no framework</h3>
+      <p>
+        Ask the model, run whatever tools it requested, hand the results back, repeat until it
+        answers in prose. Capped at eight iterations; tool results truncated at 12k characters.
+        Every step is emitted as an event, so the UI shows <em>which tool is running</em> rather
+        than a spinner — "what is the agent doing while it works" deserves a better answer than
+        "Thinking…".
+      </p>
+      <p>
+        No framework, because the two decisions that actually define this agent — the tool boundary
+        and citation validation — are precisely what a framework would hide behind its own
+        abstractions, without removing any of the real work.
+      </p>
+
+      <h3>Fifteen curated tools, not text-to-Cypher</h3>
+      <p>
+        The model chooses which tool to call and with what arguments; it never writes the query.
+        Text-to-Cypher was the obvious alternative and was rejected on four counts:
+      </p>
+      <ul>
+        <li>
+          <strong>Safety.</strong> A curated tool cannot express a mutation. The brief's hard rule
+          becomes structural.
+        </li>
+        <li>
+          <strong>Correctness.</strong> Hand-written Cypher for "every path from the internet to
+          this resource" is reviewable, testable, and identical on every run.
+        </li>
+        <li>
+          <strong>Cost.</strong> A tool call returns rows. Text-to-Cypher tends to return a schema,
+          a failed query, an error, and a retry.
+        </li>
+        <li>
+          <strong>Auditability.</strong> Because every tool records exactly which ARNs it returned,
+          citations can be validated mechanically. This is the one that pays for the other three.
+        </li>
+      </ul>
+      <p>
+        There is still a <code>graph_query</code> escape hatch for genuinely novel questions. It
+        runs behind a lexical write-clause validator <strong>and</strong> inside a Neo4j read
+        transaction, because neither layer is trusted alone.
+      </p>
+
+      <h3>Citation validation</h3>
+      <div class="box key">
+        <h4>The mechanism, in one paragraph</h4>
+        <p>
+          Every tool records the ARNs it returned. Every ARN appearing in an answer is checked
+          against that set, and anything unsupported is flagged on the response and shown to the
+          user. This turns the most dangerous failure mode — a confident, plausible, invented
+          identifier — from something a prompt hopes to prevent into something the system detects.
+          Any unsupported citation fails an eval case outright.
+        </p>
+      </div>
+      <p>
+        It has earned its place twice. Once it cried wolf at a Markdown backtick and needed the ARN
+        pattern fixed (log #12). Once it caught the agent emitting
+        <code>arn:aws:ec2:…:instance/</code> — a truncated placeholder — and the root cause turned
+        out to be a tool that did not return the resource its own question was about (log #32).
+      </p>
+
+      <h3>"Never change anything", enforced at four layers</h3>
+      <ol class="tight">
+        <li>The IAM role has no write permissions and an explicit Deny on data reads.</li>
+        <li>
+          The scanner only ever calls <code>Describe</code> / <code>List</code> / <code>Get</code>.
+        </li>
+        <li>No tool can express a mutation.</li>
+        <li>Raw Cypher is lexically validated and run inside a read transaction.</li>
+      </ol>
+      <p>
+        And a fifth, added because it had to be: when a user asks the agent to change something, the
+        answer must explicitly say it cannot. Three attempts to achieve that by prompting failed —
+        one of them because the prompt's own Style rules ("do not pad with caveats") were competing
+        with the constraint. The guarantee now lives in code, in
+        <code>readOnlyGuard.ts</code>, applied after the model has spoken (log #15, ADR-009).
+      </p>
+      <div class="box lesson">
+        <h4>The generalisable point</h4>
+        <p>
+          If a property must hold, do not ask a model to hold it. Three prompt attempts, each
+          plausible, each failing differently, cost more than the twenty lines that made it
+          structural — and the twenty lines cannot regress when the prompt is edited for an
+          unrelated reason.
+        </p>
+      </div>
+
+      <h3>One honest boundary</h3>
+      <p>
+        <strong>Neo4j Community has no role-based access control</strong>, so a genuinely read-only
+        database <em>user</em> is not available. The read transaction is enforced at the driver, not
+        the database. In production this would be an Enterprise read-only role or a read replica.
+        Recorded in log #7 rather than glossed over — and worth volunteering in the interview, since
+        it is the kind of thing a good reviewer will find.
+      </p>
+    </div>
+
+    <!-- =================== 6 =================== -->
+    <div class="section">
+      <h2><span class="num">6</span>How correctness is established</h2>
+
+      <p>Two eval suites that fail for different reasons, which is the point of splitting them.</p>
+
+      <h3>Tier 1 — ground truth over the data</h3>
+      <p>
+        Seeds the mock account, runs a real scan, and asserts the result against the hand-written
+        answer key. <strong>No model, no API key, about two seconds</strong>, and it runs in CI on
+        every commit. Fifteen checks, including the ones that matter most: the neutralised bucket is
+        <em>not</em> public, the inline-admin role <em>is</em> admin, the private database is
+        reachable by both expected chains, and the publicly-flagged database is reachable by none.
+      </p>
+
+      <h3>Tier 2 — answer quality</h3>
+      <p>
+        Eighteen cases against the live agent, scored on the ARNs each answer cites, with precision
+        and recall. Each case asserts what must be cited, what must <strong>not</strong> be (the
+        traps), and which tools should have been chosen.
+      </p>
+      <p>
+        Last recorded full run on <code>claude-sonnet-5</code>:
+        <strong>18/18, mean F1 1.0, no unsupported citations.</strong>
+      </p>
+      <p>
+        Precision matters as much as recall precisely because of the traps: an answer naming every
+        bucket achieves perfect recall and is useless.
+      </p>
+
+      <div class="box lesson">
+        <h4>Getting there is the better advertisement than the score</h4>
+        <p>The suite caught four real problems, and two of them were problems with the tests:</p>
+        <ul>
+          <li>
+            The agent answering "please delete this volume" with the volume's details and a CLI
+            command — safe, useful, and never saying it could not act (log #15).
+          </li>
+          <li>
+            A defect in a test rather than an answer (log #13) — and two days later that same
+            relaxed test turned out to have been hiding a real tool defect (log #32).
+          </li>
+          <li>
+            Two attempts to test a <em>negated</em> inference with a forbidden-substring pattern,
+            both of which failed correct answers. The second failed on "a different kind of risk
+            than an unused admin role" — a sentence stating the very distinction being tested for.
+          </li>
+        </ul>
+      </div>
+
+      <h3>What this does not catch, stated plainly</h3>
+      <p>
+        An answer that cites exactly the right resources and describes them wrongly. The
+        <code>mustMention</code> patterns cover the cases where that has teeth, but a genuinely
+        adversarial wrong answer with correct citations would pass. Closing it needs an LLM judge
+        over a larger case set. Relatedly, lexical patterns cannot test a negated claim at all — "X
+        is unused" and "X is not unused" differ by one token that carries the whole meaning.
+      </p>
+
+      <h3>How you would know a change made it worse</h3>
+      <p>
+        Tier 1 fails in CI within seconds. Tier 2 produces a mean F1 and a pass count, stored in
+        <code>eval_runs</code> and written to <code>evals/results/</code> so two runs can be diffed.
+        The split makes failures diagnosable: if tier 1 passes and tier 2 fails, the data is right
+        and the agent misused it — a prompt or tool-description problem. If tier 1 fails, nothing
+        about the agent is worth looking at yet.
+      </p>
+
+      <h3>CI</h3>
+      <p>
+        Three jobs: a static job (format, typecheck, 176 unit tests), an integration job that stands
+        up Postgres, Neo4j and moto and runs the tier-1 suite, and a secret scan. The secret scan
+        pairs gitleaks with a deterministic <code>git ls-files</code> check that no environment file
+        is ever tracked — because a probabilistic check that silently matches nothing is worse than
+        no check at all, which is exactly what happened in log #27.
+      </p>
+    </div>
+
+    <!-- =================== 7 =================== -->
+    <div class="section">
+      <h2><span class="num">7</span>The thirteen decisions</h2>
+      <p class="muted small">
+        Full records with alternatives and consequences in <code>docs/DECISIONS.md</code>.
+      </p>
+
+      <h3>ADR-001 — TypeScript across the whole repo</h3>
+      <p>
+        One language for the scanner, the API, the agent and the UI. The domain model is defined
+        once in <code>packages/shared</code> and imported by everything, so a change to a resource
+        shape is a compile error rather than a runtime surprise at the API boundary. Python would
+        have been better for nothing here that TypeScript is not adequate for.
+      </p>
+
+      <h3>ADR-002 — moto in Docker as the mock AWS control plane</h3>
+      <p>
+        moto implements the real AWS APIs, so the scanner is written against the genuine SDK and
+        does not know it is talking to a mock — the same code runs against real AWS with only an
+        endpoint override removed. LocalStack's community edition cannot do RDS, which this project
+        needs. The cost is two capability gaps, both recorded rather than hidden: no pagination
+        simulation, and no Resource Explorer.
+      </p>
+
+      <h3>ADR-003 — Postgres as system of record, Neo4j as derived projection</h3>
+      <p>Covered in section 2. The load-bearing part is the hierarchy, not the pair.</p>
+
+      <h3>ADR-004 — Security reasoning is computed in code, never by the model</h3>
+      <p>
+        Covered in section 4. This is the decision to lead with if asked "what would you defend
+        hardest?"
+      </p>
+
+      <h3>ADR-005 — A curated tool library instead of text-to-Cypher</h3>
+      <p>Covered in section 5, with the four reasons.</p>
+
+      <h3>ADR-006 — Citations are validated mechanically</h3>
+      <p>
+        The one countermeasure against invented identifiers that does not depend on the model
+        cooperating. It requires the tool boundary of ADR-005 to work at all, which is why the two
+        decisions are really one.
+      </p>
+
+      <h3>ADR-007 — Replacing the supplied read-only role</h3>
+      <p>Covered in section 3, with the <code>sqs:ReceiveMessage</code> detail.</p>
+
+      <h3>ADR-008 — Two tiers of evaluation</h3>
+      <p>
+        Tier 1 is deterministic, free and fast enough for CI; tier 2 costs money and time and needs
+        a key. Keeping them separate means the expensive suite is not the gate, and a failure in
+        either one localises the problem immediately.
+      </p>
+
+      <h3>ADR-009 — The read-only refusal is enforced in code, not prompted</h3>
+      <p>Covered in section 5, including the two-instructions-fighting diagnosis.</p>
+
+      <h3>ADR-010 — Onboarding is guided in the UI, not performed by it</h3>
+      <p>
+        The obvious feature is a form: paste a role ARN and an ExternalId, press connect. This API
+        has no authentication, so that form would be an unauthenticated endpoint that assumes a role
+        into somebody's AWS account and stores a value the role template itself calls a credential.
+        Instead the server generates what a customer needs, renders the exact command, and tests the
+        connection that is already configured — so putting the role ARN into configuration stays a
+        deliberate act by an operator with host access.
+        <strong
+          >Building it would have made the demo look more complete and the product less
+          defensible.</strong
+        >
+      </p>
+
+      <h3>ADR-011 — Evaluation results are shown in the product</h3>
+      <p>
+        The Trust panel shows what is checked and when it last ran. A tool that makes security
+        claims should be able to show its own working to the person relying on it, not only to the
+        engineer who wrote it.
+      </p>
+
+      <h3>ADR-012 — "Public" and "unprotected" are separate verdicts</h3>
+      <p>
+        Covered in section 4. Prompted by a real question about a real bucket with Block Public
+        Access disabled: the agent was correct to say it was not public, and the product was wrong
+        to have nowhere to say it was unguarded.
+      </p>
+
+      <h3>ADR-013 — The account toggle switches at runtime and never writes <code>.env</code></h3>
+      <p>
+        Switching accounts from the UI must not rewrite configuration — a restart should always
+        return to a known state. Switching also deliberately does not rescan: the graph keeps
+        showing the previous account's inventory until one runs, and the banner says so, rather than
+        letting someone read one account's resources under another's name.
+      </p>
+    </div>
+
+    <!-- =================== 8 =================== -->
+    <div class="section">
+      <h2><span class="num">8</span>The thirty-two problems</h2>
+      <p class="muted small">
+        Full write-ups in <code>docs/ENGINEERING-LOG.md</code>. Each entry below gives the symptom,
+        the cause, the fix, and what it generalises to.
+      </p>
+
+      <h3>Mock-environment capability gaps</h3>
+
+      <div class="log">
+        <h3>
+          <span class="id">#1</span><code>AttachRolePolicy</code> fails for AWS-managed policies
+          under moto
+        </h3>
+        <dl class="row">
+          <dt>Cause</dt>
+          <dd>
+            moto does not load AWS-managed policies unless told to;
+            <code>AdministratorAccess</code> simply does not exist, so attaching it throws
+            <code>NoSuchEntity</code>.
+          </dd>
+          <dt>Fix</dt>
+          <dd><code>MOTO_IAM_LOAD_MANAGED_POLICIES=true</code> in compose.</dd>
+          <dt>Lesson</dt>
+          <dd>
+            A mock's defaults are a product decision, not a bug. Read them before assuming your code
+            is wrong.
+          </dd>
+        </dl>
+      </div>
+
+      <div class="log">
+        <h3><span class="id">#2</span>Resources silently vanishing into a second AWS account</h3>
+        <dl class="row">
+          <dt>Cause</dt>
+          <dd>
+            moto namespaces resources by the account id in the credentials. Assuming a role whose
+            ARN names a different account than <code>MOTO_ACCOUNT_ID</code> puts resources in a
+            separate namespace — seeds succeed, scans find nothing.
+          </dd>
+          <dt>Fix</dt>
+          <dd>
+            Keep the role ARN's account equal to the mock account id; documented in
+            <code>.env.example</code>.
+          </dd>
+          <dt>Lesson</dt>
+          <dd>
+            The first of <em>three</em> bugs in this project caused by two sources of truth for
+            "which account am I looking at?". See #17 and #31.
+          </dd>
+        </dl>
+      </div>
+
+      <div class="log">
+        <h3><span class="id">#3</span>moto does not simulate pagination</h3>
+        <dl class="row">
+          <dt>Cause</dt>
+          <dd>
+            Thirty instances with <code>pageSize: 5</code> returned one page, so paginator handling
+            was untested by construction.
+          </dd>
+          <dt>Fix</dt>
+          <dd>Unit-test paginators against a stubbed client rather than the mock.</dd>
+          <dt>Lesson</dt>
+          <dd>
+            Know which properties your fixture <em>cannot</em> exercise, and test those elsewhere —
+            a green suite over a mock that cannot fail is not evidence.
+          </dd>
+        </dl>
+      </div>
+
+      <div class="log">
+        <h3><span class="id">#4</span>AWS Resource Explorer is not available in the mock</h3>
+        <dl class="row">
+          <dt>Cause</dt>
+          <dd>moto returns an HTML 404 for <code>resource-explorer-2</code>.</dd>
+          <dt>Fix</dt>
+          <dd>
+            Treat it as an optional fast path with SDK enumeration as the tested fallback; the
+            degradation path is what gets exercised locally.
+          </dd>
+          <dt>Lesson</dt>
+          <dd>
+            It also cannot be relied on in production: the index must be created in the customer
+            account, which a read-only role cannot do. Worth raising as feedback on the brief.
+          </dd>
+        </dl>
+      </div>
+
+      <h3>Type and tooling traps</h3>
+
+      <div class="log">
+        <h3><span class="id">#5</span><code>InstanceType</code> is an enum, not a string</h3>
+        <dl class="row">
+          <dt>Cause</dt>
+          <dd>
+            The SDK types it as a union of literals; a plain <code>string</code> will not assign.
+          </dd>
+          <dt>Fix</dt>
+          <dd>Use the SDK's own <code>_InstanceType</code> type in the seeder.</dd>
+        </dl>
+      </div>
+
+      <div class="log">
+        <h3><span class="id">#6</span>The SDK paginator refuses a hand-rolled fake client</h3>
+        <dl class="row">
+          <dt>Cause</dt>
+          <dd>Paginators check <code>instanceof</code> the real client class.</dd>
+          <dt>Fix</dt>
+          <dd>Construct a real client and stub only its <code>send</code>.</dd>
+          <dt>Lesson</dt>
+          <dd>
+            Fake at the narrowest seam the library will accept, not the widest one that compiles.
+          </dd>
+        </dl>
+      </div>
+
+      <div class="log">
+        <h3>
+          <span class="id">#9</span>An SDK type silently degraded to <code>any</code>, and
+          <code>skipLibCheck</code> hid why
+        </h3>
+        <dl class="row">
+          <dt>Cause</dt>
+          <dd>
+            Anthropic SDK 0.33.1 had broken self-referencing imports. <code>Message</code> resolved
+            to <code>any</code>, so a type predicate degraded and its callback parameter became
+            implicitly <code>any</code> — surfacing as an unrelated <code>TS7006</code>.
+          </dd>
+          <dt>Fix</dt>
+          <dd>
+            Diagnosed by assigning the suspect type to a <code>number</code> and watching it
+            succeed. Upgraded to 0.128.0 and aliased the content-block types once so it cannot
+            silently return.
+          </dd>
+          <dt>Lesson</dt>
+          <dd>
+            <code>skipLibCheck</code> buys build speed by hiding exactly this. If a type error makes
+            no sense, test whether the type is <code>any</code>.
+          </dd>
+        </dl>
+      </div>
+
+      <div class="log">
+        <h3><span class="id">#10</span>Three versions of Vite in one workspace</h3>
+        <dl class="row">
+          <dt>Cause</dt>
+          <dd>Transitive version drift across workspaces.</dd>
+          <dt>Fix</dt>
+          <dd>Clean reinstall, aligned on one version.</dd>
+        </dl>
+      </div>
+
+      <div class="log">
+        <h3><span class="id">#14</span>Vite does not see the repo-root <code>.env</code></h3>
+        <dl class="row">
+          <dt>Cause</dt>
+          <dd>Vite loads <code>.env</code> relative to its own root, not the monorepo root.</dd>
+          <dt>Fix</dt>
+          <dd>Point <code>envDir</code> at the repo root so one file configures everything.</dd>
+        </dl>
+      </div>
+
+      <div class="log">
+        <h3>
+          <span class="id">#18</span>Prettier silently deleted 47 lines of a CloudFormation template
+        </h3>
+        <dl class="row">
+          <dt>Cause</dt>
+          <dd>
+            Prettier's YAML formatter reflows folded block scalars (<code>Description: &gt;</code>)
+            and dropped content from one.
+          </dd>
+          <dt>Fix</dt>
+          <dd><code>infra/*.yaml</code> in <code>.prettierignore</code>.</dd>
+          <dt>Lesson</dt>
+          <dd>It happened a second time from an unidentified cause, which is why #22 exists.</dd>
+        </dl>
+      </div>
+
+      <h3>Database and query behaviour</h3>
+
+      <div class="log">
+        <h3><span class="id">#8</span><code>LIMIT $limit</code> rejected with "found 100.0"</h3>
+        <dl class="row">
+          <dt>Cause</dt>
+          <dd>JavaScript numbers reach Neo4j as floats; <code>LIMIT</code> requires an integer.</dd>
+          <dt>Fix</dt>
+          <dd>
+            <code>neo4j.int()</code> inside the shared <code>clamp()</code> helper, so every query
+            is fixed at once.
+          </dd>
+          <dt>Lesson</dt>
+          <dd>
+            Fix a type-boundary bug in the one place the boundary is crossed, never at each call
+            site.
+          </dd>
+        </dl>
+      </div>
+
+      <div class="log">
+        <h3><span class="id">#7</span>Neo4j Community cannot enforce a read-only database user</h3>
+        <dl class="row">
+          <dt>Cause</dt>
+          <dd>RBAC is an Enterprise feature.</dd>
+          <dt>Fix</dt>
+          <dd>
+            Enforce read-only at the driver with explicit read transactions, plus a lexical
+            write-clause validator; record the residual gap honestly.
+          </dd>
+          <dt>Lesson</dt>
+          <dd>
+            When you cannot have the guarantee you want, name the one you actually have. Volunteer
+            this in the interview.
+          </dd>
+        </dl>
+      </div>
+
+      <div class="log">
+        <h3>
+          <span class="id">#11</span>A diff field that arrived with no <code>before</code> key
+        </h3>
+        <dl class="row">
+          <dt>Cause</dt>
+          <dd>Absent and <code>null</code> were conflated when diffing snapshots.</dd>
+          <dt>Fix</dt>
+          <dd>Distinguish them explicitly in the diff model.</dd>
+          <dt>Lesson</dt>
+          <dd>
+            "Missing" and "empty" are different facts. This project made the same class of mistake
+            three more times — #28, #30 — with empty strings.
+          </dd>
+        </dl>
+      </div>
+
+      <h3>Agent and evaluation</h3>
+
+      <div class="log">
+        <h3><span class="id">#12</span>The citation validator cried wolf at Markdown</h3>
+        <dl class="row">
+          <dt>Cause</dt>
+          <dd>
+            The ARN regex swallowed a trailing backtick, so a correct answer was flagged as citing
+            an unsupported ARN.
+          </dd>
+          <dt>Fix</dt>
+          <dd>
+            Exclude Markdown punctuation and strip trailing noise — but <em>not</em> the colon,
+            since RDS and SNS ARNs contain colons in the resource section. The first fix
+            over-corrected and truncated RDS ARNs instead.
+          </dd>
+          <dt>Lesson</dt>
+          <dd>
+            An indicator is only as good as its false-positive rate. A validator that flags correct
+            answers gets ignored, which is worse than not having one.
+          </dd>
+        </dl>
+      </div>
+
+      <div class="log">
+        <h3><span class="id">#13</span>An eval failure that was a bad test</h3>
+        <dl class="row">
+          <dt>Cause</dt>
+          <dd>
+            <code>blast-radius</code> expected the agent to cite <code>prod-web-1</code>, but
+            <code>find_reachable_from</code> did not return the source, so its ARN was not citable.
+          </dd>
+          <dt>Fix</dt>
+          <dd>
+            At the time: relaxed the assertion. <strong>That was the wrong call</strong> — see #32.
+          </dd>
+          <dt>Lesson</dt>
+          <dd>
+            "The test is wrong" and "the system is wrong" are both live hypotheses, and I chose the
+            first too quickly.
+          </dd>
+        </dl>
+      </div>
+
+      <div class="log">
+        <h3>
+          <span class="id">#15</span>The refusal the model would not make, and two instructions
+          fighting
+        </h3>
+        <dl class="row">
+          <dt>Cause</dt>
+          <dd>
+            Asked to delete a volume, the agent returned the volume's details and a CLI command —
+            safe and useful, but never saying it could not act. Three prompt fixes failed; one
+            failed because the Style section's "do not pad with caveats" was competing with the
+            constraint.
+          </dd>
+          <dt>Fix</dt>
+          <dd>
+            Enforced in code after the model has spoken (<code>readOnlyGuard.ts</code>, ADR-009).
+          </dd>
+          <dt>Lesson</dt>
+          <dd>
+            Prompt instructions compete, and the loser is not predictable. If a property must hold,
+            make it structural.
+          </dd>
+        </dl>
+      </div>
+
+      <div class="log">
+        <h3>
+          <span class="id">#16</span>Change detection looked broken because the fixture had been
+          re-seeded
+        </h3>
+        <dl class="row">
+          <dt>Cause</dt>
+          <dd>
+            Re-seeding regenerates resource ids, so every resource read as removed and re-added.
+          </dd>
+          <dt>Fix</dt>
+          <dd>Documented the seed → scan → drift → scan order; the diff was correct throughout.</dd>
+          <dt>Lesson</dt>
+          <dd>Before debugging a diff, check whether the identities being compared are stable.</dd>
+        </dl>
+      </div>
+
+      <div class="log">
+        <h3>
+          <span class="id">#25</span>The eval CLI would have run sixteen fixture questions at a real
+          account
+        </h3>
+        <dl class="row">
+          <dt>Cause</dt>
+          <dd>
+            The tier-2 runner had no mode guard, so it would happily ask mock-specific questions of
+            a real account.
+          </dd>
+          <dt>Fix</dt>
+          <dd>Refuse to run unless the mode is mock.</dd>
+        </dl>
+      </div>
+
+      <h3>The configuration failures — the most serious class</h3>
+
+      <div class="box warn">
+        <h4>Three routes to the same artefact</h4>
+        <p>
+          #2, #17 and #31 are the same bug three times:
+          <strong>two sources of truth for "which account am I looking at?"</strong> — the endpoint
+          the calls go to, and the ARN the results are labelled with — with nothing asserting they
+          agree. The output is a complete, confident, entirely fictional inventory of a real AWS
+          account, sitting in the database looking exactly like a genuine scan. It is the worst
+          thing this system can produce.
+        </p>
+      </div>
+
+      <div class="log">
+        <h3><span class="id">#17</span>A real-account scan that silently inventoried the mock</h3>
+        <dl class="row">
+          <dt>Cause</dt>
+          <dd>
+            <code>AWS_ENDPOINT_URL</code> left in <code>.env</code> for the mock is read
+            <em>directly by the AWS SDK</em> from the environment. It is an SDK-wide override, so it
+            redirected every client — STS included — away from AWS regardless of
+            <code>AWS_MODE</code>. The scan enumerated moto and labelled the results with the real
+            account id from the role ARN. <strong>The connection test passed</strong>, because moto
+            accepts any AssumeRole it is given.
+          </dd>
+          <dt>Fix</dt>
+          <dd>
+            <code>config.ts</code> deletes every SDK endpoint override from
+            <code>process.env</code> unconditionally at import, warns loudly, and passes the mock
+            endpoint explicitly instead. Placeholder credentials that would shadow real ones are
+            removed the same way.
+          </dd>
+          <dt>Lesson</dt>
+          <dd>
+            A config value your dependency reads directly from the environment is not yours to
+            interpret. The only fix that works is deleting it.
+          </dd>
+        </dl>
+      </div>
+
+      <div class="log">
+        <h3><span class="id">#31</span>A mock scan recorded under a real AWS account id</h3>
+        <dl class="row">
+          <dt>Cause</dt>
+          <dd>
+            <code>AWS_MODE=mock npm run scan</code> against a <code>.env</code> pointing at a real
+            account. The mode override made <code>configuredMode</code> "mock", so the mock branch
+            honoured <code>AWS_TARGET_ROLE_ARN</code> (which #24 had deliberately made it do) — but
+            that ARN named the real account while the endpoint override sent every call to moto. 100
+            mock resources were persisted under a real twelve-digit account.
+          </dd>
+          <dt>Fix</dt>
+          <dd>
+            The test for "does <code>.env</code> describe the mock?" is now the
+            <strong>account id</strong>, not the mode flag. Extracted as a pure exported function
+            with ten tests, because the condition was load-bearing and untestable inside a module
+            that reads <code>process.env</code> at import.
+          </dd>
+          <dt>Lesson</dt>
+          <dd>
+            When two configuration values must be consistent, do not document the requirement —
+            compute one from the other, or refuse.
+          </dd>
+        </dl>
+      </div>
+
+      <div class="log">
+        <h3><span class="id">#21</span>A configuration knob that existed only in code</h3>
+        <dl class="row">
+          <dt>Cause</dt>
+          <dd>
+            <code>AWS_SCAN_REGIONS</code> had a code default but was never documented in
+            <code>.env.example</code>, so a real account scanned three regions instead of seventeen.
+          </dd>
+          <dt>Fix</dt>
+          <dd>Documented, with the blank-means-discover semantics made explicit.</dd>
+        </dl>
+      </div>
+
+      <div class="log">
+        <h3><span class="id">#23</span>The test suite scanned a real AWS account</h3>
+        <dl class="row">
+          <dt>Cause</dt>
+          <dd>
+            The ground-truth suite seeds a fixture and scans it. With <code>.env</code> in real mode
+            it would do that to a real account.
+          </dd>
+          <dt>Fix</dt>
+          <dd>
+            An <code>isMock()</code> guard that refuses to run. The first attempt wrote
+            <code>!isMock</code> — a function reference, always truthy, so the negation was always
+            false and the guard was silently disabled.
+          </dd>
+          <dt>Lesson</dt>
+          <dd>
+            A guard that cannot fire is worse than no guard, because it is trusted. Test that your
+            guard fires.
+          </dd>
+        </dl>
+      </div>
+
+      <div class="log">
+        <h3>
+          <span class="id">#24</span>The toggle quietly disabled the project's own onboarding
+          variables
+        </h3>
+        <dl class="row">
+          <dt>Cause</dt>
+          <dd>
+            Adding the runtime account toggle made mock mode derive its role ARN and ExternalId, so
+            editing <code>AWS_TARGET_ROLE_ARN</code> — the variable the project ships in
+            <code>.env.example</code> — appeared to do nothing.
+          </dd>
+          <dt>Fix</dt>
+          <dd>
+            Honour them whenever <code>.env</code> itself describes the mock. (Which then needed
+            #31's account-id refinement to be safe.)
+          </dd>
+          <dt>Lesson</dt>
+          <dd>
+            A feature that makes documented configuration inert is a regression even if nothing
+            fails.
+          </dd>
+        </dl>
+      </div>
+
+      <h3>The IAM template</h3>
+
+      <div class="log">
+        <h3>
+          <span class="id">#20</span>The IAM template had never been deployed, and did not work
+        </h3>
+        <dl class="row">
+          <dt>Cause</dt>
+          <dd>
+            It referenced <code>arn:aws:iam::aws:policy/ViewOnlyAccess</code>, which does not exist.
+            <code>ViewOnlyAccess</code> is a <em>job-function</em> policy and lives under
+            <code>job-function/</code>. <code>SecurityAudit</code> on the line above <em>is</em> at
+            the root, which is what makes it easy to get wrong. CloudFormation only says so at
+            deploy time; the stack rolled back and had to be deleted before retrying.
+          </dd>
+          <dt>Fix</dt>
+          <dd>Corrected path, plus tests asserting it.</dd>
+          <dt>Lesson</dt>
+          <dd>
+            An artefact nothing executes is an artefact nothing checks. This one was described in
+            detail in the README and had never once been run.
+          </dd>
+        </dl>
+      </div>
+
+      <div class="log">
+        <h3>
+          <span class="id">#22</span>The template lost its reasoning twice, so now a test holds it
+        </h3>
+        <dl class="row">
+          <dt>Cause</dt>
+          <dd>
+            ~70 lines of rationale vanished twice — once demonstrably from Prettier (#18), once from
+            a cause never identified.
+          </dd>
+          <dt>Fix</dt>
+          <dd>Seventeen guard tests asserting both the permissions <em>and</em> the prose.</dd>
+          <dt>Lesson</dt>
+          <dd>
+            A document nobody checks rots. Content guards look odd in most repositories; here the
+            content had been silently deleted twice.
+          </dd>
+        </dl>
+      </div>
+
+      <div class="log">
+        <h3>
+          <span class="id">#19</span>The onboarding guide taught the mistake it was meant to prevent
+        </h3>
+        <dl class="row">
+          <dt>Cause</dt>
+          <dd>
+            Two ARNs are involved — the scanner principal (an input) and the created role (the
+            output) — and the guide did not distinguish them clearly enough.
+          </dd>
+          <dt>Fix</dt>
+          <dd>Named both roles explicitly in the guide and the template header.</dd>
+          <dt>Lesson</dt>
+          <dd>
+            Prose was not enough; #28 shows the same confusion recurring and being fixed in code.
+          </dd>
+        </dl>
+      </div>
+
+      <h3>Secrets</h3>
+
+      <div class="log">
+        <h3>
+          <span class="id">#26</span>A live API key reached git history, and the secret scan passed
+        </h3>
+        <dl class="row">
+          <dt>Cause</dt>
+          <dd>
+            A file named <code>.env.mock-backup</code>, created as a convenience step during
+            unrelated work, was committed with a live Anthropic key and the customer ExternalId.
+            <code>.gitignore</code> listed exact filenames; gitleaks' rules did not match.
+          </dd>
+          <dt>Fix</dt>
+          <dd>
+            Key revoked and rotated. History rewritten with <code>git filter-branch</code> and
+            force-pushed with a lease; verified no object in history contains the key.
+            <code>.gitignore</code> widened to <code>.env*</code> patterns. A deterministic CI check
+            added: <em>no environment files may be tracked</em>, whatever they are called.
+          </dd>
+          <dt>Lesson</dt>
+          <dd>
+            Two of them. Pair a probabilistic check with a deterministic one covering the common
+            case. And the riskiest artefacts are the incidental ones — this file was not part of any
+            feature, and nobody reviews a convenience step.
+          </dd>
+        </dl>
+      </div>
+
+      <div class="log">
+        <h3><span class="id">#27</span>The secret scan I added to catch #26 was not running</h3>
+        <dl class="row">
+          <dt>Cause</dt>
+          <dd>
+            The new rule used a negative lookahead to exclude placeholders. gitleaks is written in
+            Go, and RE2 has no lookarounds by design — so gitleaks
+            <strong>panicked at startup and scanned nothing</strong>. It failed loudly only by luck,
+            because a later step could not find a report file.
+          </dd>
+          <dt>Fix</dt>
+          <dd>Exclusions moved to a rule allowlist, which is the mechanism provided for it.</dd>
+          <dt>Lesson</dt>
+          <dd>
+            This is #26 one level up. There, green meant "my rules did not match". Here it would
+            have meant "my rules did not load" — strictly worse, because it is trusted. The
+            deterministic <code>git ls-files</code> guard needs no rules and no regex engine, and
+            would have caught the original leak alone.
+          </dd>
+        </dl>
+      </div>
+
+      <h3>Found by real use, at the end</h3>
+
+      <div class="log">
+        <h3>
+          <span class="id">#28</span>Four bugs in the onboarding path, found by someone actually
+          using it
+        </h3>
+        <dl class="row">
+          <dt>Symptom</dt>
+          <dd>
+            A real deployment of the role template, followed by the UI's own connection guide. Four
+            separate failures, none reachable from any unit test.
+          </dd>
+          <dt>Causes</dt>
+          <dd>
+            <strong>(1)</strong> CloudFormation caps <code>Description</code> at 1024 characters;
+            the explanatory header had reached 3,952, so the template could not be deployed at all —
+            and the guards from #18/#22 asserted the prose was <em>present</em>, never that the file
+            still <em>worked</em>. <strong>(2)</strong> The guide pre-filled the deploy command from
+            <code>sts:GetCallerIdentity</code> verbatim. That reports a <em>session</em>, so it
+            returns <code>arn:aws:sts::…</code>; a trust policy needs the
+            <code>arn:aws:iam::…</code> identity behind it. Against the mock it offered
+            <em>moto's own identity</em> as the principal to trust in a real account.
+            <strong>(3)</strong> <code>AWS_TARGET_ROLE_ARN</code> held a user ARN — the correct
+            answer to the question asked two steps earlier, and something
+            <code>sts:AssumeRole</code> can never assume. <strong>(4)</strong>
+            <code>AWS_REGION=</code> was blank; Zod's <code>.default()</code> fires only on
+            <code>undefined</code>, and a blank <code>.env</code> line parses as <code>""</code>, so
+            every AWS client was built with an empty region.
+          </dd>
+          <dt>Fixes</dt>
+          <dd>
+            Prose moved to <code>#</code> comments (no length limit, stripped before evaluation)
+            with guards on the folded length; a tested <code>principal.ts</code> that converts
+            session ARNs to principal ARNs and returns a <em>reason</em> rather than a guess where
+            there is none; <code>validateAssumeRoleTarget()</code> naming the two-role mix-up; and a
+            <code>blankAsUnset</code> wrapper — deliberately <em>not</em> applied to the two
+            variables where blank is documented and meaningful.
+          </dd>
+          <dt>Lesson</dt>
+          <dd>
+            Three of the four were in code whose job is to <em>explain</em> something, and
+            explanatory code fails silently because nothing downstream consumes it. A wrong ARN in a
+            code path throws; a wrong ARN in an instruction gets pasted. The fix for all of it was
+            the same: make the thing that explains also be the thing that computes.
+          </dd>
+        </dl>
+      </div>
+
+      <div class="log">
+        <h3>
+          <span class="id">#29</span>"No admin roles" was true, and read as "nobody has admin"
+        </h3>
+        <dl class="row">
+          <dt>Symptom</dt>
+          <dd>
+            A scan of a real account returned a completely empty findings panel — including no
+            administrators — for an account where two of three IAM users hold
+            <code>AdministratorAccess</code>.
+          </dd>
+          <dt>Cause</dt>
+          <dd>
+            The collector fetched policy documents for roles only. The pipeline loop, commented
+            "which principals are administrators?", filtered to <code>IamRole</code>. The analyser
+            was never the problem: it reads policy documents, identically shaped for both.
+          </dd>
+          <dt>Why nothing caught it</dt>
+          <dd>
+            The mock account contained no IAM users at all.
+            <strong>The fixture shared the blind spot</strong>, so 157 passing tests said this
+            worked.
+          </dd>
+          <dt>Fix</dt>
+          <dd>
+            Collect user policies (sharing the managed-policy cache); accept both kinds; match both
+            labels in the query; add three users to the fixture — one admin by managed policy, one
+            admin inline under the name <code>BackupHelper</code>, one scoped as the negative class
+            — and three ground-truth checks. Reverting only the pipeline filter fails two of them.
+          </dd>
+          <dt>Lesson</dt>
+          <dd>
+            It did not say "I do not check users". It said "No role grants unrestricted access"
+            beside an empty panel, which reads as a clean bill of health. A gap that presents as
+            reassurance is the one kind of false negative a security tool cannot ship.
+          </dd>
+        </dl>
+      </div>
+
+      <div class="log">
+        <h3>
+          <span class="id">#30</span>An idle-detection rule that was correct and never fired once
+        </h3>
+        <dl class="row">
+          <dt>Symptom</dt>
+          <dd>
+            The README listed an unassociated elastic IP among the mock's waste. The findings never
+            contained one.
+          </dd>
+          <dt>Cause</dt>
+          <dd>
+            moto reports an unassociated address as <code>InstanceId: ""</code> — an empty string,
+            not an absent key. The collector's <code>?? null</code> only substitutes for
+            <code>undefined</code>, and the rule asked <code>!== null</code>. So
+            <code>"" !== null</code> was true and every orphaned address read as in use.
+          </dd>
+          <dt>Why nothing caught it</dt>
+          <dd>
+            The answer key did not list the address either. Fixture and code shared the omission —
+            the same shape as #29, two entries apart.
+          </dd>
+          <dt>Fix</dt>
+          <dd>
+            <code>absentIfBlank()</code> at the collector boundary; a presence test in the analyser
+            as a second layer; the address tagged in the fixture so the answer key can name it; six
+            unit tests stating the empty-string case explicitly.
+          </dd>
+          <dt>Lesson</dt>
+          <dd>
+            Two bugs of this shape in two days argues for a rule:
+            <strong
+              >normalise "absent" where data enters, once, and never ask <code>!== null</code> about
+              a string from an external API.</strong
+            >
+          </dd>
+        </dl>
+      </div>
+
+      <div class="log">
+        <h3>
+          <span class="id">#32</span>The validator caught the agent inventing an ARN, and the tool
+          was at fault
+        </h3>
+        <dl class="row">
+          <dt>Symptom</dt>
+          <dd>
+            <code>cited unsupported ARNs: arn:aws:ec2:us-east-1:…:instance/</code> — a truncated
+            prefix, followed in the prose by "let me confirm exact ARN".
+          </dd>
+          <dt>Cause</dt>
+          <dd>
+            <code>find_reachable_from</code> returned only the <em>targets</em>. The question is "if
+            prod-web-1 were compromised, what could it reach?", so every answer names prod-web-1 —
+            whose ARN was in no tool result and therefore not citable.
+          </dd>
+          <dt>The uncomfortable part</dt>
+          <dd>
+            #13 recorded this same case failing and concluded the <em>test</em> was wrong. Relaxing
+            it made the suite green and left a tool whose result set cannot support the obvious
+            answer to its own question. The defect waited two days and returned as a fabricated
+            identifier.
+          </dd>
+          <dt>Fix</dt>
+          <dd>
+            The tool returns the source at <code>hops: 0</code>. The separate lookup also
+            distinguishes "no such resource" from "reaches nothing", which the single query had
+            conflated.
+          </dd>
+          <dt>Lesson</dt>
+          <dd>
+            The tell I missed: I relaxed an assertion and wrote a comment justifying it in terms of
+            a <em>system limitation</em>.
+            <strong>That comment was a defect report filed in the wrong place.</strong> A test
+            relaxed because the system cannot satisfy it should open an issue, not close one.
+          </dd>
+        </dl>
+      </div>
+    </div>
+
+    <!-- =================== 9 =================== -->
+    <div class="section">
+      <h2><span class="num">9</span>Recurring failure patterns</h2>
+      <p>
+        Thirty-two entries reduce to about five shapes. If you are asked "what did you learn
+        building this?", this section is the answer — it is more convincing than any individual bug.
+      </p>
+
+      <h3>1. Two sources of truth for the same fact</h3>
+      <p>
+        Bugs #2, #17 and #31 are one bug three times: the endpoint calls go to, and the account id
+        results are labelled with, were independently configurable with nothing asserting they
+        agree. The output each time is a fabricated inventory of a real account.
+        <strong>Rule:</strong> when two configuration values must be consistent, compute one from
+        the other or refuse — never document the requirement and hope.
+      </p>
+
+      <h3>2. "Absent" and "empty" are different facts</h3>
+      <p>
+        Bugs #11, #28 and #30. An empty string is a <em>present</em> value to any check written
+        against <code>null</code>, and the AWS SDK is inconsistent about which one it sends —
+        between services, and between real AWS and moto. <strong>Rule:</strong> normalise at the
+        boundary where data enters, once.
+      </p>
+
+      <h3>3. A check that cannot fire is worse than no check</h3>
+      <p>
+        Bugs #23 and #27. A guard written <code>!isMock</code> instead of <code>!isMock()</code> is
+        always false. A gitleaks rule with a lookahead panics and scans nothing. Both leave a green
+        tick next to an absent control, and green is trusted. <strong>Rule:</strong> test that your
+        guard fires, and pair a probabilistic check with a deterministic one.
+      </p>
+
+      <h3>4. A fixture that shares the code's blind spot proves nothing</h3>
+      <p>
+        Bugs #29 and #30. The mock account was built to be adversarial about everything I thought of
+        — and contained no IAM users, and no answer-key entry for the orphaned elastic IP. Both
+        analyses passed every test while being wrong.
+        <strong>Rule:</strong> a green suite over a fixture you also wrote is evidence about
+        consistency, not correctness. Point the thing at reality and disbelieve a clean result.
+      </p>
+
+      <h3>5. Explanatory code fails silently</h3>
+      <p>
+        Bugs #19, #20, #22 and #28. A template header, a deploy command, an error message — nothing
+        downstream consumes them, so they stay confidently wrong. A wrong ARN in a code path throws;
+        a wrong ARN in an instruction gets pasted into someone's AWS account.
+        <strong>Rule:</strong> make the thing that explains also be the thing that computes.
+      </p>
+
+      <div class="box lesson">
+        <h4>And one about process</h4>
+        <p>
+          Five of the last six bugs were found by <em>using the product</em> — deploying the
+          template for real, following the guide by hand, scanning a real account, and auditing the
+          README against the running system. None was reachable from the test suite, because each
+          lived in a seam between components or outside the repository entirely. The tests were
+          necessary and were never going to be sufficient.
+        </p>
+      </div>
+    </div>
+
+    <!-- =================== 10 =================== -->
+    <div class="section">
+      <h2><span class="num">10</span>Limits, and what comes next</h2>
+
+      <h3>What breaks first on a large account, in order</h3>
+      <ol>
+        <li>
+          <strong>The graph rebuild, at roughly 50k resources.</strong> Neo4j is rebuilt wholesale
+          in one transaction — simple, leaves no stale nodes, and O(all resources) per scan.
+          <em>Fix:</em> diff the Postgres snapshots, which already exist, and
+          <code>MERGE</code> only what changed. The snapshots were designed with this in mind.
+        </li>
+        <li>
+          <strong>Scan wall-clock across many regions.</strong> 6 services × 30 regions is 180 units
+          at a concurrency of 6, and per-bucket S3 work is four API calls each — so 10,000 buckets
+          is 40,000 calls in one unit. Partly addressed by the Resource Explorer fast path.
+          <em>Remaining fix:</em> per-service concurrency and splitting oversized units.
+        </li>
+        <li>
+          <strong>Throttling, well before that.</strong> <code>retryMode: adaptive</code> handles
+          bursts, but a full parallel scan competes with the customer's own workloads.
+          <em>Fix:</em> a token bucket per (service, region) sized from published quotas, and a scan
+          budget the customer controls.
+        </li>
+        <li>
+          <strong>The frontend, at about 2,000 nodes.</strong> React Flow renders every node; dagre
+          is O(V+E) but the DOM is not. <em>Fix:</em> server-side aggregation — collapse a VPC to
+          one node until expanded — and viewport virtualisation.
+        </li>
+        <li>
+          <strong>The agent's context on broad questions.</strong> <em>Fix:</em> tools should return
+          aggregates with drill-down rather than rows, and say so when truncating.
+        </li>
+      </ol>
+      <p>
+        <strong>What does not break:</strong> partial-failure handling and credential renewal both
+        get <em>more</em> useful at scale, which is why they were built in from the start.
+      </p>
+      <p>
+        <strong>Multi-tenancy</strong> is the other axis. Today one module-level flag tracks whether
+        a scan is running and the graph holds one account. Multi-tenant needs an account id on every
+        node and query, per-tenant credential caching, and a job queue instead of an in-process
+        scan. The storage model already carries <code>accountId</code> on every resource; the scan
+        orchestration is what would change.
+      </p>
+
+      <h3>Deliberate gaps, and why each is a boundary rather than an omission</h3>
+      <table>
+        <tr>
+          <th style="width: 44mm">Gap</th>
+          <th>Why it is deliberate</th>
+        </tr>
+        <tr>
+          <td>CloudWatch-based idle detection</td>
+          <td>
+            Current findings use structural signals only. "This volume is unattached" is defensible
+            from one inventory pass; "this instance has been under 2% CPU for thirty days" is far
+            more useful and needs metrics over time. The role already grants the permissions.
+          </td>
+        </tr>
+        <tr>
+          <td>NACLs, peering, Transit Gateway</td>
+          <td>
+            Reachability is conservative: it can <em>miss</em> a path, but a path it reports is
+            justified by rules that really exist. Being conservative in the safe direction was the
+            deliberate choice; peering and Transit Gateway are the biggest honest gaps.
+          </td>
+        </tr>
+        <tr>
+          <td>An LLM judge over the evals</td>
+          <td>
+            The named limitation of tier 2 — an answer that cites the right resources and describes
+            them wrongly would pass. Lexical patterns also cannot test a negated claim at all.
+          </td>
+        </tr>
+        <tr>
+          <td>Incremental graph updates</td>
+          <td>
+            The first scaling limit, and the enabler for continuous rather than on-demand scans.
+          </td>
+        </tr>
+        <tr>
+          <td>Neo4j read-only RBAC</td>
+          <td>Not available in Community. Enforced at the driver instead, and stated as such.</td>
+        </tr>
+      </table>
+
+      <h3>The next week, in priority order</h3>
+      <ol class="tight">
+        <li>
+          <strong>Incremental graph updates.</strong> Removes the first scaling limit and makes
+          scans cheap enough to run continuously.
+        </li>
+        <li><strong>Real idle detection</strong> from CloudWatch and Cost Explorer.</li>
+        <li><strong>An LLM judge</strong> over a larger eval set, closing the named gap.</li>
+        <li>
+          <strong>Change detection as a first-class feature.</strong> Diffing exists and the agent
+          can query it; "what changed since yesterday, and does any of it matter?" is the question
+          that makes this a product someone opens daily.
+        </li>
+        <li>
+          <strong>More of the account:</strong> ELB, ECS, EKS, API Gateway, CloudFront, Route 53.
+          The collector interface is deliberately small — each is an afternoon — and load balancers
+          in particular would fill a real gap in the reachability graph.
+        </li>
+        <li><strong>NACLs, peering and Transit Gateway</strong> in the reachability model.</li>
+      </ol>
+    </div>
+
+    <!-- =================== 11 =================== -->
+    <div class="section">
+      <h2><span class="num">11</span>Interview preparation</h2>
+      <p class="muted small">
+        Answers grounded in things the code actually does. Where an answer concedes something, the
+        concession is the strongest part — say it before you are asked.
+      </p>
+
+      <div class="qa">
+        <div class="q">Why two databases? Isn't that over-engineering for this scale?</div>
+        <div class="a">
+          <p>
+            At this scale, yes, if they were peers. They are not: Postgres is authoritative and
+            Neo4j is a projection that rebuilds from it in one transaction with no AWS calls. That
+            hierarchy is what makes it cheap — the graph is disposable, so the model I understood
+            least well at the start is the one I can change freely.
+          </p>
+          <p>
+            Neo4j is there for one specific reason: "what can reach the production database?" is a
+            variable-length path query. One <code>MATCH</code> with a <code>*1..n</code> hop in
+            Cypher, a recursive CTE over a junction table in SQL. And scan history, partial-failure
+            records and agent traces all fit badly in a graph, so Postgres was never optional.
+          </p>
+        </div>
+      </div>
+
+      <div class="qa">
+        <div class="q">Why not let the model write Cypher? It would be far more flexible.</div>
+        <div class="a">
+          <p>
+            Four reasons, and the fourth is the one that decided it. Safety: a curated tool cannot
+            express a mutation, so the brief's hard rule becomes structural rather than asserted.
+            Correctness: hand-written Cypher for reachability is reviewable and identical every run.
+            Cost: a tool call returns rows; text-to-Cypher tends to return a schema, a failed query,
+            an error and a retry. <strong>Auditability:</strong> because every tool records exactly
+            which ARNs it returned, I can validate citations mechanically — which is impossible if
+            the model invents the query.
+          </p>
+          <p>
+            There is still a <code>graph_query</code> escape hatch for novel questions, behind a
+            write-clause validator and a read transaction, because neither layer is trusted alone.
+          </p>
+        </div>
+      </div>
+
+      <div class="qa">
+        <div class="q">How do you know the agent isn't making things up?</div>
+        <div class="a">
+          <p>
+            I do not trust it not to; I detect it when it does. Every tool records the ARNs it
+            returned, every ARN in an answer is checked against that set, and anything unsupported
+            is flagged on the response and shown to the user. Any unsupported citation fails an eval
+            case outright.
+          </p>
+          <p>
+            It has fired for real. In a run two days ago the agent wrote
+            <code>arn:aws:ec2:…:instance/</code> — a truncated placeholder — and the validator
+            caught it. The root cause was mine: the tool did not return the resource its own
+            question was about, so the correct ARN was genuinely unavailable. That is the sort of
+            bug you only find if the check is mechanical.
+          </p>
+        </div>
+      </div>
+
+      <div class="qa">
+        <div class="q">You changed the IAM role we gave you. Why?</div>
+        <div class="a">
+          <p>
+            Because <code>ReadOnlyAccess</code> is not read-only in the sense an inventory product
+            needs. It grants about 7,000 actions including <code>s3:GetObject</code>,
+            <code>secretsmanager:GetSecretValue</code> and <code>lambda:GetFunction</code>, which
+            returns a presigned URL to function source. dave.io needs to know a bucket exists, who
+            can reach it, and how it is configured — never to read an object out of it. Granting
+            that turns a compromise of dave.io's platform account into a compromise of every
+            customer's data.
+          </p>
+          <p>
+            The detail I would raise with a real customer is <code>sqs:ReceiveMessage</code>: it is
+            not read-only even literally, because receiving a message starts its visibility timeout
+            and can hide it from the consumer that should have processed it. A scanner with that
+            permission can breach your own hard rule through a permission nobody thinks of as a
+            write.
+          </p>
+          <p>
+            I also scoped the trust policy to the scanner principal rather than
+            <code>:root</code> — which does not mean the root user, it means every principal in the
+            account — and added <code>sts:SourceIdentity</code> so customers can attribute scans in
+            their own CloudTrail. The original template is kept alongside for comparison.
+          </p>
+        </div>
+      </div>
+
+      <div class="qa">
+        <div class="q">What's the weakest part of this?</div>
+        <div class="a">
+          <p>
+            The eval suite's blind spot, and I would rather name it than have it found. An answer
+            that cites exactly the right resources and describes them wrongly passes. The
+            <code>mustMention</code> patterns cover the cases where that has teeth, but lexical
+            patterns cannot test a negated claim at all — I tried twice on one case and both
+            attempts failed <em>correct</em> answers, the second on the sentence "a different kind
+            of risk than an unused admin role", which states the exact distinction I was testing
+            for. Closing it needs an LLM judge, which is the third item on my list.
+          </p>
+          <p>
+            Second: reachability ignores NACLs, peering and Transit Gateway. It is conservative — it
+            can miss a path, but a path it reports is justified by rules that really exist — and I
+            would rather under-report than fabricate. Still a real gap.
+          </p>
+        </div>
+      </div>
+
+      <div class="qa">
+        <div class="q">What went wrong while you built it?</div>
+        <div class="a">
+          <p>
+            Thirty-two logged problems, and they reduce to about five shapes. The one I would lead
+            with: three separate times I built a route to the same catastrophic output — a complete,
+            confident, entirely fictional inventory of a real AWS account. Once from a leaked
+            <code>AWS_ENDPOINT_URL</code> that the SDK reads directly from the environment, once
+            from moto's account namespacing, once from a mode override honouring a real account's
+            role ARN while talking to the mock. Same cause every time: two sources of truth for
+            "which account am I looking at?" with nothing asserting they agree.
+          </p>
+          <p>
+            The general lesson I took: when two configuration values must be consistent, do not
+            document the requirement — compute one from the other, or refuse. The third fix is a
+            pure function with ten tests, because the condition was load-bearing and untestable
+            inside a module that reads the environment at import.
+          </p>
+        </div>
+      </div>
+
+      <div class="qa">
+        <div class="q">Your tests all pass. How much does that actually tell me?</div>
+        <div class="a">
+          <p>
+            Less than it looks, and I can prove it. A hundred and fifty-seven tests passed while the
+            admin analysis silently ignored IAM users entirely — because the mock account I wrote
+            contained no IAM users, so the fixture shared the code's blind spot. I found it by
+            pointing the scanner at a real account and disbelieving an empty findings panel.
+          </p>
+          <p>
+            The same thing happened with an idle-detection rule that was correct and never fired
+            once: the answer key had the same omission as the collector. So the tests are necessary
+            and were never going to be sufficient, and the fixture being adversarial about
+            everything I thought of is exactly the limitation — it cannot be adversarial about what
+            I did not.
+          </p>
+        </div>
+      </div>
+
+      <div class="qa">
+        <div class="q">Why is there no "connect my AWS account" form in the UI?</div>
+        <div class="a">
+          <p>
+            Because this API has no authentication. That form would be an unauthenticated endpoint
+            that assumes a role into somebody's AWS account and stores a value the role template
+            itself calls a credential. Building it would have made the demo look more complete and
+            the product less defensible.
+          </p>
+          <p>
+            So the UI guides onboarding instead of performing it: it generates an ExternalId,
+            renders the exact CloudFormation command pre-filled with the principal to trust, and
+            tests the connection that is already configured — diagnosing failures rather than
+            echoing SDK errors. A multi-tenant version would put authentication, per-tenant
+            isolation and encrypted secret storage in first, and only then offer the form.
+          </p>
+        </div>
+      </div>
+
+      <div class="qa">
+        <div class="q">A bucket has Block Public Access turned off. Is it public?</div>
+        <div class="a">
+          <p>
+            No — and this is the distinction I care most about in the project. Turning the block off
+            grants nobody anything; it removes the guardrail that would neutralise a permissive
+            policy. An anonymous request still gets 403 unless a policy or ACL actually grants
+            access.
+          </p>
+          <p>
+            But "not public" is an unsatisfying answer to someone who has just weakened their own
+            defences, so they are two separate verdicts: <code>isPublic</code> means anonymous
+            access is granted now, <code>isUnprotected</code> means nothing would stop it being
+            granted. Separate tabs, separate agent tools, and a paragraph of the system prompt —
+            because the model conflates them too.
+          </p>
+        </div>
+      </div>
+
+      <div class="qa">
+        <div class="q">How would you make this production-ready?</div>
+        <div class="a">
+          <p>
+            In order: incremental graph updates from the Postgres snapshots, which removes the first
+            scaling limit and makes continuous scanning affordable. Per-service rate limiting with a
+            customer-controlled scan budget, because competing with a customer's own workloads is
+            worse than being slow. Multi-tenancy — account id on every query, per-tenant credential
+            caching, and a job queue instead of an in-process scan; the storage model already
+            carries
+            <code>accountId</code>, so it is the orchestration that changes. Then Neo4j Enterprise
+            or a read replica for genuine database-level read-only, which Community cannot give me.
+          </p>
+        </div>
+      </div>
+    </div>
+  </body>
+</html>
