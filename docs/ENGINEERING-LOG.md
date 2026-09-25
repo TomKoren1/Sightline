@@ -713,3 +713,37 @@ that were added to improve quality. More generally: the parts of a repository
 with no tests are the parts that rot, and "it's only documentation" is precisely
 why nothing noticed. The template was simultaneously the most carefully argued
 artefact in the project and the only one that had never been run or checked.
+
+---
+
+## #23 — The test suite scanned a real AWS account
+
+**Symptom.** With `.env` switched to a real account, `npx vitest run` failed ten
+ground-truth assertions. They were checking for `northwind-public-assets` and
+finding a real estate instead.
+
+**Diagnosis.** The ground-truth suite seeds the mock fixture and then calls
+`runScan()`. `runScan` reads the same configuration the application does, so in
+`real` mode it scanned the real account — the seeding was irrelevant, and the
+assertions were comparing a fixture answer key against somebody's actual
+infrastructure.
+
+The failing tests were the least of it. **Running the test suite made live AWS
+API calls against a real account.** Read-only ones, and it still should not
+happen: a test run must not depend on, or touch, a real cloud account. On a
+customer's estate it would put a few hundred unexplained calls in their
+CloudTrail, attributed to a scan nobody asked for.
+
+`npm run verify` had passed throughout, because it excludes the eval directory —
+so the guard I had built for exactly this class of mistake did not cover it.
+
+**Fix.** The suite now checks `isMock` before anything else and skips with an
+explicit reason. Verified both directions: it skips with `.env` in real mode,
+and still runs properly when pointed at the mock.
+
+**What to take from it.** A test that reads application configuration inherits
+whatever the developer happens to have configured, and "whatever they happen to
+have configured" eventually includes production credentials. Anything that can
+reach a real environment should assert it is not in one, first and loudly,
+rather than relying on the environment being right — the same argument as ADR-009
+and engineering log #17, arrived at from a third direction.

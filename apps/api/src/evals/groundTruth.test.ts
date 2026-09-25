@@ -21,6 +21,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { seed } from "@daveio/mock-aws";
 import type { Relationship, Resource } from "@daveio/shared";
 
+import { isMock } from "../config.js";
 import { runScan } from "../scan/runner.js";
 import { CHECKS, runChecks, type CheckResult } from "./checks.js";
 
@@ -28,12 +29,34 @@ let resources: Resource[] = [];
 let relationships: Relationship[] = [];
 let results: CheckResult[] = [];
 let available = false;
+let skipReason: string | null = null;
 
 beforeAll(async () => {
   try {
+    /**
+     * Refuse to run unless we are pointed at the mock.
+     *
+     * This suite seeds a fixture and then runs a real scan. With `.env` in
+     * `real` mode that scan goes to an actual AWS account - so the assertions
+     * fail confusingly, and, far worse, running the test suite makes live API
+     * calls against somebody's infrastructure.
+     *
+     * A test run must never touch a real cloud account, however read-only the
+     * calls are. Checked before anything else happens.
+     */
+    if (!isMock) {
+      skipReason =
+        "AWS_MODE is not 'mock'. This suite seeds a fixture and scans it, so it refuses " +
+        "to run against a real account. Set AWS_MODE=mock to exercise it.";
+      return;
+    }
+
     const endpoint = process.env["AWS_ENDPOINT_URL"] ?? "http://localhost:5000";
     const res = await fetch(`${endpoint}/moto-api/`).catch(() => null);
-    if (!res?.ok) return;
+    if (!res?.ok) {
+      skipReason = `moto was not reachable at ${endpoint}. Start it with \`docker compose up -d\`.`;
+      return;
+    }
 
     await seed();
     const scan = await runScan({ scanId: "eval" });
@@ -47,17 +70,15 @@ beforeAll(async () => {
 }, 180_000);
 
 afterAll(() => {
-  if (!available) {
-    console.warn(
-      "\n  Ground-truth suite did not run: moto was unreachable.\n" +
-        "  Start it with `docker compose up -d` to exercise these.\n",
-    );
+  if (!available && skipReason) {
+    console.warn(`\n  Ground-truth suite did not run.\n  ${skipReason}\n`);
   }
 });
 
 describe.runIf(!process.env["SKIP_INTEGRATION"])("ingest ground truth", () => {
   it("collects a non-trivial inventory", () => {
     if (!available) return;
+    expect(skipReason, "suite ran, so there should be no skip reason").toBeNull();
     expect(resources.length).toBeGreaterThan(50);
     expect(relationships.length).toBeGreaterThan(50);
   });
