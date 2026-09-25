@@ -269,3 +269,53 @@ without going back to AWS.
 `npm run query -w @daveio/api` runs every curated query and prints the rows.
 It answers the question "is this the model's fault or the query's?", which is
 the first thing worth knowing when an agent answer looks wrong.
+
+---
+
+### `feat(api): the agent - tools, Cypher guard, citation validation`
+
+Part 2 of the brief.
+
+**`cypherGuard.ts`** guards the raw-Cypher escape hatch: an allowlist of
+opening clauses plus a denylist of write keywords, applied *after* string
+literals and comments are stripped — so a node named `"DELETE ME"` cannot trip
+it, and more importantly a write cannot hide inside a string. It is lexical,
+not a parser, and deliberately strict: a wrongly-rejected query costs one
+retry, a wrongly-accepted one breaks the brief's hard rule. It is the second
+of two layers; the query also runs inside a Neo4j read transaction.
+
+**`tools.ts`** defines thirteen tools over the curated queries. The
+descriptions are load-bearing — they are all the model sees when choosing, and
+most bad answers are a tool-choice mistake rather than a reasoning one, so
+each says what it answers *and* when to prefer it over a neighbour. Tool
+errors are returned to the model rather than thrown: it can often recover by
+trying something else, and throwing would end the turn with nothing to show.
+
+**`citations.ts`** implements ADR-006. Every ARN in an answer is checked
+against the union of ARNs the tools actually returned, and anything
+unsupported is flagged on the response. Resource *names* are resolved too, but
+for a different purpose: they are how the frontend highlights the nodes an
+answer talks about.
+
+**`prompt.ts`** tells the model to trust the computed verdicts over its own
+reading of a policy — the analysers are testable and the model is not — and
+injects data freshness plus any failed scan units, so the agent warns about
+stale or missing data without being asked.
+
+**`agent.ts`** is a plain tool-calling loop, no framework. The interesting
+decisions here are the tool boundary and citation validation; a framework
+would hide both without removing any real work. Every step is emitted as an
+event so the UI can name the running tool instead of showing a spinner.
+
+23 further unit tests cover the guard (including writes smuggled after a
+semicolon, and keywords inside string literals) and citation validation
+(including the invented-ARN case that is the whole point).
+
+---
+
+### `fix(api): upgrade Anthropic SDK to 0.128 to restore type inference`
+
+Chased three nonsensical `implicitly has an 'any' type` errors down to broken
+self-referencing subpath imports inside SDK 0.33.1's own declarations, hidden
+by `skipLibCheck`. Full write-up in engineering log #9 — it is a good example
+of the error appearing a long way from its cause.

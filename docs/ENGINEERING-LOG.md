@@ -178,3 +178,51 @@ integer.
 **Fix.** The `clamp` helper that bounds every limit now returns
 `neo4j.int(...)`. Doing it there rather than at each call site means a new
 query cannot forget.
+
+---
+
+## #9 — An SDK type silently degraded to `any`, and `skipLibCheck` hid why
+
+**Symptom.** Three `TS7006: Parameter implicitly has an 'any' type` errors in
+the agent loop, on callbacks whose parameters are obviously inferable:
+
+```ts
+const textBlocks = response.content.filter(
+  (block): block is TextBlock => block.type === "text",   // block: any
+);
+```
+
+**The misleading part.** Every type involved checked out in isolation.
+`Anthropic.TextBlock`, `Anthropic.MessageParam` and `Anthropic.Tool` all
+resolved. `MessageStream` resolved. Two plausible theories — that a value
+import of `Anthropic` breaks type resolution, and that the SDK needed the
+`DOM` lib — were both tested and both wrong.
+
+**Diagnosis.** The error was downstream of the real problem. TS7006 on an
+inferable callback means the receiver is `any`, so the question was not "why
+is `block` untyped" but "why is `response` untyped". Forcing the compiler to
+print types by assigning them to `number` gave the answer: `s` was a proper
+`MessageStream`, but `await s.finalMessage()` was `any`.
+
+The cause was inside the SDK's own declarations. `MessageStream.d.ts` imports
+`Message` from `'@anthropic-ai/sdk/resources/messages'` — a self-referencing
+subpath. In version 0.33.1 the package's `exports` map offers only `"./*"`,
+which resolves that specifier to a file `resources/messages` that does not
+exist; the real file is `resources/messages/index.d.ts`. Exports-based
+resolution does **not** fall back to a directory index, so the import failed
+and `Message` became `any`.
+
+`skipLibCheck: true` suppressed the error in the declaration file, leaving no
+symptom except our own parameters quietly losing their types.
+
+**Fix.** Upgraded `@anthropic-ai/sdk` from 0.33.1 to 0.128.0, which ships a
+complete exports map. `response.content` now resolves to
+`ContentBlock[] & ParsedContentBlock<null>[]`, and the `DOM` lib that was
+briefly added while chasing the wrong theory was removed again.
+
+**What to take from it.** Two things. `skipLibCheck` buys compile speed at the
+cost of turning a dependency's broken types into silent `any` in your own
+code — worth remembering when an inference failure makes no sense. And when
+TS7006 appears somewhere it has no business appearing, check the receiver
+rather than the parameter; assigning the expression to a deliberately wrong
+type is the fastest way to make the compiler tell you what it really thinks.

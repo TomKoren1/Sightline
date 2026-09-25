@@ -13,7 +13,7 @@
     "inspect": "tsx src/cli/inspect.ts"
   },
   "dependencies": {
-    "@anthropic-ai/sdk": "^0.33.1",
+    "@anthropic-ai/sdk": "^0.128.0",
     "@aws-sdk/client-ec2": "^3.716.0",
     "@aws-sdk/client-iam": "^3.716.0",
     "@aws-sdk/client-lambda": "^3.716.0",
