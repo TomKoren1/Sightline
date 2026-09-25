@@ -859,3 +859,41 @@ deterministic one covering the common case.
 And the file was created by a convenience step, during work on something else,
 named in a hurry. It was not part of any feature. The riskiest artefacts are
 usually the incidental ones, because nobody reviews them.
+
+---
+
+## #27 — The secret scan I added to catch #26 was not running
+
+**Symptom.** CI went red immediately after the history rewrite. The `Secret
+scan` job failed with `Error: File results.sarif does not exist`, which is the
+action failing to upload a report rather than a useful message.
+
+**Diagnosis.** Further up the log:
+
+```
+panic: regexp: Compile(`(?i)aws_external_id\s*=\s*(?!replace-me|local-dev|<)...`):
+error parsing regexp: bad perl operator: `(?!`
+```
+
+The rule I had just written to catch leaked external ids used a negative
+lookahead to exclude placeholders. gitleaks is written in Go, and Go's RE2 has
+no lookarounds by design — it guarantees linear-time matching, which lookarounds
+break. So gitleaks panicked at startup and scanned nothing.
+
+**Fix.** Exclusions moved into a rule allowlist, which is the mechanism gitleaks
+provides for exactly this. Verified there are no lookarounds left in any rule
+regex, that the TOML parses, and that CI's secret scan now passes rather than
+crashing.
+
+**What to take from it.** The failure was loud here only by luck: the action
+happened to exit non-zero because a later step could not find its output file.
+A panic that had been swallowed would have left a green "Secret scan ✓" next to
+a scanner that ran no rules — which is strictly worse than having no scanner,
+because it is trusted.
+
+That is the same shape as #26, one level up. There, a green gitleaks meant "my
+rules did not match"; here it would have meant "my rules did not load". Both
+argue for the same thing: pair a probabilistic check with a deterministic one.
+The `git ls-files` guard added in #26 needs no rules, no regex engine, and
+cannot silently do nothing — and it would have caught the original leak on its
+own.
