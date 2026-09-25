@@ -80,6 +80,8 @@ export interface AgentEvalRun {
 }
 
 export interface Connection {
+  /** The identity this backend runs as, which the trust policy must name. */
+  callerIdentity: string | null;
   mode: "mock" | "real";
   roleArn: string;
   accountId: string | null;
@@ -99,6 +101,7 @@ export interface ConnectionTest {
   accountId?: string;
   callerArn?: string | null;
   expiresAt?: string;
+  endpoint?: string;
   code?: string;
   problem?: string;
   fix?: string;

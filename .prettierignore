@@ -4,3 +4,12 @@ build
 coverage
 *.log
 package-lock.json
+
+# CloudFormation templates.
+#
+# Prettier's YAML formatter collapses folded block scalars (`Description: >`)
+# and silently drops content from them - it removed ~47 lines of the explanatory
+# header from readonly-role.yaml. CloudFormation also uses short-form
+# intrinsics (!Ref, !Sub, !GetAtt) that are not portable YAML tags. Neither is
+# worth reformatting; both are worth not corrupting.
+infra/*.yaml

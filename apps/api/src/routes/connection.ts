@@ -91,7 +91,26 @@ export function registerConnectionRoutes(app: FastifyInstance): void {
     const latest = await getLatestScan().catch(() => null);
     const accountId = accountIdFromArn(cfg.AWS_TARGET_ROLE_ARN);
 
+    /**
+     * The identity this backend runs as, before assuming anything.
+     *
+     * Needed by the onboarding guide: it is the principal the customer's trust
+     * policy has to name, and asking someone to find it themselves is how they
+     * end up pointing the scanner at the wrong role.
+     */
+    let callerIdentity: string | null = null;
+    try {
+      const sts = new STSClient({
+        region: cfg.AWS_REGION,
+        ...(isMock ? { endpoint: cfg.AWS_ENDPOINT_URL } : {}),
+      });
+      callerIdentity = (await sts.send(new GetCallerIdentityCommand({}))).Arn ?? null;
+    } catch {
+      // No credentials, or none that work. Step 3 falls back to a placeholder.
+    }
+
     return {
+      callerIdentity,
       mode: cfg.AWS_MODE,
       roleArn: cfg.AWS_TARGET_ROLE_ARN,
       accountId,
@@ -145,6 +164,10 @@ export function registerConnectionRoutes(app: FastifyInstance): void {
         callerArn: identity.Arn ?? null,
         expiresAt: session.expiresAt.toISOString(),
         mode: cfg.AWS_MODE,
+        // Reported explicitly because a successful test against the mock while
+        // believing you are on a real account is the worst outcome this
+        // endpoint can produce - see engineering log #17.
+        endpoint: isMock ? cfg.AWS_ENDPOINT_URL : "AWS (no endpoint override)",
       });
     } catch (err) {
       app.log.warn({ err }, "connection test failed");

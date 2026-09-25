@@ -15,7 +15,7 @@
 
 import { STSClient, AssumeRoleCommand } from "@aws-sdk/client-sts";
 import type { AwsCredentialIdentity } from "@aws-sdk/types";
-import { cfg, isMock } from "../config.js";
+import { cfg, isMock, sourceCredentials } from "../config.js";
 
 /**
  * Renew this long before expiry. A scan unit can run for a while, and a
@@ -38,18 +38,17 @@ function stsClient(): STSClient {
   return new STSClient({
     region: cfg.AWS_REGION,
     ...(isMock ? { endpoint: cfg.AWS_ENDPOINT_URL } : {}),
-    // In `real` mode these are undefined, so the SDK falls back to the standard
-    // credential chain: environment, shared config, container role, instance
-    // role. That is how this runs in production - dave.io's own task role is
-    // the only identity allowed to call AssumeRole on the customer role.
-    ...(cfg.AWS_ACCESS_KEY_ID && cfg.AWS_SECRET_ACCESS_KEY
-      ? {
-          credentials: {
-            accessKeyId: cfg.AWS_ACCESS_KEY_ID,
-            secretAccessKey: cfg.AWS_SECRET_ACCESS_KEY,
-          },
-        }
-      : {}),
+    // Omitted entirely in `real` mode unless genuine keys were configured, so
+    // the SDK falls back to its standard chain: environment, shared config,
+    // container role, instance role. In production that is dave.io's own task
+    // role, the only identity the customer's trust policy names.
+    //
+    // `sourceCredentials()` is what decides, because a placeholder left in .env
+    // would otherwise shadow real credentials - see the note in config.ts.
+    ...(() => {
+      const credentials = sourceCredentials();
+      return credentials ? { credentials } : {};
+    })(),
   });
 }
 

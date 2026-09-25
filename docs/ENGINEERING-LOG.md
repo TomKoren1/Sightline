@@ -477,3 +477,116 @@ history, and on a real account the equivalent is a resource replaced rather than
 modified: a Terraform change that recreates an instance will show as an add and
 a remove, correctly, and no amount of diff logic can tell that from a genuine
 replacement without more information than the API gives us.
+
+---
+
+## #17 — A real-account scan that silently inventoried the mock
+
+**The worst bug in this project so far, and it took a real AWS account to find.**
+
+**Symptom.** With `AWS_MODE=real` and a genuine role ARN configured, the
+connection test reported success, and a scan completed in 1.8 seconds reporting
+98 resources — labelled with the real account id. Everything looked right.
+
+The resources were `northwind-public-assets`, `northwind-prod-db` and the rest
+of the seeded fixture. The scan had enumerated **the mock**, stamped it with a
+real AWS account id, and reported success.
+
+**Diagnosis.** `AWS_ENDPOINT_URL` is a documented AWS SDK environment variable
+that overrides the endpoint for _every_ client. `.env` carries it, pointing at
+moto — and dotenv loads `.env` into `process.env`, which the SDK reads directly.
+So even though the code carefully omits the endpoint override when
+`AWS_MODE=real`, the SDK applied one anyway, to every service including STS.
+
+moto accepts any `sts:AssumeRole` it is given and echoes back a plausible
+assumed-role ARN, so the connection test passed. The account id in the response
+came from the configured role ARN, which was genuinely the customer's. Every
+signal available to the user said "connected".
+
+A second, related bug sat behind it: `.env` also carries
+`AWS_ACCESS_KEY_ID=mock`, and the SDK's environment credential provider is the
+_first_ in its chain. So the placeholder did not merely fail to be used in real
+mode — it actively shadowed `~/.aws/credentials`.
+
+**Fix.** In `real` mode, `config.ts` now deletes `AWS_ENDPOINT_URL` (and its
+per-service variants, and the dualstack/FIPS flags) and any non-genuine
+`AWS_ACCESS_KEY_ID`/`AWS_SECRET_ACCESS_KEY` from `process.env`, warning loudly
+about each. Deleting them is the only fix that works, because the SDK reads
+`process.env` itself rather than anything we control. Values that look like real
+AWS keys are left alone. The connection test now also reports which endpoint it
+used, so this can never again be invisible.
+
+**What to take from it.** Two things, and the second is the uncomfortable one.
+
+Configuration that a library reads from the ambient environment is not
+configuration you own. Passing the right options to a client is not enough when
+the client also reads `process.env` — and `dotenv` turns a project's config file
+into ambient environment, which is exactly what makes this easy to miss.
+
+And: this project's central argument is that a confident, plausible, wrong
+answer is the failure mode worth engineering against — deterministic analysers,
+validated citations, an eval suite. It then produced a confident, plausible,
+entirely fabricated inventory of somebody's AWS account, and every check it owns
+passed, because all of them validate the data _after_ ingest and none asked
+whether ingest was talking to the right cloud. The defences were pointed
+downstream of where this went wrong.
+
+---
+
+## #18 — Prettier silently deleted 47 lines of a CloudFormation template
+
+**Symptom.** An edit to `infra/readonly-role.yaml` failed to apply because the
+text it matched was gone. The file was 208 lines; the committed version was 255.
+
+**Diagnosis.** `npm run lint` runs `prettier --check .`, and `prettier --write .`
+had been reformatting the template. Prettier's YAML formatter rewrites folded
+block scalars (`Description: >`), and in doing so dropped most of the
+explanatory header — the whole rationale for replacing `ReadOnlyAccess`,
+including the analysis the README points at.
+
+No test covers a template's comments, and CI checks formatting rather than
+content, so nothing failed. It surfaced only because a later edit could not find
+its anchor.
+
+**Fix.** Restored from git, and `infra/*.yaml` added to `.prettierignore` with
+the reason. CloudFormation also uses short-form intrinsics (`!Ref`, `!Sub`,
+`!GetAtt`) that are not portable YAML tags, so it is not a file a general YAML
+formatter should be touching at all.
+
+**Worth recording** because the damage was invisible and the tool was one added
+to improve quality. A formatter that rewrites a file type it does not fully
+model will eventually corrupt it, and the files most at risk are the ones with
+no tests — documentation and infrastructure templates.
+
+---
+
+## #19 — The onboarding guide taught the mistake it was meant to prevent
+
+**Symptom.** Following the guide against a real account produced
+`AccessDenied`, then `NoSuchEntity`: the configured role did not exist, and
+listing the account's roles found nothing matching `/dave/i` at all.
+
+**Diagnosis.** The template has two roles in it and the guide did not
+distinguish them clearly enough. `DaveIoScannerRoleArn` is an **input** — the
+principal permitted to assume — while the role the stack **creates** is
+`DaveIoReadOnlyRole`, and it is the created one that belongs in
+`AWS_TARGET_ROLE_ARN`. The guide said "the scanner role ARN from your onboarding
+email", which presumes a dave.io account that does not exist for someone running
+the project themselves. Reasonably, the value from step 3 was carried into
+step 4.
+
+Two smaller failures compounded it. The template's `AllowedPattern` accepted
+only a role ARN, and a self-hosted deployment's identity is commonly an IAM
+user. And configuration is read once at startup, so editing `.env` without
+restarting the API changed nothing — which the guide never said.
+
+**Fix.** The connection endpoint now returns the identity the backend actually
+runs as, and the guide pre-fills it into the deploy command, so there is nothing
+to work out. Step 3 states the input/output distinction and the error each
+mix-up produces. Step 4 says to restart, and to remove the mock's environment
+variables. The template accepts a user ARN and documents the single-account case.
+
+**Worth recording** because the guide was written to prevent exactly this
+confusion and instead transmitted it. Documentation written by someone holding
+the whole model in their head will omit the distinction that is obvious to them,
+and the only reliable way to find out is to watch someone follow it.

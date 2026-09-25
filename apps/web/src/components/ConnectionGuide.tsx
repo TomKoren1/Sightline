@@ -100,19 +100,24 @@ export function ConnectionGuide() {
   const isReal = c.mode === "real";
   const suggestedId = externalId.data?.externalId ?? "generating…";
 
+  // Pre-filled with the identity this backend actually runs as. Asking someone
+  // to work out which principal to trust is how they end up trusting the wrong
+  // one - which is exactly the mistake this guide previously invited.
+  const scannerPrincipal = c.callerIdentity ?? "arn:aws:iam::<account>:role/DaveIoScanner";
+
   const deployCommand = [
     "aws cloudformation deploy \\",
     "  --template-file infra/readonly-role.yaml \\",
     "  --stack-name daveio-readonly \\",
     "  --capabilities CAPABILITY_NAMED_IAM \\",
     "  --parameter-overrides \\",
-    "      DaveIoScannerRoleArn=arn:aws:iam::<daveio-account>:role/DaveIoScanner \\",
+    `      DaveIoScannerRoleArn=${scannerPrincipal} \\`,
     `      ExternalId=${suggestedId}`,
   ].join("\n");
 
   const envSnippet = [
     "AWS_MODE=real",
-    "AWS_TARGET_ROLE_ARN=<the RoleArn output from the stack>",
+    "AWS_TARGET_ROLE_ARN=<the RoleArn output from step 3, NOT the scanner principal>",
     `AWS_EXTERNAL_ID=${suggestedId}`,
     "AWS_SCAN_REGIONS=          # empty discovers every enabled region",
   ].join("\n");
@@ -196,20 +201,44 @@ export function ConnectionGuide() {
             Run this against the account you want scanned. It creates one IAM role and nothing else.
           </p>
           <Copyable value={deployCommand} />
+          <div className="rounded border border-ink-700 bg-ink-850 px-2 py-1.5">
+            <p className="text-[10px] leading-relaxed text-ink-400">
+              <strong className="text-ink-300">
+                Two roles are involved, and confusing them is the usual mistake.
+              </strong>{" "}
+              <code>DaveIoScannerRoleArn</code> is an <em>input</em> — the principal permitted to
+              assume the new role, already filled in above with the identity this backend runs as
+              {c.callerIdentity ? "" : " (no credentials found, so a placeholder is shown)"}. The
+              stack then <em>creates</em> a different role, <code>DaveIoReadOnlyRole</code>, and its{" "}
+              <code>RoleArn</code> output is what step 4 wants.
+            </p>
+            <p className="mt-1 text-[10px] leading-relaxed text-ink-400">
+              Pointing <code>AWS_TARGET_ROLE_ARN</code> at the scanner principal instead of the
+              created role gives <code>AccessDenied</code>, or <code>NoSuchEntity</code> if it does
+              not exist.
+            </p>
+          </div>
           <p className="text-[10px] leading-relaxed text-ink-400">
-            Replace <code>&lt;daveio-account&gt;</code> with the scanner role ARN from your
-            onboarding email. When it finishes, copy the <code>RoleArn</code> output. In production
-            dave.io would host this template at a stable HTTPS URL and hand you a one-click
-            CloudFormation link; the CLI form is used here because the template lives in this
-            repository.
+            When it finishes, copy the <code>RoleArn</code> output. In production dave.io would host
+            this template at a stable HTTPS URL and hand you a one-click CloudFormation link; the
+            CLI form is used here because the template lives in this repository.
           </p>
         </Step>
 
         <Step n={4} title="Point this deployment at the role">
           <p className="text-[11px] leading-relaxed text-ink-400">
-            Add these to <code className="text-ink-300">.env</code> and restart the API.
+            Add these to <code className="text-ink-300">.env</code> and{" "}
+            <strong className="text-ink-300">restart the API</strong> — configuration is read once
+            at startup, so an edit with no restart changes nothing.
           </p>
           <Copyable value={envSnippet} />
+          <p className="text-[10px] leading-relaxed text-warn">
+            Also remove <code>AWS_ENDPOINT_URL</code>, <code>AWS_ACCESS_KEY_ID</code> and{" "}
+            <code>AWS_SECRET_ACCESS_KEY</code> if they are still set to the mock's values. The AWS
+            SDK reads those from the environment itself, so leaving them sends every request to the
+            mock and shadows your real credentials. The API removes them and warns on startup, but
+            deleting them is cleaner.
+          </p>
           <div className="rounded border border-ink-700 bg-ink-850 px-2 py-1.5">
             <p className="text-[10px] leading-relaxed text-ink-400">
               <strong className="text-ink-300">Why there is no form here.</strong> This API has no
@@ -241,6 +270,7 @@ export function ConnectionGuide() {
               <div className="mt-0.5 space-y-0.5 font-mono text-[10px] opacity-85">
                 <div>assumed: {test.data.assumedRoleArn}</div>
                 <div>account: {test.data.accountId}</div>
+                <div>endpoint: {test.data.endpoint}</div>
                 <div>
                   session expires: {new Date(test.data.expiresAt ?? "").toLocaleTimeString()}{" "}
                   (renewed automatically)

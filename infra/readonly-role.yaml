@@ -64,17 +64,44 @@ Description: >
           ExternalId=<the value from your onboarding email>
 
   Then send dave.io the RoleArn output. Nothing else is required.
+
+  TWO ROLES ARE INVOLVED AND CONFUSING THEM IS THE USUAL MISTAKE:
+
+    DaveIoScannerRoleArn  an INPUT. The principal permitted to assume this
+                          role. It already exists; this template does not
+                          create it.
+
+    RoleArn (output)      what this template CREATES, in the account being
+                          scanned. This is the value that belongs in
+                          AWS_TARGET_ROLE_ARN.
+
+  Pointing AWS_TARGET_ROLE_ARN at the scanner principal instead of at the
+  created role produces AccessDenied, or NoSuchEntity if it does not exist.
+
+  Running against your own account, both live in one account: the scanner
+  principal is your own identity, and the created DaveIoReadOnlyRole is what
+  the scanner assumes.
   ---------------------------------------------------------------------------
 
 Parameters:
   DaveIoScannerRoleArn:
     Type: String
     Description: >
-      The exact ARN of the dave.io role that performs scans. Deliberately not
-      an account id: this role should be assumable by one principal, not by
-      everything dave.io runs.
-    AllowedPattern: "^arn:aws:iam::[0-9]{12}:role/.+$"
-    ConstraintDescription: Must be a full IAM role ARN, not an account id.
+      The ARN of the principal allowed to assume this role. Deliberately not an
+      account id: this role should be assumable by one principal, not by
+      everything in the calling account.
+
+      In production that is dave.io's scanner role, e.g.
+      arn:aws:iam::123456789012:role/DaveIoScanner.
+
+      Running the project against your own account there is no separate dave.io
+      account, so this is whatever identity the backend runs as. Find it with
+      `aws sts get-caller-identity`. A user ARN is accepted for exactly this
+      case - on a workstation the identity is commonly an IAM user rather than
+      a role.
+    AllowedPattern: "^arn:aws:iam::[0-9]{12}:(role|user)/.+$"
+    ConstraintDescription: >
+      Must be a full IAM role or user ARN, not an account id.
 
   ExternalId:
     Type: String
