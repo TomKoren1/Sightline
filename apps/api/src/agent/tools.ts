@@ -15,6 +15,8 @@
 import type Anthropic from "@anthropic-ai/sdk";
 
 import * as q from "../db/queries.js";
+import { remediationInputFromGraph } from "../remediation/fromGraph.js";
+import { remediationsFor } from "../remediation/remediation.js";
 import { readQuery } from "../db/neo4j.js";
 import { diffScans, getLatestScan, listScans } from "../db/repository.js";
 import { assertReadOnlyCypher } from "./cypherGuard.js";
@@ -223,6 +225,23 @@ export const TOOL_DEFINITIONS: Anthropic.Tool[] = [
     },
   },
   {
+    name: "suggest_remediation",
+    description:
+      "For one resource, the exact commands that would fix what is wrong with it, what each " +
+      "change might break, and a read-only command to confirm it worked. Use when asked 'how do " +
+      "I fix this?', 'what should I do about X?' or after reporting a finding the user is likely " +
+      "to act on. Returns nothing when the resource has no findings, which is a real answer. " +
+      "These are computed from the same evidence as the verdict, not written by you - quote them " +
+      "verbatim rather than composing your own commands, and always pass on the `caution`, " +
+      "because a command without its blast radius is the dangerous half of the advice. " +
+      "dave.io cannot run any of them; say so if the user seems to expect otherwise.",
+    input_schema: {
+      type: "object",
+      properties: { arnOrName: { type: "string" } },
+      required: ["arnOrName"],
+    },
+  },
+  {
     name: "graph_query",
     description:
       "Run a read-only Cypher query against the resource graph. This is an escape hatch for " +
@@ -262,6 +281,18 @@ export async function runTool(name: string, input: ToolInput): Promise<ToolResul
     case "get_resource": {
       const row = await q.getResource(String(input["arnOrName"] ?? ""));
       return wrap(row ? [row] : [], row ? {} : { note: "No resource matched that ARN or name." });
+    }
+
+    case "suggest_remediation": {
+      const row = await q.getResource(String(input["arnOrName"] ?? ""));
+      if (!row) return wrap([], { note: "No resource matched that ARN or name." });
+      const remediations = remediationsFor(remediationInputFromGraph(row as never));
+      return wrap(remediations.length > 0 ? [{ arn: row.arn, remediations }] : [], {
+        note:
+          remediations.length === 0
+            ? `${row.name} has no findings that this can suggest a fix for. Say so plainly rather than inventing advice.`
+            : "dave.io cannot apply these. Present them as commands for the user to run, with the caution attached to each.",
+      });
     }
 
     case "find_public_resources":

@@ -1299,3 +1299,50 @@ satisfy it should open an issue, not close one.
 The validator, meanwhile, did exactly its job — it turned a plausible-looking
 hedge into a hard failure two days before anyone demoed it. That is the argument
 for ADR-006 in one line.
+
+---
+
+## #33 — Two test expectations that were wrong about the shell
+
+**Context.** Building remediation (ADR-014), which emits shell commands for a
+human to run. Two of the first tests failed, and both times the implementation
+was right.
+
+**The quoting one.** `shellQuote("it's")` produced `'it'\''s'` and the test
+expected `'it\'s'`. The intuitive form is the wrong one: a POSIX single-quoted
+string has no escape character at all, so a quote cannot be backslash-escaped
+inside it. The correct idiom closes the quoting, emits an escaped quote outside
+it, and reopens — which is what the implementation did.
+
+Rather than argue from memory I ran it:
+
+```bash
+printf '%s\n' 'it'\''s'      # -> it's
+```
+
+The form the test expected is one the shell cannot parse at all. Had I "fixed"
+the implementation to match the test, every remediation for a resource with an
+apostrophe in its name would have produced a command that fails on paste — and
+the tests would have been green.
+
+**The other one** was more ordinary: an assertion on
+`release-address --allocation-id …` that omitted the `--region` flag sitting
+between them. Also a wrong expectation, also mine.
+
+**What to take from it.** Two for two, on a day when #32 had just finished
+recording that I trust "the test is wrong" too readily. The difference here is
+that the hypothesis was _checked_ rather than assumed — a five-second shell
+command settled the quoting question definitively, and the answer happened to
+favour the implementation.
+
+The general form: when a test and the code disagree about how an **external
+system** behaves — a shell, an AWS API, a database — neither the test nor the
+code is evidence. Go and ask the external system. Both #13 and #32 went wrong
+by reasoning about the disagreement instead of resolving it.
+
+**The stakes are also why these are unit-tested at all.** The output of this
+feature is text that a person pastes into a terminal holding production
+credentials. A quoting bug there is not a rendering glitch; it is a command that
+runs and does something other than what it reads as. That is worth a test that
+states the exact expected bytes, and worth verifying the expectation against a
+real shell before trusting it.

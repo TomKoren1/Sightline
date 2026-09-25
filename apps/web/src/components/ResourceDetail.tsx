@@ -1,6 +1,8 @@
 /** Detail panel for a selected node. */
 
 import { useQuery } from "@tanstack/react-query";
+
+import { Remediation } from "./Remediation.js";
 import { styleFor } from "../kinds.js";
 
 interface Neighbour {
@@ -131,6 +133,15 @@ export function ResourceDetail({
                 )}
               </div>
             )}
+
+            {/* Directly under the verdicts: someone who has just read "reachable
+                from the internet" wants the fix next, not the property list. */}
+            <Remediation
+              arn={resource.arn}
+              hasFindings={["isPublic", "isAdmin", "isIdle", "isUnprotected"].some(
+                (k) => resource.props[k] === true,
+              )}
+            />
 
             <div>
               <div className="mb-1 text-[10px] font-semibold uppercase tracking-wider text-ink-400">

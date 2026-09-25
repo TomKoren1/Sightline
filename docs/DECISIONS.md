@@ -488,3 +488,72 @@ log #17, arriving by a different route.
 **Cost.** Switching does not rescan, so the graph still shows the previous
 account until one runs. The UI says so rather than letting someone read one
 account's inventory under another's name.
+
+---
+
+## ADR-014 — Remediation is generated and never applied
+
+**Context.** The product identifies a public bucket, an admin role, an SSH port
+open to the world — and then stops. The engineer reading it still has to work
+out the exact command, which is the part where mistakes happen: detaching
+`AdministratorAccess` from a role whose admin actually comes from an inline
+policy, or revoking an ingress rule before adding the replacement and locking
+themselves out of the host.
+
+The obvious next step is a **Fix it** button. It is also the one thing this
+product must not have.
+
+**Decision.** Every finding carries the exact commands that would resolve it,
+what each one might break, and a read-only command to confirm it worked — as
+**strings**. There is no endpoint that executes them, no credential with the
+permission to, and no plan to add either.
+
+**Why this strengthens the position rather than straining it.** Every other
+decision here points the same way: the IAM role has no write permissions and an
+explicit Deny on data reads (ADR-007), no agent tool can express a mutation
+(ADR-005), and a request to change something is refused in code (ADR-009). A
+Fix button would undo all three in one click, and the trade is bad in both
+directions — it buys convenience and sells the single property that makes
+standing access to a customer's account defensible.
+
+The honest version is also the more useful one. The person who knows whether
+`northwind-public-assets` is a mistake or a deliberate CDN origin is the one at
+the keyboard, not the scanner. So the product's job is to remove the tedious and
+error-prone part — working out the precise command — and leave the judgement
+where the knowledge is.
+
+**Computed, not generated.** The commands come from the same evidence as the
+verdict, by the argument in ADR-004. A model asked to write
+`aws s3api put-public-access-block` will usually produce something right, and
+"usually" is not a property you want in a command someone pastes into
+production. More concretely: the fixture contains a role whose admin comes from
+an inline policy called `legacy-deploy-inline`, and a model reaching for the
+obvious `detach-role-policy --policy-arn .../AdministratorAccess` would emit a
+command that runs cleanly and fixes nothing. The generator reads which policy
+actually grants `*:*` and targets that one. The system prompt tells the agent to
+quote the result verbatim rather than compose its own.
+
+**`caution` is a required field.** Not optional, not a nicety. A remediation
+without a stated blast radius is a trap, and the most dangerous output this
+feature could produce is a confident one-liner that takes a public asset host
+offline or strips the permissions from a role a deployment pipeline depends on.
+Where the resource is used by something, the caution names it. Where the finding
+is posture rather than exposure, it says so — re-enabling Block Public Access on
+a bucket nobody can reach is rated **low**, because no anonymous access exists to
+lose, and rating it alongside a genuinely public bucket would teach people to
+ignore the rating. That is ADR-012 carried to the last step.
+
+**Ordering, too.** The caution renders _above_ the copy button. Below it, it is
+read second, and by then the command is already on the clipboard.
+
+**Consequences.** Someone will ask for the Fix button, and the answer is a
+product decision rather than a backlog item: a version that applies changes needs
+a different trust model — scoped write permissions per action, an approval
+workflow, an audit trail the customer controls, and a rollback path — and that
+is a different product, not a checkbox. Saying so is a better answer than
+building it badly.
+
+The generators also need maintaining alongside the analysers: a new verdict with
+no remediation is a finding that dead-ends. That is a real cost, and the reason
+the contract tests assert that every remediation has a caution and a read-only
+verify command rather than trusting each generator to remember.

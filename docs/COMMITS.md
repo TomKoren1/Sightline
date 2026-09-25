@@ -824,3 +824,43 @@ distinction being checked. Replaced with positive assertions.
 
 README counts corrected: 176 tests, 15 tier-1 checks, 18 tier-2 cases, 13 ADRs,
 $103/month idle. Tier 2: **18/18, mean F1 1.0, no unsupported citations.**
+
+---
+
+### `feat(remediation): the fix, written out, and never applied`
+
+Every finding now carries the exact commands that would resolve it, what each
+one might break, and a read-only command to confirm it worked — as strings.
+There is no endpoint that executes them and no credential that could. ADR-014.
+
+**Why this rather than a Fix button.** Every other decision here points the same
+way: the IAM role has no write permissions (ADR-007), no tool can express a
+mutation (ADR-005), and a change request is refused in code (ADR-009). A Fix
+button undoes all three in one click. The honest version is also more useful —
+the person who knows whether a public bucket is a mistake or a deliberate CDN
+origin is at the keyboard, not in the scanner — so the product removes the
+error-prone part, working out the precise command, and leaves the judgement
+where the knowledge is.
+
+**Computed, not generated**, by the argument in ADR-004. The fixture has a role
+whose admin comes from an inline policy called `legacy-deploy-inline`; a model
+reaching for the obvious `detach-role-policy --policy-arn .../AdministratorAccess`
+would emit a command that runs cleanly and fixes nothing. The generator reads
+which policy actually grants `*:*`. Verified against the running system: it
+targets the inline policy by name and warns that `legacy-image-resizer` will
+lose every permission.
+
+**`caution` is a required field**, and the contract tests enforce it along with
+a read-only `verify` command for every remediation. ADR-012 is carried to the
+last step: an unprotected bucket rates **low** — "no anonymous access exists to
+lose" — while a genuinely public one rates high, and `analytics-db`, flagged
+public but reachable by nothing, says so rather than crying wolf. In the UI the
+caution renders _above_ the copy button, because below it, it is read second.
+
+Also: a 16th agent tool (`suggest_remediation`), the system prompt redirected to
+quote it rather than compose commands from memory, `Copyable` extracted so the
+connection guide and remediation behave identically, and three eval cases —
+including one asserting that a refusal still hands over the command, which
+would catch ADR-009 being satisfied by an answer that abandons the user.
+
+218 unit tests, 21/21 agent evals, mean F1 1.0, no unsupported citations.

@@ -58,6 +58,10 @@ so rather than letting you read one account's inventory under another's name.
 **Trust** shows what is checked and when it last ran: the data checks run on
 demand in milliseconds with no API key, and the last agent eval run is shown.
 
+Clicking any flagged node opens **How to fix** alongside the verdict: the exact
+commands, what each one might break, and a read-only way to confirm it worked.
+Nothing in the product runs them.
+
 **Connection** is a step-by-step guide for pointing this at a real AWS account.
 It generates an external id, pre-fills the CloudFormation command with the
 identity this backend runs as, and tests the connection — diagnosing failures
@@ -128,7 +132,7 @@ is one of only two variables where blank is meaningful rather than unset.
 | `npm run drift`                             | Change the mock account, so a second scan has a diff   |
 | `npm run inspect -w @daveio/api`            | Scan and print findings without touching the databases |
 | `npm run query -w @daveio/api`              | Run every curated query against the graph              |
-| `npm test`                                  | 176 unit tests                                         |
+| `npm test`                                  | 218 unit tests                                         |
 | `npm run verify`                            | Everything CI's static job runs — use before pushing   |
 | `npm run evals:ground-truth -w @daveio/api` | Tier-1 evals — no API key needed                       |
 | `npm run evals -w @daveio/api`              | Tier-2 agent evals — needs a key                       |
@@ -201,7 +205,7 @@ be quoted verbatim rather than paraphrased by a model that might get it wrong.
 
 ## How the agent works, and why it is built that way
 
-A plain tool-calling loop over **fifteen curated, parameterised tools** — no
+A plain tool-calling loop over **sixteen curated, parameterised tools** — no
 agent framework. The model chooses which tool to call and with what arguments;
 it never writes the query.
 
@@ -227,6 +231,20 @@ prompt: the IAM role has no write permissions and an explicit deny on data
 reads; the scanner only ever calls `Describe`/`List`/`Get`; no tool can express
 a mutation; and raw Cypher is validated and run read-only.
 
+That is also why **remediation is generated and never applied** ([ADR-014](docs/DECISIONS.md)).
+Every finding carries the exact commands that would fix it, what each one might
+break, and a read-only command to confirm it worked — as strings. There is no
+endpoint that executes them. A "Fix it" button would undo the three guarantees
+above in one click, and the honest version is more useful anyway: the person who
+knows whether a public bucket is a mistake or a deliberate CDN origin is at the
+keyboard, not in the scanner. The commands are computed from the same evidence
+as the verdict, not written by the model — the fixture's admin role gets its
+`*:*` from an inline policy called `legacy-deploy-inline`, so the obvious
+`detach-role-policy --policy-arn .../AdministratorAccess` would run cleanly and
+fix nothing. And `caution` is a required field: an unprotected bucket rates
+**low risk** because no anonymous access exists to lose, while a genuinely
+public one rates high.
+
 One honest boundary: **Neo4j Community has no role-based access control**, so a
 read-only database _user_ is not available. In production this would be an
 Enterprise read-only role or a read replica. Recorded in
@@ -244,11 +262,11 @@ _not_ public, the inline-admin role _is_ admin, the private database is
 reachable by both expected chains, and the publicly-flagged database is
 reachable by none.
 
-**Tier 2 — answer quality.** Eighteen cases against the live agent, scored on
+**Tier 2 — answer quality.** Twenty-one cases against the live agent, scored on
 the ARNs each answer cites, with precision and recall.
 
-Last recorded full run on `claude-sonnet-5`: **18/18, mean F1 1.0, no
-unsupported citations** — one case per question the brief names, plus twelve
+Last recorded full run on `claude-sonnet-5`: **21/21, mean F1 1.0, no
+unsupported citations** — one case per question the brief names, plus fifteen
 more.
 
 Getting there is the better advertisement for the suite than the score is. It
@@ -413,11 +431,11 @@ docs/               decisions, engineering log, commit log, walkthrough
 
 ## Documentation
 
-- **[docs/DECISIONS.md](docs/DECISIONS.md)** — thirteen ADRs: the stack, the
+- **[docs/DECISIONS.md](docs/DECISIONS.md)** — fourteen ADRs: the stack, the
   mock, the two-database split, deterministic analysis, the tool boundary,
   citation validation, the IAM role, the eval strategy, the read-only refusal in
   code, guided onboarding, evals shown in the product, public vs unprotected,
-  and the runtime account toggle.
+  the runtime account toggle, and remediation that is never applied.
 - **[docs/ENGINEERING-LOG.md](docs/ENGINEERING-LOG.md)** — every non-obvious
   problem hit while building this, with diagnosis and fix. Includes a silent
   moto account-namespacing trap, two capability gaps in the mock recorded as
