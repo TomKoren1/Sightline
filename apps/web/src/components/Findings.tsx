@@ -8,6 +8,7 @@
 
 import { useState } from "react";
 import type { Findings as FindingsData, GraphNode, Summary } from "../api.js";
+import { ChangesPanel } from "./ChangesPanel.js";
 
 export interface FindingsProps {
   summary: Summary | undefined;
@@ -16,7 +17,7 @@ export interface FindingsProps {
   onHighlight: (arns: string[]) => void;
 }
 
-type Tab = "overview" | "exposed" | "admin" | "idle";
+type Tab = "overview" | "exposed" | "admin" | "idle" | "changes";
 
 export function Findings({ summary, findings, loading, onHighlight }: FindingsProps) {
   const [tab, setTab] = useState<Tab>("overview");
@@ -44,6 +45,7 @@ export function Findings({ summary, findings, loading, onHighlight }: FindingsPr
     { id: "exposed", label: "Exposed", count: summary.publicCount, tone: "text-danger" },
     { id: "admin", label: "Admin", count: summary.adminCount, tone: "text-warn" },
     { id: "idle", label: "Idle", count: summary.idleCount },
+    { id: "changes", label: "Changes" },
   ];
 
   return (
@@ -114,6 +116,8 @@ export function Findings({ summary, findings, loading, onHighlight }: FindingsPr
             }}
           />
         )}
+
+        {tab === "changes" && <ChangesPanel onHighlight={onHighlight} />}
 
         {tab === "idle" && (
           <FindingList

@@ -10,6 +10,8 @@ import { getLatestScan } from "./db/repository.js";
 import { registerScanRoutes } from "./routes/scans.js";
 import { registerGraphRoutes } from "./routes/graph.js";
 import { registerChatRoutes } from "./routes/chat.js";
+import { registerEvalRoutes } from "./routes/evals.js";
+import { registerConnectionRoutes } from "./routes/connection.js";
 
 const app = Fastify({
   logger: { level: process.env["LOG_LEVEL"] ?? "info" },
@@ -68,6 +70,8 @@ app.get("/api/health", async () => {
 registerScanRoutes(app);
 registerGraphRoutes(app);
 registerChatRoutes(app);
+registerEvalRoutes(app);
+registerConnectionRoutes(app);
 
 try {
   await migrate();

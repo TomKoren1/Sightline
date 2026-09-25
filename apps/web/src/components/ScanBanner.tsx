@@ -28,6 +28,8 @@ export interface ScanBannerProps {
   liveUnits: ScanUnit[];
   error: string | null;
   onScan: () => void;
+  onOpenTrust: () => void;
+  onOpenConnection: () => void;
 }
 
 export function ScanBanner({
@@ -37,6 +39,8 @@ export function ScanBanner({
   liveUnits,
   error,
   onScan,
+  onOpenTrust,
+  onOpenConnection,
 }: ScanBannerProps) {
   const units = scanning ? liveUnits : (scan?.units ?? []);
   const failed = units.filter((u) => u.status === "failed");
@@ -84,13 +88,27 @@ export function ScanBanner({
           )}
         </div>
 
-        <button
-          onClick={onScan}
-          disabled={scanning}
-          className="rounded border border-ink-700 bg-ink-800 px-2.5 py-1 text-[11px] text-ink-100 transition hover:border-ink-600 disabled:cursor-not-allowed disabled:opacity-40"
-        >
-          {scanning ? "Scanning…" : scan ? "Rescan" : "Run scan"}
-        </button>
+        <div className="flex items-center gap-1.5">
+          <button
+            onClick={onOpenConnection}
+            className="rounded border border-ink-700 bg-ink-800 px-2 py-1 text-[11px] text-ink-300 transition hover:border-ink-600 hover:text-ink-100"
+          >
+            Connection
+          </button>
+          <button
+            onClick={onOpenTrust}
+            className="rounded border border-ink-700 bg-ink-800 px-2 py-1 text-[11px] text-ink-300 transition hover:border-ink-600 hover:text-ink-100"
+          >
+            Trust
+          </button>
+          <button
+            onClick={onScan}
+            disabled={scanning}
+            className="rounded border border-ink-700 bg-ink-800 px-2.5 py-1 text-[11px] text-ink-100 transition hover:border-ink-600 disabled:cursor-not-allowed disabled:opacity-40"
+          >
+            {scanning ? "Scanning…" : scan ? "Rescan" : "Run scan"}
+          </button>
+        </div>
       </div>
 
       {error && (

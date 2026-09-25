@@ -15,6 +15,9 @@ import type { ScanEvent, ScanUnit } from "@daveio/shared";
 import { api, startScan } from "./api.js";
 import { DEFAULT_VISIBLE_KINDS, KIND_STYLES, styleFor } from "./kinds.js";
 import { Chat } from "./components/Chat.js";
+import { ConnectionGuide } from "./components/ConnectionGuide.js";
+import { Modal } from "./components/Modal.js";
+import { TrustPanel } from "./components/TrustPanel.js";
 import { Findings } from "./components/Findings.js";
 import { GraphView } from "./components/GraphView.js";
 import { ResourceDetail } from "./components/ResourceDetail.js";
@@ -32,6 +35,7 @@ export function App() {
   const [selectedArn, setSelectedArn] = useState<string | null>(null);
   const [visibleKinds, setVisibleKinds] = useState<string[]>(DEFAULT_VISIBLE_KINDS);
   const [showFilters, setShowFilters] = useState(false);
+  const [modal, setModal] = useState<"trust" | "connection" | null>(null);
 
   const latest = useQuery({ queryKey: ["latestScan"], queryFn: api.latestScan });
   const hasScan = Boolean(latest.data?.scan);
@@ -102,7 +106,29 @@ export function App() {
         liveUnits={liveUnits}
         error={scanError}
         onScan={() => void runScan()}
+        onOpenTrust={() => setModal("trust")}
+        onOpenConnection={() => setModal("connection")}
       />
+
+      {modal === "trust" && (
+        <Modal
+          title="Can you trust this?"
+          subtitle="What is checked, how, and when it last ran"
+          onClose={() => setModal(null)}
+        >
+          <TrustPanel />
+        </Modal>
+      )}
+
+      {modal === "connection" && (
+        <Modal
+          title="Connect an AWS account"
+          subtitle="Read-only access to your account, in about five minutes"
+          onClose={() => setModal(null)}
+        >
+          <ConnectionGuide />
+        </Modal>
+      )}
 
       <div className="flex min-h-0 flex-1">
         <aside className="flex w-72 shrink-0 flex-col border-r border-ink-800 bg-ink-900">

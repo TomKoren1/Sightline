@@ -21,7 +21,8 @@
     "dev:api": "npm run dev -w @daveio/api",
     "dev:web": "npm run dev -w @daveio/web",
     "evals": "npm run evals -w @daveio/api",
-    "verify": "npm run typecheck && npm run lint && vitest run --exclude '**/evals/**' && npm run build -w @daveio/web"
+    "verify": "npm run typecheck && npm run lint && vitest run --exclude '**/evals/**' && npm run build -w @daveio/web",
+    "drift": "npm run drift -w @daveio/mock-aws"
   },
   "devDependencies": {
     "@types/node": "^22.10.2",

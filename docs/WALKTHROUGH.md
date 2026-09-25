@@ -66,6 +66,47 @@ The correct answer is no — its security group opens no ports. This is the
 clearest demonstration that the agent is reading computed facts rather than
 paraphrasing an AWS field.
 
+### Show change detection
+
+```bash
+npm run drift && npm run scan
+```
+
+Open the **Changes** tab. Five things changed; three are grouped as _worth
+looking at_ and the rest as routine.
+
+The one to dwell on: `northwind-logs-archive` and `northwind-terraform-state`
+both received the **same** permissive bucket policy, and only the first shows
+`derived.isPublic: false → true`. The second's public access block neutralised
+it. A diff that flagged them identically would be reading the policy instead of
+evaluating it — this is the deterministic-analysis argument (ADR-004) visible in
+one screen.
+
+### Show the Trust panel
+
+Header → **Trust**.
+
+- **Data checks** run on demand: twelve checks, no model, no API key, about
+  10ms. Expand one to see what it guards against and what it found.
+- **Agent answer quality** shows the last recorded eval run — 16/16, mean F1
+  1.0, no unsupported citations — with the model that produced it.
+
+If drift has been applied, the data checks deliberately show **amber, not red**,
+with an explanation: they assert properties of the pristine fixture, so a
+failure after drift is them detecting the drift. Worth pointing out — an
+indicator whose false positives are not handled gets ignored, and then it is
+worse than absent.
+
+### Show the onboarding guide
+
+Header → **Connection**. Five steps, and step 4 is the one to talk about: there
+is deliberately **no form** for pasting a role ARN, because this API has no
+authentication and that form would be an open endpoint assuming a role into
+someone's AWS account while storing a credential. The screen says so.
+
+Press **Test connection** — `AssumeRole` plus `GetCallerIdentity`, and on
+failure it names the specific thing to fix rather than echoing an SDK error.
+
 ### Show partial failure
 
 ```bash

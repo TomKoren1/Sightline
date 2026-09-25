@@ -542,3 +542,53 @@ Engineering log #4 is corrected to describe what the code now does, including an
 explicit note that it previously overclaimed.
 
 **Eval suite: 16/16, mean F1 1.0. 101 unit tests.**
+
+---
+
+### `feat: Trust panel, change detection in the UI, and an onboarding guide`
+
+Three additions, each closing a gap between what the project does and what a
+user can see it doing.
+
+**Change detection was built and invisible.** Scan diffing worked server-side
+and the agent could query it, but nothing surfaced it — and _"what changed since
+yesterday, and does any of it matter?"_ is the question that makes an inventory
+tool something you open daily. The **Changes** tab now separates a security
+event from bookkeeping, because an instance gaining a public IP and an instance
+gaining a tag are both "modified" and only one is worth interrupting someone for.
+That classification lives in `packages/shared` rather than in the component, so
+it is domain knowledge the test runner can see — thirteen tests cover it.
+
+`npm run drift` makes the feature demonstrable. Re-seeding was the wrong way to
+get a diff: moto assigns fresh ids, so everything looks removed and re-added.
+Drift applies targeted changes to the existing account instead, and applies the
+**same** permissive policy to two buckets where only one becomes public — the
+other's access block neutralises it. Side by side, that is ADR-004 visible in one
+screen.
+
+**A Trust panel** (ADR-011), because the eval suite was the strongest evidence
+here and required a README, an API key and a CLI to see. Data checks run on
+demand — no model, ~10ms — against the inventory on screen; agent evals are read
+from `eval_runs` and displayed rather than re-run from a button that spends money
+per click. The ground-truth assertions were extracted from the Vitest file into
+`evals/checks.ts` so the test suite and the product run the same definitions and
+cannot disagree about what "correct" means.
+
+That surfaced a problem worth recording: drift _deliberately_ breaks some checks,
+and presented naively a correct system reads as broken. The endpoint detects a
+drifted account and the panel shows amber with an explanation. Same failure mode
+as the citation validator's false positives (engineering log #12), and the same
+lesson — an indicator whose false positives go unhandled gets ignored, and is
+then worse than absent.
+
+**An onboarding guide** (ADR-010) for connecting a real AWS account: five steps,
+a generated external id that is never stored, the exact CloudFormation command,
+and a connection test that diagnoses failures rather than echoing SDK errors.
+
+Deliberately **no form** for pasting a role ARN. This API has no
+authentication, so that form would be an open endpoint that assumes a role into
+somebody's AWS account and persists a credential. The screen says so in step 4,
+because a customer granting a third party standing access is reasonably
+interested in how it is constrained.
+
+**114 unit tests, evals 16/16 unchanged.**

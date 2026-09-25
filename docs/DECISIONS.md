@@ -340,3 +340,77 @@ behind a prompt that usually works, not a parser. And when it fires on an
 answer that declined in wording the detector did not recognise, the notice is
 mildly redundant. Both failure directions are harmless, which is why a
 conservative heuristic is acceptable here; the reverse trade-off would not be.
+
+---
+
+## ADR-010 — Onboarding is guided in the UI, not performed by it
+
+**Context.** The product's real first step is connecting a customer's AWS
+account. The obvious feature is a form: paste a role ARN and an external id,
+press connect.
+
+**The constraint that decides it.** This API has no authentication. Every
+endpoint is open. A form like that would therefore be an unauthenticated
+endpoint that assumes a role into somebody's AWS account, and it would persist a
+value that the role template itself calls a credential, in plaintext, behind
+nothing.
+
+**Decision.** The UI guides onboarding and does not perform it. The server
+generates a fresh external id, renders the exact CloudFormation command with
+parameters filled in, explains what access the role grants and why, and tests
+the connection that is already configured — `AssumeRole` followed by
+`GetCallerIdentity`, two read-only calls. Putting the role ARN into
+configuration stays a deliberate act by an operator with host access.
+
+**Why this is the better answer and not the lazy one.** It delivers what the
+screen is actually for: a customer can see what they are granting, get the
+values they need, run one command, and find out immediately whether it worked —
+with a diagnosis rather than a stack trace when it did not. The step that is
+omitted is the one that would require authentication, tenant isolation and
+encrypted secret storage to do responsibly. Building it without those would make
+the demo look more complete and the product less defensible, and a reviewer
+asking "would you deploy this?" deserves a yes.
+
+The screen says so, in step 4, rather than leaving the omission to be inferred.
+A customer granting a third party standing access into their account is
+reasonably interested in how that access is constrained.
+
+**Cost.** Connecting an account is not a single click, and a multi-tenant
+version would have to build the form eventually — behind auth. The diagnosis
+logic in the connection test is where most of the value landed, and it carries
+over unchanged.
+
+---
+
+## ADR-011 — Evaluation results are shown in the product
+
+**Context.** The eval suite is the strongest evidence this project has that its
+answers can be trusted, and it was invisible: a reviewer had to read the README,
+obtain an API key and run a CLI to see any of it.
+
+**Decision.** A Trust panel in the UI, presenting the two tiers as different
+kinds of evidence. Data checks run on demand — no model, no key, milliseconds —
+so they are live evidence about the inventory currently on screen. Agent evals
+are read from `eval_runs` and displayed, because they cost money and a button
+that spends it per click is a bad button.
+
+**Why it belongs in the product rather than only in CI.** "How much should I
+trust this?" is a real question from someone about to act on an answer about
+their production infrastructure, and dave.io's proposition is an AI system with
+standing access to a customer's account. Answering it in the product is part of
+the product, not documentation.
+
+**The consequence that needed handling.** The data checks assert properties of
+the seeded fixture, and `npm run drift` deliberately changes the account — so
+after drift, some checks are _supposed_ to fail. Presented naively that reads as
+a broken system. The endpoint therefore detects a drifted account and says so,
+and the panel shows amber with an explanation rather than red. A panel that
+cries wolf teaches people to ignore it, which is the same failure the citation
+validator had (engineering log #12) and worth recognising as a pattern: any
+indicator whose false positives are not handled will be ignored, and then it is
+worse than absent.
+
+**Cost.** The checks are meaningful only against the mock, so the endpoint
+refuses when `AWS_MODE=real` rather than showing a real customer assertions
+about a fictional account. A production version would need per-customer
+expectations, which is a different and larger feature.

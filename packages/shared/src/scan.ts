@@ -99,3 +99,57 @@ export interface ScanDiff {
   removed: ResourceDiff[];
   modified: ResourceDiff[];
 }
+
+/**
+ * Field changes that are a security event rather than bookkeeping.
+ *
+ * An instance gaining a public IP and an instance gaining a tag are both
+ * "modified", and only one of them is worth interrupting someone for. This
+ * lives in the shared model rather than in the component that renders it,
+ * because it is domain knowledge — the same judgement an alerting rule or a
+ * digest email would need — and because here it can be tested.
+ */
+export const SIGNIFICANT_CHANGE_FIELDS: ReadonlySet<string> = new Set([
+  // Derived security verdicts flipping is the strongest signal there is.
+  "derived.isPublic",
+  "derived.isAdmin",
+  "derived.isIdle",
+  // Exposure
+  "publiclyAccessible",
+  "publicIpAddress",
+  "isPublic",
+  // Network reachability
+  "ingress",
+  "ingressRuleCount",
+  "securityGroupIds",
+  // Access control
+  "policy",
+  "policyIsPublic",
+  "publicAccessBlock",
+  "attachedPolicies",
+  "inlinePolicies",
+  "trustPolicy",
+  "roleArn",
+  // Lifecycle, which changes cost and availability
+  "state",
+  "status",
+]);
+
+/** Does this diff contain a change worth drawing attention to? */
+export function hasSignificantChange(diff: ResourceDiff): boolean {
+  return (diff.changedFields ?? []).some((f) => SIGNIFICANT_CHANGE_FIELDS.has(f.field));
+}
+
+/**
+ * Order changed fields so the ones that matter come first.
+ *
+ * Returns a new array; the input is left alone because callers may be rendering
+ * from React state.
+ */
+export function sortFieldsBySignificance<T extends { field: string }>(fields: T[]): T[] {
+  return [...fields].sort(
+    (a, b) =>
+      Number(SIGNIFICANT_CHANGE_FIELDS.has(b.field)) -
+      Number(SIGNIFICANT_CHANGE_FIELDS.has(a.field)),
+  );
+}

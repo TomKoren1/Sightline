@@ -37,6 +37,73 @@ export interface Findings {
   exposed: Array<GraphNode & { ports?: string[]; securityGroup?: string }>;
 }
 
+export interface CheckResult {
+  id: string;
+  description: string;
+  rationale: string;
+  passed: boolean;
+  detail: string;
+}
+
+export interface GroundTruthRun {
+  scanId: string;
+  scannedAt: string;
+  durationMs: number;
+  total: number;
+  passed: number;
+  /** True when the account has been changed since seeding, so failures are expected. */
+  drifted: boolean;
+  driftNote?: string;
+  results: CheckResult[];
+}
+
+export interface AgentEvalCase {
+  id: string;
+  question: string;
+  passed: boolean;
+  f1: number;
+  toolsCalled: string[];
+  failures: string[];
+  unsupportedCitations: number;
+  durationMs: number;
+}
+
+export interface AgentEvalRun {
+  id: string;
+  startedAt: string;
+  model: string;
+  total: number;
+  passed: number;
+  meanF1: number;
+  unsupportedCitations: number;
+  cases: AgentEvalCase[];
+}
+
+export interface Connection {
+  mode: "mock" | "real";
+  roleArn: string;
+  accountId: string | null;
+  externalIdMasked: string;
+  externalIdIsPlaceholder: boolean;
+  homeRegion: string;
+  regions: string[] | null;
+  endpointOverride: string | null;
+  lastScan: { id: string; at: string; status: string } | null;
+}
+
+export interface ConnectionTest {
+  ok: boolean;
+  durationMs: number;
+  mode: string;
+  assumedRoleArn?: string;
+  accountId?: string;
+  callerArn?: string | null;
+  expiresAt?: string;
+  code?: string;
+  problem?: string;
+  fix?: string;
+}
+
 export interface Health {
   status: string;
   checks: Record<string, string>;
@@ -67,6 +134,25 @@ export const api = {
     return get<{ nodes: GraphNode[]; edges: GraphEdge[] }>(`/api/graph?${search}`);
   },
   diff: () => get<{ diff: ScanDiff | null; reason?: string }>("/api/scans/diff"),
+
+  checks: () => get<{ checks: Array<Omit<CheckResult, "passed" | "detail">> }>("/api/evals/checks"),
+  latestEvalRun: () =>
+    get<{ run: AgentEvalRun | null; hint?: string; currentModel?: string }>("/api/evals/latest"),
+  runGroundTruth: async (): Promise<GroundTruthRun> => {
+    const res = await fetch("/api/evals/ground-truth", { method: "POST" });
+    if (!res.ok) {
+      const body = (await res.json().catch(() => ({}))) as { error?: string };
+      throw new Error(body.error ?? `${res.status} ${res.statusText}`);
+    }
+    return res.json() as Promise<GroundTruthRun>;
+  },
+
+  connection: () => get<Connection>("/api/connection"),
+  newExternalId: () => get<{ externalId: string; note: string }>("/api/connection/external-id"),
+  testConnection: async (): Promise<ConnectionTest> => {
+    const res = await fetch("/api/connection/test", { method: "POST" });
+    return res.json() as Promise<ConnectionTest>;
+  },
 };
 
 /**

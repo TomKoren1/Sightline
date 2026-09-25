@@ -9,7 +9,8 @@
   },
   "scripts": {
     "seed": "tsx src/cli.ts",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "drift": "tsx src/driftCli.ts"
   },
   "dependencies": {
     "@aws-sdk/client-ec2": "^3.716.0",

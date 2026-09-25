@@ -36,6 +36,23 @@ npm run dev:web               # http://localhost:5173   ← open this
 `npm run seed` and `npm run scan` are also reachable from the UI: open it with
 an empty database and the empty state offers to run the first scan.
 
+To see change detection, make the account drift and scan again:
+
+```bash
+npm run drift                 # a bucket goes public, a port opens, an instance stops
+npm run scan
+```
+
+The **Changes** tab then separates what matters from bookkeeping. Two buckets
+receive the same permissive policy and only one becomes public — the other's
+access block neutralises it — which is the clearest demonstration that verdicts
+are computed rather than read off a field.
+
+The header has two more things worth opening. **Trust** shows what is checked
+and when it last ran: the data checks run on demand in milliseconds with no API
+key, and the last agent eval run is displayed. **Connection** is the onboarding
+guide for pointing this at a real AWS account.
+
 ### The LLM key
 
 The agent uses Anthropic. Put a key in `.env`:
@@ -73,6 +90,7 @@ same code in both modes.
 | ------------------------------------------- | ------------------------------------------------------ |
 | `npm run seed`                              | Rebuild the mock account from scratch                  |
 | `npm run scan`                              | Scan, persist, project the graph                       |
+| `npm run drift`                             | Change the mock account, so a second scan has a diff   |
 | `npm run inspect -w @daveio/api`            | Scan and print findings without touching the databases |
 | `npm run query -w @daveio/api`              | Run every curated query against the graph              |
 | `npm test`                                  | 101 unit tests                                         |
