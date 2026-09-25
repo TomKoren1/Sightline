@@ -75,7 +75,7 @@ export function Findings({ summary, findings, loading, onHighlight }: FindingsPr
           <div className="space-y-3">
             <div className="grid grid-cols-2 gap-1.5">
               <Stat label="Exposed" value={summary.publicCount} tone="text-danger" />
-              <Stat label="Admin roles" value={summary.adminCount} tone="text-warn" />
+              <Stat label="Admin principals" value={summary.adminCount} tone="text-warn" />
               <Stat label="Idle" value={summary.idleCount} />
               <Stat label="Unguarded" value={summary.unprotectedCount} tone="text-warn" />
               <Stat
@@ -107,14 +107,22 @@ export function Findings({ summary, findings, loading, onHighlight }: FindingsPr
 
         {tab === "admin" && (
           <FindingList
-            items={findings.adminRoles}
-            empty="No role grants unrestricted access."
+            items={findings.adminPrincipals}
+            empty="No role or user grants unrestricted access."
             onHighlight={onHighlight}
             extra={(item) => {
               const used = (item as { usedBy?: GraphNode[] }).usedBy ?? [];
-              return used.length === 0
-                ? "Used by nothing — candidate for removal"
-                : `Used by ${used.map((u) => u.name).join(", ")}`;
+              if (used.length > 0) return `Used by ${used.map((u) => u.name).join(", ")}`;
+              /**
+               * "Used by nothing" means different things for the two kinds, and
+               * saying "candidate for removal" about an admin IAM user would be
+               * wrong: a user has no instance profile or Lambda to be used by,
+               * so an empty list carries no information about whether it is in
+               * use. It has long-lived credentials instead, which is the risk.
+               */
+              return item.kind === "IamUser"
+                ? "IAM user — standing admin via long-lived credentials"
+                : "Used by nothing — candidate for removal";
             }}
           />
         )}

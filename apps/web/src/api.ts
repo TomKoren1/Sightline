@@ -36,7 +36,7 @@ export interface Findings {
   publicResources: GraphNode[];
   /** Not public, but nothing would stop them becoming public. */
   unprotected: GraphNode[];
-  adminRoles: Array<GraphNode & { reason?: string; usedBy?: GraphNode[]; useCount?: number }>;
+  adminPrincipals: Array<GraphNode & { reason?: string; usedBy?: GraphNode[]; useCount?: number }>;
   idle: GraphNode[];
   exposed: Array<GraphNode & { ports?: string[]; securityGroup?: string }>;
 }

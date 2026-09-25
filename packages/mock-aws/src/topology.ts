@@ -57,11 +57,27 @@ export const GROUND_TRUTH = {
    */
   blockedPublicBuckets: ["northwind-reports"],
 
-  /** Principals with effective `*:*`. */
+  /** Roles with effective `*:*`. */
   adminRoles: ["NorthwindAdminRole", "LegacyDeployRole", "UnusedAdminRole"],
+
+  /**
+   * Users with effective `*:*`.
+   *
+   * Separate from roles because they were separately missed: the scanner
+   * inventoried users without their policies, so an account administered
+   * entirely through IAM users reported no administrators at all. A standing
+   * user with long-lived keys is not a lesser finding than an admin role.
+   */
+  adminUsers: ["northwind-ci-deploy", "northwind-backup-agent"],
+
+  /** Users that must NOT be flagged - the negative class for the above. */
+  nonAdminUsers: ["northwind-metrics-reader"],
 
   /** Admin roles with an inline rather than managed grant. */
   inlineAdminRoles: ["LegacyDeployRole"],
+
+  /** Admin users whose grant is inline, under an unrevealing policy name. */
+  inlineAdminUsers: ["northwind-backup-agent"],
 
   /** Admin roles nothing assumes or attaches to. */
   unusedAdminRoles: ["UnusedAdminRole"],

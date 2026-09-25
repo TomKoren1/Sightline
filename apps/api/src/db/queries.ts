@@ -103,18 +103,28 @@ export async function findPublicResources(params: { kind?: string; limit?: numbe
  * "What uses them" is the half that makes the answer actionable: an admin role
  * attached to a running instance is an incident, and an admin role nothing
  * references is cleanup.
+ *
+ * Matches roles **and** users. It matched only roles until a real account
+ * reported no administrators while two IAM users held `AdministratorAccess`
+ * (engineering log #29). A user has no instance profile or Lambda to be used
+ * by, so `usedBy` is empty for them - which is itself the point: a standing
+ * admin user with long-lived credentials and nothing attaching it to a
+ * workload is a different risk from an admin role a service assumes, not a
+ * lesser one.
  */
 export async function findAdminPrincipals(params: { limit?: number } = {}) {
   return readQuery<ResourceRow>(
-    `MATCH (r:Resource:IamRole)
-     WHERE r.isAdmin = true
+    `MATCH (r:Resource)
+     WHERE (r:IamRole OR r:IamUser) AND r.isAdmin = true
      OPTIONAL MATCH (p:InstanceProfile)-[:PROVIDES_ROLE]->(r)
      OPTIONAL MATCH (i:Ec2Instance)-[:HAS_INSTANCE_PROFILE]->(p)
      OPTIONAL MATCH (f:LambdaFunction)-[:EXECUTES_AS]->(r)
      WITH r,
           collect(DISTINCT {arn: i.arn, name: i.name, kind: 'Ec2Instance'}) AS instances,
           collect(DISTINCT {arn: f.arn, name: f.name, kind: 'LambdaFunction'}) AS functions
-     RETURN r.arn AS arn, 'IamRole' AS kind, r.name AS name, null AS region,
+     RETURN r.arn AS arn,
+            CASE WHEN r:IamUser THEN 'IamUser' ELSE 'IamRole' END AS kind,
+            r.name AS name, null AS region,
             r.adminReason AS reason,
             [u IN instances + functions WHERE u.arn IS NOT NULL] AS usedBy,
             size([u IN instances + functions WHERE u.arn IS NOT NULL]) AS useCount

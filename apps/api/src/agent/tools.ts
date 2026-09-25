@@ -109,10 +109,12 @@ export const TOOL_DEFINITIONS: Anthropic.Tool[] = [
   {
     name: "find_admin_principals",
     description:
-      "IAM roles with effective administrator access (Action '*' on Resource '*'), whether " +
-      "granted by a managed or an inline policy, together with what actually uses each role. " +
-      "Use for 'which roles have admin access, and what uses them?'. A role with no users is " +
-      "cleanup; a role attached to a running instance is an incident - say which is which.",
+      "IAM roles AND IAM users with effective administrator access (Action '*' on Resource " +
+      "'*'), whether granted by a managed or an inline policy, together with what uses each " +
+      "role. Use for 'who has admin access?'. Check the `kind` field: a role attached to a " +
+      "running instance is an incident, a role nothing uses is cleanup, and a *user* with " +
+      "admin has long-lived credentials and no usage data here - report it as its own risk " +
+      "rather than as an unused role.",
     input_schema: { type: "object", properties: { limit: { type: "number" } } },
   },
   {

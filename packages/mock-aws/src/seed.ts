@@ -37,6 +37,9 @@ import {
 import {
   AddRoleToInstanceProfileCommand,
   AttachRolePolicyCommand,
+  AttachUserPolicyCommand,
+  CreateUserCommand,
+  PutUserPolicyCommand,
   CreateInstanceProfileCommand,
   CreatePolicyCommand,
   CreateRoleCommand,
@@ -316,7 +319,55 @@ async function seedIam() {
     }),
   );
 
-  log("IAM: 5 roles (3 effectively admin, 1 of them inline-only), 1 instance profile");
+  /**
+   * IAM users, because "which principals are administrators?" is not a question
+   * about roles.
+   *
+   * A real account was scanned whose only two human identities both held
+   * `AdministratorAccess`, and the findings panel reported no administrators:
+   * the collector gathered users without their policies and the analyser only
+   * ever looked at roles. Technically "no admin roles", read by anyone as
+   * "nobody has admin" (engineering log #29).
+   *
+   * So the fixture now contains one admin user and two negatives - a user with
+   * a scoped policy, and one with no policies at all - which is what makes the
+   * check discriminating rather than a smoke test.
+   */
+  await client.send(new CreateUserCommand({ UserName: "northwind-ci-deploy" }));
+  await client.send(
+    new AttachUserPolicyCommand({
+      UserName: "northwind-ci-deploy",
+      PolicyArn: "arn:aws:iam::aws:policy/AdministratorAccess",
+    }),
+  );
+
+  // Admin granted inline, under a name that does not suggest it - the same
+  // trap as LegacyDeployRole, on a user, so the check cannot pass by reading
+  // policy names.
+  await client.send(new CreateUserCommand({ UserName: "northwind-backup-agent" }));
+  await client.send(
+    new PutUserPolicyCommand({
+      UserName: "northwind-backup-agent",
+      PolicyName: "BackupHelper",
+      PolicyDocument: JSON.stringify({
+        Version: "2012-10-17",
+        Statement: [{ Effect: "Allow", Action: "*", Resource: "*" }],
+      }),
+    }),
+  );
+
+  // Negative class: scoped, and must not be flagged.
+  await client.send(new CreateUserCommand({ UserName: "northwind-metrics-reader" }));
+  await client.send(
+    new AttachUserPolicyCommand({
+      UserName: "northwind-metrics-reader",
+      PolicyArn: "arn:aws:iam::aws:policy/ReadOnlyAccess",
+    }),
+  );
+
+  log(
+    "IAM: 5 roles (3 effectively admin, 1 of them inline-only), 3 users (2 admin, 1 of them inline-only), 1 instance profile",
+  );
   return { appProfileName: "NorthwindAppProfile" };
 }
 

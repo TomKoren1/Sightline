@@ -1035,3 +1035,89 @@ The cheapest fix for all of it was the same: make the thing that explains also
 be the thing that computes. The guide no longer prints an identity and hopes it
 is pasteable — it prints the output of a tested function whose contract is "this
 satisfies the template's own pattern".
+
+---
+
+## #29 — "No admin roles" was true, and read as "nobody has admin"
+
+**Symptom.** With the real-account connection finally working (#28), a scan of
+Tom's account returned a completely empty findings panel. No public buckets, no
+exposed resources, no idle spend, and **no administrators**.
+
+The first four were correct — it is a small, tidy account. The last was not.
+Two of its three IAM users hold `arn:aws:iam::aws:policy/AdministratorAccess`.
+
+**Diagnosis.** Two independent gaps, both of which had to be closed.
+
+The IAM collector inventoried users with their name, path, creation date and
+last password use, and nothing about their permissions. It fetched attached and
+inline policy documents for _roles_ only.
+
+The pipeline's admin loop then read:
+
+```ts
+// --- Which principals are administrators? ---
+for (const resource of resources) {
+  if (resource.kind !== "IamRole") continue;
+```
+
+The comment asks about principals. The code filters to roles. That gap had
+survived every review, including two full audits against the brief, because
+the mock account contains no IAM users at all — so no test could have caught
+it, and the reason no test caught it is that the fixture shared the blind spot.
+
+The analyser itself was never the problem: it evaluates policy documents, which
+are identically shaped for both. Only collection and that one filter were
+role-specific.
+
+**Why it is worse than a missing feature.** The tool did not say "I do not
+check users". It said, through an empty panel and the words "No role grants
+unrestricted access", something a reader will take as "this account has no
+administrators". A gap that presents as a clean bill of health is the one kind
+of false negative a security tool cannot ship — and it is the exact failure
+this project argues against elsewhere, in ADR-004 (analysis belongs in
+deterministic code) and in the public-vs-unprotected split of ADR-012.
+
+**Fix.**
+
+- The collector fetches `ListAttachedUserPolicies`, `ListUserPolicies` and
+  `GetUserPolicy`, reusing the managed-policy document cache so
+  `AdministratorAccess` attached to six principals is still fetched once.
+- The pipeline filter accepts `IamRole` and `IamUser`.
+- `findAdminPrincipals` matches both labels and returns the real `kind`.
+- The mock account gains three users: one admin by managed policy, one admin by
+  an inline policy called `BackupHelper` (so the check cannot pass by pattern
+  matching policy names), and one scoped user as the negative class.
+- Three ground-truth checks cover them. Reverting only the pipeline filter fails
+  two of the three, so they are discriminating rather than decorative.
+- The API field `adminRoles` became `adminPrincipals`, and the UI's empty state
+  and stat label changed with it. A field named after roles that returns users
+  is the same bug in a different place.
+
+**A detail the fix turned up.** The panel annotates an admin role used by
+nothing as "candidate for removal". That inference does not transfer: a user has
+no instance profile or Lambda to be _used by_, so an empty `usedBy` says nothing
+about whether it is in use. An admin user is annotated as standing admin via
+long-lived credentials instead — which is the actual risk, and the opposite of
+"probably safe to delete". The agent's tool description says the same thing, so
+the model does not make the inference either.
+
+**Verified against the real account.** Both users are now reported by name, with
+the specific grant:
+
+```
+IamUser terraform-bootstrap — Grants Action "*" on Resource "*"
+                              via the managed policy "AdministratorAccess"
+```
+
+**What to take from it.** A fixture that shares the production blind spot proves
+nothing, however green it is. The mock account was built to be adversarial about
+everything I thought of — a bucket that looks public and is not, admin granted
+inline under a boring name, a database flagged public that nothing can reach —
+and it contained no IAM users, so the one analysis that only ever read roles
+passed everything. A hundred and fifty-seven tests said this worked.
+
+The bug was found by pointing the tool at a real account and disbelieving a
+clean result. That is worth more than another test written against the same
+mental model that produced the code, and it argues for keeping a real-account
+smoke test in the loop rather than trusting the fixture to be complete.

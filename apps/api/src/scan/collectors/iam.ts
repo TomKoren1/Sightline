@@ -24,6 +24,9 @@ import {
   ListAttachedRolePoliciesCommand,
   ListRolePoliciesCommand,
   GetRolePolicyCommand,
+  ListAttachedUserPoliciesCommand,
+  ListUserPoliciesCommand,
+  GetUserPolicyCommand,
   GetPolicyCommand,
   GetPolicyVersionCommand,
 } from "@aws-sdk/client-iam";
@@ -229,26 +232,90 @@ export async function collectIam(ctx: CollectorContext): Promise<CollectorOutput
     }
   }
 
-  // --- Users --------------------------------------------------------------
+  /**
+   * --- Users ---------------------------------------------------------------
+   *
+   * Users carry their policies for the same reason roles do: the admin
+   * analyser asks "which principals are administrators?", and for a long time
+   * this collector answered only for roles. Users were inventoried with their
+   * name and creation date and nothing about what they could do, so an account
+   * whose only administrators were IAM users reported no administrators at
+   * all - a false negative in the one analysis a reader is most likely to check
+   * first. Found against a real account with two `AdministratorAccess` users
+   * and an empty findings panel (engineering log #29).
+   *
+   * Roles remain the more interesting case in a mature account, but "no admin
+   * roles" and "no admins" are different statements and the tool was making the
+   * second while only checking the first.
+   */
   for await (const page of paginateListUsers({ client }, {})) {
     for (const user of page.Users ?? []) {
       if (!user.UserName) continue;
+      const userName = user.UserName;
+
+      const attached = await client
+        .send(new ListAttachedUserPoliciesCommand({ UserName: userName }))
+        .catch(() => null);
+
+      const attachedPolicies: Array<{
+        policyArn: string;
+        policyName: string;
+        document: PolicyDocument | null;
+      }> = [];
+      for (const p of attached?.AttachedPolicies ?? []) {
+        if (!p.PolicyArn) continue;
+        attachedPolicies.push({
+          policyArn: p.PolicyArn,
+          policyName: p.PolicyName ?? p.PolicyArn.split("/").pop() ?? p.PolicyArn,
+          // Shares the cache with roles, so AdministratorAccess attached to
+          // several principals is fetched once.
+          document: await managedPolicyDocument(p.PolicyArn),
+        });
+      }
+
+      const inlineNames = await client
+        .send(new ListUserPoliciesCommand({ UserName: userName }))
+        .catch(() => null);
+
+      const inlinePolicies: Array<{ policyName: string; document: PolicyDocument | null }> = [];
+      for (const policyName of inlineNames?.PolicyNames ?? []) {
+        const inline = await client
+          .send(new GetUserPolicyCommand({ UserName: userName, PolicyName: policyName }))
+          .catch(() => null);
+        inlinePolicies.push({
+          policyName,
+          document: decodePolicyDocument(inline?.PolicyDocument as string | undefined),
+        });
+      }
+
       resources.push({
-        arn: user.Arn ?? iamArn(ctx.accountId, "user", user.UserName),
+        arn: user.Arn ?? iamArn(ctx.accountId, "user", userName),
         kind: "IamUser",
-        name: user.UserName,
+        name: userName,
         region: null,
         accountId: ctx.accountId,
         tags: tagsToRecord(user.Tags),
         properties: {
-          userName: user.UserName,
+          userName,
           path: user.Path ?? "/",
           createdAt: user.CreateDate?.toISOString() ?? null,
           passwordLastUsed: user.PasswordLastUsed?.toISOString() ?? null,
+          attachedPolicies,
+          inlinePolicies,
+          attachedPolicyCount: attachedPolicies.length,
+          inlinePolicyCount: inlinePolicies.length,
         },
         derived: {},
         raw: user,
       });
+
+      for (const p of attachedPolicies) {
+        relationships.push({
+          from: user.Arn ?? iamArn(ctx.accountId, "user", userName),
+          to: p.policyArn,
+          type: "HAS_POLICY",
+        });
+      }
     }
   }
 

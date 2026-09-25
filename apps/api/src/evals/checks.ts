@@ -113,6 +113,58 @@ export const CHECKS: CheckDefinition[] = [
     },
   },
   {
+    id: "admin-users",
+    description: "Every effectively-administrator IAM user is found",
+    rationale:
+      "Users were inventoried without their policies, so an account administered through IAM users reported no administrators. One of these grants *:* inline under an innocuous name, so policy names are not enough.",
+    run: ({ resources }) => {
+      const found = sortedNames(
+        resources,
+        (r) => r.kind === "IamUser" && r.derived.isAdmin === true,
+      );
+      const expected = [...GROUND_TRUTH.adminUsers].sort();
+      return {
+        passed: same(found, expected),
+        detail: `admin users: ${found.join(", ") || "none"} (expected ${expected.join(", ")})`,
+      };
+    },
+  },
+  {
+    id: "scoped-users-not-admin",
+    description: "Scoped IAM users are not flagged as administrators",
+    rationale: "Without a negative class, 'find the admin users' passes by flagging everything.",
+    run: ({ resources }) => {
+      const wrong = GROUND_TRUTH.nonAdminUsers.filter(
+        (name) => resources.find((r) => r.kind === "IamUser" && r.name === name)?.derived.isAdmin,
+      );
+      return {
+        passed: wrong.length === 0,
+        detail:
+          wrong.length === 0
+            ? `${GROUND_TRUTH.nonAdminUsers.join(", ")} correctly not admin`
+            : `wrongly flagged: ${wrong.join(", ")}`,
+      };
+    },
+  },
+  {
+    id: "inline-admin-user",
+    description: "Admin granted inline to a user is attributed to the inline policy",
+    rationale: "Same requirement as for roles: a verdict has to say where the privilege came from.",
+    run: ({ resources }) => {
+      const failures = GROUND_TRUTH.inlineAdminUsers.filter((name) => {
+        const user = resources.find((r) => r.kind === "IamUser" && r.name === name);
+        return !user?.derived.isAdmin || !(user.derived.adminReason ?? "").includes("inline");
+      });
+      return {
+        passed: failures.length === 0,
+        detail:
+          failures.length === 0
+            ? `${GROUND_TRUTH.inlineAdminUsers.join(", ")} correctly attributed to an inline policy`
+            : `not attributed correctly: ${failures.join(", ")}`,
+      };
+    },
+  },
+  {
     id: "inline-admin",
     description: "Admin granted inline is attributed to the inline policy",
     rationale: "A verdict a user can act on has to say where the privilege came from.",

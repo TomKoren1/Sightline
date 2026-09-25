@@ -740,3 +740,40 @@ is, which is the whole difficulty when two real identities in the same account
 are involved.
 
 157 tests (was 138).
+
+---
+
+### `fix(analysis): admin detection ignored IAM users entirely`
+
+A scan of a real account returned an empty findings panel, including no
+administrators, for an account where two of three IAM users hold
+`AdministratorAccess`. Engineering log #29.
+
+Two gaps. The IAM collector fetched policy documents for roles only, so users
+were inventoried with a name and a creation date and nothing about what they
+could do. The pipeline loop — commented "which principals are administrators?" —
+filtered to `IamRole`.
+
+Neither was caught by any test, because the mock account contains no IAM users.
+The fixture shared the blind spot, so 157 passing tests said this worked.
+
+The analyser needed no change: it reads policy documents, which are identically
+shaped for roles and users. Collection and one filter were the whole bug.
+
+- Collector fetches `ListAttachedUserPolicies`, `ListUserPolicies`,
+  `GetUserPolicy`; shares the managed-policy cache with roles.
+- Pipeline filter accepts both kinds; `findAdminPrincipals` matches both labels
+  and returns the real `kind`.
+- Mock account gains three users — admin by managed policy, admin by an inline
+  policy named `BackupHelper`, and one scoped user as the negative class — plus
+  three ground-truth checks. Reverting only the pipeline filter fails two of
+  them.
+- `adminRoles` → `adminPrincipals` through the API, the web types and the UI. A
+  field named after roles that returns users is the same bug relocated.
+- "Used by nothing — candidate for removal" no longer shows for users: an empty
+  `usedBy` is uninformative for a principal that has no instance profile, and
+  the correct reading is standing admin on long-lived credentials. The agent's
+  tool description says so too.
+
+Verified against the real account: both users reported by name with the exact
+granting policy. 160 tests.
