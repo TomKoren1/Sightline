@@ -28,7 +28,10 @@ let available = false;
 
 const byName = (name: string) => resources.find((r) => r.name === name);
 const namesWhere = (predicate: (r: Resource) => boolean) =>
-  resources.filter(predicate).map((r) => r.name).sort();
+  resources
+    .filter(predicate)
+    .map((r) => r.name)
+    .sort();
 
 beforeAll(async () => {
   try {

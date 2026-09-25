@@ -11,18 +11,19 @@ decision, and what it costs. Recorded at the time the decision was made.
 databases, an LLM agent and a React graph UI.
 
 **Options.**
-- *Python backend, TypeScript frontend.* Best-in-class AWS tooling (`boto3`,
+
+- _Python backend, TypeScript frontend._ Best-in-class AWS tooling (`boto3`,
   `moto` in-process), and the richest agent-framework ecosystem. Costs a second
   toolchain, a second test runner, and a language boundary through which the
   domain model has to be restated.
-- *TypeScript throughout.* One model definition shared by scanner, API and UI;
+- _TypeScript throughout._ One model definition shared by scanner, API and UI;
   one test runner; one CI pipeline.
 
 **Decision.** TypeScript throughout.
 
 **Why.** The domain model is the centre of this project — `Resource`,
 `Relationship`, `ScanUnit`, the agent's wire types. Defining it once in
-`packages/shared` and importing the *same types* into the scanner, the API and
+`packages/shared` and importing the _same types_ into the scanner, the API and
 the React components removes an entire class of drift. AWS SDK v3 is
 TypeScript-first with generated types precise enough to catch real mistakes
 (see engineering log #5). A reviewer reads one language.
@@ -40,16 +41,17 @@ convincing enough that the scanner's real behaviour — assume-role, region
 fan-out, pagination, retries — is genuinely exercised rather than stubbed out.
 
 **Options.**
-- *A real AWS account.* Maximum fidelity, but reviewers cannot run it, costs
+
+- _A real AWS account._ Maximum fidelity, but reviewers cannot run it, costs
   money, and the interesting security topology would have to be built by hand
   in someone's account.
-- *Hand-written fixtures behind a fake client.* Fast and fully controlled, but
+- _Hand-written fixtures behind a fake client._ Fast and fully controlled, but
   it deletes the entire AWS integration — credentials, paginators, error
   handling — which is a third of what is being assessed.
-- *LocalStack (community).* Real AWS API surface. **Cannot do RDS** in the
+- _LocalStack (community)._ Real AWS API surface. **Cannot do RDS** in the
   community edition, and the production database is the centre of the most
   interesting question in the brief.
-- *moto in server mode.* Real AWS API over HTTP. Verified by probe to support
+- _moto in server mode._ Real AWS API over HTTP. Verified by probe to support
   STS assume-role, EC2/VPC, S3 (including bucket policy and public access
   block), IAM, **RDS**, and Lambda.
 
@@ -77,18 +79,19 @@ or neither. Using both because both were offered is not a reason.
 Neo4j is a rebuildable projection of it.**
 
 **Why Neo4j at all.** The questions in the brief are overwhelmingly about
-*relationships*, and one of them — "what can reach the production RDS
+_relationships_, and one of them — "what can reach the production RDS
 instance?" — is a variable-length path query over security group references.
 In Cypher that is one `MATCH` with a `*1..n` hop. In SQL it is a recursive CTE
 over a junction table that nobody on the team will enjoy maintaining. The graph
 is not decoration; it is the shape of the problem.
 
 **Why Postgres too.** Three things fit badly in a graph:
-1. *Scan history.* "What changed since the last scan?" needs immutable
+
+1. _Scan history._ "What changed since the last scan?" needs immutable
    snapshots over time, not a mutable current-state graph.
-2. *Partial failure.* Per-`(service, region)` outcomes, error codes, durations
+2. _Partial failure._ Per-`(service, region)` outcomes, error codes, durations
    and API-call counts are a plain relational fact table.
-3. *Agent traces.* Conversations, tool calls and eval results are relational
+3. _Agent traces._ Conversations, tool calls and eval results are relational
    and high-volume, and must never pollute the graph the agent queries.
 
 **Why the hierarchy matters.** Every scan writes immutable resource snapshots
@@ -109,15 +112,16 @@ well-defined rebuild.
 is not. A bucket is public if its policy or ACL grants a wildcard principal
 **and** neither the bucket-level nor account-level public access block
 overrides that grant. Similarly, an IAM role is an administrator if the union
-of its managed and inline policies grants `*` on `*` — which no policy *name*
+of its managed and inline policies grants `*` on `*` — which no policy _name_
 reliably indicates.
 
 **Options.**
-- *Give the model the raw JSON and let it reason.* Flexible, and wrong often
+
+- _Give the model the raw JSON and let it reason._ Flexible, and wrong often
   enough to be dangerous. A DevOps engineer acting on "this bucket is private"
   needs that to be a fact, not a generation.
-- *Compute the facts deterministically during ingest; let the model select,
-  combine and explain them.*
+- _Compute the facts deterministically during ingest; let the model select,
+  combine and explain them._
 
 **Decision.** The second. Analysers in the ingest pipeline compute
 `isPublic`, `isAdmin`, `isIdle` and the derived `CAN_REACH` edges, each paired
@@ -126,7 +130,7 @@ with a human-readable `reason` recording the evidence.
 **Why.** It moves the part that must be correct into code that can be unit
 tested against a known topology, and leaves the model doing what it is actually
 good at: picking the right query, joining results, and explaining them in
-English. It also makes wrong answers *debuggable* — a bad verdict is a failing
+English. It also makes wrong answers _debuggable_ — a bad verdict is a failing
 test on an analyser, not a prompt to reword.
 
 **Cost.** The analysers encode our interpretation of reachability and
@@ -147,13 +151,14 @@ genuinely novel questions, behind a write-clause validator and a read
 transaction.
 
 **Why.**
-- *Safety.* The brief's one hard rule is that the agent must never change
+
+- _Safety._ The brief's one hard rule is that the agent must never change
   anything. A curated tool cannot express a mutation.
-- *Correctness.* Hand-written Cypher for "find every path from the internet to
+- _Correctness._ Hand-written Cypher for "find every path from the internet to
   this resource" is reviewable, testable, and identical on every run.
-- *Cost and latency.* A tool call returns rows; text-to-Cypher tends to return
+- _Cost and latency._ A tool call returns rows; text-to-Cypher tends to return
   a schema, a failed query, an error, and a retry.
-- *Auditability.* Every tool records the exact query it ran and the ARNs it
+- _Auditability._ Every tool records the exact query it ran and the ARNs it
   returned, which is what makes citation validation (ADR-006) possible.
 
 **Cost.** Questions nobody anticipated fall back to `graph_query` or are
@@ -177,8 +182,8 @@ invented resource identifier — from something we hope a prompt prevents into
 something the system detects. It is cheap, deterministic, and independent of
 the model.
 
-**Cost.** It catches invented *identifiers*, not invented *relationships between
-real identifiers*. The eval suite covers that second class.
+**Cost.** It catches invented _identifiers_, not invented _relationships between
+real identifiers_. The eval suite covers that second class.
 
 ---
 
@@ -203,7 +208,7 @@ narrowing:
 An inventory product needs to know a bucket exists, how it is configured, and
 who can reach it. It never needs to read an object out of it. With
 `ReadOnlyAccess`, a compromise of dave.io's platform account becomes a
-compromise of every customer's *data*, not merely their inventory. That is a
+compromise of every customer's _data_, not merely their inventory. That is a
 materially larger blast radius for capability the product does not use.
 
 `sqs:ReceiveMessage` is worth singling out because it is not read-only even
@@ -259,8 +264,8 @@ it fails it does not say whether the data or the reasoning was wrong.
 **Tier 1 — ground truth over the data** (`src/evals/groundTruth.test.ts`).
 Seeds the mock account, runs a real scan, and asserts the result against the
 hand-written answer key in `topology.ts`. No model, no API key, ~2 seconds.
-It checks that the bucket with a neutralised policy is *not* public, that the
-inline-admin role *is* admin, that the private database is reachable by both
+It checks that the bucket with a neutralised policy is _not_ public, that the
+inline-admin role _is_ admin, that the private database is reachable by both
 expected chains, and that the publicly-flagged database is reachable by none.
 
 **Tier 2 — answer quality** (`npm run evals`). Fifteen cases run against the
@@ -287,5 +292,5 @@ bucket achieves perfect recall and is useless.
 
 **Cost.** Grading on citations misses answers that cite the right resources and
 describe them wrongly. `mustMention` / `mustNotMention` patterns cover the
-cases where that has teeth — the agent must say `analytics-db` is *not*
+cases where that has teeth — the agent must say `analytics-db` is _not_
 exposed, not merely mention it.

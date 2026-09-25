@@ -67,7 +67,7 @@ try {
       results.push(result);
       console.log(
         `${result.passed ? green("PASS") : red("FAIL")} ${dim(
-          `f1=${result.f1.toFixed(2)} ${result.toolsCalled.length} tools ${((result.durationMs / 1000)).toFixed(1)}s`,
+          `f1=${result.f1.toFixed(2)} ${result.toolsCalled.length} tools ${(result.durationMs / 1000).toFixed(1)}s`,
         )}`,
       );
       for (const failure of result.failures) console.log(`      ${red("·")} ${failure}`);
@@ -104,7 +104,14 @@ try {
   const runId = randomUUID();
   await pool.query(
     `INSERT INTO eval_runs (id, model, total, passed, mean_f1, results) VALUES ($1,$2,$3,$4,$5,$6)`,
-    [runId, cfg.ANTHROPIC_MODEL, summary.total, summary.passed, summary.meanF1, JSON.stringify(results)],
+    [
+      runId,
+      cfg.ANTHROPIC_MODEL,
+      summary.total,
+      summary.passed,
+      summary.meanF1,
+      JSON.stringify(results),
+    ],
   );
 
   // Also written to disk, so a CI run can publish it as an artifact and a

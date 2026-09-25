@@ -1,125 +1,352 @@
-# dave.io Engineering Home Assignment
+# Dave — AWS inventory, graph and agent
 
-Welcome, and thanks for taking the time. This document is the full brief.
+A thin slice of the dave.io product: connect to a customer's AWS account with a
+read-only role, ingest what is there and how it fits together, and put an agent
+on top that answers questions a DevOps engineer would act on.
 
-## About dave.io
-
-dave.io is an **AI-native DevOps service** company. We embed a real human DevOps engineer (in your timezone and language) alongside **Dave**, our proprietary AI system that plugs into a customer's infrastructure and SDLC and executes tasks at machine speed. Customers get the judgment of a senior engineer with the throughput of a system that never sleeps.
-
-## What this assignment is
-
-We'd like you to build a thin slice of a real product feature — something we can actually run, click around, talk to, and reason about with you.
-
-The feature has three equal parts, and we care about all three:
-
-1. **Infra**: connect to a customer's AWS account safely and understand what's in it.
-2. **Data**: ingest those resources and their relationships into a store that suits the data.
-3. **AI**: put an agent on top that answers real questions about the account, grounded in what you ingested.
-
-There's a little boilerplate in this repository: a `docker-compose.yml` with two databases and an IAM role template. Use what helps you, replace what doesn't. How you structure the project is up to you. We haven't pinned a backend framework, frontend framework, LLM provider, or agent framework: pick the stack you'd actually reach for.
-
-## The problem
-
-A new dave.io customer wants Dave to manage their AWS environment. Before Dave can act, the customer (and their assigned human DevOps engineer) needs to **see and understand what's actually in the account**, and be able to **ask questions about it in plain language**.
-
-### Part 1: Connect and ingest
-
-1. **Connect** to an AWS account using the read-only IAM role defined in [`infra/readonly-role.yaml`](./infra/readonly-role.yaml). That file describes how dave.io gets access in production. You can modify it, work around it, or replace it with something better.
-2. **Discover and ingest** the customer's AWS resources. Pick a representative set, such as EC2, S3, IAM, VPC, RDS and Lambda; you don't need every service. The AWS SDK is the obvious starting point. AWS Resource Explorer (for example `aws resource-explorer-2 list-resources`) is also worth a look for pulling a bulk inventory across services and regions in a few calls.
-3. **Store** the resources and their relationships somewhere sensible. We've put both **Neo4j** and **Postgres** in `docker-compose.yml`. Use either, both, or neither, whatever fits the shape of the data and the questions the agent will need to answer.
-
-### Part 2: The agent
-
-4. **Build an agent** that answers questions about the ingested account. For example:
-   - "Which S3 buckets are public?"
-   - "What can reach the production RDS instance?"
-   - "Which EC2 instances aren't in a private subnet?"
-   - "Which IAM roles have admin access, and what uses them?"
-   - "What changed since the last scan?"
-   - "Is anything here costing money but not being used?"
-
-   A DevOps engineer should be able to trust its answers enough to act on them. How you get there is up to you. The one hard rule: the agent must never change anything in the customer's account.
-
-   Any model and any agent framework is fine. If you want a suggestion, try LangChain's [Deep Agents](https://github.com/langchain-ai/deepagents), but it's not required.
-
-### Part 3: Show it to the user
-
-5. **Visualize** the resource graph in a frontend using a graph layout library such as React Flow / xyflow. Keep it simple; this part doesn't need polish.
-6. **Chat with the agent** in the same UI. It helps if resources the agent mentions can be found or highlighted in the graph.
-7. **Communicate state** throughout: scan progress, data freshness, the ability to refresh, empty states, partial-failure states, and what the agent is doing while it works.
-
-A single-account, single-tenant version is the target. If you want to gesture at multi-tenancy, scale, cost or production robustness as you build, great — it's a bonus, not a requirement.
-
-## What's already in the box
+Built for the dave.io engineering assignment. It runs end to end against a
+mocked AWS account with no credentials and no cloud spend.
 
 ```
-.
-├── README.md                       <- this file
-├── docker-compose.yml              <- Neo4j + Postgres, ready to `docker compose up`
-├── .env.example                    <- env vars referenced by compose
-└── infra/
-    └── readonly-role.yaml          <- how dave.io accesses the customer account
+AWS (real or mock) ──▶ scanner ──▶ Postgres ──▶ Neo4j ──▶ agent ──▶ React UI
+                       assume-role  system of   graph     curated   graph +
+                       per service  record      projection tools    chat
+                       per region
 ```
 
-## Getting started
+---
+
+## Running it
+
+You need Docker and Node 20+. Nothing else — no AWS account, no credentials.
 
 ```bash
+git clone <this repo> && cd dave.io_home-assignment
 cp .env.example .env
-docker compose up -d
+docker compose up -d          # Postgres, Neo4j, and moto (mock AWS)
+npm install
 
-# Neo4j browser:  http://localhost:7474   (user: neo4j, password: see .env)
-# Postgres:       localhost:5432          (db/user/password: see .env)
+npm run seed                  # build the fictional customer account
+npm run scan                  # discover it, persist it, build the graph
+
+npm run dev:api               # http://localhost:3000
+npm run dev:web               # http://localhost:5173   ← open this
 ```
 
-Then bring up your own backend and frontend, point them at the env vars in `.env`, and start building. You'll need an API key for whichever LLM provider you choose; tell us in your README how to supply it.
+`npm run seed` and `npm run scan` are also reachable from the UI: open it with
+an empty database and the empty state offers to run the first scan.
 
-## Deliverables
+### The LLM key
 
-One thing we need: **a runnable project**. We should be able to clone, follow your README, and see the feature work end-to-end: scan an account, view the graph, and ask the agent questions. You can run it against a real AWS account or a mocked AWS layer, your call. If you mock it, make the mock data interesting enough that the agent's questions have non-obvious answers.
+The agent uses Anthropic. Put a key in `.env`:
 
-In your README, include a short **design note** covering:
+```bash
+ANTHROPIC_API_KEY=sk-ant-...
+ANTHROPIC_MODEL=claude-sonnet-5   # default
+```
 
-- Why you chose your storage model, and how it serves the agent's questions.
-- How the agent works, and why you built it that way.
-- How you know the agent's answers are right, and how you'd know if a change made it worse.
-- What breaks first on a large account (thousands of resources, many regions), and what you'd do about it.
-- What you'd build next if you had another week.
+Everything except chat works without one — the scan, the graph, the findings
+sidebar, and the entire tier-1 eval suite. `/api/health` tells you whether a
+key is configured rather than making you discover it through a failed request.
 
-Optionally, a short walkthrough video (Loom or similar) where you show the thing running and talk us through the choices you made. Not required at all — but some candidates find it the easiest way to communicate the parts that don't show up in code.
+### Running against a real AWS account
 
-## Definition of done
+The scanner does not know it is talking to a mock. Point it at a real account
+by deploying the role in [`infra/readonly-role.yaml`](infra/readonly-role.yaml)
+and setting:
 
-A sanity check, not a checklist to game:
+```bash
+AWS_MODE=real                 # drops the endpoint override
+AWS_TARGET_ROLE_ARN=arn:aws:iam::<customer>:role/DaveIoReadOnlyRole
+AWS_EXTERNAL_ID=<the per-customer secret>
+AWS_SCAN_REGIONS=             # empty = discover every enabled region
+```
 
-- Someone can clone the repo, follow your README, and get the feature running.
-- The seven items in "The problem" are addressed, in code or in a short note explaining why you skipped them.
-- The agent answers the example questions, or ones like them, correctly.
-- The frontend handles the obvious UX states (loading, empty, stale, partial failure, error, agent thinking) in some recognizable way.
-- The integration model in `infra/readonly-role.yaml` is accommodated, or you've replaced it with something you like better.
+In `real` mode the source credentials come from the standard AWS chain
+(environment, shared config, container or instance role). Assume-role,
+pagination, adaptive retry, region fan-out and partial-failure handling are the
+same code in both modes.
 
-## How we'll evaluate
+### Useful commands
 
-We're a small team, so we read submissions carefully and talk about them together. We weigh infra, coding and AI roughly equally. A few things we tend to notice:
+| Command                                     | What it does                                           |
+| ------------------------------------------- | ------------------------------------------------------ |
+| `npm run seed`                              | Rebuild the mock account from scratch                  |
+| `npm run scan`                              | Scan, persist, project the graph                       |
+| `npm run inspect -w @daveio/api`            | Scan and print findings without touching the databases |
+| `npm run query -w @daveio/api`              | Run every curated query against the graph              |
+| `npm test`                                  | 78 unit tests                                          |
+| `npm run evals:ground-truth -w @daveio/api` | Tier-1 evals — no API key needed                       |
+| `npm run evals -w @daveio/api`              | Tier-2 agent evals — needs a key                       |
 
-- **Infra judgment.** Do you understand the AWS access model, least privilege, and what "read-only" really means? Do you handle rate limits, pagination, multiple regions and partial failures?
-- **Code quality.** Is the code clear, sensibly structured, and something a teammate could pick up?
-- **AI engineering.** Does the agent's design hold up beyond a demo, on real questions and on accounts that aren't tiny? Can we trust what it says?
-- **UX.** Does it make sense to a real user? Does it tell them what's happening, what's stale, what failed, and what the agent is doing?
-- **Production thinking.** Would you defend these decisions in production, not just on a take-home? Does the running thing actually do what your README says?
-- **The brief itself.** Tell us anything you noticed that we got wrong, missed, or could have asked better.
+---
 
-We're not grading on visual polish, framework name-dropping, or lines of code. Build the thing you'd build for a real customer. If you run out of time, a smaller thing that works well and is honestly documented beats a bigger thing that half works.
+## What is in the mock account
 
-## Ground rules
+The brief asks for mock data whose questions have non-obvious answers, so the
+account is built around traps that defeat a naive lookup:
 
-Plan for about 3–5 days of work. Use AI tools as much as you like — we do. Be creative. Build something a real user would actually want to use.
+|                                         |                                                                                                                                                                                                                                |
+| --------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| **Two buckets, one policy**             | `northwind-public-assets` and `northwind-reports` carry byte-identical wildcard-principal policies. Only the first is public; the second is neutralised by `RestrictPublicBuckets`.                                            |
+| **A private database anyone can reach** | `northwind-prod-db` is `PubliclyAccessible: false` in a private subnet, and is reachable from the internet by **two** chains — three hops through the web and app tiers, and two through a bastion with SSH open to the world. |
+| **A public database nobody can reach**  | `analytics-db` is `PubliclyAccessible: true` and its security group opens no ports. The obvious answer is wrong.                                                                                                               |
+| **Admin hiding in plain sight**         | Three roles are effectively administrator. One carries `AdministratorAccess`, one grants `*:*` **inline** under the name `LegacyDeployRole`, and one is privileged but entirely unused.                                        |
+| **Money going nowhere**                 | Unattached volumes, an unassociated elastic IP, a stopped instance, and a NAT gateway in an abandoned region — about $99/month.                                                                                                |
+| **Three regions**                       | Production in `us-east-1`, staging in `eu-west-1` with RDP open to the world, and `ap-southeast-1` nobody has looked at in two years.                                                                                          |
 
-## Submission
+The answer key lives in [`packages/mock-aws/src/topology.ts`](packages/mock-aws/src/topology.ts)
+and is written by hand rather than generated from the code under test, so an
+analyser bug cannot grade itself as correct.
 
-Send a link (Drive / Dropbox / GitHub) to gal@dave.io with the subject line **"dave.io Engineering Assignment — Tom"**.
+---
 
-We'll respond within 5 business days with next steps.
+# Design note
 
-Good luck — we're looking forward to seeing what you build.
+## Why this storage model, and how it serves the agent's questions
 
-— The dave.io team
+**Both databases, with a strict hierarchy: Postgres is authoritative and Neo4j
+is a rebuildable projection of it.**
+
+Neo4j earns its place because the brief's questions are overwhelmingly about
+relationships, and one of them — _what can reach the production RDS instance?_
+— is a variable-length path query. In Cypher that is one `MATCH` with a `*1..n`
+hop. In SQL it is a recursive CTE over a junction table that nobody will enjoy
+maintaining. The graph is not decoration; it is the shape of the problem.
+
+Postgres earns its place because three things fit badly in a graph:
+
+- **Scan history.** _What changed since the last scan?_ needs immutable
+  snapshots over time, not a mutable current-state graph.
+- **Partial failure.** Per-`(service, region)` status, error codes, durations
+  and API-call counts are a plain relational fact table.
+- **Agent traces.** Conversations, tool calls and eval results are relational
+  and high-volume, and must never compete with the queries the agent runs.
+
+The hierarchy is what makes running two stores tolerable. Each scan writes
+immutable snapshots to Postgres, then rebuilds the Neo4j projection in one
+transaction. There is exactly one writer and one direction of flow. If Neo4j is
+lost, or the graph model changes, it replays from Postgres with no rescan and
+no further AWS calls — which makes the graph disposable, and therefore safe to
+change.
+
+**The decision underneath this one matters more.** Questions like _which
+buckets are public?_ are security reasoning, not data lookup: a bucket is
+public if its policy or ACL grants a wildcard principal **and** neither the
+bucket-level nor account-level public access block overrides it. That reasoning
+is done **deterministically, in code, at ingest time** — never by the model.
+Analysers compute `isPublic`, `isAdmin`, `isIdle` and the derived `CAN_REACH`
+edges, each paired with a `reason` string recording its evidence.
+
+So the graph the agent queries does not contain raw AWS JSON for it to
+interpret. It contains verdicts that a unit test can check, with the evidence
+attached. That is what makes the agent's answers auditable, and it is why
+`prod-db-sg allows tcp/5432 from prod-app-sg, which prod-app-1 belongs to` can
+be quoted verbatim rather than paraphrased by a model that might get it wrong.
+
+## How the agent works, and why it is built that way
+
+A plain tool-calling loop over **thirteen curated, parameterised tools** — no
+agent framework. The model chooses which tool to call and with what arguments;
+it never writes the query.
+
+Text-to-Cypher was the obvious alternative and was rejected on four counts.
+_Safety_: the brief's one hard rule is that the agent must never change
+anything, and a curated tool cannot express a mutation. _Correctness_:
+hand-written Cypher for "every path from the internet to this resource" is
+reviewable, testable and identical on every run. _Cost_: a tool call returns
+rows, whereas text-to-Cypher tends to return a schema, a failed query, an error
+and a retry. _Auditability_: because every tool records exactly which ARNs it
+returned, citations can be validated mechanically.
+
+There is still a `graph_query` escape hatch for genuinely novel questions. It
+runs behind a lexical write-clause validator **and** inside a Neo4j read
+transaction, because neither layer is trusted alone.
+
+No framework, because the two decisions that actually define this agent — the
+tool boundary and citation validation — are precisely what a framework would
+hide behind its own abstractions, without removing any of the real work.
+
+**"Never change anything" is enforced at four layers**, not asserted in a
+prompt: the IAM role has no write permissions and an explicit deny on data
+reads; the scanner only ever calls `Describe`/`List`/`Get`; no tool can express
+a mutation; and raw Cypher is validated and run read-only.
+
+One honest boundary: **Neo4j Community has no role-based access control**, so a
+read-only database _user_ is not available. In production this would be an
+Enterprise read-only role or a read replica. Recorded in
+[engineering log #7](docs/ENGINEERING-LOG.md) rather than glossed over.
+
+## How I know the answers are right, and how I would know if a change made it worse
+
+Two eval suites that fail for different reasons ([ADR-008](docs/DECISIONS.md)).
+
+**Tier 1 — ground truth over the data.** Seeds the mock account, runs a real
+scan, and asserts the result against the hand-written answer key. **No model,
+no API key, about two seconds**, and it runs in CI on every commit. Fourteen
+assertions, including the ones that matter most: the neutralised bucket is
+_not_ public, the inline-admin role _is_ admin, the private database is
+reachable by both expected chains, and the publicly-flagged database is
+reachable by none.
+
+**Tier 2 — answer quality.** Fifteen cases against the live agent, scored on
+the ARNs each answer cites, with precision and recall. Each case asserts what
+must be cited, what must **not** be (the traps), and which tools should have
+been chosen. Precision matters as much as recall precisely because of the
+traps: an answer naming every bucket achieves perfect recall and is useless.
+
+**Underneath both, citation validation.** Every tool records the ARNs it
+returned; every ARN in an answer is checked against that set, and anything
+unsupported is flagged on the response and shown to the user. This turns the
+most dangerous failure mode — a confident, plausible, invented identifier —
+from something a prompt hopes to prevent into something the system detects.
+Any unsupported citation fails an eval case outright.
+
+**How I would know a change made it worse:** tier 1 fails in CI within
+seconds; tier 2 produces a mean F1 and a pass count, stored in `eval_runs` and
+written to `evals/results/` so two runs can be diffed. The split also makes
+failures diagnosable — if tier 1 passes and tier 2 fails, the data is right and
+the agent misused it, which is a prompt or tool-description problem. If tier 1
+fails, nothing about the agent is worth looking at yet.
+
+**What this does not catch**, stated plainly: an answer that cites exactly the
+right resources and describes them wrongly. The `mustMention` patterns cover
+the cases where that has teeth, but a genuinely adversarial wrong answer with
+correct citations would pass. Closing that needs an LLM judge over a larger
+case set, which is on the list below.
+
+## What breaks first on a large account
+
+In the order it would actually happen:
+
+**1. The graph rebuild, at roughly 50k resources.** Neo4j is rebuilt wholesale
+in one transaction. That is simple and leaves no stale nodes, but it is O(all
+resources) per scan and the transaction gets large. _Fix:_ diff the Postgres
+snapshots — which already exist — and `MERGE` only what changed. The snapshots
+were designed with this in mind.
+
+**2. Scan wall-clock, across many regions.** 6 services × 30 regions is 180
+units at a concurrency of 6. Because per-bucket S3 calls are four API calls
+each, an account with 10,000 buckets is 40,000 calls in one unit. _Fix:_ the
+Resource Explorer fast path already written but unexercisable against the mock
+(a single indexed query replaces most enumeration), plus per-service
+concurrency rather than one global limit, plus splitting oversized units.
+
+**3. Throttling, well before that.** `retryMode: adaptive` handles bursts, but
+a full parallel scan of a busy account will hit service quotas — and worse,
+compete with the customer's own workloads. _Fix:_ a token bucket per
+`(service, region)` sized from published quotas, and a scan budget the customer
+controls.
+
+**4. The frontend, at about 2,000 nodes.** React Flow renders every node; dagre
+layout is O(V+E) but the DOM is not. Already mitigated by filtering noisy kinds
+by default. _Fix:_ server-side aggregation — collapse a VPC to one node until
+expanded — and viewport virtualisation.
+
+**5. The agent's context, on broad questions.** Tool results are capped at 12k
+characters and truncated. On a large account "list all EC2 instances" is
+useless anyway. _Fix:_ tools should return aggregates with drill-down rather
+than rows, and say so when truncating.
+
+**What does not break:** partial failure handling and credential renewal both
+get _more_ useful at scale, which is why they were built in from the start
+rather than added later.
+
+**Multi-tenancy** is the other axis. Today a single module-level flag tracks
+whether a scan is running, and the graph holds one account. Multi-tenant needs
+an account id on every node and query, per-tenant credential caching, and a job
+queue instead of an in-process scan. The storage model already carries
+`accountId` on every resource; the scan orchestration is what would change.
+
+## What I would build next, given another week
+
+1. **Incremental graph updates.** The highest-value change: it removes the
+   first scaling limit and makes scans cheap enough to run continuously rather
+   than on demand.
+2. **Real idle detection.** Current idle findings use structural signals only —
+   attached to nothing, associated with nothing, stopped. CloudWatch metrics
+   and Cost Explorer would turn "this volume is unattached" into "this instance
+   has been under 2% CPU for thirty days", which is a much more useful finding.
+   The role already grants the permissions.
+3. **An LLM judge over a larger eval set.** Closes the gap named above, and
+   makes prompt changes safe to make quickly.
+4. **Change detection as a first-class feature.** Scan diffing exists and the
+   agent can query it, but the UI does not surface it. "What changed since
+   yesterday, and does any of it matter?" is the question that makes this a
+   product someone opens daily rather than once.
+5. **More of the account.** ELB, ECS, EKS, API Gateway, CloudFront and
+   Route 53. The collector interface is deliberately small — each is an
+   afternoon — and load balancers in particular would fill a real gap in the
+   reachability graph.
+6. **NACLs, peering and Transit Gateway in the reachability model.** Today the
+   analysis is conservative: it can miss a path, but a path it reports is
+   justified by rules that really exist. Peering and Transit Gateway are the
+   biggest honest gaps.
+
+---
+
+## Notes on the brief
+
+Taking up the invitation to say what could have been clearer or different.
+
+**`ReadOnlyAccess` is the sharpest thing in the brief, and I suspect
+deliberately so.** The supplied template grants it while the evaluation
+criteria ask whether candidates understand "what read-only really means". It
+grants ~7,000 actions including `s3:GetObject`, `secretsmanager:GetSecretValue`
+and `lambda:GetFunction` (which returns a presigned URL to function source). An
+inventory product never needs to read an object out of a bucket, and granting
+the ability turns a compromise of dave.io's platform account into a compromise
+of every customer's _data_.
+
+`sqs:ReceiveMessage` is the detail I would flag to a real customer: it is not
+read-only even literally, since receiving a message starts its visibility
+timeout and can hide it from the consumer that should have processed it. A
+scanner holding that permission can breach the brief's own hard rule through a
+permission nobody thinks of as a write.
+
+I replaced the template — `SecurityAudit` + `ViewOnlyAccess` plus an explicit
+`Deny` on data-plane reads, trust scoped to the scanner role rather than
+`:root`, and `sts:SourceIdentity` so customers can attribute scans in their own
+CloudTrail. The original is kept alongside for comparison, and the reasoning is
+in [ADR-007](docs/DECISIONS.md).
+
+**Two smaller things.** The trust policy's `Principal: ...:root` is worth
+calling out in the brief itself — it reads like "the root user" but means every
+principal in the account, and that is a common misreading rather than a
+candidate trap. And **AWS Resource Explorer needs an index created in the
+customer account**, which a read-only role cannot do. It is excellent advice
+for accounts that have it enabled, but as suggested it cannot be relied on;
+the scanner treats it as an optional fast path with SDK enumeration as the
+tested fallback.
+
+---
+
+## Repository layout
+
+```
+apps/api            backend: scanner, analysers, graph, agent, HTTP API
+  src/aws/          credentials, instrumented clients, region discovery
+  src/scan/         collectors, analysers, orchestration
+  src/db/           Postgres schema and repository, Neo4j projection, queries
+  src/agent/        tools, Cypher guard, citation validation, the loop
+  src/evals/        tier-1 ground truth, tier-2 cases and grading
+apps/web            React frontend: graph, chat, findings, UX states
+packages/shared     domain model shared by every package
+packages/mock-aws   the seeded customer account and its answer key
+infra/              the replacement read-only role, and the original
+docs/               decisions, engineering log, commit log, walkthrough
+```
+
+## Documentation
+
+- **[docs/DECISIONS.md](docs/DECISIONS.md)** — eight ADRs: the stack, the mock,
+  the two-database split, deterministic analysis, the tool boundary, citation
+  validation, the IAM role, and the eval strategy.
+- **[docs/ENGINEERING-LOG.md](docs/ENGINEERING-LOG.md)** — every non-obvious
+  problem hit while building this, with diagnosis and fix. Includes a silent
+  moto account-namespacing trap, two capability gaps in the mock recorded as
+  gaps rather than hidden, and an SDK type that degraded to `any` behind
+  `skipLibCheck`.
+- **[docs/COMMITS.md](docs/COMMITS.md)** — what each commit changed and why.
+- **[docs/WALKTHROUGH.md](docs/WALKTHROUGH.md)** — a guided tour of the running
+  system.

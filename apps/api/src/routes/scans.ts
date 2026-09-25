@@ -52,18 +52,24 @@ export function registerScanRoutes(app: FastifyInstance): void {
     return reply.send({ scan });
   });
 
-  app.get<{ Querystring: { from?: string; to?: string } }>("/api/scans/diff", async (req, reply) => {
-    let { from, to } = req.query;
-    if (!from || !to) {
-      const scans = await listScans(2);
-      if (scans.length < 2) {
-        return reply.send({ diff: null, reason: "Only one scan exists; nothing to compare yet." });
+  app.get<{ Querystring: { from?: string; to?: string } }>(
+    "/api/scans/diff",
+    async (req, reply) => {
+      let { from, to } = req.query;
+      if (!from || !to) {
+        const scans = await listScans(2);
+        if (scans.length < 2) {
+          return reply.send({
+            diff: null,
+            reason: "Only one scan exists; nothing to compare yet.",
+          });
+        }
+        to ??= scans[0]!.id;
+        from ??= scans[1]!.id;
       }
-      to ??= scans[0]!.id;
-      from ??= scans[1]!.id;
-    }
-    return reply.send({ diff: await diffScans(from, to) });
-  });
+      return reply.send({ diff: await diffScans(from, to) });
+    },
+  );
 
   /** Run a scan, streaming progress as server-sent events. */
   app.post("/api/scans", async (req, reply) => {

@@ -39,7 +39,8 @@ try {
   console.log(`\n${bold("findNetworkPaths(northwind-prod-db)")} ${dim(`(${paths.length} paths)`)}`);
   for (const path of paths) {
     console.log("  " + path.hops.map((h) => h.name).join(" -> "));
-    for (const edge of path.edges) console.log(dim(`      ${edge.ports.join(", ")} via ${edge.via}`));
+    for (const edge of path.edges)
+      console.log(dim(`      ${edge.ports.join(", ")} via ${edge.via}`));
   }
 
   const analytics = await q.findNetworkPaths({ target: "analytics-db", maxHops: 5 });

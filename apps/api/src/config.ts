@@ -60,12 +60,17 @@ export const isMock = cfg.AWS_MODE === "mock";
 export function configuredRegions(): string[] | null {
   const raw = cfg.AWS_SCAN_REGIONS.trim();
   if (!raw) return null;
-  return raw.split(",").map((r) => r.trim()).filter(Boolean);
+  return raw
+    .split(",")
+    .map((r) => r.trim())
+    .filter(Boolean);
 }
 
 /** Parse the fault-injection hook into a lookup set. */
 export function faultInjections(): ReadonlySet<string> {
   return new Set(
-    cfg.SCAN_FAULT_INJECTION.split(",").map((s) => s.trim()).filter(Boolean),
+    cfg.SCAN_FAULT_INJECTION.split(",")
+      .map((s) => s.trim())
+      .filter(Boolean),
   );
 }

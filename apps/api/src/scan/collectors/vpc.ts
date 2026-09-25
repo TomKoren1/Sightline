@@ -83,7 +83,10 @@ export async function collectVpc(ctx: CollectorContext): Promise<CollectorOutput
         region,
         accountId: ctx.accountId,
         tags,
-        properties: { internetGatewayId: igw.InternetGatewayId, attachedVpcId: attachedVpc ?? null },
+        properties: {
+          internetGatewayId: igw.InternetGatewayId,
+          attachedVpcId: attachedVpc ?? null,
+        },
         derived: {},
         raw: igw,
       });

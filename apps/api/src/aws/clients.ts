@@ -76,9 +76,7 @@ function baseConfig(region: string) {
  */
 type MiddlewareStack = {
   add: (
-    middleware: (
-      next: (args: unknown) => Promise<unknown>,
-    ) => (args: unknown) => Promise<unknown>,
+    middleware: (next: (args: unknown) => Promise<unknown>) => (args: unknown) => Promise<unknown>,
     options: { step: "deserialize"; name: string; override: boolean },
   ) => void;
 };

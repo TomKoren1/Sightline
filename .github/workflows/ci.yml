@@ -1,0 +1,135 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+# A new push supersedes an in-flight run on the same branch.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  NODE_VERSION: "22"
+
+jobs:
+  # Fast feedback: types, formatting and everything that needs no services.
+  static:
+    name: Types, format and unit tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      - run: npm ci
+
+      - name: Typecheck every workspace
+        run: npm run typecheck
+
+      - name: Check formatting
+        run: npm run lint
+
+      - name: Unit tests
+        # The integration suite needs the compose stack and runs in the next
+        # job; this one must stay fast and dependency-free.
+        run: npx vitest run --exclude '**/evals/**'
+
+      - name: Build frontend
+        run: npm run build -w @daveio/web
+
+  # The claim this project makes is that it runs end to end. This proves it,
+  # through exactly the commands the README tells a reader to use.
+  integration:
+    name: End-to-end scan against the mock account
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      - run: npm ci
+
+      - name: Start Postgres, Neo4j and the mock AWS control plane
+        run: |
+          cp .env.example .env
+          docker compose up -d
+
+      - name: Wait for services to be healthy
+        run: |
+          for i in $(seq 1 60); do
+            unhealthy=$(docker compose ps --format json \
+              | jq -r 'select(.Health != "healthy" and .Health != "") | .Service' || true)
+            if [ -z "$unhealthy" ]; then echo "all services healthy"; exit 0; fi
+            echo "waiting for: $unhealthy"
+            sleep 3
+          done
+          echo "services did not become healthy in time"
+          docker compose ps
+          docker compose logs --tail 50
+          exit 1
+
+      - name: Seed the mock AWS account
+        run: npm run seed
+
+      - name: Run a full scan and persist it
+        run: npm run scan
+
+      - name: Ground-truth assertions
+        # Tier 1 of the eval suite (ADR-008). Needs no API key, and catches the
+        # regression that matters most: an analyser becoming quietly wrong.
+        run: npx vitest run apps/api/src/evals/groundTruth.test.ts
+
+      - name: Verify the API serves what the scan produced
+        run: |
+          npx tsx apps/api/src/server.ts &
+          for i in $(seq 1 30); do
+            curl -sf http://localhost:3000/api/health >/dev/null && break
+            sleep 2
+          done
+
+          echo "--- health ---"
+          curl -sf http://localhost:3000/api/health | jq .
+
+          echo "--- graph must be non-empty ---"
+          nodes=$(curl -sf "http://localhost:3000/api/graph?limit=500" | jq '.nodes | length')
+          echo "nodes: $nodes"
+          [ "$nodes" -gt 50 ] || { echo "graph is suspiciously small"; exit 1; }
+
+          echo "--- findings must include the seeded public bucket ---"
+          curl -sf http://localhost:3000/api/findings \
+            | jq -e '.publicResources[] | select(.name == "northwind-public-assets")' >/dev/null
+
+          echo "--- and must NOT include the neutralised one ---"
+          if curl -sf http://localhost:3000/api/findings \
+            | jq -e '.publicResources[] | select(.name == "northwind-reports")' >/dev/null; then
+            echo "northwind-reports was reported public; its access block should have neutralised it"
+            exit 1
+          fi
+
+      - name: Service logs on failure
+        if: failure()
+        run: docker compose logs --tail 100
+
+  # The repository holds AWS role ARNs, external ids and an LLM key in .env.
+  # A leak check is cheap and the consequences of skipping it are not.
+  secrets:
+    name: Secret scan
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

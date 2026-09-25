@@ -36,7 +36,13 @@ const subnet = (name: string, isPublic: boolean): Resource => ({
   derived: { isPublic },
 });
 
-const open = (port: number) => ({ protocol: "tcp", fromPort: port, toPort: port, source: "cidr", cidr: "0.0.0.0/0" });
+const open = (port: number) => ({
+  protocol: "tcp",
+  fromPort: port,
+  toPort: port,
+  source: "cidr",
+  cidr: "0.0.0.0/0",
+});
 const fromSg = (port: number, groupId: string) => ({
   protocol: "tcp",
   fromPort: port,
@@ -74,7 +80,12 @@ describe("analyseReachability", () => {
   });
 
   it("links one host to another when the target's group admits the source's group", () => {
-    const resources = [sg("web", []), sg("app", [fromSg(9000, "web")]), host("web1", "x"), host("app1", "x")];
+    const resources = [
+      sg("web", []),
+      sg("app", [fromSg(9000, "web")]),
+      host("web1", "x"),
+      host("app1", "x"),
+    ];
     const relationships: Relationship[] = [
       { from: "host:web1", to: "sg:web", type: "HAS_SECURITY_GROUP" },
       { from: "host:app1", to: "sg:app", type: "HAS_SECURITY_GROUP" },

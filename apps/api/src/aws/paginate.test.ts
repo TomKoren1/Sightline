@@ -12,7 +12,11 @@
  */
 
 import { describe, expect, it } from "vitest";
-import { DescribeInstancesCommand, EC2Client, paginateDescribeInstances } from "@aws-sdk/client-ec2";
+import {
+  DescribeInstancesCommand,
+  EC2Client,
+  paginateDescribeInstances,
+} from "@aws-sdk/client-ec2";
 
 interface Page {
   ids: string[];
@@ -91,11 +95,7 @@ describe("SDK pagination, as the collectors use it", () => {
    */
   it("propagates an error raised partway through, rather than truncating", async () => {
     const client = stubClient(
-      [
-        { ids: ["i-1"], nextToken: "1" },
-        { ids: ["i-2"], nextToken: "2" },
-        { ids: ["i-3"] },
-      ],
+      [{ ids: ["i-1"], nextToken: "1" }, { ids: ["i-2"], nextToken: "2" }, { ids: ["i-3"] }],
       "2",
     );
     await expect(drain(client)).rejects.toThrow("Rate exceeded");

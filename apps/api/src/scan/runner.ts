@@ -54,7 +54,11 @@ export interface ScanOptions {
 function errorCodeOf(err: unknown): string | undefined {
   if (typeof err !== "object" || err === null) return undefined;
   const e = err as { name?: string; Code?: string; $metadata?: { httpStatusCode?: number } };
-  return e.Code ?? e.name ?? (e.$metadata?.httpStatusCode ? `HTTP ${e.$metadata.httpStatusCode}` : undefined);
+  return (
+    e.Code ??
+    e.name ??
+    (e.$metadata?.httpStatusCode ? `HTTP ${e.$metadata.httpStatusCode}` : undefined)
+  );
 }
 
 /**
@@ -103,10 +107,24 @@ export async function runScan(options: ScanOptions): Promise<ScanResult & { unit
   const units: ScanUnit[] = [];
   for (const service of SCANNABLE_SERVICES) {
     if (GLOBAL_SERVICES.has(service)) {
-      units.push({ service, region: null, status: "pending", resourceCount: 0, apiCalls: 0, durationMs: 0 });
+      units.push({
+        service,
+        region: null,
+        status: "pending",
+        resourceCount: 0,
+        apiCalls: 0,
+        durationMs: 0,
+      });
     } else {
       for (const region of regions) {
-        units.push({ service, region, status: "pending", resourceCount: 0, apiCalls: 0, durationMs: 0 });
+        units.push({
+          service,
+          region,
+          status: "pending",
+          resourceCount: 0,
+          apiCalls: 0,
+          durationMs: 0,
+        });
       }
     }
   }

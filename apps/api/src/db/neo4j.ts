@@ -17,7 +17,12 @@
  */
 
 import neo4j, { type Driver, type Session } from "neo4j-driver";
-import { RELATIONSHIP_TYPES, RESOURCE_KINDS, type Relationship, type Resource } from "@daveio/shared";
+import {
+  RELATIONSHIP_TYPES,
+  RESOURCE_KINDS,
+  type Relationship,
+  type Resource,
+} from "@daveio/shared";
 
 import { cfg } from "../config.js";
 
@@ -113,7 +118,10 @@ function primitiveOrJson(value: unknown): unknown {
   if (value === null || value === undefined) return null;
   const t = typeof value;
   if (t === "string" || t === "number" || t === "boolean") return value;
-  if (Array.isArray(value) && value.every((v) => ["string", "number", "boolean"].includes(typeof v))) {
+  if (
+    Array.isArray(value) &&
+    value.every((v) => ["string", "number", "boolean"].includes(typeof v))
+  ) {
     return value;
   }
   return JSON.stringify(value);
@@ -144,7 +152,9 @@ export async function projectGraph(
 
       const byKind = new Map<string, Resource[]>();
       for (const resource of resources) {
-        (byKind.get(resource.kind) ?? byKind.set(resource.kind, []).get(resource.kind)!).push(resource);
+        (byKind.get(resource.kind) ?? byKind.set(resource.kind, []).get(resource.kind)!).push(
+          resource,
+        );
       }
 
       for (const [kind, group] of byKind) {

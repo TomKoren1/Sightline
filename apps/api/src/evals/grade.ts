@@ -43,7 +43,10 @@ export function gradeCase(
   const failures: string[] = [];
   const citedArns = new Set((message.citations ?? []).filter((c) => c.valid).map((c) => c.arn));
   const citedNames = new Set(
-    (message.citations ?? []).filter((c) => c.valid).map((c) => c.name).filter(Boolean),
+    (message.citations ?? [])
+      .filter((c) => c.valid)
+      .map((c) => c.name)
+      .filter(Boolean),
   );
   const toolsCalled = (message.toolCalls ?? []).map((t) => t.name);
 
@@ -61,9 +64,7 @@ export function gradeCase(
 
   // Citation validation already flagged these; here they are fatal, because an
   // invented identifier is the one failure a user cannot catch themselves.
-  const unsupportedCitations = (message.citations ?? [])
-    .filter((c) => !c.valid)
-    .map((c) => c.arn);
+  const unsupportedCitations = (message.citations ?? []).filter((c) => !c.valid).map((c) => c.arn);
 
   if (missing.length > 0) failures.push(`did not cite: ${missing.join(", ")}`);
   if (falsePositives.length > 0) {

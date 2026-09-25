@@ -7,16 +7,15 @@
  * role only matters once you know what uses it.
  */
 
-import {
-  INTERNET_ARN,
-  type Relationship,
-  type Resource,
-  type ScanResult,
-} from "@daveio/shared";
+import { INTERNET_ARN, type Relationship, type Resource, type ScanResult } from "@daveio/shared";
 
 import { accountArn, regionArn } from "../aws/arns.js";
 import { evaluateAdmin, type PolicyRef } from "./analysers/policy.js";
-import { evaluateBucketPublicAccess, type AclGrant, type PublicAccessBlock } from "./analysers/publicAccess.js";
+import {
+  evaluateBucketPublicAccess,
+  type AclGrant,
+  type PublicAccessBlock,
+} from "./analysers/publicAccess.js";
 import { analyseIdleResources } from "./analysers/idle.js";
 import { analyseReachability } from "./analysers/reachability.js";
 
@@ -116,7 +115,8 @@ export function annotate(
       bucketName: resource.name,
       policy: (resource.properties["policy"] ?? null) as string | null,
       policyIsPublic: (resource.properties["policyIsPublic"] ?? null) as boolean | null,
-      publicAccessBlock: (resource.properties["publicAccessBlock"] ?? null) as PublicAccessBlock | null,
+      publicAccessBlock: (resource.properties["publicAccessBlock"] ??
+        null) as PublicAccessBlock | null,
       aclGrants: (resource.properties["aclGrants"] ?? []) as AclGrant[],
     });
     resource.derived.isPublic = verdict.isPublic;

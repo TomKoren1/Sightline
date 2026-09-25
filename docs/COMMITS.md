@@ -1,6 +1,6 @@
 # Commit log
 
-What changed in each commit and *why*, in plain language. `git log` records
+What changed in each commit and _why_, in plain language. `git log` records
 what happened; this file records the intent, so the history can be read as a
 narrative rather than reconstructed from diffs.
 
@@ -38,7 +38,7 @@ Two pieces of design live here rather than in an implementation:
   `reason` string. These are computed by code during ingest, never by the
   model. See ADR-004.
 - **`ScanUnit`** — one `(service, region)` pair, carrying its own status and
-  error. Making the unit of failure explicit in the *type* is what forces
+  error. Making the unit of failure explicit in the _type_ is what forces
   partial-failure handling to be designed in rather than bolted on.
 
 `rollUpStatus` derives an overall scan status from the units, so `partial` is a
@@ -122,7 +122,7 @@ Six collectors, each returning resources and the relationships between them.
 Two are more than transcription:
 
 **IAM** fetches every policy document — managed and inline — because the
-question it serves cannot be answered from a listing, and a policy's *name*
+question it serves cannot be answered from a listing, and a policy's _name_
 tells you nothing. Managed documents are cached, since `AdministratorAccess`
 is attached to several roles here and to hundreds on a real account.
 
@@ -141,7 +141,7 @@ not because of its name.
 ### `feat(api): deterministic security analysers`
 
 Where ADR-004 becomes code. Four analysers compute the facts the agent is
-later only allowed to *read*:
+later only allowed to _read_:
 
 - `policy.ts` — effective administrator, by evaluating documents. Conditioned
   statements and `NotAction` are deliberately excluded rather than guessed at,
@@ -212,7 +212,7 @@ scan's rows, which is what makes "what changed since the last scan?" a query
 rather than a guess, and means a bad scan can be discarded without corrupting
 history.
 
-`resource_snapshots.fingerprint` is a hash of the *queryable* state — it
+`resource_snapshots.fingerprint` is a hash of the _queryable_ state — it
 deliberately excludes the raw API response, because AWS returns fields that
 change on every call without anything having actually changed, and diffing on
 those would report noise as change. Diffing is then an index-backed join, and
@@ -277,7 +277,7 @@ the first thing worth knowing when an agent answer looks wrong.
 Part 2 of the brief.
 
 **`cypherGuard.ts`** guards the raw-Cypher escape hatch: an allowlist of
-opening clauses plus a denylist of write keywords, applied *after* string
+opening clauses plus a denylist of write keywords, applied _after_ string
 literals and comments are stripped — so a node named `"DELETE ME"` cannot trip
 it, and more importantly a write cannot hide inside a string. It is lexical,
 not a parser, and deliberately strict: a wrongly-rejected query costs one
@@ -287,13 +287,13 @@ of two layers; the query also runs inside a Neo4j read transaction.
 **`tools.ts`** defines thirteen tools over the curated queries. The
 descriptions are load-bearing — they are all the model sees when choosing, and
 most bad answers are a tool-choice mistake rather than a reasoning one, so
-each says what it answers *and* when to prefer it over a neighbour. Tool
+each says what it answers _and_ when to prefer it over a neighbour. Tool
 errors are returned to the model rather than thrown: it can often recover by
 trying something else, and throwing would end the turn with nothing to show.
 
 **`citations.ts`** implements ADR-006. Every ARN in an answer is checked
 against the union of ARNs the tools actually returned, and anything
-unsupported is flagged on the response. Resource *names* are resolved too, but
+unsupported is flagged on the response. Resource _names_ are resolved too, but
 for a different purpose: they are how the frontend highlights the nodes an
 answer talks about.
 
@@ -376,3 +376,43 @@ person about to act on it should be the first to know.
 `npm ls vite` showed plugins resolving to a hoisted copy while `apps/web` had
 its own major. Full write-up in engineering log #10; the lockfile, not the
 version constraint, was the actual obstacle.
+
+---
+
+### `ci: static checks, end-to-end integration and secret scanning`
+
+Three jobs. `static` runs typecheck, Prettier, unit tests and the frontend
+build. `integration` brings up the compose stack, seeds, scans, runs the
+tier-1 ground-truth evals, then starts the API and asserts against it — that
+the graph is non-empty, that the seeded public bucket appears in findings, and
+that the bucket whose access block neutralises its policy **does not**. It runs
+exactly the commands the README tells a reader to use, so "does the running
+thing do what the README says" is checked rather than claimed.
+
+`secrets` runs gitleaks. The repository's `.env` holds a role ARN, a
+per-customer external id and an LLM key; the check is cheap and the
+consequences of skipping it are not.
+
+Agent evals live in a separate manually-triggered workflow (plus a weekly
+schedule, so model drift is noticed before a demo notices it), because they
+cost money and need a key.
+
+---
+
+### `docs: README design note, walkthrough, and the IAM analysis`
+
+The README answers the brief's five design-note questions directly, including
+the two that are easy to hand-wave: how I know the answers are right (two eval
+tiers, and what neither catches), and what breaks first at scale (five limits
+in the order they would actually happen, each with the fix and why the
+groundwork for it already exists).
+
+It also takes up the brief's invitation to say what could have been clearer,
+leading with the `ReadOnlyAccess` analysis and the `sqs:ReceiveMessage` detail
+— a permission that would let a scanner breach the brief's own hard rule
+without anyone calling it a write.
+
+`docs/WALKTHROUGH.md` is a tour of the running system: a seven-minute demo
+ordered so each step sets up the next, the three decisions worth leading with,
+the questions to expect with honest answers, a triage table for when something
+breaks mid-demo, and a direct account of what is unfinished.

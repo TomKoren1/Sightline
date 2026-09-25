@@ -17,7 +17,12 @@ describe("validateCitations", () => {
       new Set([ARN_A]),
       known,
     );
-    expect(citations).toContainEqual({ arn: ARN_A, valid: true, kind: "S3Bucket", name: "northwind-public-assets" });
+    expect(citations).toContainEqual({
+      arn: ARN_A,
+      valid: true,
+      kind: "S3Bucket",
+      name: "northwind-public-assets",
+    });
     expect(warnings).toHaveLength(0);
   });
 
@@ -43,8 +48,17 @@ describe("validateCitations", () => {
   });
 
   it("resolves a bare resource name so the UI can highlight it", () => {
-    const { citations } = validateCitations("prod-web-1 is internet-facing.", new Set([ARN_B]), known);
-    expect(citations).toContainEqual({ arn: ARN_B, valid: true, kind: "Ec2Instance", name: "prod-web-1" });
+    const { citations } = validateCitations(
+      "prod-web-1 is internet-facing.",
+      new Set([ARN_B]),
+      known,
+    );
+    expect(citations).toContainEqual({
+      arn: ARN_B,
+      valid: true,
+      kind: "Ec2Instance",
+      name: "prod-web-1",
+    });
   });
 
   it("does not match a name that is only a prefix of a longer word", () => {
@@ -62,10 +76,7 @@ describe("validateCitations", () => {
 describe("CitationTracker", () => {
   it("harvests ARNs, names and kinds from nested rows", () => {
     const tracker = new CitationTracker();
-    tracker.record(
-      [{ hops: [{ arn: ARN_B, name: "prod-web-1", kind: "Ec2Instance" }] }],
-      [ARN_B],
-    );
+    tracker.record([{ hops: [{ arn: ARN_B, name: "prod-web-1", kind: "Ec2Instance" }] }], [ARN_B]);
     expect(tracker.allowed.has(ARN_B)).toBe(true);
     expect(tracker.known.get(ARN_B)?.name).toBe("prod-web-1");
   });

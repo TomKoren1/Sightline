@@ -3,7 +3,9 @@ import { evaluateBucketPublicAccess, policyAllowsWildcardPrincipal } from "./pub
 
 const wildcardPolicy = JSON.stringify({
   Version: "2012-10-17",
-  Statement: [{ Effect: "Allow", Principal: "*", Action: "s3:GetObject", Resource: "arn:aws:s3:::b/*" }],
+  Statement: [
+    { Effect: "Allow", Principal: "*", Action: "s3:GetObject", Resource: "arn:aws:s3:::b/*" },
+  ],
 });
 
 const base = {
@@ -32,7 +34,9 @@ describe("policyAllowsWildcardPrincipal", () => {
   it("does not flag a named account principal", () => {
     expect(
       policyAllowsWildcardPrincipal(
-        JSON.stringify({ Statement: [{ Effect: "Allow", Principal: { AWS: "arn:aws:iam::123456789012:root" } }] }),
+        JSON.stringify({
+          Statement: [{ Effect: "Allow", Principal: { AWS: "arn:aws:iam::123456789012:root" } }],
+        }),
       ),
     ).toBe(false);
   });
@@ -42,7 +46,11 @@ describe("policyAllowsWildcardPrincipal", () => {
       policyAllowsWildcardPrincipal(
         JSON.stringify({
           Statement: [
-            { Effect: "Allow", Principal: "*", Condition: { StringEquals: { "aws:SourceVpce": "vpce-1" } } },
+            {
+              Effect: "Allow",
+              Principal: "*",
+              Condition: { StringEquals: { "aws:SourceVpce": "vpce-1" } },
+            },
           ],
         }),
       ),

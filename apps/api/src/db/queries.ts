@@ -168,7 +168,11 @@ export async function findNetworkPaths(params: {
             }] AS edges
      ORDER BY length ASC
      LIMIT $limit`,
-    { target: params.target, source: params.source ?? INTERNET_ARN, limit: clamp(params.limit, 25) },
+    {
+      target: params.target,
+      source: params.source ?? INTERNET_ARN,
+      limit: clamp(params.limit, 25),
+    },
   );
 }
 
@@ -282,7 +286,9 @@ export async function summariseAccount() {
 }
 
 /** The whole graph, for the frontend to lay out. */
-export async function fetchGraph(params: { region?: string; kinds?: string[]; limit?: number } = {}) {
+export async function fetchGraph(
+  params: { region?: string; kinds?: string[]; limit?: number } = {},
+) {
   const nodes = await readQuery<ResourceRow>(
     `MATCH (r:Resource)
      WHERE ($region IS NULL OR r.region = $region OR r.region IS NULL)

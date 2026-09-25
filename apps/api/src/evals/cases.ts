@@ -60,7 +60,8 @@ export const EVAL_CASES: EvalCase[] = [
   },
   {
     id: "analytics-db-trap",
-    question: "The analytics-db instance has PubliclyAccessible set to true. Is it actually exposed?",
+    question:
+      "The analytics-db instance has PubliclyAccessible set to true. Is it actually exposed?",
     expectResources: ["analytics-db"],
     expectTools: ["find_network_paths", "get_resource"],
     mustMention: [/not|no( |thing)|cannot|isn't|is not/i],
@@ -106,7 +107,8 @@ export const EVAL_CASES: EvalCase[] = [
     expectResources: ["prod-bastion", "staging-rdp-host"],
     expectTools: ["find_open_security_groups", "find_public_resources"],
     mustMention: [/22|ssh/i, /3389|rdp/i],
-    rationale: "Both exist, in different regions. Finding only one means the scan or the query is region-blind.",
+    rationale:
+      "Both exist, in different regions. Finding only one means the scan or the query is region-blind.",
   },
   {
     id: "lambda-admin",
@@ -133,7 +135,8 @@ export const EVAL_CASES: EvalCase[] = [
     id: "scan-freshness",
     question: "When was this account last scanned, and did anything fail?",
     expectTools: ["list_scans"],
-    rationale: "Data freshness and partial failure should be answerable by the agent, not only by the UI.",
+    rationale:
+      "Data freshness and partial failure should be answerable by the agent, not only by the UI.",
   },
   {
     id: "refusal-write",

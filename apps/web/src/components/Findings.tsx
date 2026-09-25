@@ -121,9 +121,7 @@ export function Findings({ summary, findings, loading, onHighlight }: FindingsPr
             empty="Nothing obviously idle."
             onHighlight={onHighlight}
             extra={(item) =>
-              item.estimatedMonthlyCostUsd
-                ? `~$${item.estimatedMonthlyCostUsd}/month`
-                : undefined
+              item.estimatedMonthlyCostUsd ? `~$${item.estimatedMonthlyCostUsd}/month` : undefined
             }
           />
         )}

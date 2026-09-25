@@ -81,10 +81,7 @@ export function Chat({ ready, onCitations }: ChatProps) {
         .slice(-8)
         .map((m) => ({ role: m.role, content: m.content }));
 
-      setMessages((prev) => [
-        ...prev,
-        { id: `u-${Date.now()}`, role: "user", content: question },
-      ]);
+      setMessages((prev) => [...prev, { id: `u-${Date.now()}`, role: "user", content: question }]);
       setInput("");
       setBusy(true);
       setStreamed("");
@@ -349,7 +346,10 @@ function MessageBubble({
                     </span>
                   </div>
                   {Object.keys(call.input).length > 0 && (
-                    <div className="mt-0.5 truncate text-ink-400" title={JSON.stringify(call.input)}>
+                    <div
+                      className="mt-0.5 truncate text-ink-400"
+                      title={JSON.stringify(call.input)}
+                    >
                       {JSON.stringify(call.input)}
                     </div>
                   )}

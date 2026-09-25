@@ -44,7 +44,13 @@ export type AgentEvent =
   | { type: "agent.started"; messageId: string }
   | { type: "agent.thinking"; text: string }
   | { type: "agent.tool_call"; name: string; input: Record<string, unknown> }
-  | { type: "agent.tool_result"; name: string; resultCount: number; durationMs: number; error?: string }
+  | {
+      type: "agent.tool_result";
+      name: string;
+      resultCount: number;
+      durationMs: number;
+      error?: string;
+    }
   | { type: "agent.token"; text: string }
   | { type: "agent.finished"; message: AgentMessage }
   | { type: "agent.failed"; error: string };

@@ -132,7 +132,10 @@ export async function ask(options: AskOptions): Promise<AgentMessage> {
     );
 
     if (toolUses.length === 0) {
-      answer = textBlocks.map((b) => b.text).join("\n").trim();
+      answer = textBlocks
+        .map((b) => b.text)
+        .join("\n")
+        .trim();
       break;
     }
 
@@ -183,8 +186,22 @@ export async function ask(options: AskOptions): Promise<AgentMessage> {
         // nothing to show the user.
         const message = err instanceof Error ? err.message : String(err);
         const durationMs = Date.now() - startedAt;
-        trace = { id: use.id, name: use.name, input, resultCount: 0, arns: [], durationMs, error: message };
-        emit({ type: "agent.tool_result", name: use.name, resultCount: 0, durationMs, error: message });
+        trace = {
+          id: use.id,
+          name: use.name,
+          input,
+          resultCount: 0,
+          arns: [],
+          durationMs,
+          error: message,
+        };
+        emit({
+          type: "agent.tool_result",
+          name: use.name,
+          resultCount: 0,
+          durationMs,
+          error: message,
+        });
         toolResults.push({
           type: "tool_result",
           tool_use_id: use.id,

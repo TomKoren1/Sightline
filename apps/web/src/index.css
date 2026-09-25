@@ -22,32 +22,71 @@
   --color-good: #4ade80;
 }
 
-html, body, #root { height: 100%; }
+html,
+body,
+#root {
+  height: 100%;
+}
 
 body {
   margin: 0;
   background: var(--color-ink-950);
   color: var(--color-ink-100);
-  font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  font-family:
+    ui-sans-serif,
+    system-ui,
+    -apple-system,
+    "Segoe UI",
+    sans-serif;
   font-size: 13px;
 }
 
-::-webkit-scrollbar { width: 9px; height: 9px; }
-::-webkit-scrollbar-track { background: transparent; }
-::-webkit-scrollbar-thumb { background: var(--color-ink-700); border-radius: 5px; }
-::-webkit-scrollbar-thumb:hover { background: var(--color-ink-600); }
+::-webkit-scrollbar {
+  width: 9px;
+  height: 9px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--color-ink-700);
+  border-radius: 5px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--color-ink-600);
+}
 
 /* React Flow's defaults assume a light canvas. */
-.react-flow__edge-path { stroke: var(--color-ink-600); }
-.react-flow__edge.selected .react-flow__edge-path { stroke: var(--color-accent); }
-.react-flow__handle { opacity: 0; }
-.react-flow__attribution { display: none; }
+.react-flow__edge-path {
+  stroke: var(--color-ink-600);
+}
+.react-flow__edge.selected .react-flow__edge-path {
+  stroke: var(--color-accent);
+}
+.react-flow__handle {
+  opacity: 0;
+}
+.react-flow__attribution {
+  display: none;
+}
 .react-flow__controls-button {
   background: var(--color-ink-800);
   border-bottom: 1px solid var(--color-ink-700);
   fill: var(--color-ink-300);
 }
-.react-flow__controls-button:hover { background: var(--color-ink-700); }
+.react-flow__controls-button:hover {
+  background: var(--color-ink-700);
+}
 
-@keyframes pulse-dot { 0%, 100% { opacity: 0.35; } 50% { opacity: 1; } }
-.pulse { animation: pulse-dot 1.4s ease-in-out infinite; }
+@keyframes pulse-dot {
+  0%,
+  100% {
+    opacity: 0.35;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+.pulse {
+  animation: pulse-dot 1.4s ease-in-out infinite;
+}

@@ -84,7 +84,7 @@ surfacing as a JSON deserialisation error.
 inventory in a few calls, and it genuinely is the right first choice on a large
 real account. It cannot be exercised here.
 
-**Fix.** Implemented as an *optional fast path*: the scanner calls
+**Fix.** Implemented as an _optional fast path_: the scanner calls
 `ListIndexes`, and only if an aggregator index exists does it use `Search` for
 bulk discovery. Otherwise it falls back to per-service enumeration. The
 fallback is the path that is tested and demonstrated; the fast path is written,
@@ -102,15 +102,15 @@ path is unavailable no matter what we do.
 **Symptom.** `tsc` rejected `InstanceType: extra.instanceType ?? "t3.medium"`
 with `Type 'string' is not assignable to type '_InstanceType | undefined'`.
 
-**Diagnosis.** A string *literal* in an object passed directly to a command is
+**Diagnosis.** A string _literal_ in an object passed directly to a command is
 contextually typed and narrows fine. Routing it through an optional parameter
 typed `string` widens it, and the union no longer accepts it.
 
 **Fix.** Typed the helper's parameter as the SDK's own `_InstanceType`.
 
 **Why it is worth recording.** This is the ergonomic tax of AWS SDK v3's
-generated enums, and it recurs. The habit that avoids it: take types *from the
-SDK* rather than restating them as `string`.
+generated enums, and it recurs. The habit that avoids it: take types _from the
+SDK_ rather than restating them as `string`.
 
 ---
 
@@ -156,7 +156,7 @@ that user is an administrator. There is no `GRANT MATCH` to hand out.
 2. The Cypher escape hatch additionally passes through a validator that
    rejects write clauses before the query is ever sent.
 
-**What is still true.** The *credentials* the process holds could write if
+**What is still true.** The _credentials_ the process holds could write if
 some other code path used them. In production this would be an Enterprise
 read-only role, or a read replica the agent talks to exclusively. Recorded
 here rather than glossed over, because "the agent cannot write" is a claim
@@ -188,7 +188,7 @@ the agent loop, on callbacks whose parameters are obviously inferable:
 
 ```ts
 const textBlocks = response.content.filter(
-  (block): block is TextBlock => block.type === "text",   // block: any
+  (block): block is TextBlock => block.type === "text", // block: any
 );
 ```
 

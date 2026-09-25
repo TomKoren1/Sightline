@@ -61,9 +61,7 @@ export function App() {
           case "unit.finished":
             setLiveUnits((prev) =>
               prev.map((u) =>
-                u.service === event.unit.service && u.region === event.unit.region
-                  ? event.unit
-                  : u,
+                u.service === event.unit.service && u.region === event.unit.region ? event.unit : u,
               ),
             );
             break;
@@ -179,9 +177,7 @@ export function App() {
                 </span>
                 <button
                   onClick={() =>
-                    setVisibleKinds(
-                      visibleKinds.length === presentKinds.length ? [] : presentKinds,
-                    )
+                    setVisibleKinds(visibleKinds.length === presentKinds.length ? [] : presentKinds)
                   }
                   className="text-[10px] text-accent"
                 >

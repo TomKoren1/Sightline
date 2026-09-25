@@ -90,8 +90,7 @@ export function evaluateBucketPublicAccess(input: BucketPublicInput): PublicVerd
     (g) => g.granteeUri === ALL_USERS || g.granteeUri === AUTHENTICATED_USERS,
   );
   // Prefer AWS's own policy status when we have it; fall back to parsing.
-  const wildcardPolicy =
-    input.policyIsPublic ?? policyAllowsWildcardPrincipal(input.policy);
+  const wildcardPolicy = input.policyIsPublic ?? policyAllowsWildcardPrincipal(input.policy);
 
   const policyRestricted = pab?.RestrictPublicBuckets === true || pab?.BlockPublicPolicy === true;
   const aclRestricted = pab?.IgnorePublicAcls === true || pab?.BlockPublicAcls === true;
@@ -100,7 +99,7 @@ export function evaluateBucketPublicAccess(input: BucketPublicInput): PublicVerd
     return {
       isPublic: true,
       reason:
-        "Its bucket policy allows a wildcard principal (\"*\") and no public access block restricts policy-based access",
+        'Its bucket policy allows a wildcard principal ("*") and no public access block restricts policy-based access',
     };
   }
 

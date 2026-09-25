@@ -129,7 +129,13 @@ export async function saveScanResult(
          SET status = $2, finished_at = now(), resource_count = $3,
              relationship_count = $4, api_calls = $5
        WHERE id = $1`,
-      [scanId, params.status, params.resources.length, params.relationships.length, params.apiCalls],
+      [
+        scanId,
+        params.status,
+        params.resources.length,
+        params.relationships.length,
+        params.apiCalls,
+      ],
     );
 
     await client.query("COMMIT");

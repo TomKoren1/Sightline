@@ -42,7 +42,9 @@ async function optional<T>(fn: () => Promise<T>, expectedErrors: string[]): Prom
     if (expectedErrors.includes(name)) return null;
     // An unexpected error is worth knowing about, but must not abort the
     // bucket: an AccessDenied on one call still leaves the rest usable.
-    console.warn(`  s3: unexpected ${name || "error"} - ${err instanceof Error ? err.message : err}`);
+    console.warn(
+      `  s3: unexpected ${name || "error"} - ${err instanceof Error ? err.message : err}`,
+    );
     return null;
   }
 }
@@ -68,16 +70,18 @@ export async function collectS3(ctx: CollectorContext): Promise<CollectorOutput>
     const client = s3Client(region);
 
     const [policy, policyStatus, publicAccessBlock, acl, tagging] = await Promise.all([
-      optional(() => client.send(new GetBucketPolicyCommand({ Bucket: name })), [
-        "NoSuchBucketPolicy",
-      ]),
-      optional(() => client.send(new GetBucketPolicyStatusCommand({ Bucket: name })), [
-        "NoSuchBucketPolicy",
-        "NoSuchBucketPolicyStatus",
-      ]),
-      optional(() => client.send(new GetPublicAccessBlockCommand({ Bucket: name })), [
-        "NoSuchPublicAccessBlockConfiguration",
-      ]),
+      optional(
+        () => client.send(new GetBucketPolicyCommand({ Bucket: name })),
+        ["NoSuchBucketPolicy"],
+      ),
+      optional(
+        () => client.send(new GetBucketPolicyStatusCommand({ Bucket: name })),
+        ["NoSuchBucketPolicy", "NoSuchBucketPolicyStatus"],
+      ),
+      optional(
+        () => client.send(new GetPublicAccessBlockCommand({ Bucket: name })),
+        ["NoSuchPublicAccessBlockConfiguration"],
+      ),
       optional(() => client.send(new GetBucketAclCommand({ Bucket: name })), ["AccessDenied"]),
       optional(() => client.send(new GetBucketTaggingCommand({ Bucket: name })), ["NoSuchTagSet"]),
     ]);

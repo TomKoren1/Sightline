@@ -46,20 +46,17 @@ import { CreateDBInstanceCommand, CreateDBSubnetGroupCommand } from "@aws-sdk/cl
 import { CreateFunctionCommand } from "@aws-sdk/client-lambda";
 
 import { ec2, iam, lambda, rds, s3, resetMoto, waitForMoto } from "./clients.js";
-import {
-  ACCOUNT_ID,
-  LEGACY_REGION,
-  PROD_REGION,
-  STAGING_REGION,
-  TAGS,
-} from "./topology.js";
+import { ACCOUNT_ID, LEGACY_REGION, PROD_REGION, STAGING_REGION, TAGS } from "./topology.js";
 
 type Tags = Record<string, string>;
 
 const tagSpec = (resourceType: string, name: string, tags: Tags) => [
   {
     ResourceType: resourceType as never,
-    Tags: [{ Key: "Name", Value: name }, ...Object.entries(tags).map(([Key, Value]) => ({ Key, Value }))],
+    Tags: [
+      { Key: "Name", Value: name },
+      ...Object.entries(tags).map(([Key, Value]) => ({ Key, Value })),
+    ],
   },
 ];
 
@@ -102,7 +99,10 @@ async function seedNetwork(
     new CreateSubnetCommand({
       VpcId: vpcId,
       CidrBlock: opts.cidr.replace("0.0/16", "1.0/24"),
-      TagSpecifications: tagSpec("subnet", `${opts.name}-public-a`, { ...opts.tags, Tier: "public" }),
+      TagSpecifications: tagSpec("subnet", `${opts.name}-public-a`, {
+        ...opts.tags,
+        Tier: "public",
+      }),
     }),
   );
   const publicSubnetId = publicSubnet.Subnet!.SubnetId!;
@@ -111,7 +111,10 @@ async function seedNetwork(
     new CreateSubnetCommand({
       VpcId: vpcId,
       CidrBlock: opts.cidr.replace("0.0/16", "10.0/24"),
-      TagSpecifications: tagSpec("subnet", `${opts.name}-private-a`, { ...opts.tags, Tier: "private" }),
+      TagSpecifications: tagSpec("subnet", `${opts.name}-private-a`, {
+        ...opts.tags,
+        Tier: "private",
+      }),
     }),
   );
   const privateSubnetAId = privateSubnetA.Subnet!.SubnetId!;
@@ -120,7 +123,10 @@ async function seedNetwork(
     new CreateSubnetCommand({
       VpcId: vpcId,
       CidrBlock: opts.cidr.replace("0.0/16", "11.0/24"),
-      TagSpecifications: tagSpec("subnet", `${opts.name}-private-b`, { ...opts.tags, Tier: "private" }),
+      TagSpecifications: tagSpec("subnet", `${opts.name}-private-b`, {
+        ...opts.tags,
+        Tier: "private",
+      }),
     }),
   );
   const privateSubnetBId = privateSubnetB.Subnet!.SubnetId!;
@@ -173,7 +179,9 @@ async function seedNetwork(
       }),
     );
     for (const subnetId of [privateSubnetAId, privateSubnetBId]) {
-      await client.send(new AssociateRouteTableCommand({ RouteTableId: privateRtId, SubnetId: subnetId }));
+      await client.send(
+        new AssociateRouteTableCommand({ RouteTableId: privateRtId, SubnetId: subnetId }),
+      );
     }
   }
 
@@ -212,23 +220,31 @@ async function seedIam() {
   const client = iam();
   const ec2Trust = JSON.stringify({
     Version: "2012-10-17",
-    Statement: [{ Effect: "Allow", Principal: { Service: "ec2.amazonaws.com" }, Action: "sts:AssumeRole" }],
+    Statement: [
+      { Effect: "Allow", Principal: { Service: "ec2.amazonaws.com" }, Action: "sts:AssumeRole" },
+    ],
   });
   const lambdaTrust = JSON.stringify({
     Version: "2012-10-17",
-    Statement: [{ Effect: "Allow", Principal: { Service: "lambda.amazonaws.com" }, Action: "sts:AssumeRole" }],
+    Statement: [
+      { Effect: "Allow", Principal: { Service: "lambda.amazonaws.com" }, Action: "sts:AssumeRole" },
+    ],
   });
 
   // Admin #1: the obvious one. Managed AdministratorAccess, and genuinely used
   // by the application tier via an instance profile.
-  await client.send(new CreateRoleCommand({ RoleName: "NorthwindAdminRole", AssumeRolePolicyDocument: ec2Trust }));
+  await client.send(
+    new CreateRoleCommand({ RoleName: "NorthwindAdminRole", AssumeRolePolicyDocument: ec2Trust }),
+  );
   await client.send(
     new AttachRolePolicyCommand({
       RoleName: "NorthwindAdminRole",
       PolicyArn: "arn:aws:iam::aws:policy/AdministratorAccess",
     }),
   );
-  await client.send(new CreateInstanceProfileCommand({ InstanceProfileName: "NorthwindAppProfile" }));
+  await client.send(
+    new CreateInstanceProfileCommand({ InstanceProfileName: "NorthwindAppProfile" }),
+  );
   await client.send(
     new AddRoleToInstanceProfileCommand({
       InstanceProfileName: "NorthwindAppProfile",
@@ -238,16 +254,16 @@ async function seedIam() {
 
   // Admin #2: the trap. Same effective power, granted inline, under a name
   // that sounds routine. Only reading the policy document finds this one.
-  await client.send(new CreateRoleCommand({ RoleName: "LegacyDeployRole", AssumeRolePolicyDocument: lambdaTrust }));
+  await client.send(
+    new CreateRoleCommand({ RoleName: "LegacyDeployRole", AssumeRolePolicyDocument: lambdaTrust }),
+  );
   await client.send(
     new PutRolePolicyCommand({
       RoleName: "LegacyDeployRole",
       PolicyName: "legacy-deploy-inline",
       PolicyDocument: JSON.stringify({
         Version: "2012-10-17",
-        Statement: [
-          { Sid: "LegacyCatchAll", Effect: "Allow", Action: "*", Resource: "*" },
-        ],
+        Statement: [{ Sid: "LegacyCatchAll", Effect: "Allow", Action: "*", Resource: "*" }],
       }),
     }),
   );
@@ -255,7 +271,9 @@ async function seedIam() {
   // Admin #3: privileged and entirely unused - nothing assumes it, no instance
   // profile references it. The "admin roles, and what uses them" question
   // should separate this from the first two.
-  await client.send(new CreateRoleCommand({ RoleName: "UnusedAdminRole", AssumeRolePolicyDocument: ec2Trust }));
+  await client.send(
+    new CreateRoleCommand({ RoleName: "UnusedAdminRole", AssumeRolePolicyDocument: ec2Trust }),
+  );
   await client.send(
     new AttachRolePolicyCommand({
       RoleName: "UnusedAdminRole",
@@ -265,14 +283,20 @@ async function seedIam() {
 
   // A correctly scoped execution role, so "which roles are admin" has a
   // meaningful negative class to exclude.
-  await client.send(new CreateRoleCommand({ RoleName: "LambdaExecRole", AssumeRolePolicyDocument: lambdaTrust }));
+  await client.send(
+    new CreateRoleCommand({ RoleName: "LambdaExecRole", AssumeRolePolicyDocument: lambdaTrust }),
+  );
   const scoped = await client.send(
     new CreatePolicyCommand({
       PolicyName: "OrderProcessorScoped",
       PolicyDocument: JSON.stringify({
         Version: "2012-10-17",
         Statement: [
-          { Effect: "Allow", Action: ["s3:GetObject", "s3:PutObject"], Resource: "arn:aws:s3:::northwind-reports/*" },
+          {
+            Effect: "Allow",
+            Action: ["s3:GetObject", "s3:PutObject"],
+            Resource: "arn:aws:s3:::northwind-reports/*",
+          },
           { Effect: "Allow", Action: ["logs:CreateLogStream", "logs:PutLogEvents"], Resource: "*" },
         ],
       }),
@@ -282,7 +306,9 @@ async function seedIam() {
     new AttachRolePolicyCommand({ RoleName: "LambdaExecRole", PolicyArn: scoped.Policy!.Arn! }),
   );
 
-  await client.send(new CreateRoleCommand({ RoleName: "ReadOnlyAuditRole", AssumeRolePolicyDocument: ec2Trust }));
+  await client.send(
+    new CreateRoleCommand({ RoleName: "ReadOnlyAuditRole", AssumeRolePolicyDocument: ec2Trust }),
+  );
   await client.send(
     new AttachRolePolicyCommand({
       RoleName: "ReadOnlyAuditRole",
@@ -317,7 +343,10 @@ async function seedS3() {
   // Genuinely public: wildcard policy, and nothing blocking it.
   await client.send(new CreateBucketCommand({ Bucket: "northwind-public-assets" }));
   await client.send(
-    new PutBucketPolicyCommand({ Bucket: "northwind-public-assets", Policy: wildcardPolicy("northwind-public-assets") }),
+    new PutBucketPolicyCommand({
+      Bucket: "northwind-public-assets",
+      Policy: wildcardPolicy("northwind-public-assets"),
+    }),
   );
   await client.send(
     new PutPublicAccessBlockCommand({
@@ -341,7 +370,10 @@ async function seedS3() {
   // it. Reading the policy alone gives the wrong answer.
   await client.send(new CreateBucketCommand({ Bucket: "northwind-reports" }));
   await client.send(
-    new PutBucketPolicyCommand({ Bucket: "northwind-reports", Policy: wildcardPolicy("northwind-reports") }),
+    new PutBucketPolicyCommand({
+      Bucket: "northwind-reports",
+      Policy: wildcardPolicy("northwind-reports"),
+    }),
   );
   await client.send(
     new PutPublicAccessBlockCommand({
@@ -622,7 +654,10 @@ async function seedLegacy() {
   // Rename the NAT gateway so the idle-cost answer can name it.
   if (net.natId) {
     await client.send(
-      new CreateTagsCommand({ Resources: [net.natId], Tags: [{ Key: "Name", Value: "legacy-nat" }] }),
+      new CreateTagsCommand({
+        Resources: [net.natId],
+        Tags: [{ Key: "Name", Value: "legacy-nat" }],
+      }),
     );
   }
 

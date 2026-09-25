@@ -1,7 +1,10 @@
 import { describe, expect, it } from "vitest";
 import { documentGrantsAdmin, evaluateAdmin } from "./policy.js";
 
-const adminDoc = { Version: "2012-10-17", Statement: [{ Effect: "Allow", Action: "*", Resource: "*" }] };
+const adminDoc = {
+  Version: "2012-10-17",
+  Statement: [{ Effect: "Allow", Action: "*", Resource: "*" }],
+};
 
 describe("documentGrantsAdmin", () => {
   it("detects the canonical AdministratorAccess shape", () => {
@@ -22,7 +25,9 @@ describe("documentGrantsAdmin", () => {
   });
 
   it("does not treat a broad Deny as admin", () => {
-    expect(documentGrantsAdmin({ Statement: [{ Effect: "Deny", Action: "*", Resource: "*" }] }).yes).toBe(false);
+    expect(
+      documentGrantsAdmin({ Statement: [{ Effect: "Deny", Action: "*", Resource: "*" }] }).yes,
+    ).toBe(false);
   });
 
   it("does not treat service-wide access as account-wide admin", () => {
@@ -56,7 +61,8 @@ describe("documentGrantsAdmin", () => {
 
   it("ignores NotAction, which inverts the match and is out of scope", () => {
     expect(
-      documentGrantsAdmin({ Statement: [{ Effect: "Allow", NotAction: "iam:*", Resource: "*" }] }).yes,
+      documentGrantsAdmin({ Statement: [{ Effect: "Allow", NotAction: "iam:*", Resource: "*" }] })
+        .yes,
     ).toBe(false);
   });
 
@@ -78,7 +84,11 @@ describe("evaluateAdmin", () => {
 
   it("finds admin granted inline under an innocuous policy name", () => {
     const verdict = evaluateAdmin([
-      { policyName: "ReadOnlyAccess", kind: "managed", document: { Statement: [{ Effect: "Allow", Action: "s3:Get*", Resource: "*" }] } },
+      {
+        policyName: "ReadOnlyAccess",
+        kind: "managed",
+        document: { Statement: [{ Effect: "Allow", Action: "s3:Get*", Resource: "*" }] },
+      },
       { policyName: "legacy-deploy-inline", kind: "inline", document: adminDoc },
     ]);
     expect(verdict.isAdmin).toBe(true);
@@ -88,7 +98,8 @@ describe("evaluateAdmin", () => {
   it("reports no policies distinctly from policies that grant nothing", () => {
     expect(evaluateAdmin([]).reason).toBe("No policies attached");
     expect(
-      evaluateAdmin([{ policyName: "Scoped", kind: "managed", document: { Statement: [] } }]).reason,
+      evaluateAdmin([{ policyName: "Scoped", kind: "managed", document: { Statement: [] } }])
+        .reason,
     ).toContain("None of the 1");
   });
 

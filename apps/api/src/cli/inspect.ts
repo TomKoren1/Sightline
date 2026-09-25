@@ -76,7 +76,9 @@ console.log(`\n${bold("Who can reach the production database")}`);
 const db = result.resources.find((r) => r.name === "northwind-prod-db");
 for (const edge of canReach.filter((e) => e.to === db?.arn)) {
   const source = result.resources.find((r) => r.arn === edge.from);
-  console.log(`  ${source?.name} -> northwind-prod-db\n     ${dim(String(edge.properties?.["reason"] ?? ""))}`);
+  console.log(
+    `  ${source?.name} -> northwind-prod-db\n     ${dim(String(edge.properties?.["reason"] ?? ""))}`,
+  );
 }
 
 // Full paths, not just the last hop. This is the question the brief asks, and

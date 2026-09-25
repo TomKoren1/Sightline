@@ -1,0 +1,61 @@
+name: Agent evals
+
+# Tier 2 of the eval suite (ADR-008). Kept off the default CI path because it
+# costs money and needs a key: run it deliberately before merging a change to
+# the prompt, the tools or the model.
+on:
+  workflow_dispatch:
+    inputs:
+      model:
+        description: Model to evaluate
+        required: false
+        default: claude-sonnet-5
+  schedule:
+    # Weekly, so a drift in model behaviour is noticed before a demo does it
+    # for us.
+    - cron: "0 6 * * 1"
+
+jobs:
+  evals:
+    name: Agent answer quality
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+
+      - run: npm ci
+
+      - name: Start services
+        run: |
+          cp .env.example .env
+          docker compose up -d
+          for i in $(seq 1 60); do
+            unhealthy=$(docker compose ps --format json \
+              | jq -r 'select(.Health != "healthy" and .Health != "") | .Service' || true)
+            [ -z "$unhealthy" ] && break
+            sleep 3
+          done
+
+      - name: Seed and scan
+        run: |
+          npm run seed
+          npm run scan
+
+      - name: Run agent evals
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          ANTHROPIC_MODEL: ${{ inputs.model || 'claude-sonnet-5' }}
+        run: npm run evals
+
+      - name: Upload results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: eval-results
+          path: evals/results/
+          if-no-files-found: warn
