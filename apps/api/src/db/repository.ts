@@ -333,7 +333,11 @@ function changedFields(
     const a = before?.[key];
     const b = after?.[key];
     if (JSON.stringify(a) !== JSON.stringify(b)) {
-      fields.push({ field: `${prefix}${key}`, before: a, after: b });
+      // `undefined` is dropped entirely by JSON.stringify, so a field that
+      // only appeared in the newer scan would serialise with no `before` key
+      // at all and every consumer would have to handle its absence. Normalised
+      // to null so both keys are always present over the wire.
+      fields.push({ field: `${prefix}${key}`, before: a ?? null, after: b ?? null });
     }
   }
   return fields;

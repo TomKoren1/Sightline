@@ -254,3 +254,29 @@ version.
 **Worth noting.** The lockfile was the real obstacle, not the version
 constraint. When a dependency edit appears to have no effect, check what npm
 actually resolved before changing the constraint again.
+
+---
+
+## #11 — A diff field that arrived with no `before` key
+
+**Symptom.** Consuming `/api/scans/diff` threw `KeyError: 'before'` while
+printing the changed fields of a modified resource.
+
+**Diagnosis.** `changedFields` compares the old and new value of each property
+and emits `{ field, before, after }`. For a property that only exists in the
+newer scan, `before` is `undefined` — and `JSON.stringify` **omits** keys whose
+value is `undefined` rather than encoding them as null. So the field arrived
+over the wire as `{ field, after }`, and every consumer would have had to
+handle the absence.
+
+Found by stopping an instance between two scans: the new `idleReason` and
+`estimatedMonthlyCostUsd` properties appeared, and both had no `before`.
+
+**Fix.** Normalised both sides with `?? null`, so the shape is stable
+regardless of which direction the change ran.
+
+**Worth recording** because it is a whole class of bug rather than one
+instance: `undefined` is not representable in JSON and vanishes silently, so
+any optional field on an API boundary needs normalising at the point it is
+built. TypeScript does not catch it — `before: unknown` is perfectly happy with
+`undefined`.
