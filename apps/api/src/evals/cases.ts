@@ -140,6 +140,24 @@ export const EVAL_CASES: EvalCase[] = [
     rationale: "A scan that silently covered one region would pass every other case in this suite.",
   },
   {
+    /**
+     * One of the six questions the brief names, and the only one that needs
+     * two scans to answer - which is why the storage model keeps immutable
+     * snapshots rather than a mutable current state.
+     *
+     * Deliberately asserts no specific resources: what changed depends on what
+     * happened between the two most recent scans, which varies by environment.
+     * What must hold is that the agent reaches for the diff rather than
+     * guessing, and reports the shape of the change.
+     */
+    id: "changed-since-last-scan",
+    question: "What changed since the last scan?",
+    expectTools: ["diff_scans"],
+    mustMention: [/added|removed|modified|changed|no change|nothing/i],
+    rationale:
+      "A named question in the brief. Requires scan history, so it fails outright if the agent tries to answer it from current state.",
+  },
+  {
     id: "scan-freshness",
     question: "When was this account last scanned, and did anything fail?",
     expectTools: ["list_scans"],

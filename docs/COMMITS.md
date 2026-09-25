@@ -507,3 +507,38 @@ could I safely delete?" would be noise, and noise is how a real notice stops
 being read. Eight unit tests pin both halves.
 
 **Eval suite now 15/15, mean F1 1.0, no unsupported citations.**
+
+---
+
+### `feat(api): implement the Resource Explorer fast path, and close an eval gap`
+
+Both changes came from auditing the repository against the original brief and
+against its own README, rather than from a failing test.
+
+**The Resource Explorer fast path did not exist.** The README claimed it was
+"already written"; in fact only the client had been constructed. Nothing caught
+it, because the claim lived in a document and documents have no tests. Now
+implemented: `ListIndexes` looks for an **aggregator** index — a local index
+only sees its own region — and if one exists, `Search` reports which regions
+hold resources so the rest of the scan plan is skipped. On an account with 30
+enabled regions and resources in four, 180 scan units become 30.
+
+It narrows and no more, deliberately: a search result carries an ARN, type,
+region and tags, not the security group rules or bucket policies every question
+here depends on, so the collectors still run. Six unit tests cover what the mock
+cannot — correct narrowing, never dropping the home region (global services are
+read through it), distrusting an index that disagrees wildly with the configured
+regions, and degrading to a full scan on every unavailability path rather than
+erroring. Verified live: against moto it prints `endpoint does not implement
+Resource Explorer, using per-service enumeration` and the scan proceeds intact.
+
+**"What changed since the last scan?" had no eval case** — one of the six
+questions the brief names by example. The capability worked; nothing verified
+it. Added, and it asserts the agent reaches for `diff_scans` rather than
+answering from current state, without pinning specific resources since what
+changed depends on the environment.
+
+Engineering log #4 is corrected to describe what the code now does, including an
+explicit note that it previously overclaimed.
+
+**Eval suite: 16/16, mean F1 1.0. 101 unit tests.**

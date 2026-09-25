@@ -75,7 +75,7 @@ same code in both modes.
 | `npm run scan`                              | Scan, persist, project the graph                       |
 | `npm run inspect -w @daveio/api`            | Scan and print findings without touching the databases |
 | `npm run query -w @daveio/api`              | Run every curated query against the graph              |
-| `npm test`                                  | 95 unit tests                                          |
+| `npm test`                                  | 101 unit tests                                         |
 | `npm run verify`                            | Everything CI's static job runs — use before pushing   |
 | `npm run evals:ground-truth -w @daveio/api` | Tier-1 evals — no API key needed                       |
 | `npm run evals -w @daveio/api`              | Tier-2 agent evals — needs a key                       |
@@ -193,8 +193,8 @@ reachable by none.
 **Tier 2 — answer quality.** Fifteen cases against the live agent, scored on
 the ARNs each answer cites, with precision and recall.
 
-Last recorded full run on `claude-sonnet-5`: **15/15, mean F1 1.0, no
-unsupported citations.**
+Last recorded full run on `claude-sonnet-5`: **16/16, mean F1 1.0, no
+unsupported citations** — one case per question the brief names, plus ten more.
 
 Getting there is the better advertisement for the suite than the score is. It
 caught two real problems. One was a defect in a test rather than an answer
@@ -239,10 +239,17 @@ were designed with this in mind.
 
 **2. Scan wall-clock, across many regions.** 6 services × 30 regions is 180
 units at a concurrency of 6. Because per-bucket S3 calls are four API calls
-each, an account with 10,000 buckets is 40,000 calls in one unit. _Fix:_ the
-Resource Explorer fast path already written but unexercisable against the mock
-(a single indexed query replaces most enumeration), plus per-service
-concurrency rather than one global limit, plus splitting oversized units.
+each, an account with 10,000 buckets is 40,000 calls in one unit.
+
+Partly addressed: the Resource Explorer fast path asks one indexed query which
+regions actually hold resources and skips the rest, so an account with 30
+enabled regions and resources in four scans 4 regions rather than 30. It cannot
+do more than that — a search result carries an ARN, type and region, not the
+security group rules or bucket policies every question here depends on, so the
+detailed Describe calls still happen. It is also unavailable on any account
+without an aggregator index, which a read-only role cannot create, and it cannot
+be exercised against the mock at all. _Remaining fix:_ per-service concurrency
+rather than one global limit, and splitting oversized units.
 
 **3. Throttling, well before that.** `retryMode: adaptive` handles bursts, but
 a full parallel scan of a busy account will hit service quotas — and worse,

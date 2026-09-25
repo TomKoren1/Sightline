@@ -25,6 +25,7 @@ import { cfg, faultInjections } from "../config.js";
 import { callCounter } from "../aws/clients.js";
 import { getSession } from "../aws/credentials.js";
 import { resolveRegions } from "../aws/regions.js";
+import { discoverActiveRegions, narrowRegions } from "../aws/resourceExplorer.js";
 import { runWithConcurrency } from "./limiter.js";
 import { mergeOutputs, type Collector, type CollectorOutput } from "./collectors/types.js";
 import { collectEc2 } from "./collectors/ec2.js";
@@ -99,7 +100,26 @@ export async function runScan(options: ScanOptions): Promise<ScanResult & { unit
   // Without credentials there is no scan to report on - this is the one
   // genuinely fatal failure.
   const session = await getSession();
-  const { regions } = await resolveRegions();
+  const { regions: candidateRegions } = await resolveRegions();
+
+  /**
+   * Optional fast path. One Resource Explorer query can tell us which regions
+   * actually hold resources, so the rest are skipped rather than costing a
+   * Describe call per service. Unavailable on any account without an aggregator
+   * index - which a read-only role cannot create - so this always degrades to
+   * scanning every candidate region.
+   */
+  const fastPath = await discoverActiveRegions();
+  const { regions, skipped } = narrowRegions(candidateRegions, fastPath, cfg.AWS_REGION);
+  if (fastPath.available && skipped.length > 0) {
+    console.log(
+      `  resource-explorer: ${fastPath.resourceCount} resources indexed; ` +
+        `skipping ${skipped.length} region(s) with none (${skipped.join(", ")})`,
+    );
+  } else if (!fastPath.available) {
+    console.log(`  resource-explorer: ${fastPath.unavailableReason}`);
+  }
+
   const faults = faultInjections();
 
   // Build the unit list up front so the UI can render the full plan

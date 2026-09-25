@@ -84,11 +84,32 @@ surfacing as a JSON deserialisation error.
 inventory in a few calls, and it genuinely is the right first choice on a large
 real account. It cannot be exercised here.
 
-**Fix.** Implemented as an _optional fast path_: the scanner calls
-`ListIndexes`, and only if an aggregator index exists does it use `Search` for
-bulk discovery. Otherwise it falls back to per-service enumeration. The
-fallback is the path that is tested and demonstrated; the fast path is written,
-guarded, and documented as unverified against a real account.
+**Fix.** Implemented as an _optional fast path_ in
+`apps/api/src/aws/resourceExplorer.ts`: the scanner calls `ListIndexes` looking
+for an **aggregator** index — a local index only sees its own region, so
+finding one is not enough — and if one exists uses `Search` to learn which
+regions hold resources, then skips the rest of the scan plan. On an account with
+30 enabled regions and resources in four, that turns 180 scan units into 30.
+
+It goes no further than narrowing, deliberately. A search result carries an ARN,
+type, region and tags — not a security group's rules or a bucket's policy, which
+are exactly the fields every question in this project depends on. So it cannot
+replace the collectors; the detailed Describe calls still happen.
+
+Since none of it can run against the mock, the behaviour is unit-tested instead:
+that narrowing is correct when an index exists, that the home region is never
+dropped (global services are read through it), that an index disagreeing wildly
+with the configured regions is distrusted rather than obeyed, and that every way
+the path can be unavailable degrades to scanning everything rather than to an
+error.
+
+**A correction worth recording.** This entry originally claimed the fast path
+was implemented when only the client had been constructed — the logic did not
+exist. Nothing caught it: there was no test to fail, because the claim lived in
+a document. It surfaced only when the repository was audited against its own
+README, which is an argument for doing that deliberately rather than trusting
+that code and docs drifted together. The implementation above was written after
+the audit found the gap.
 
 There is a second, non-mock reason this has to be optional: Resource Explorer
 requires an index to be created **in the customer account**, and a read-only
