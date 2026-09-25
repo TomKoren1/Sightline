@@ -1,0 +1,81 @@
+# Local development stack for the dave.io engineering assignment.
+#
+#   docker compose up -d
+#
+# Three services:
+#   postgres  - system of record: scan runs, resource snapshots, agent traces
+#   neo4j     - derived graph projection the agent traverses
+#   moto      - mock AWS control plane (see docs/DECISIONS.md ADR-002)
+#
+# Credentials and ports come from .env - see .env.example.
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: daveio-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-dave}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-dave}
+      POSTGRES_DB: ${POSTGRES_DB:-dave}
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-dave}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  neo4j:
+    image: neo4j:5-community
+    container_name: daveio-neo4j
+    restart: unless-stopped
+    environment:
+      # Format is user/password. Neo4j requires the password to be 8+ chars.
+      NEO4J_AUTH: ${NEO4J_USER:-neo4j}/${NEO4J_PASSWORD:-neo4jneo4j}
+      NEO4J_PLUGINS: '["apoc"]'
+      NEO4J_dbms_security_procedures_unrestricted: apoc.*
+      NEO4J_dbms_memory_heap_initial__size: 512m
+      NEO4J_dbms_memory_heap_max__size: 1G
+    ports:
+      - "${NEO4J_HTTP_PORT:-7474}:7474"   # browser UI
+      - "${NEO4J_BOLT_PORT:-7687}:7687"   # driver protocol
+    volumes:
+      - neo4j-data:/data
+      - neo4j-logs:/logs
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:7474 >/dev/null 2>&1 || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  # Mock AWS control plane. Speaks the real AWS API over HTTP, so the scanner
+  # exercises its real code paths (assume-role, pagination, retries, region
+  # fan-out) and differs from production only by an endpoint override.
+  #
+  # MOTO_ACCOUNT_ID must match the account in AWS_TARGET_ROLE_ARN: moto
+  # namespaces resources by the account ID carried in the credentials, so a
+  # mismatch silently writes into a different account. See ENGINEERING-LOG #2.
+  moto:
+    image: motoserver/moto:latest
+    container_name: daveio-moto
+    restart: unless-stopped
+    environment:
+      MOTO_ACCOUNT_ID: ${MOCK_AWS_ACCOUNT_ID:-123456789012}
+      # AWS-managed policies (AdministratorAccess etc.) are not loaded by
+      # default; without this AttachRolePolicy throws NoSuchEntityException.
+      MOTO_IAM_LOAD_MANAGED_POLICIES: "true"
+    ports:
+      - "${MOCK_AWS_PORT:-5000}:5000"
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request;urllib.request.urlopen('http://localhost:5000/moto-api/')\" || exit 1"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+volumes:
+  postgres-data:
+  neo4j-data:
+  neo4j-logs:
