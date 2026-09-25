@@ -8,7 +8,79 @@ Description: >
   set no longer grants the ability to read customer data. The reasoning is in
   docs/DECISIONS.md (ADR-007) and summarised inline below.
 
-  description must be 1024 char <
+  ---------------------------------------------------------------------------
+  WHY THE ORIGINAL WAS CHANGED
+  ---------------------------------------------------------------------------
+
+  1. `ReadOnlyAccess` is not read-only in the sense an inventory product needs.
+
+     The AWS-managed `ReadOnlyAccess` policy grants roughly 7,000 actions,
+     including data-plane reads: `s3:GetObject`, `dynamodb:GetItem`,
+     `sqs:ReceiveMessage`, `ssm:GetParameter`, `lambda:GetFunction` (which
+     returns a presigned URL to the function's source), `kinesis:GetRecords`
+     and more.
+
+     dave.io needs to know that a bucket exists, who can reach it, and how it
+     is configured. It never needs to read an object out of it. Granting the
+     ability to do so means a compromise of dave.io's platform account becomes
+     a compromise of every customer's *data*, not just their inventory. That
+     is a materially different blast radius, and it is not one the product
+     needs to accept.
+
+     `sqs:ReceiveMessage` deserves a specific mention: it is not even read-only
+     in the literal sense. Receiving a message starts its visibility timeout,
+     hiding it from the consumer that should have processed it. A scanner
+     holding that permission can disrupt a production queue by accident.
+
+  2. Trusting `:root` trusts every principal in dave.io's account.
+
+     `Principal: arn:aws:iam::<dave.io>:root` does not mean "the root user". It
+     means "any principal in that account that IAM permits to call
+     AssumeRole" - every role, every user, every CI job. The ExternalId
+     condition prevents a third party from tricking dave.io into using its
+     access (the confused-deputy problem it is designed for), but it does
+     nothing to limit which *internal* principal can assume the role.
+
+     This version names the scanner role directly, so a compromise of some
+     unrelated workload inside dave.io does not reach customer accounts.
+
+  3. There was no way for a customer to attribute activity to a person.
+
+     Adding `sts:SourceIdentity` to the trust policy means the customer's own
+     CloudTrail records which dave.io operator or system triggered a scan, and
+     that value cannot be changed for the life of the session. Customers
+     auditing a third party with standing access should not have to take our
+     word for who did what.
+
+  ---------------------------------------------------------------------------
+  DEPLOYING
+
+    aws cloudformation deploy \
+      --template-file infra/readonly-role.yaml \
+      --stack-name daveio-readonly \
+      --capabilities CAPABILITY_NAMED_IAM \
+      --parameter-overrides \
+          DaveIoScannerRoleArn=arn:aws:iam::123456789012:role/DaveIoScanner \
+          ExternalId=<the value from your onboarding email>
+
+  Then send dave.io the RoleArn output. Nothing else is required.
+
+  TWO ROLES ARE INVOLVED AND CONFUSING THEM IS THE USUAL MISTAKE:
+
+    DaveIoScannerRoleArn  an INPUT. The principal permitted to assume this
+                          role. It already exists; this template does not
+                          create it.
+
+    RoleArn (output)      what this template CREATES, in the account being
+                          scanned. This is the value that belongs in
+                          AWS_TARGET_ROLE_ARN.
+
+  Pointing AWS_TARGET_ROLE_ARN at the scanner principal instead of at the
+  created role produces AccessDenied, or NoSuchEntity if it does not exist.
+
+  Running against your own account, both live in one account: the scanner
+  principal is your own identity, and the created DaveIoReadOnlyRole is what
+  the scanner assumes.
   ---------------------------------------------------------------------------
 
 Parameters:
@@ -111,7 +183,7 @@ Resources:
         #
         # Note the path: ViewOnlyAccess is a *job function* policy, so it lives
         # under job-function/ rather than at the root like SecurityAudit. The
-        # obvious ARN does not exist, and CloudFormation only says so at deploy
+        # obvious ARN does not exist and CloudFormation only says so at deploy
         # time - see engineering log #20.
         - arn:aws:iam::aws:policy/job-function/ViewOnlyAccess
 

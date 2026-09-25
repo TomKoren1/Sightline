@@ -674,3 +674,42 @@ account.
 and quietly became the product's behaviour. A default that suits your test
 fixture is worth a second look, and a setting absent from the example
 configuration effectively does not exist.
+
+---
+
+## #22 — The template lost its reasoning twice, so now a test holds it
+
+**Symptom.** After correcting the `ViewOnlyAccess` ARN and committing, the
+template was 215 lines. The previous commit had 282. Seventy-four lines had gone
+again — the same explanatory header Prettier had already removed once (#18),
+including the entire `ReadOnlyAccess` rationale the README points readers at.
+
+**Diagnosis, partial and honestly so.** The first occurrence was definitely
+Prettier reformatting a folded block scalar. The second was not: Prettier
+reported the file as ignored (`--file-info` → `"ignored": true`), and the AWS
+CLI was ruled out empirically by hashing a copy either side of a
+`validate-template` call. The cause of the second truncation was never
+identified.
+
+**Fix.** Restored from the last good commit, re-applied the ARN correction, and
+stopped investigating in favour of making it impossible to miss:
+`infra/template.test.ts` asserts both halves of what the template is for.
+
+_The permissions_: ViewOnlyAccess at its job-function path and never the root
+one, SecurityAudit present, `ReadOnlyAccess` absent (and present in the original,
+kept for comparison), every data-plane action the README names appearing under
+an explicit Deny, trust scoped to a named principal rather than `:root`, and the
+external id and SourceIdentity conditions intact.
+
+_The reasoning_: the rationale header, the `sqs:ReceiveMessage` visibility-timeout
+argument, the `:root` explanation, the two-role warning, and a line-count floor.
+
+Verified by simulating the exact corruption — stripping the `Description` block
+— and confirming four tests fail, then restoring.
+
+**What to take from it.** Content guards on prose look strange, and they earn
+their place here because this content has been silently deleted twice by tools
+that were added to improve quality. More generally: the parts of a repository
+with no tests are the parts that rot, and "it's only documentation" is precisely
+why nothing noticed. The template was simultaneously the most carefully argued
+artefact in the project and the only one that had never been run or checked.
