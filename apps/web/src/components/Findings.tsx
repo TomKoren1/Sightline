@@ -51,12 +51,18 @@ export function Findings({ summary, findings, loading, onHighlight }: FindingsPr
 
   return (
     <div className="flex h-full flex-col">
-      <div className="flex border-b border-ink-800">
+      {/* Wraps rather than overflowing. Six labels do not fit across a 288px
+          sidebar, and flex items default to `min-width: auto`, so they refused
+          to shrink and spilled across the graph pane instead - where the
+          floating Filter button then covered two of them. Two rows of three is
+          the only arrangement that keeps every label readable and inside the
+          column. Found by screenshotting the running UI (engineering log #34). */}
+      <div className="flex flex-wrap border-b border-ink-800">
         {tabs.map((t) => (
           <button
             key={t.id}
             onClick={() => setTab(t.id)}
-            className={`flex-1 border-b-2 px-2 py-1.5 text-[11px] transition ${
+            className={`min-w-0 basis-1/3 grow border-b-2 px-2 py-1.5 text-[11px] transition ${
               tab === t.id
                 ? "border-accent text-ink-100"
                 : "border-transparent text-ink-400 hover:text-ink-300"

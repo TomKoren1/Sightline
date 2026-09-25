@@ -1346,3 +1346,66 @@ credentials. A quoting bug there is not a rendering glitch; it is a command that
 runs and does something other than what it reads as. That is worth a test that
 states the exact expected bytes, and worth verifying the expectation against a
 real shell before trusting it.
+
+---
+
+## #34 — Three UI bugs that only existed on screen
+
+**Context.** For most of this project I could not see the UI. There was no
+browser on the build host, so "the frontend works" meant it compiled, served,
+and its endpoints returned correct JSON — which is not the same claim. Building
+the handover PDF required headless Chrome, and having installed it for that, it
+could be pointed at the running app.
+
+Three bugs, none of which any test could have caught, all found in the first two
+screenshots.
+
+**1. The findings tab bar overflowed its sidebar and hid behind a button.**
+Six tabs — Overview, Exposed, Admin, Idle, Unguarded, Changes — in a 288px
+column. They were laid out `flex` with `flex-1`, which looks like it should
+shrink them to fit. It does not: flex items default to `min-width: auto`, so
+they refuse to shrink below their content width and overflow instead. They
+spilled across the graph pane, where the floating **Filter** button — absolutely
+positioned at `z-10` — sat on top of two of them.
+
+So the Unguarded and Changes tabs were partly unreachable, in the panel that
+exists to surface findings. Measured rather than guessed: the Changes tab's
+bounding box started at x=345 in a column that ends at x=288. Now the row wraps
+to two rows of three, and the sidebar has `overflow-hidden` so nothing else can
+spill either.
+
+**2. The copy button covered the command it copies.** `Copyable` positioned the
+button absolutely inside the `<pre>` and reserved room with `pr-16`. That works
+while the block is wide, which is how it was built and where it was seen — the
+connection guide's modal. Remediation puts the same component in a 320px side
+panel, where the `<pre>` scrolls horizontally, the padding scrolls away with the
+content, and the button ends up sitting on the command with a stray character
+visible past it.
+
+A copy button obscuring the thing being copied is a bad joke in a feature whose
+entire purpose is handing people exact commands. The button now sits in a header
+row above the block, which cannot overlap at any width.
+
+**3. A 404 on every page load.** No favicon, so every load logged
+`GET /favicon.ico 404` in the console. Trivial, and worth fixing for the same
+reason as #12 and ADR-012: a console that cries wolf is one nobody reads when
+something real appears. An inline SVG data URI avoids shipping a binary asset
+for one 16px glyph.
+
+**What to take from it.** All three are invisible to every kind of test in this
+repository, and would have stayed invisible through any number of green runs.
+They are also not subtle — one of them hid part of the primary navigation. The
+gap was not rigour, it was **never having looked**.
+
+This is the fourth entry in a row (#28, #29, #30, #34) where the finding came
+from using the thing rather than testing it, and the pattern is worth stating
+plainly: tests check the properties you thought to assert, and a screenshot
+checks every property at once, including the ones you would never think to name.
+Where the output is visual, look at it. Where it is a command someone will run,
+run it (#33). The cheapest verification is usually the one that exercises the
+artefact the way its user will.
+
+A smaller lesson inside the first bug: `flex-1` does not mean "shrink to fit".
+`min-width: auto` on flex items is one of the few CSS defaults that silently
+produces overflow rather than compression, and it is worth reaching for
+`min-w-0` by reflex whenever a flex child contains text.

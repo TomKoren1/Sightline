@@ -864,3 +864,31 @@ including one asserting that a refusal still hands over the command, which
 would catch ADR-009 being satisfied by an answer that abandons the user.
 
 218 unit tests, 21/21 agent evals, mean F1 1.0, no unsupported citations.
+
+---
+
+### `fix(ui): three bugs found by looking at the running interface`
+
+The first screenshots ever taken of this UI. Headless Chrome was installed to
+render the handover PDF; pointing it at the running app found three bugs in two
+screenshots, none reachable from any test. Engineering log #34.
+
+**The findings tab bar overflowed its 288px sidebar.** Six tabs laid out with
+`flex-1`, which does not shrink them — flex items default to `min-width: auto`
+and overflow instead. They spilled across the graph pane, where the floating
+Filter button at `z-10` covered two of them, making part of the primary
+navigation unreachable. Measured, not guessed: the Changes tab began at x=345 in
+a column ending at x=288. Now wraps to two rows of three, with `overflow-hidden`
+on the column so nothing else can spill.
+
+**The copy button covered the command it copies.** `Copyable` positioned it
+absolutely inside the `<pre>` with `pr-16` to reserve room — fine in the wide
+connection modal it was built for, broken in remediation's 320px panel where the
+block scrolls horizontally and the padding scrolls away with it. The button now
+sits above the block, where it cannot overlap at any width.
+
+**A 404 on every page load**, for a missing favicon. Inline SVG data URI. Same
+argument as ADR-012 and log #12: a console that cries wolf is one nobody reads.
+
+Verified by re-measuring after the fix — the Changes tab now ends at x=287, and
+the page loads with zero failed requests.
