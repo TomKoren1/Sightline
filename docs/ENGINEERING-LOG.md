@@ -443,3 +443,37 @@ not on any mention of a destructive verb, because prepending a safety notice to
 notice stops being read. Eight unit tests pin both halves, including the exact
 unhelpful answer that prompted it and the eleven ordinary questions that must
 not trigger.
+
+---
+
+## #16 — Change detection looked broken because the fixture had been re-seeded
+
+**Symptom.** With a deliberately drifted account, the Changes tab reported 74
+resources added and 73 removed instead of the five changes that had actually
+been made.
+
+**Diagnosis.** The diff was between the correct pair of scans. The problem was
+what happened between them: the ground-truth test suite had been run, and it
+re-seeds moto. moto assigns fresh random ids on creation, so the second scan
+observed an entirely new set of ARNs — and since ARN is the identity a diff is
+computed on, every resource legitimately read as removed and re-added.
+
+Not a bug in the diff. A property of the fixture, and one that is easy to walk
+into because the trigger is running the tests.
+
+**Fix.** No code change; the behaviour is correct. Documented in the walkthrough
+with the sequence that produces a clean diff (`seed` once, then
+`scan → drift → scan` with nothing in between) and the symptom to recognise.
+
+`npm run drift` exists because of the same underlying fact: re-seeding was the
+obvious way to get a second scan to differ, and it is the wrong way, because it
+changes identity rather than state. Drift mutates the existing account and
+leaves ARNs alone.
+
+**The general point.** Any diff is only as stable as the identity it joins on.
+This project uses ARNs, which is right for AWS — they are durable and
+meaningful. But it means anything that regenerates identities invalidates
+history, and on a real account the equivalent is a resource replaced rather than
+modified: a Terraform change that recreates an instance will show as an add and
+a remove, correctly, and no amount of diff logic can tell that from a genuine
+replacement without more information than the API gives us.
