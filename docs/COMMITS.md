@@ -688,3 +688,55 @@ toggled away from it.
 Also corrects README drift accumulated across recent work: the test count, the
 tool count, and the header controls, plus the public/unguarded distinction in
 the mock-account table.
+
+---
+
+### `fix(onboarding): repair the four bugs a real deployment found`
+
+Everything in this commit was found by deploying the role template into a real
+AWS account and following the UI's own connection guide. All four are in the
+seams the unit tests do not reach, and three of them are in code whose job is to
+_explain_ something — which fails silently, because nothing downstream consumes
+an explanation. Full write-up in engineering log #28.
+
+**The template could not be deployed.** CloudFormation caps `Description` at
+1024 characters; the explanatory header had reached 3,952. The guards added in
+#18 and #22 asserted the prose was still present and never that the file still
+deployed, so they passed while the artefact was unusable — and the natural
+workaround for the error is to delete exactly the prose those guards protect.
+The prose moves into `#` comments, which have no limit and are stripped before
+evaluation. Two guards now assert the folded `Description` stays under 1024 and
+the role's own under IAM's 1000; the first fails against the previous commit.
+
+**The guide told people to paste an ARN that cannot work.** Step 3 filled
+`DaveIoScannerRoleArn` from `sts:GetCallerIdentity` verbatim. That call reports
+a _session_, so it returns `arn:aws:sts::…`; a trust policy needs the
+`arn:aws:iam::…` identity behind it. Against the mock it emitted moto's own
+identity as the principal to trust in someone's real account. New
+`aws/principal.ts` converts session ARNs to principal ARNs and returns a reason
+rather than a guess for the forms that have none (federated sessions, account
+root); one of its fourteen tests asserts every ARN it returns satisfies the
+template's own `AllowedPattern`.
+
+**A user ARN in `AWS_TARGET_ROLE_ARN` is silently unusable.**
+`sts:AssumeRole` can only assume a role, and a user ARN is the correct answer to
+the question the guide asks two steps earlier. `validateAssumeRoleTarget()`
+names the mix-up and says where the right value comes from. Reported, not fatal:
+the screen explaining the fix is in the app, so exiting would remove the only
+thing that could help.
+
+**`AWS_REGION=` was set, and therefore was not set.** Zod's `.default()` fires
+only on `undefined`, and a blank line in `.env` parses as `""`. Every AWS client
+was built with an empty region. A `blankAsUnset` wrapper treats `""` as absent —
+applied to every variable where blank means nothing, and deliberately not to
+`AWS_SCAN_REGIONS` or `SCAN_FAULT_INJECTION`, where blank is documented and
+meaningful.
+
+Finally, the connection test's `AccessDenied` diagnosis now names the principal
+the service is authenticating as and the command that shows what the trust
+policy actually names. The previous wording — "the trust policy does not name
+this principal" — is true and leaves the reader to work out which principal that
+is, which is the whole difficulty when two real identities in the same account
+are involved.
+
+157 tests (was 138).

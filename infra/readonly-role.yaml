@@ -1,87 +1,120 @@
+# =============================================================================
+# dave.io read-only inventory role.
+#
+# Everything below the comment block is the template. Everything inside it is
+# reasoning, and it lives in `#` comments rather than in `Description:` for a
+# concrete reason: CloudFormation caps a template's Description at 1024
+# characters and rejects the whole template with
+#
+#   Template format error: 'Description' length is greater than 1024
+#
+# at CreateChangeSet time - before anything is validated, so the error says
+# nothing about what is actually wrong. Comments have no such limit and are
+# stripped before the template is ever evaluated, so the explanation costs
+# nothing. See engineering log #28.
+#
+# -----------------------------------------------------------------------------
+# WHY THE ORIGINAL WAS CHANGED
+# -----------------------------------------------------------------------------
+#
+# This replaces the original template in this repository (kept alongside as
+# readonly-role.original.yaml). Two things changed, both narrowing access: the
+# trust policy no longer trusts an entire AWS account, and the permission set no
+# longer grants the ability to read customer data. The reasoning is in
+# docs/DECISIONS.md (ADR-007) and summarised here.
+#
+# 1. `ReadOnlyAccess` is not read-only in the sense an inventory product needs.
+#
+#    The AWS-managed `ReadOnlyAccess` policy grants roughly 7,000 actions,
+#    including data-plane reads: `s3:GetObject`, `dynamodb:GetItem`,
+#    `sqs:ReceiveMessage`, `ssm:GetParameter`, `lambda:GetFunction` (which
+#    returns a presigned URL to the function's source), `kinesis:GetRecords`
+#    and more.
+#
+#    dave.io needs to know that a bucket exists, who can reach it, and how it
+#    is configured. It never needs to read an object out of it. Granting the
+#    ability to do so means a compromise of dave.io's platform account becomes
+#    a compromise of every customer's *data*, not just their inventory. That
+#    is a materially different blast radius, and it is not one the product
+#    needs to accept.
+#
+#    `sqs:ReceiveMessage` deserves a specific mention: it is not even read-only
+#    in the literal sense. Receiving a message starts its visibility timeout,
+#    hiding it from the consumer that should have processed it. A scanner
+#    holding that permission can disrupt a production queue by accident.
+#
+# 2. Trusting `:root` trusts every principal in dave.io's account.
+#
+#    `Principal: arn:aws:iam::<dave.io>:root` does not mean "the root user". It
+#    means "any principal in that account that IAM permits to call AssumeRole"
+#    - every role, every user, every CI job. The ExternalId condition prevents
+#    a third party from tricking dave.io into using its access (the
+#    confused-deputy problem it is designed for), but it does nothing to limit
+#    which *internal* principal can assume the role.
+#
+#    This version names the scanner role directly, so a compromise of some
+#    unrelated workload inside dave.io does not reach customer accounts.
+#
+# 3. There was no way for a customer to attribute activity to a person.
+#
+#    Adding `sts:SourceIdentity` to the trust policy means the customer's own
+#    CloudTrail records which dave.io operator or system triggered a scan, and
+#    that value cannot be changed for the life of the session. Customers
+#    auditing a third party with standing access should not have to take our
+#    word for who did what.
+#
+# -----------------------------------------------------------------------------
+# DEPLOYING
+# -----------------------------------------------------------------------------
+#
+#   aws cloudformation deploy \
+#     --template-file infra/readonly-role.yaml \
+#     --stack-name daveio-readonly \
+#     --capabilities CAPABILITY_NAMED_IAM \
+#     --parameter-overrides \
+#         DaveIoScannerRoleArn=arn:aws:iam::123456789012:role/DaveIoScanner \
+#         ExternalId=<the value from your onboarding email>
+#
+# Then send dave.io the RoleArn output. Nothing else is required.
+#
+# Note the `iam` in that ARN. `aws sts get-caller-identity` reports the
+# *session* you are using, so it returns an `arn:aws:sts::...` ARN - either
+# `sts::<acct>:assumed-role/<Role>/<session>` or, on some endpoints,
+# `sts::<acct>:user/<name>`. Neither is a principal ARN, and IAM rejects both
+# here. The equivalent principal is the `iam` form: `assumed-role/Foo/session`
+# becomes `role/Foo`. The UI's connection guide does this conversion for you.
+#
+# TWO ROLES ARE INVOLVED AND CONFUSING THEM IS THE USUAL MISTAKE:
+#
+#   DaveIoScannerRoleArn  an INPUT. The principal permitted to assume this
+#                         role. It already exists; this template does not
+#                         create it.
+#
+#   RoleArn (output)      what this template CREATES, in the account being
+#                         scanned. This is the value that belongs in
+#                         AWS_TARGET_ROLE_ARN.
+#
+# Pointing AWS_TARGET_ROLE_ARN at the scanner principal instead of at the
+# created role produces AccessDenied, or NoSuchEntity if it does not exist.
+# `sts:AssumeRole` can only ever assume a *role*, so a `:user/` ARN in
+# AWS_TARGET_ROLE_ARN cannot work no matter what the trust policy says. The API
+# refuses to start on one rather than failing later with a vaguer error.
+#
+# Running the project against your own account, both live in one account: the
+# scanner principal is your own identity, and the created DaveIoReadOnlyRole is
+# what the scanner assumes.
+# =============================================================================
+
 AWSTemplateFormatVersion: "2010-09-09"
+
+# Kept short deliberately: CloudFormation rejects a Description over 1024
+# characters. The full reasoning is in the comment block above.
 Description: >
-  dave.io read-only inventory role.
-
-  Replaces the original template in this repository (kept alongside as
-  readonly-role.original.yaml). Two things changed, both narrowing access:
-  the trust policy no longer trusts an entire AWS account, and the permission
-  set no longer grants the ability to read customer data. The reasoning is in
-  docs/DECISIONS.md (ADR-007) and summarised inline below.
-
-  ---------------------------------------------------------------------------
-  WHY THE ORIGINAL WAS CHANGED
-  ---------------------------------------------------------------------------
-
-  1. `ReadOnlyAccess` is not read-only in the sense an inventory product needs.
-
-     The AWS-managed `ReadOnlyAccess` policy grants roughly 7,000 actions,
-     including data-plane reads: `s3:GetObject`, `dynamodb:GetItem`,
-     `sqs:ReceiveMessage`, `ssm:GetParameter`, `lambda:GetFunction` (which
-     returns a presigned URL to the function's source), `kinesis:GetRecords`
-     and more.
-
-     dave.io needs to know that a bucket exists, who can reach it, and how it
-     is configured. It never needs to read an object out of it. Granting the
-     ability to do so means a compromise of dave.io's platform account becomes
-     a compromise of every customer's *data*, not just their inventory. That
-     is a materially different blast radius, and it is not one the product
-     needs to accept.
-
-     `sqs:ReceiveMessage` deserves a specific mention: it is not even read-only
-     in the literal sense. Receiving a message starts its visibility timeout,
-     hiding it from the consumer that should have processed it. A scanner
-     holding that permission can disrupt a production queue by accident.
-
-  2. Trusting `:root` trusts every principal in dave.io's account.
-
-     `Principal: arn:aws:iam::<dave.io>:root` does not mean "the root user". It
-     means "any principal in that account that IAM permits to call
-     AssumeRole" - every role, every user, every CI job. The ExternalId
-     condition prevents a third party from tricking dave.io into using its
-     access (the confused-deputy problem it is designed for), but it does
-     nothing to limit which *internal* principal can assume the role.
-
-     This version names the scanner role directly, so a compromise of some
-     unrelated workload inside dave.io does not reach customer accounts.
-
-  3. There was no way for a customer to attribute activity to a person.
-
-     Adding `sts:SourceIdentity` to the trust policy means the customer's own
-     CloudTrail records which dave.io operator or system triggered a scan, and
-     that value cannot be changed for the life of the session. Customers
-     auditing a third party with standing access should not have to take our
-     word for who did what.
-
-  ---------------------------------------------------------------------------
-  DEPLOYING
-
-    aws cloudformation deploy \
-      --template-file infra/readonly-role.yaml \
-      --stack-name daveio-readonly \
-      --capabilities CAPABILITY_NAMED_IAM \
-      --parameter-overrides \
-          DaveIoScannerRoleArn=arn:aws:iam::123456789012:role/DaveIoScanner \
-          ExternalId=<the value from your onboarding email>
-
-  Then send dave.io the RoleArn output. Nothing else is required.
-
-  TWO ROLES ARE INVOLVED AND CONFUSING THEM IS THE USUAL MISTAKE:
-
-    DaveIoScannerRoleArn  an INPUT. The principal permitted to assume this
-                          role. It already exists; this template does not
-                          create it.
-
-    RoleArn (output)      what this template CREATES, in the account being
-                          scanned. This is the value that belongs in
-                          AWS_TARGET_ROLE_ARN.
-
-  Pointing AWS_TARGET_ROLE_ARN at the scanner principal instead of at the
-  created role produces AccessDenied, or NoSuchEntity if it does not exist.
-
-  Running against your own account, both live in one account: the scanner
-  principal is your own identity, and the created DaveIoReadOnlyRole is what
-  the scanner assumes.
-  ---------------------------------------------------------------------------
+  dave.io read-only inventory role. Grants metadata and configuration reads for
+  inventory, visualisation and security analysis; grants no writes and, by
+  default, explicitly denies reading the contents of objects, records,
+  parameters and secrets. Trusts one named principal rather than an account
+  root. Reasoning: docs/DECISIONS.md (ADR-007) and the comments in this file.
 
 Parameters:
   DaveIoScannerRoleArn:
@@ -95,10 +128,16 @@ Parameters:
       arn:aws:iam::123456789012:role/DaveIoScanner.
 
       Running the project against your own account there is no separate dave.io
-      account, so this is whatever identity the backend runs as. Find it with
-      `aws sts get-caller-identity`. A user ARN is accepted for exactly this
-      case - on a workstation the identity is commonly an IAM user rather than
-      a role.
+      account, so this is whatever identity the backend runs as. A user ARN is
+      accepted for exactly this case - on a workstation the identity is commonly
+      an IAM user rather than a role.
+
+      `aws sts get-caller-identity` shows you who that is, but do not paste its
+      output here. It reports the *session*, so it returns an arn:aws:sts:: ARN
+      (assumed-role/Role/session, or user/name); this parameter needs the
+      arn:aws:iam:: identity behind it, which is why the pattern below rejects
+      the sts form. Convert assumed-role/Foo/session to role/Foo. The UI's
+      connection guide does this for you.
     AllowedPattern: "^arn:aws:iam::[0-9]{12}:(role|user)/.+$"
     ConstraintDescription: >
       Must be a full IAM role or user ARN, not an account id.

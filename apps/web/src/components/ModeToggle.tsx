@@ -31,7 +31,23 @@ export function ModeToggle({ onSwitched }: { onSwitched: (note: string) => void 
   if (!c) return null;
 
   const isMock = c.mode === "mock";
-  const canSwitchToReal = c.realAccountConfigured;
+  const canSwitchToReal = c.realAccountConfigured && !c.roleArnProblem;
+
+  /**
+   * Why "My AWS" cannot be selected, in words, next to the button.
+   *
+   * It used to be disabled with the explanation only in a `title` tooltip, and
+   * a disabled control that gives no visible reason reads as a broken one -
+   * which is exactly how it was reported. The common cause is also not what
+   * the tooltip said: configuration is read once at startup, so editing `.env`
+   * without restarting the API leaves the process reporting the old values and
+   * the button correctly, but confusingly, disabled. See engineering log #28.
+   */
+  const blockedReason = c.roleArnProblem
+    ? "AWS_TARGET_ROLE_ARN cannot be assumed — open Connect for the fix"
+    : !c.realAccountConfigured
+      ? "no real account in .env — set AWS_TARGET_ROLE_ARN, then restart the API"
+      : null;
 
   return (
     <div className="flex items-center gap-1.5">
@@ -45,8 +61,8 @@ export function ModeToggle({ onSwitched }: { onSwitched: (note: string) => void 
               onClick={() => !active && switchMode.mutate(mode)}
               disabled={disabled || active}
               title={
-                mode === "real" && !canSwitchToReal
-                  ? "No real account configured. Set AWS_TARGET_ROLE_ARN and AWS_EXTERNAL_ID in .env."
+                mode === "real" && blockedReason
+                  ? `${blockedReason}. Configuration is read once at startup, so an edit to .env with no restart changes nothing.`
                   : mode === "mock"
                     ? "The seeded demo account"
                     : `Your AWS account ${c.accountId ?? ""}`
@@ -78,6 +94,12 @@ export function ModeToggle({ onSwitched }: { onSwitched: (note: string) => void 
       {switchMode.isError && (
         <span className="text-[10px] text-danger" title={(switchMode.error as Error).message}>
           failed
+        </span>
+      )}
+      {/* The reason the button is dead, visible rather than hidden in a tooltip. */}
+      {blockedReason && !switchMode.isPending && (
+        <span className="max-w-[22rem] truncate text-[10px] text-warn" title={blockedReason}>
+          {blockedReason}
         </span>
       )}
       <span className="text-[10px] text-ink-400" title={c.roleArn}>

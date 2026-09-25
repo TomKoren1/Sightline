@@ -84,8 +84,19 @@ export interface AgentEvalRun {
 }
 
 export interface Connection {
-  /** The identity this backend runs as, which the trust policy must name. */
+  /** The raw session ARN GetCallerIdentity reports. Shown, but not pasteable. */
   callerIdentity: string | null;
+  /** True when that identity came from the mock rather than from AWS. */
+  callerIdentityIsMock: boolean;
+  /**
+   * The identity converted into a principal a trust policy can name, or null
+   * with the reason in `scannerPrincipalNote`. This is the value to paste.
+   */
+  scannerPrincipal: string | null;
+  scannerPrincipalConverted: boolean;
+  scannerPrincipalNote: string | null;
+  /** Set when AWS_TARGET_ROLE_ARN cannot be assumed at all. */
+  roleArnProblem: string | null;
   mode: "mock" | "real";
   /** What .env says, so the UI can show when the toggle has diverged. */
   configuredMode: "mock" | "real";

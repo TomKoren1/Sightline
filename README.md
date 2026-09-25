@@ -94,6 +94,31 @@ In `real` mode the source credentials come from the standard AWS chain
 pagination, adaptive retry, region fan-out and partial-failure handling are the
 same code in both modes.
 
+The UI's **Connect** panel walks through this interactively — it generates an
+ExternalId, renders the exact `aws cloudformation deploy` command pre-filled
+with the principal to trust, and tests the result. Three things it gets right
+that are easy to get wrong by hand, all of which cost a real deployment
+(engineering log #28):
+
+- **Two ARNs are involved and each looks like a valid value for the other.**
+  `DaveIoScannerRoleArn` is an _input_ — the principal allowed to assume.
+  `AWS_TARGET_ROLE_ARN` is the stack's `RoleArn` _output_ — the role that gets
+  assumed. `sts:AssumeRole` can only assume a role, so a user ARN in the second
+  can never work; the API refuses it by name at startup rather than failing
+  later with `AccessDenied`.
+- **`aws sts get-caller-identity` does not print a principal ARN.** It reports
+  your _session_, so it returns `arn:aws:sts::…` — either
+  `assumed-role/Role/session` or, on some endpoints, `user/name`. A trust policy
+  needs the `arn:aws:iam::…` identity behind it. The guide converts it; pasting
+  the raw value fails the template's own parameter pattern.
+- **The trust policy must name the identity the backend actually runs as**,
+  which is not necessarily the one you had in mind when you deployed. When
+  AssumeRole is refused, the connection test prints the principal it is
+  authenticating as and the command to show what the policy names.
+
+Note that `AWS_SCAN_REGIONS=` blank means "discover every enabled region", and
+is one of only two variables where blank is meaningful rather than unset.
+
 ### Useful commands
 
 | Command                                     | What it does                                           |

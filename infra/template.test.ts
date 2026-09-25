@@ -27,6 +27,38 @@ import { describe, expect, it } from "vitest";
 const template = readFileSync(new URL("./readonly-role.yaml", import.meta.url), "utf8");
 const original = readFileSync(new URL("./readonly-role.original.yaml", import.meta.url), "utf8");
 
+/**
+ * Resolve a folded block scalar (`key: >`) to the string CloudFormation will
+ * actually receive, so length limits can be checked against the real value
+ * rather than the source text.
+ *
+ * Folded-scalar rules, in the subset this template uses: lines at the block
+ * indent are joined with a single space, and a blank line becomes a newline.
+ */
+function foldedScalar(source: string, key: string, indent = ""): string {
+  const start = new RegExp(`^${indent}${key}: >-?\\n`, "m").exec(source);
+  if (!start) throw new Error(`no folded scalar for "${key}"`);
+  const rest = source.slice(start.index + start[0].length).split("\n");
+  const bodyIndent = /^(\s*)/.exec(rest[0] ?? "")![1]!;
+  const lines: string[] = [];
+  for (const line of rest) {
+    if (line.trim() === "") {
+      lines.push("");
+      continue;
+    }
+    if (!line.startsWith(bodyIndent)) break;
+    lines.push(line.slice(bodyIndent.length));
+  }
+  while (lines.length && lines[lines.length - 1] === "") lines.pop();
+
+  let out = "";
+  for (const line of lines) {
+    if (line === "") out += "\n";
+    else out += (out === "" || out.endsWith("\n") ? "" : " ") + line;
+  }
+  return out;
+}
+
 describe("readonly-role.yaml structure", () => {
   it("has every required top-level section", () => {
     for (const key of [
@@ -129,5 +161,60 @@ describe("the reasoning survives", () => {
     // It was 287 lines when these guards were written. A large drop means
     // something reformatted or mangled it rather than edited it.
     expect(template.split("\n").length).toBeGreaterThan(250);
+  });
+});
+
+/**
+ * Length limits CloudFormation enforces.
+ *
+ * These are not style rules. A template whose Description exceeds 1024
+ * characters is rejected outright at CreateChangeSet, before any resource is
+ * looked at, with `Template format error: 'Description' length is greater than
+ * 1024` - which names no resource and suggests no fix. The explanatory header
+ * had grown past it, so the template could not be deployed at all, and nothing
+ * here noticed because nothing here deploys it (engineering log #28).
+ *
+ * The fix was to move the prose into `#` comments, which have no limit and are
+ * stripped before evaluation. These guards stop it drifting back.
+ */
+describe("the limits CloudFormation enforces", () => {
+  it("keeps the template Description within 1024 characters", () => {
+    const description = foldedScalar(template, "Description");
+    expect(
+      description.length,
+      `Description is ${description.length} chars; CloudFormation rejects over 1024. ` +
+        "Move the prose into # comments rather than trimming it.",
+    ).toBeLessThanOrEqual(1024);
+  });
+
+  it("keeps the role's own Description within the IAM limit of 1000", () => {
+    const description = foldedScalar(template, "Description", "      ");
+    expect(description.length).toBeLessThanOrEqual(1000);
+  });
+
+  it("documents deployment in comments, which have no length limit", () => {
+    // The prose lives above the template body now. If it migrates back into
+    // Description the guard above fails, but this says why it must not.
+    expect(template).toMatch(/^# .*WHY THE ORIGINAL WAS CHANGED/m);
+    expect(template).toMatch(/^#.*cloudformation deploy/m);
+  });
+});
+
+/**
+ * `aws sts get-caller-identity` returns an `arn:aws:sts::...` session ARN, and
+ * pasting that into DaveIoScannerRoleArn is the mistake this template's own
+ * AllowedPattern rejects. Every ARN we show as an example must be the `iam`
+ * principal form, or we are teaching the error.
+ */
+describe("the examples are principal ARNs, not session ARNs", () => {
+  it("shows no arn:aws:sts:: ARN as a parameter value", () => {
+    const badExamples = template
+      .split("\n")
+      .filter((line) => /DaveIoScannerRoleArn=\s*arn:aws:sts::/.test(line));
+    expect(badExamples).toEqual([]);
+  });
+
+  it("explains the sts-to-iam conversion, since the error message does not", () => {
+    expect(template).toContain("assumed-role");
   });
 });

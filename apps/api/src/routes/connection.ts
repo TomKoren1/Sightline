@@ -29,7 +29,9 @@ import {
   currentMode,
   isMock,
   setMode,
+  targetRoleProblem,
 } from "../config.js";
+import { assumablePrincipalArn } from "../aws/principal.js";
 import { accountIdFromArn, getSession, resetSession } from "../aws/credentials.js";
 import { getLatestScan } from "../db/repository.js";
 
@@ -45,17 +47,37 @@ function mask(value: string): string {
  * This is the whole value of a connection test. "AccessDenied" is accurate and
  * useless; "the trust policy does not name this principal" is actionable.
  */
-function diagnose(err: unknown): { code: string; problem: string; fix: string } {
+function diagnose(
+  err: unknown,
+  callerIdentity?: string | null,
+): { code: string; problem: string; fix: string } {
   const name = err instanceof Error ? err.name : "UnknownError";
   const message = err instanceof Error ? err.message : String(err);
 
   if (name === "AccessDenied" || message.includes("not authorized to perform: sts:AssumeRole")) {
+    /**
+     * Name the principal rather than describing it.
+     *
+     * "The trust policy does not name this principal" is true and still leaves
+     * the reader to work out which principal that is - and the answer is
+     * frequently not the one they assumed, because the host's ambient
+     * credentials need not be the identity they had in mind when they deployed
+     * the stack. We know exactly who we are, so say it, and give the command
+     * that fixes it (engineering log #28).
+     */
+    const identity = callerIdentity
+      ? `\n  This backend is authenticating as ${callerIdentity}. The stack's trust policy has to name exactly that principal, ` +
+        "so if it was deployed with a different one, redeploy with " +
+        `DaveIoScannerRoleArn=${callerIdentity}, or give this host credentials for the principal it does name. ` +
+        "Check with: aws iam get-role --role-name DaveIoReadOnlyRole --query 'Role.AssumeRolePolicyDocument'"
+      : "";
     return {
       code: name,
       problem: "The role exists but refused to be assumed.",
       fix:
         "Usually one of two things: the trust policy does not name this principal, or the ExternalId does not match. " +
-        "Check that AWS_EXTERNAL_ID here is byte-identical to the value used when the stack was deployed.",
+        "Check that AWS_EXTERNAL_ID here is byte-identical to the value used when the stack was deployed." +
+        identity,
     };
   }
   if (message.includes("ExternalId") || message.includes("external id")) {
@@ -115,11 +137,42 @@ export function registerConnectionRoutes(app: FastifyInstance): void {
       });
       callerIdentity = (await sts.send(new GetCallerIdentityCommand({}))).Arn ?? null;
     } catch {
-      // No credentials, or none that work. Step 3 falls back to a placeholder.
+      // No credentials, or none that work. The guide says so rather than
+      // offering a placeholder to paste.
     }
+
+    /**
+     * The identity converted into something a trust policy can name.
+     *
+     * `GetCallerIdentity` reports a *session*, so it returns an
+     * `arn:aws:sts::...` ARN, and the guide used to print that straight into
+     * the CloudFormation command. It is rejected by the template's own
+     * AllowedPattern, and a trust policy that did accept it would simply never
+     * match. See aws/principal.ts and engineering log #28.
+     */
+    const resolved = assumablePrincipalArn(callerIdentity);
+
+    /**
+     * Where that identity came from. In mock mode every AWS call goes to moto,
+     * so the identity is moto's - fine for walking through onboarding, and
+     * actively misleading if presented as the principal to trust in a real
+     * account. The UI labels it rather than hiding it.
+     */
+    const callerIdentityIsMock = connection.endpoint !== null;
 
     return {
       callerIdentity,
+      callerIdentityIsMock,
+      /** Ready to paste into the CloudFormation parameter, or null with a reason. */
+      scannerPrincipal: resolved.ok ? resolved.principalArn : null,
+      scannerPrincipalConverted: resolved.ok ? resolved.converted : false,
+      scannerPrincipalNote: resolved.ok ? (resolved.note ?? null) : resolved.reason,
+      /**
+       * Set when AWS_TARGET_ROLE_ARN cannot be assumed whatever else is right -
+       * a user ARN being the usual cause. Surfaced so the UI can say so
+       * instead of letting a scan fail with AccessDenied later.
+       */
+      roleArnProblem: targetRoleProblem(),
       mode: currentMode(),
       // What .env says, so the UI can show when the toggle has diverged from it.
       configuredMode,
@@ -200,6 +253,22 @@ export function registerConnectionRoutes(app: FastifyInstance): void {
    */
   app.post("/api/connection/test", async (_req, reply) => {
     const started = Date.now();
+
+    /**
+     * Read before assuming, so a failure can name the principal that was
+     * refused. Best-effort: if this fails the diagnosis simply loses a detail.
+     */
+    let callerIdentity: string | null = null;
+    try {
+      const sts = new STSClient({
+        region: cfg.AWS_REGION,
+        ...(isMock() ? { endpoint: cfg.AWS_ENDPOINT_URL } : {}),
+      });
+      callerIdentity = (await sts.send(new GetCallerIdentityCommand({}))).Arn ?? null;
+    } catch {
+      // Falls through; diagnose() handles a missing identity.
+    }
+
     try {
       resetSession(); // Test the real thing, not a cached session.
       const session = await getSession();
@@ -230,7 +299,8 @@ export function registerConnectionRoutes(app: FastifyInstance): void {
         ok: false,
         durationMs: Date.now() - started,
         mode: cfg.AWS_MODE,
-        ...diagnose(err),
+        callerIdentity,
+        ...diagnose(err, callerIdentity),
       });
     }
   });

@@ -897,3 +897,141 @@ argue for the same thing: pair a probabilistic check with a deterministic one.
 The `git ls-files` guard added in #26 needs no rules, no regex engine, and
 cannot silently do nothing — and it would have caught the original leak on its
 own.
+
+---
+
+## #28 — Four bugs in the onboarding path, found by someone actually using it
+
+Tom deployed the role template into his own AWS account and worked through the
+UI's connection guide. Nothing in the repository was broken in a way any test
+could see, and four separate things went wrong. They are worth recording
+together, because they share a cause: every one of them is a place where the
+code was correct and the _path through it_ was not, and none of them is
+reachable from the unit tests.
+
+### 1. The template could not be deployed at all
+
+```
+An error occurred (ValidationError) when calling the CreateChangeSet operation:
+Template format error: 'Description' length is greater than 1024
+```
+
+CloudFormation caps a template's `Description` at 1024 characters. The
+explanatory header — the rationale for replacing `ReadOnlyAccess`, the
+`:root` argument, the two-role warning — had grown to **3,952**, nearly four
+times the limit. The whole point of #18 and #22 was that this prose kept getting
+deleted and needed protecting; the guards I wrote to protect it checked that the
+words were present and never checked whether the file still deployed.
+
+So the tests passed, the reasoning survived, and the artefact was unusable.
+Tom's workaround was the obvious one: delete the prose to get the deploy
+through, which is exactly the outcome the guards existed to prevent.
+
+**Fix.** The prose moved into `#` comments. Comments have no length limit and
+are stripped before the template is evaluated, so the explanation now costs
+nothing at deploy time — it should never have been in `Description`, which is a
+UI string shown in the CloudFormation console, not a place for an essay. Two new
+guards assert the folded `Description` stays under 1024 and the role's own stays
+under IAM's 1000. Run against the previous commit, the first one fails with
+`Description is 3952 chars`.
+
+**What to take from it.** A guard on content is not a guard on validity. I had
+written tests that asserted the file still _said_ the right things, and none
+that asserted it still _worked_ — and the two failed in opposite directions, so
+the passing tests actively obscured the broken artefact.
+
+### 2. The connection guide told people to paste an ARN that cannot work
+
+Step 3 pre-fills the CloudFormation command with the identity this backend runs
+as, so nobody has to work out which principal to trust. It filled it from
+`sts:GetCallerIdentity` verbatim, which is wrong in a way that is one character
+wide.
+
+`GetCallerIdentity` reports the **session** you are using, so it returns an
+`arn:aws:sts::…` ARN. An IAM trust policy needs the **identity** behind that
+session, which is always `arn:aws:iam::…`. Against the mock the guide emitted
+
+```
+DaveIoScannerRoleArn=arn:aws:sts::123456789012:user/moto
+```
+
+— moto's own identity, offered as the principal to trust in somebody's real AWS
+account. The template's `AllowedPattern` rejects it, which is the only reason
+this failed loudly. Against a real assumed-role session it would emit
+`arn:aws:sts::…:assumed-role/Role/session`, which also fails the pattern; and a
+hand-written trust policy that accepted the `sts` form would deploy cleanly and
+then never match, giving `AccessDenied` on every scan with nothing to point at.
+
+**Fix.** `aws/principal.ts` converts a caller identity into a principal ARN —
+`assumed-role/Role/session` → `role/Role`, `sts::…:user/x` → `iam::…:user/x` —
+and returns a _reason_ rather than a guess for the cases that have no answer
+(federated sessions, the account root). The guide shows the converted value,
+says it converted it, and warns when the identity came from the mock rather than
+from AWS. Fourteen tests, including one asserting that every ARN it returns
+satisfies the template's own `AllowedPattern`.
+
+### 3. `AWS_TARGET_ROLE_ARN` held a user ARN, which can never be assumed
+
+`.env` had been set to `arn:aws:iam::<account>:user/dave-home-assignment`. That
+is a correct and useful ARN — it is the answer to the question asked two steps
+earlier, the principal the trust policy should name. It is not something
+`sts:AssumeRole` can assume; only a role is.
+
+The two variables sit next to each other in the guide, and each one's correct
+value looks exactly like a plausible value for the other. The template's header
+already warned about this mix-up in prose. Prose is not a control.
+
+**Fix.** `validateAssumeRoleTarget()` rejects a non-role ARN, names the mix-up
+specifically, and says where the right value comes from (the stack's `RoleArn`
+output). It warns at startup and surfaces through `/api/connection`, so the UI
+shows it — deliberately **not** a fatal error, because the screen that explains
+the fix is in the app, and a process that exits on bad configuration cannot tell
+you how to correct it.
+
+### 4. `AWS_REGION=` was set, and therefore was not set
+
+`.env` contained `AWS_REGION=` with nothing after it. Zod's `.default()` only
+fires on `undefined`, and an empty line in a `.env` file parses as `""` — a
+perfectly valid string. So `cfg.AWS_REGION` was `""`, every AWS client was
+constructed with an empty region, and the failure surfaced from whichever client
+was built first, as `Region is missing`.
+
+**Fix.** A `blankAsUnset` wrapper treats `""` as absent. Applied to every
+variable where blank means nothing — and deliberately **not** to
+`AWS_SCAN_REGIONS` or `SCAN_FAULT_INJECTION`, where blank is a documented,
+meaningful value ("discover every region", "inject no faults"). Collapsing those
+into their defaults would have silently changed behaviour the README promises,
+which would have been a worse bug than the one being fixed.
+
+### And a fifth, which only a real account could reveal
+
+With all four fixed, the connection test still failed. The stack's trust policy
+named `user/dave-home-assignment`; the host's ambient credentials were
+`user/terraform-bootstrap`. Both are real identities in the same account, and
+the mismatch is invisible from either side alone.
+
+The diagnosis said "the trust policy does not name this principal" — true, and
+it leaves the reader to work out which principal that is. The service knows
+exactly who it is authenticating as, so it now says so, and gives the command
+that shows what the policy actually names:
+
+```
+This backend is authenticating as arn:aws:iam::…:user/terraform-bootstrap.
+The stack's trust policy has to name exactly that principal, so if it was
+deployed with a different one, redeploy with DaveIoScannerRoleArn=…, or give
+this host credentials for the principal it does name.
+Check with: aws iam get-role --role-name DaveIoReadOnlyRole …
+```
+
+**What to take from the set.** The tests covered the components; all four bugs
+lived in the seams between them, and the fifth lived outside the repository
+entirely. Three of the four were in code whose job is to _explain_ something —
+the template's header, the guide's deploy command, the connection test's error
+message — and the failure mode of explanatory code is that it stays confidently
+wrong, because nothing downstream consumes it. A wrong ARN in a code path
+throws; a wrong ARN in an instruction gets pasted.
+
+The cheapest fix for all of it was the same: make the thing that explains also
+be the thing that computes. The guide no longer prints an identity and hopes it
+is pasteable — it prints the output of a tested function whose contract is "this
+satisfies the template's own pattern".

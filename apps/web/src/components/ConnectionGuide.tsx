@@ -100,10 +100,19 @@ export function ConnectionGuide() {
   const isReal = c.mode === "real";
   const suggestedId = externalId.data?.externalId ?? "generating…";
 
-  // Pre-filled with the identity this backend actually runs as. Asking someone
-  // to work out which principal to trust is how they end up trusting the wrong
-  // one - which is exactly the mistake this guide previously invited.
-  const scannerPrincipal = c.callerIdentity ?? "arn:aws:iam::<account>:role/DaveIoScanner";
+  /**
+   * The principal to trust, already converted from the session ARN.
+   *
+   * This used to print `c.callerIdentity` directly, which is what
+   * `GetCallerIdentity` returns: an `arn:aws:sts::...` **session** ARN. A trust
+   * policy needs the `arn:aws:iam::...` **identity** behind it. Pasting the
+   * former fails the template's AllowedPattern, and against the mock it emits
+   * `arn:aws:sts::123456789012:user/moto` - moto's identity, offered as the
+   * principal to trust in somebody's real account. The conversion happens on
+   * the server (aws/principal.ts); see engineering log #28.
+   */
+  const scannerPrincipal = c.scannerPrincipal ?? "arn:aws:iam::<account>:role/DaveIoScanner";
+  const principalUnresolved = c.scannerPrincipal === null;
 
   const deployCommand = [
     "aws cloudformation deploy \\",
@@ -154,6 +163,17 @@ export function ConnectionGuide() {
         </dl>
       </div>
 
+      {c.roleArnProblem && (
+        <div className="rounded border border-danger/50 bg-danger/10 px-2.5 py-2">
+          <p className="text-[11px] font-semibold text-danger">
+            AWS_TARGET_ROLE_ARN cannot be assumed
+          </p>
+          <p className="mt-0.5 whitespace-pre-line text-[10px] leading-relaxed text-ink-300">
+            {c.roleArnProblem}
+          </p>
+        </div>
+      )}
+
       <p className="text-[12px] leading-relaxed text-ink-300">
         Connecting a real account takes four steps and about five minutes. dave.io never receives
         your AWS keys — it assumes a role that you create, in your account, which you can inspect
@@ -201,17 +221,40 @@ export function ConnectionGuide() {
             Run this against the account you want scanned. It creates one IAM role and nothing else.
           </p>
           <Copyable value={deployCommand} />
+          {principalUnresolved && (
+            <p className="rounded border border-warn/40 bg-warn/10 px-2 py-1.5 text-[10px] leading-relaxed text-warn">
+              The command above contains a placeholder.{" "}
+              {c.scannerPrincipalNote ?? "This backend could not determine its own identity."}
+            </p>
+          )}
+          {!principalUnresolved && c.callerIdentityIsMock && (
+            <p className="rounded border border-warn/40 bg-warn/10 px-2 py-1.5 text-[10px] leading-relaxed text-warn">
+              You are on the demo account, so the principal above is the mock's own identity, not
+              yours. Fine for reading through these steps; before deploying for real, switch to{" "}
+              <strong>My AWS</strong> or run <code>aws sts get-caller-identity</code> yourself and
+              use that identity instead.
+            </p>
+          )}
           <div className="rounded border border-ink-700 bg-ink-850 px-2 py-1.5">
             <p className="text-[10px] leading-relaxed text-ink-400">
               <strong className="text-ink-300">
                 Two roles are involved, and confusing them is the usual mistake.
               </strong>{" "}
               <code>DaveIoScannerRoleArn</code> is an <em>input</em> — the principal permitted to
-              assume the new role, already filled in above with the identity this backend runs as
-              {c.callerIdentity ? "" : " (no credentials found, so a placeholder is shown)"}. The
-              stack then <em>creates</em> a different role, <code>DaveIoReadOnlyRole</code>, and its{" "}
-              <code>RoleArn</code> output is what step 4 wants.
+              assume the new role, already filled in above with the identity this backend runs as.
+              The stack then <em>creates</em> a different role, <code>DaveIoReadOnlyRole</code>, and
+              its <code>RoleArn</code> output is what step 4 wants.
             </p>
+            {c.scannerPrincipalConverted && c.callerIdentity && (
+              <p className="mt-1 text-[10px] leading-relaxed text-ink-400">
+                <strong className="text-ink-300">Note the ARN was converted.</strong>{" "}
+                <code>get-caller-identity</code> reports the <em>session</em> you are using, so it
+                returns <code className="break-all">{c.callerIdentity}</code> — an <code>sts</code>{" "}
+                ARN. A trust policy needs the <code>iam</code> identity behind that session, which
+                is what the command uses. Pasting the <code>sts</code> form fails the template's own
+                parameter pattern.
+              </p>
+            )}
             <p className="mt-1 text-[10px] leading-relaxed text-ink-400">
               Pointing <code>AWS_TARGET_ROLE_ARN</code> at the scanner principal instead of the
               created role gives <code>AccessDenied</code>, or <code>NoSuchEntity</code> if it does

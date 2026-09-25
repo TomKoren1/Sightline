@@ -3,26 +3,49 @@
 import { config as loadDotenv } from "dotenv";
 import { z } from "zod";
 
+import { validateAssumeRoleTarget } from "./aws/principal.js";
+
 loadDotenv({ path: new URL("../../../.env", import.meta.url).pathname, quiet: true });
 
+/**
+ * Treat an empty value as an unset one.
+ *
+ * `.env` is a text file, so a variable someone has blanked out arrives as `""`
+ * rather than as `undefined` - and Zod's `.default()` only fires on
+ * `undefined`. `AWS_REGION=` therefore produced `cfg.AWS_REGION === ""`, which
+ * the AWS SDK rejects with "Region is missing" from whichever client happened
+ * to be constructed first. The variable looked present and documented; it was
+ * simply empty, and the default that was supposed to cover it never ran.
+ *
+ * Applied to every variable where a blank value means nothing. It is
+ * deliberately **not** applied to AWS_SCAN_REGIONS or SCAN_FAULT_INJECTION,
+ * where blank is a documented, meaningful value - "discover every region" and
+ * "inject no faults" respectively - and collapsing it into the default would
+ * silently change behaviour. See engineering log #28.
+ */
+const blankAsUnset = <T extends z.ZodTypeAny>(inner: T) =>
+  z.preprocess((value) => (value === "" ? undefined : value), inner);
+
 const schema = z.object({
-  DATABASE_URL: z.string().default("postgres://dave:dave@localhost:5432/dave"),
-  NEO4J_URI: z.string().default("bolt://localhost:7687"),
-  NEO4J_USER: z.string().default("neo4j"),
-  NEO4J_PASSWORD: z.string().default("neo4jneo4j"),
+  DATABASE_URL: blankAsUnset(z.string().default("postgres://dave:dave@localhost:5432/dave")),
+  NEO4J_URI: blankAsUnset(z.string().default("bolt://localhost:7687")),
+  NEO4J_USER: blankAsUnset(z.string().default("neo4j")),
+  NEO4J_PASSWORD: blankAsUnset(z.string().default("neo4jneo4j")),
 
   /**
    * `mock` points every AWS client at moto and uses static source credentials.
    * `real` drops the endpoint override and uses the standard credential chain.
    * Nothing else about the scanner changes between the two.
    */
-  AWS_MODE: z.enum(["mock", "real"]).default("mock"),
-  AWS_ENDPOINT_URL: z.string().default("http://localhost:5000"),
-  AWS_TARGET_ROLE_ARN: z.string().default("arn:aws:iam::123456789012:role/DaveIoReadOnlyRole"),
-  AWS_EXTERNAL_ID: z.string().default("local-dev-external-id-0000"),
-  AWS_REGION: z.string().default("us-east-1"),
-  AWS_ACCESS_KEY_ID: z.string().optional(),
-  AWS_SECRET_ACCESS_KEY: z.string().optional(),
+  AWS_MODE: blankAsUnset(z.enum(["mock", "real"]).default("mock")),
+  AWS_ENDPOINT_URL: blankAsUnset(z.string().default("http://localhost:5000")),
+  AWS_TARGET_ROLE_ARN: blankAsUnset(
+    z.string().default("arn:aws:iam::123456789012:role/DaveIoReadOnlyRole"),
+  ),
+  AWS_EXTERNAL_ID: blankAsUnset(z.string().default("local-dev-external-id-0000")),
+  AWS_REGION: blankAsUnset(z.string().default("us-east-1")),
+  AWS_ACCESS_KEY_ID: blankAsUnset(z.string().optional()),
+  AWS_SECRET_ACCESS_KEY: blankAsUnset(z.string().optional()),
 
   /**
    * Regions to scan. Empty means "discover them", which on a real account
@@ -31,7 +54,7 @@ const schema = z.object({
   AWS_SCAN_REGIONS: z.string().default("us-east-1,eu-west-1,ap-southeast-1"),
 
   /** Max concurrent (service, region) units in flight. */
-  SCAN_CONCURRENCY: z.coerce.number().int().positive().default(6),
+  SCAN_CONCURRENCY: blankAsUnset(z.coerce.number().int().positive().default(6)),
 
   /**
    * Testing hook: comma-separated `service:region` pairs that should fail.
@@ -40,16 +63,16 @@ const schema = z.object({
    */
   SCAN_FAULT_INJECTION: z.string().default(""),
 
-  ANTHROPIC_API_KEY: z.string().optional(),
-  ANTHROPIC_MODEL: z.string().default("claude-sonnet-5"),
+  ANTHROPIC_API_KEY: blankAsUnset(z.string().optional()),
+  ANTHROPIC_MODEL: blankAsUnset(z.string().default("claude-sonnet-5")),
 
-  BACKEND_PORT: z.coerce.number().int().positive().default(3000),
+  BACKEND_PORT: blankAsUnset(z.coerce.number().int().positive().default(3000)),
   /**
    * Bind address for the API. Loopback by default: the frontend reaches it
    * through Vite's server-side proxy, so it does not need to be exposed even
    * when the UI is served to another machine.
    */
-  BACKEND_HOST: z.string().default("127.0.0.1"),
+  BACKEND_HOST: blankAsUnset(z.string().default("127.0.0.1")),
 });
 
 const parsed = schema.safeParse(process.env);
@@ -125,6 +148,33 @@ export function activeConnection(): {
     };
   }
   return { roleArn: cfg.AWS_TARGET_ROLE_ARN, externalId: cfg.AWS_EXTERNAL_ID, endpoint: null };
+}
+
+/**
+ * Whether the configured target role can possibly work, and if not, why.
+ *
+ * `sts:AssumeRole` can only assume a **role**. A user ARN here is the single
+ * most likely misconfiguration, because it is the correct answer to a
+ * different question the onboarding guide asks two steps earlier - the
+ * principal the customer's trust policy should name. The two variables sit
+ * next to each other and one is a valid-looking value for the other.
+ *
+ * Reported rather than fatal. Exiting would leave the UI unable to load, and
+ * the UI is where the connection guide that explains the fix lives; a process
+ * that dies on bad configuration cannot tell you how to correct it. So this
+ * surfaces at startup, through `/api/connection`, and in the connection test.
+ */
+export function targetRoleProblem(): string | null {
+  // The mock's derived ARN is always well-formed, so there is nothing to warn
+  // about until the configuration is actually pointed at AWS.
+  if (activeMode === "mock" && configuredMode === "mock") return null;
+  const result = validateAssumeRoleTarget(cfg.AWS_TARGET_ROLE_ARN);
+  return result.ok ? null : result.reason;
+}
+
+{
+  const problem = targetRoleProblem();
+  if (problem) console.warn(`\n  AWS_TARGET_ROLE_ARN cannot be assumed.\n  ${problem}\n`);
 }
 
 /**
