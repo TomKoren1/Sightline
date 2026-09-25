@@ -85,6 +85,48 @@ export const EVAL_CASES: EvalCase[] = [
       "Distinguishing an admin role nothing references from one attached to a running instance is what makes the answer actionable.",
   },
   {
+    id: "admin-users",
+    question: "Are there any IAM users with administrator access?",
+    expectResources: ["northwind-ci-deploy", "northwind-backup-agent"],
+    forbidResources: ["northwind-metrics-reader"],
+    expectTools: ["find_admin_principals"],
+    rationale:
+      "Admin detection read roles only, so an account administered through IAM users reported no administrators at all (engineering log #29). northwind-backup-agent grants *:* through an inline policy named BackupHelper, so policy names are not enough, and northwind-metrics-reader is the negative class.",
+  },
+  {
+    id: "admin-users-risk",
+    question: "Is the northwind-ci-deploy user a problem? Explain the risk.",
+    expectResources: ["northwind-ci-deploy"],
+    expectTools: ["find_admin_principals"],
+    /**
+     * Asserted positively, on purpose - there is no `mustNotMention` here, and
+     * removing it was the finding.
+     *
+     * The point of this case is that the answer must NOT make the role-shaped
+     * inference "used by nothing, therefore delete it". Two attempts to test
+     * that as a forbidden substring both failed correct answers. The first
+     * forbade /unused|candidate for removal/ anywhere, and the agent had
+     * written "UnusedAdminRole - admin, unused by anything (cleanup
+     * candidates)" about a *different* resource. The second anchored the
+     * pattern to within 120 characters of "northwind-ci-deploy", and the agent
+     * had written "a different kind of risk than an unused admin role" - a
+     * sentence that states the exact distinction being tested for, and matches
+     * a regex looking for its opposite.
+     *
+     * Negation and comparison defeat substring matching, and no amount of
+     * tightening fixes that: "X is not unused" and "X is unused" differ by a
+     * token that carries the whole meaning. So the wrong inference is tested
+     * by requiring the right one instead - the answer has to reach for
+     * long-lived credentials AND distinguish a user from a role, neither of
+     * which an answer making the delete-it inference would do. Catching the
+     * negative form properly needs an LLM judge, which is on the roadmap for
+     * exactly this reason. Same lesson as engineering log #13, twice over.
+     */
+    mustMention: [/long-lived|standing|long-term|rotate|leak/i, /\buser\b/i],
+    rationale:
+      "A user has no instance profile or Lambda to be used by, so an empty usedBy says nothing about whether it is in use. The role-shaped inference 'used by nothing, so delete it' is wrong here and the answer must reach for long-lived credentials instead.",
+  },
+  {
     id: "public-subnets",
     question: "Which EC2 instances aren't in a private subnet?",
     expectResources: ["prod-web-1", "prod-web-2", "prod-bastion", "staging-rdp-host"],
@@ -96,10 +138,11 @@ export const EVAL_CASES: EvalCase[] = [
   {
     id: "idle-cost",
     question: "Is anything costing money but not being used?",
-    expectResources: ["orphaned-vol-1", "legacy-orphaned-vol", "legacy-nat"],
+    expectResources: ["orphaned-vol-1", "legacy-orphaned-vol", "legacy-nat", "orphaned-eip"],
     expectTools: ["find_idle_resources"],
     mustMention: [/\$|cost|month/i],
-    rationale: "Should surface unattached volumes and the idle NAT gateway, with rough cost.",
+    rationale:
+      "Should surface unattached volumes, the idle NAT gateway and the unassociated Elastic IP, with rough cost. The Elastic IP is here because its rule was correct and never fired: moto reports an unassociated address with empty-string fields rather than absent ones, so it read as in use and was silently never reported (engineering log #30).",
   },
   {
     id: "ssh-exposed",
@@ -120,13 +163,19 @@ export const EVAL_CASES: EvalCase[] = [
   {
     id: "blast-radius",
     question: "If prod-web-1 were compromised, what could it reach?",
-    // The reachable set, not the host named in the question. An earlier
-    // version of this case expected `prod-web-1` itself, which was simply a
-    // badly specified test: the question asks what it can reach, and
-    // find_reachable_from does not return the source among its results, so
-    // the source is not citable. Asserting the actual blast radius - including
-    // the database two hops away - is the stronger check.
-    expectResources: ["prod-app-1", "northwind-prod-db", "order-processor"],
+    /**
+     * The source is expected again, and that is a fix rather than a revert.
+     *
+     * This case originally expected `prod-web-1`, then stopped, because
+     * `find_reachable_from` did not return the source and so the source was not
+     * citable (engineering log #13). Relaxing the test hid a defect in the tool:
+     * every answer to this question names prod-web-1, and with no ARN available
+     * the agent eventually emitted a truncated `arn:aws:ec2:...:instance/`
+     * placeholder, which the citation validator flagged as unsupported. The tool
+     * now returns the source at `hops: 0`, so expecting it is correct again
+     * (engineering log #32).
+     */
+    expectResources: ["prod-web-1", "prod-app-1", "northwind-prod-db", "order-processor"],
     expectTools: ["find_reachable_from", "find_network_paths"],
     mustMention: [/2 hops|two hops|via prod-app-1|through/i],
     rationale:

@@ -777,3 +777,50 @@ shaped for roles and users. Collection and one filter were the whole bug.
 
 Verified against the real account: both users reported by name with the exact
 granting policy. 160 tests.
+
+---
+
+### `fix: three defects found by auditing the README against the running system`
+
+A full pass over the README checking every claim against the code. It found
+stale counts, and three real bugs behind them. Engineering log #30, #31, #32.
+
+**An idle rule that never fired.** The README lists an unassociated Elastic IP
+among the mock account's waste; the findings never contained one. Every part
+existed — seed, collector, analyser rule — but moto reports an unassociated
+address as `InstanceId: ""`, the collector's `?? null` only catches `undefined`,
+and the rule asked `!== null`. Same defect as the blank `AWS_REGION=` in #28, in
+a different file. The answer key had the same omission, so the check passed.
+Fixed with `absentIfBlank()` at the collector boundary, a presence test in the
+analyser as a second layer, a tagged `orphaned-eip` in the fixture, and six unit
+tests that state the empty-string case explicitly. Idle spend $98.85 → $102.50.
+
+**A mock scan recorded under a real account id.** `AWS_MODE=mock npm run scan`
+against a `.env` pointing at a real account persisted the mock's 100 resources
+under account `672299759593`. `configuredMode` was "mock" so the mock branch
+honoured `AWS_TARGET_ROLE_ARN` (per #24), but that ARN named the real account
+while the endpoint override sent every call to moto. This is #17 through a
+different door, and the same artefact: a complete, confident, fictional
+inventory of a real account. The test is now the account id rather than the mode
+flag, extracted as a pure function with ten tests — the condition was
+load-bearing and untestable in place, which is why it was wrong twice.
+
+**The agent invented an ARN, and the tool was at fault.** A tier-2 run failed
+`blast-radius` with `cited unsupported ARNs:
+arn:aws:ec2:us-east-1:123456789012:instance/` — a truncated prefix, followed in
+the prose by "let me confirm exact ARN". `find_reachable_from` returned only
+targets, never the source, so prod-web-1's ARN was not citable although every
+answer names it. #13 had recorded this same case failing and concluded the test
+was wrong; relaxing it made the suite green and left the defect, which returned
+as a fabricated identifier. The tool now returns the source at `hops: 0`, and
+the separate lookup also distinguishes "no such resource" from "reaches
+nothing", which the single query conflated.
+
+Also: two new eval cases for admin IAM users (#29 had no eval coverage), and
+`admin-users-risk` demonstrates that a lexical `mustNotMention` cannot test a
+negated inference — two attempts failed correct answers, the second on "a
+different kind of risk than an unused admin role", which states the very
+distinction being checked. Replaced with positive assertions.
+
+README counts corrected: 176 tests, 15 tier-1 checks, 18 tier-2 cases, 13 ADRs,
+$103/month idle. Tier 2: **18/18, mean F1 1.0, no unsupported citations.**

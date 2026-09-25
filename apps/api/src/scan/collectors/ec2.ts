@@ -17,6 +17,24 @@ import { ec2Client } from "../../aws/clients.js";
 import { ec2Arn, iamArn, nameFromTags, regionArn, tagsToRecord } from "../../aws/arns.js";
 import type { CollectorContext, CollectorOutput } from "./types.js";
 
+/**
+ * Normalise an AWS string field that means "absent" to `null`.
+ *
+ * AWS is inconsistent about how it says "not set". Real EC2 usually omits the
+ * key; moto returns `""`. Both mean the same thing, and `?? null` only catches
+ * the first - so `NetworkInterfaceId: ""` arrived as an empty string, which is
+ * `!== null`, and every downstream "is this attached to something?" test read
+ * an unassociated address as associated.
+ *
+ * That is the same shape as the blank-`.env` bug in engineering log #28: an
+ * empty string is a *present* value to any check written against null, and the
+ * failure is silent in both cases. Normalising at the boundary means analysers
+ * can keep asking the obvious question.
+ */
+function absentIfBlank(value: string | undefined | null): string | null {
+  return value === undefined || value === null || value.trim() === "" ? null : value;
+}
+
 export async function collectEc2(ctx: CollectorContext): Promise<CollectorOutput> {
   const region = ctx.region!;
   const client = ec2Client(region);
@@ -150,20 +168,23 @@ export async function collectEc2(ctx: CollectorContext): Promise<CollectorOutput
       accountId: ctx.accountId,
       tags,
       properties: {
-        allocationId: address.AllocationId ?? null,
-        publicIp: address.PublicIp ?? null,
-        associationId: address.AssociationId ?? null,
-        instanceId: address.InstanceId ?? null,
-        networkInterfaceId: address.NetworkInterfaceId ?? null,
+        allocationId: absentIfBlank(address.AllocationId),
+        publicIp: absentIfBlank(address.PublicIp),
+        // These three decide whether the address is idle, so a blank that
+        // survived as "" would silently mean "in use". See absentIfBlank.
+        associationId: absentIfBlank(address.AssociationId),
+        instanceId: absentIfBlank(address.InstanceId),
+        networkInterfaceId: absentIfBlank(address.NetworkInterfaceId),
       },
       derived: {},
       raw: address,
     });
     relationships.push(inRegion(arn));
-    if (address.InstanceId) {
+    const attachedInstanceId = absentIfBlank(address.InstanceId);
+    if (attachedInstanceId) {
       relationships.push({
         from: arn,
-        to: ec2Arn(region, ctx.accountId, "instance", address.InstanceId),
+        to: ec2Arn(region, ctx.accountId, "instance", attachedInstanceId),
         type: "ATTACHED_TO",
       });
     }

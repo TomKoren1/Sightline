@@ -108,6 +108,34 @@ export function setMode(mode: "mock" | "real"): void {
 }
 
 /**
+ * The account id in an ARN, or null. Deliberately local: `aws/credentials.ts`
+ * has the same helper but imports this module, so using it here would be a
+ * cycle.
+ */
+export function accountOfArn(arn: string): string | null {
+  const account = arn.split(":")[4];
+  return account && /^\d{12}$/.test(account) ? account : null;
+}
+
+/**
+ * Should mock mode use the role ARN from `.env`, or the mock's own?
+ *
+ * Exported as a pure function because the answer is load-bearing and the module
+ * around it reads the environment at import time, which makes it untestable in
+ * place. Getting this wrong writes a mock inventory to Postgres under a real
+ * account id - see `activeConnection` and engineering log #31.
+ */
+export function honoursConfiguredArnInMock(
+  mode: "mock" | "real",
+  targetRoleArn: string,
+  mockAccountId: string,
+): boolean {
+  // `.env` describing a real account is not authority over the mock, whatever
+  // AWS_MODE was overridden to on the command line.
+  return mode === "mock" && accountOfArn(targetRoleArn) === mockAccountId;
+}
+
+/**
  * Connection settings for the mode in effect.
  *
  * The mock's role ARN and external id are fixed by the seeder, so they are
@@ -121,26 +149,49 @@ export function activeConnection(): {
   endpoint: string | null;
 } {
   if (activeMode === "mock") {
+    const account = process.env["MOCK_AWS_ACCOUNT_ID"] ?? "123456789012";
+
     /**
-     * When `.env` itself describes the mock, its values are authoritative.
+     * When `.env` really does describe the mock, its values are authoritative.
      *
      * `AWS_TARGET_ROLE_ARN` and `AWS_EXTERNAL_ID` are the onboarding variables
      * the project ships with, and silently ignoring them because a runtime
      * toggle exists would be a nasty surprise: editing them would appear to do
-     * nothing. So they are honoured whenever the configured mode is mock.
+     * nothing (engineering log #24). So they win - but the test for "describes
+     * the mock" is the **account id**, not the mode flag.
      *
-     * They are only derived when `.env` describes a *real* account and the user
-     * has toggled to mock - where taking the real role ARN would be wrong, and
-     * there is nothing else to fall back to.
+     * That distinction is the whole fix. `AWS_MODE=mock npm run
+     * scan` against a `.env` that points at a real account makes
+     * `configuredMode` "mock" while `AWS_TARGET_ROLE_ARN` still names the real
+     * account - so this branch honoured a real role ARN while the endpoint
+     * override sent every call to moto. The scan read the mock's inventory and
+     * wrote it to Postgres under the *real* account id.
+     *
+     * That is engineering log #17 arriving through a different door: a
+     * confident, complete, entirely fictional inventory of somebody's real AWS
+     * account. Observed, not theorised - 100 mock resources persisted under a
+     * real twelve-digit account (engineering log #31).
+     *
+     * So the onboarding variables are honoured only when their account matches
+     * the mock's. Anything else is configuration for a different account and is
+     * ignored in favour of the mock's own identity, loudly.
      */
-    if (configuredMode === "mock") {
+    if (honoursConfiguredArnInMock(configuredMode, cfg.AWS_TARGET_ROLE_ARN, account)) {
       return {
         roleArn: cfg.AWS_TARGET_ROLE_ARN,
         externalId: cfg.AWS_EXTERNAL_ID,
         endpoint: cfg.AWS_ENDPOINT_URL,
       };
     }
-    const account = process.env["MOCK_AWS_ACCOUNT_ID"] ?? "123456789012";
+
+    if (configuredMode === "mock") {
+      console.warn(
+        `\n  AWS_TARGET_ROLE_ARN names account ${accountOfArn(cfg.AWS_TARGET_ROLE_ARN) ?? "?"}, but this is mock mode\n` +
+          `  and the mock account is ${account}. Using the mock's own role so the scan cannot be\n` +
+          "  recorded under a real account id. Set MOCK_AWS_ACCOUNT_ID to match, or AWS_MODE=real.\n",
+      );
+    }
+
     return {
       roleArn: `arn:aws:iam::${account}:role/DaveIoReadOnlyRole`,
       externalId: "local-dev-external-id-0000",

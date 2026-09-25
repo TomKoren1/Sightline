@@ -568,7 +568,21 @@ async function seedProduction(appProfileName: string) {
       }),
     );
   }
-  await client.send(new AllocateAddressCommand({ Domain: "vpc" }));
+  /**
+   * An Elastic IP allocated and associated with nothing - billed at roughly
+   * $3.65/month for doing nothing at all.
+   *
+   * Tagged, unlike a real orphan would be, purely so the answer key can name it:
+   * an untagged address is identified only by its allocation id, which is random
+   * per seed and therefore useless in a fixture. The waste is the point, not the
+   * tag.
+   */
+  await client.send(
+    new AllocateAddressCommand({
+      Domain: "vpc",
+      TagSpecifications: tagSpec("elastic-ip", "orphaned-eip", TAGS.prod),
+    }),
+  );
 
   // RDS: private, not publicly accessible, and still reachable by two paths.
   const rdsClient = rds(PROD_REGION);

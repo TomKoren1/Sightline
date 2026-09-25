@@ -68,10 +68,27 @@ export function analyseIdleResources(resources: Resource[], relationships: Relat
       }
 
       case "ElasticIp": {
+        /**
+         * `present` rather than `!== null`, deliberately.
+         *
+         * This rule was correct and never fired, because moto reports an
+         * unassociated address as `NetworkInterfaceId: ""` and `InstanceId: ""`
+         * rather than omitting them, and `"" !== null` is true - so every
+         * orphaned Elastic IP read as associated and was silently never
+         * reported (engineering log #30).
+         *
+         * The collector now normalises blanks, so this is the second layer
+         * rather than the fix. It is worth having both: the analyser should not
+         * be silently wrong if some future collector, or a different AWS
+         * response shape, reintroduces an empty string.
+         */
+        const present = (value: unknown): boolean =>
+          typeof value === "string" ? value.trim() !== "" : value !== null && value !== undefined;
+
         const associated =
-          resource.properties["associationId"] !== null ||
-          resource.properties["instanceId"] !== null ||
-          resource.properties["networkInterfaceId"] !== null;
+          present(resource.properties["associationId"]) ||
+          present(resource.properties["instanceId"]) ||
+          present(resource.properties["networkInterfaceId"]);
         if (!associated) {
           resource.derived.isIdle = true;
           resource.derived.idleReason =

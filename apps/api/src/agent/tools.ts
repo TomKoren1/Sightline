@@ -141,7 +141,10 @@ export const TOOL_DEFINITIONS: Anthropic.Tool[] = [
     name: "find_reachable_from",
     description:
       "What a given resource can reach - the inverse of find_network_paths. Use for blast-radius " +
-      "questions: 'if this host were compromised, what could it talk to?'.",
+      "questions: 'if this host were compromised, what could it talk to?'. The source resource " +
+      "is included in the results at hops 0, so its ARN is available to cite; everything else " +
+      "is a target with the number of hops to it. An empty result means no such resource, " +
+      "whereas a single row means the resource exists and reaches nothing.",
     input_schema: {
       type: "object",
       properties: {

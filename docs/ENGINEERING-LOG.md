@@ -1121,3 +1121,181 @@ The bug was found by pointing the tool at a real account and disbelieving a
 clean result. That is worth more than another test written against the same
 mental model that produced the code, and it argues for keeping a real-account
 smoke test in the loop rather than trusting the fixture to be complete.
+
+---
+
+## #30 — An idle-detection rule that was correct and never fired once
+
+**Symptom.** Found by auditing the README against the running system rather than
+by any failure. The README lists "an unassociated elastic IP" among the mock
+account's waste. The idle findings never contained one.
+
+**Diagnosis.** Every part of the feature existed. The seed allocated an
+unassociated address. The collector fetched it. The analyser had a rule for it.
+The rule asked:
+
+```ts
+const associated =
+  resource.properties["associationId"] !== null ||
+  resource.properties["instanceId"] !== null ||
+  resource.properties["networkInterfaceId"] !== null;
+```
+
+moto reports an unassociated address as `InstanceId: ""` and
+`NetworkInterfaceId: ""` — empty strings, not absent keys. The collector wrote
+them through with `?? null`, which only substitutes for `undefined`. So
+`"" !== null` was true, every orphaned Elastic IP read as associated, and the
+rule returned "in use" for the only case it existed to catch.
+
+This is the same defect as the blank `AWS_REGION=` in #28, in a different file:
+**an empty string is a present value to any check written against null**, and
+the failure is silent both times.
+
+**Why nothing caught it.** The ground-truth answer key did not list the address
+either. `idleResources` named five resources, the scanner found those five, the
+check passed. The fixture and the code shared the omission — the same failure
+shape as #29, two entries apart, which is what makes it worth recording rather
+than quietly fixing.
+
+**Fix.**
+
+- `absentIfBlank()` at the collector boundary, normalising `""` and whitespace
+  to `null` for every Elastic IP field, including the one that builds the
+  `ATTACHED_TO` relationship.
+- The analyser tests _presence_ rather than `!== null`, as a second layer. Not
+  redundant: the analyser should not become silently wrong if a future collector
+  or a different AWS response shape reintroduces a blank.
+- The orphaned address is tagged `orphaned-eip` in the seed so the answer key
+  can name it — an untagged address is identified only by a per-seed random
+  allocation id, which is useless in a fixture.
+- Added to `idleResources`, plus six unit tests stating the empty-string case
+  explicitly, including that a NAT gateway's address (no `InstanceId`, but a
+  real `NetworkInterfaceId`) is still correctly _not_ idle.
+
+Idle spend in the mock account went from $98.85 to $102.50/month, and the README
+figure was wrong by exactly one Elastic IP.
+
+**What to take from it.** Two bugs of the same shape in two days argues the
+shape is worth a rule rather than a fix each time: **normalise "absent" at the
+boundary where data enters, once, and never ask `!== null` about a string that
+came from an external API.** The AWS SDK is inconsistent about it between
+services and between real AWS and moto, so every collector is exposed.
+
+---
+
+## #31 — A mock scan recorded under a real AWS account id
+
+**Symptom.** While investigating an unrelated eval failure, the scan table read:
+
+```
+started_at                    | account_id   | resources
+2026-09-25 21:24:36+00        | 672299759593 | 100
+2026-09-25 21:00:16+00        | 123456789012 | 100
+```
+
+100 resources is the mock account's inventory. `672299759593` is a real AWS
+account. The top row is the mock's data, persisted under the real account's
+identity.
+
+**Diagnosis.** The command was `AWS_MODE=mock npm run scan`, against a `.env`
+configured for the real account.
+
+`AWS_MODE=mock` on the command line makes `configuredMode` "mock". The mock
+branch of `activeConnection()` then honoured `cfg.AWS_TARGET_ROLE_ARN` —
+deliberately, because #24 established that silently ignoring the project's own
+onboarding variables was a nasty surprise. But `AWS_TARGET_ROLE_ARN` still named
+the _real_ account, while the endpoint override sent every call to moto. The
+account id is derived from the role ARN, so the scan read the mock and labelled
+it with a real twelve-digit account.
+
+**This is #17 arriving through a different door.** There, a leaked
+`AWS_ENDPOINT_URL` made real mode scan the mock. Here, a mode override makes
+mock mode wear a real account's name. Both produce the same artefact: a
+confident, complete, entirely fictional inventory of somebody's real AWS
+account, sitting in the database looking exactly like a genuine scan. It is the
+worst output this system can produce, and it is now the second time I have
+built a route to it.
+
+It also had a visible second-order effect: the `changed-since-last-scan` eval
+failed with "I wasn't able to reach a conclusion within the tool-call limit",
+because the diff compared two scans of nominally different accounts. A 100%
+spurious diff looks like a broken agent.
+
+**Fix.** The test for "does `.env` describe the mock?" is the **account id**,
+not the mode flag:
+
+```ts
+honoursConfiguredArnInMock(mode, targetRoleArn, mockAccountId)
+  => mode === "mock" && accountOfArn(targetRoleArn) === mockAccountId
+```
+
+A configured ARN naming any other account is configuration for a different
+account, and is ignored in favour of the mock's own identity, with a warning
+naming both account ids. #24's intent survives — the onboarding variables are
+still authoritative when they genuinely describe the mock.
+
+Extracted as a pure exported function with ten tests, because the module around
+it reads `process.env` at import time and the condition was therefore
+untestable in place. That is the real lesson of the fix: the decision was
+load-bearing and unreachable by any test, which is why it was wrong twice.
+
+**What to take from it.** Both routes to this failure share a cause: **two
+sources of truth for "which account am I looking at?"** — the endpoint the calls
+go to, and the ARN the results are labelled with — and nothing that asserts they
+agree. A single invariant, checked once where the connection is resolved, closes
+both doors and any third I have not found. The general form: when two
+configuration values must be consistent, do not document the requirement,
+compute one from the other or refuse.
+
+---
+
+## #32 — The citation validator caught the agent inventing an ARN, and the tool was at fault
+
+**Symptom.** A tier-2 eval run failed on `blast-radius` with an unsupported
+citation — the fatal category, since an invented identifier is the one failure a
+user cannot catch:
+
+```
+cited unsupported ARNs: arn:aws:ec2:us-east-1:123456789012:instance/
+```
+
+The answer opened:
+
+> From `prod-web-1` (arn:aws:ec2:us-east-1:123456789012:instance/… — let me
+> confirm exact ARN) a compromise could reach 3 resources…
+
+**Diagnosis.** The validator was right and the model was not really wrong.
+`find_reachable_from` returned only the _targets_ of the reachability search,
+never the source. The question is "if prod-web-1 were compromised, what could it
+reach?", so every possible answer names prod-web-1 — and its ARN was not in any
+tool result, so it was not citable. The model hedged with a truncated ARN prefix
+and said so in the text.
+
+**The uncomfortable part is that I already knew.** Engineering log #13 records
+this exact case failing, and the conclusion I drew then was that the _test_ was
+wrong: I removed `prod-web-1` from the case's expected resources, with a comment
+explaining that the source is not citable because the tool does not return it.
+That made the suite green and left a tool whose result set cannot support the
+obvious answer to its own question. The defect waited two days and came back as
+a fabricated identifier.
+
+**Fix.** The tool returns the source at `hops: 0`, so it is citable. The eval
+case expects `prod-web-1` again — a fix, not a revert, since the reason it was
+removed no longer holds. The tool description says the source is included.
+
+The lookup is a separate query, which also buys a distinction the single query
+could not express: **no rows means no such resource; one row means the resource
+exists and reaches nothing.** Those were previously the same empty result, so
+"this host is isolated" and "I could not find this host" were indistinguishable
+to the agent — a second, quieter defect in the same function.
+
+**What to take from it.** When an eval fails, "the test is wrong" and "the
+system is wrong" are both live hypotheses, and #13 shows I am capable of
+choosing the first too quickly. The tell I missed: I relaxed an assertion and
+wrote a comment justifying it in terms of a _system limitation_. That comment
+was a defect report in the wrong file. A test relaxed because the system cannot
+satisfy it should open an issue, not close one.
+
+The validator, meanwhile, did exactly its job — it turned a plausible-looking
+hedge into a hard failure two days before anyone demoed it. That is the argument
+for ADR-006 in one line.

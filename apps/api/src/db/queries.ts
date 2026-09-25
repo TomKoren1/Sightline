@@ -193,7 +193,38 @@ export async function findReachableFrom(params: {
   limit?: number;
 }) {
   const maxHops = Math.min(Math.max(1, params.maxHops ?? 3), 8);
-  return readQuery<ResourceRow>(
+
+  /**
+   * The source is returned too, at `hops: 0`.
+   *
+   * It was not, and that turned out to matter. Every answer to "if X were
+   * compromised, what could it reach?" names X - so with X absent from the
+   * result, its ARN was absent from the citable set, and the agent filled the
+   * gap by emitting a bare `arn:aws:ec2:...:instance/` prefix followed by "let
+   * me confirm exact ARN". The citation validator flagged it, correctly, as
+   * unsupported.
+   *
+   * An earlier eval case had been *relaxed* to stop expecting the source, on
+   * the grounds that it was not citable (engineering log #13). That fixed the
+   * test and left the defect: a tool whose result set cannot support the
+   * obvious answer to its own question. Returning the source fixes the cause
+   * rather than the symptom (engineering log #32).
+   *
+   * Two queries rather than a Cypher UNION subquery: the source lookup also
+   * distinguishes "no such resource" (no rows at all) from "reaches nothing"
+   * (one row, the source), which a single query conflated into an empty result.
+   */
+  const [source] = await readQuery<ResourceRow>(
+    `MATCH (source:Resource)
+     WHERE source.arn = $source OR source.name = $source
+     RETURN source.arn AS arn, source.kind AS kind, source.name AS name,
+            source.region AS region, 0 AS hops
+     LIMIT 1`,
+    { source: params.source },
+  );
+  if (!source) return [];
+
+  const targets = await readQuery<ResourceRow>(
     `MATCH (source:Resource)
      WHERE source.arn = $source OR source.name = $source
      MATCH path = (source)-[:CAN_REACH*1..${maxHops}]->(t:Resource)
@@ -203,6 +234,8 @@ export async function findReachableFrom(params: {
      LIMIT $limit`,
     { source: params.source, limit: clamp(params.limit) },
   );
+
+  return [source, ...targets];
 }
 
 /**

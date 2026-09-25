@@ -128,7 +128,7 @@ is one of only two variables where blank is meaningful rather than unset.
 | `npm run drift`                             | Change the mock account, so a second scan has a diff   |
 | `npm run inspect -w @daveio/api`            | Scan and print findings without touching the databases |
 | `npm run query -w @daveio/api`              | Run every curated query against the graph              |
-| `npm test`                                  | 160 unit tests                                         |
+| `npm test`                                  | 176 unit tests                                         |
 | `npm run verify`                            | Everything CI's static job runs — use before pushing   |
 | `npm run evals:ground-truth -w @daveio/api` | Tier-1 evals — no API key needed                       |
 | `npm run evals -w @daveio/api`              | Tier-2 agent evals — needs a key                       |
@@ -147,7 +147,7 @@ account is built around traps that defeat a naive lookup:
 | **A private database anyone can reach** | `northwind-prod-db` is `PubliclyAccessible: false` in a private subnet, and is reachable from the internet by **two** chains — three hops through the web and app tiers, and two through a bastion with SSH open to the world.                                                                                                                                                                                                                                        |
 | **A public database nobody can reach**  | `analytics-db` is `PubliclyAccessible: true` and its security group opens no ports. The obvious answer is wrong.                                                                                                                                                                                                                                                                                                                                                      |
 | **Admin hiding in plain sight**         | Three roles and two users are effectively administrator. One role carries `AdministratorAccess`, one grants `*:*` **inline** under the name `LegacyDeployRole`, one is privileged but entirely unused, and one _user_ grants `*:*` inline under the name `BackupHelper`. Users are here because a real account exposed their absence: admin detection read roles only, so an account administered through IAM users reported no administrators (engineering log #29). |
-| **Money going nowhere**                 | Unattached volumes, an unassociated elastic IP, a stopped instance, and a NAT gateway in an abandoned region — about $99/month.                                                                                                                                                                                                                                                                                                                                       |
+| **Money going nowhere**                 | Unattached volumes, an unassociated elastic IP, a stopped instance, and a NAT gateway in an abandoned region — about $103/month.                                                                                                                                                                                                                                                                                                                                      |
 | **Three regions**                       | Production in `us-east-1`, staging in `eu-west-1` with RDP open to the world, and `ap-southeast-1` nobody has looked at in two years.                                                                                                                                                                                                                                                                                                                                 |
 
 The answer key lives in [`packages/mock-aws/src/topology.ts`](packages/mock-aws/src/topology.ts)
@@ -238,17 +238,18 @@ Two eval suites that fail for different reasons ([ADR-008](docs/DECISIONS.md)).
 
 **Tier 1 — ground truth over the data.** Seeds the mock account, runs a real
 scan, and asserts the result against the hand-written answer key. **No model,
-no API key, about two seconds**, and it runs in CI on every commit. Fourteen
-assertions, including the ones that matter most: the neutralised bucket is
+no API key, about two seconds**, and it runs in CI on every commit. Fifteen
+checks, including the ones that matter most: the neutralised bucket is
 _not_ public, the inline-admin role _is_ admin, the private database is
 reachable by both expected chains, and the publicly-flagged database is
 reachable by none.
 
-**Tier 2 — answer quality.** Fifteen cases against the live agent, scored on
+**Tier 2 — answer quality.** Eighteen cases against the live agent, scored on
 the ARNs each answer cites, with precision and recall.
 
-Last recorded full run on `claude-sonnet-5`: **16/16, mean F1 1.0, no
-unsupported citations** — one case per question the brief names, plus ten more.
+Last recorded full run on `claude-sonnet-5`: **18/18, mean F1 1.0, no
+unsupported citations** — one case per question the brief names, plus twelve
+more.
 
 Getting there is the better advertisement for the suite than the score is. It
 caught two real problems. One was a defect in a test rather than an answer
@@ -412,9 +413,11 @@ docs/               decisions, engineering log, commit log, walkthrough
 
 ## Documentation
 
-- **[docs/DECISIONS.md](docs/DECISIONS.md)** — eight ADRs: the stack, the mock,
-  the two-database split, deterministic analysis, the tool boundary, citation
-  validation, the IAM role, and the eval strategy.
+- **[docs/DECISIONS.md](docs/DECISIONS.md)** — thirteen ADRs: the stack, the
+  mock, the two-database split, deterministic analysis, the tool boundary,
+  citation validation, the IAM role, the eval strategy, the read-only refusal in
+  code, guided onboarding, evals shown in the product, public vs unprotected,
+  and the runtime account toggle.
 - **[docs/ENGINEERING-LOG.md](docs/ENGINEERING-LOG.md)** — every non-obvious
   problem hit while building this, with diagnosis and fix. Includes a silent
   moto account-namespacing trap, two capability gaps in the mock recorded as

@@ -121,6 +121,14 @@ export const GROUND_TRUTH = {
     "legacy-orphaned-vol",
     "old-jenkins",
     "legacy-nat",
+    /**
+     * Added after the audit that found it missing. The rule for it existed and
+     * was correct; the collector passed moto's empty-string "not associated"
+     * through as a non-null value, so the address read as associated and was
+     * silently never reported. The answer key had the same omission, so the
+     * idle check passed (engineering log #30).
+     */
+    "orphaned-eip",
   ],
 
   /** Security groups exposing sensitive ports to the whole internet. */
