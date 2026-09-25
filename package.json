@@ -3,8 +3,13 @@
   "private": true,
   "version": "0.1.0",
   "type": "module",
-  "engines": { "node": ">=20" },
-  "workspaces": ["packages/*", "apps/*"],
+  "engines": {
+    "node": ">=20"
+  },
+  "workspaces": [
+    "packages/*",
+    "apps/*"
+  ],
   "scripts": {
     "typecheck": "npm run typecheck --workspaces --if-present",
     "test": "vitest run",
@@ -22,6 +27,6 @@
     "prettier": "^3.4.2",
     "tsx": "^4.19.2",
     "typescript": "^5.7.2",
-    "vitest": "^2.1.8"
+    "vitest": "^3.2.7"
   }
 }

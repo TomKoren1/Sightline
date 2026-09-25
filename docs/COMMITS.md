@@ -319,3 +319,60 @@ Chased three nonsensical `implicitly has an 'any' type` errors down to broken
 self-referencing subpath imports inside SDK 0.33.1's own declarations, hidden
 by `skipLibCheck`. Full write-up in engineering log #9 — it is a good example
 of the error appearing a long way from its cause.
+
+---
+
+### `feat(api): HTTP server with streaming scan and chat endpoints`
+
+Fastify, with both long-running operations streamed as server-sent events.
+
+`POST /api/scans` reports each `(service, region)` unit as it finishes, so a
+failure is visible the moment it happens rather than at the end.
+`POST /api/chat` streams the agent's tool calls as well as its tokens, which
+is what lets the UI say what the agent is doing instead of showing a spinner.
+Both set `X-Accel-Buffering: no`, because a reverse proxy will otherwise
+buffer the whole stream and deliver it at the end.
+
+`/api/health` reports each dependency separately, and says explicitly whether
+an Anthropic key is configured — a missing key is the most common reason chat
+fails, and finding that out should not require a failed request.
+
+Chat refuses to answer before the first scan rather than answering from an
+empty graph, which produces confident nonsense.
+
+---
+
+### `feat(web): graph, chat and the UX states the brief asks for`
+
+React, React Flow, TanStack Query, Tailwind v4.
+
+The graph is laid out left-to-right with dagre, so reachability reads the way
+people expect: the internet on the left, what it can touch to the right, the
+database at the end of the chain. Nodes carry their security verdict, so an
+exposed instance is visible without clicking. Route tables, DB subnet groups
+and IAM policies start hidden — they triple the node count while adding little
+to a first look.
+
+**The graph is the shared surface.** When the agent cites resources, matching
+nodes highlight, everything else dims, and the view re-frames onto them. The
+findings sidebar highlights through the same mechanism, so a standing finding
+and an agent answer feel like one feature rather than two.
+
+Every state the brief lists is handled explicitly: empty (never scanned), live
+scan progress with a per-service plan rendered up front, stale (amber, past an
+hour), **partial failure** (a loud banner naming each failed service, region
+and reason), graph load error with retry, and an agent-thinking state that
+names the running tool.
+
+Answers carry an expandable audit trail of tool calls with row counts, timings
+and any raw Cypher, and unsupported citations are shown to the user as a
+warning rather than only logged — if the model invents an identifier, the
+person about to act on it should be the first to know.
+
+---
+
+### `chore: resolve three-way Vite version split`
+
+`npm ls vite` showed plugins resolving to a hoisted copy while `apps/web` had
+its own major. Full write-up in engineering log #10; the lockfile, not the
+version constraint, was the actual obstacle.

@@ -1,0 +1,53 @@
+@import "tailwindcss";
+@import "@xyflow/react/dist/style.css";
+
+/*
+ * A dark, dense console. The audience is a DevOps engineer reading a lot of
+ * resource names at once, so the palette stays quiet and colour is reserved
+ * for meaning: red is exposed, amber is stale or partial, green is healthy.
+ */
+@theme {
+  --color-ink-950: #0a0c10;
+  --color-ink-900: #11141a;
+  --color-ink-850: #161a22;
+  --color-ink-800: #1c212b;
+  --color-ink-700: #272d3a;
+  --color-ink-600: #3a4354;
+  --color-ink-400: #6b7689;
+  --color-ink-300: #98a3b6;
+  --color-ink-100: #dfe5ee;
+  --color-accent: #4d9fff;
+  --color-danger: #ff6b6b;
+  --color-warn: #ffb454;
+  --color-good: #4ade80;
+}
+
+html, body, #root { height: 100%; }
+
+body {
+  margin: 0;
+  background: var(--color-ink-950);
+  color: var(--color-ink-100);
+  font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  font-size: 13px;
+}
+
+::-webkit-scrollbar { width: 9px; height: 9px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--color-ink-700); border-radius: 5px; }
+::-webkit-scrollbar-thumb:hover { background: var(--color-ink-600); }
+
+/* React Flow's defaults assume a light canvas. */
+.react-flow__edge-path { stroke: var(--color-ink-600); }
+.react-flow__edge.selected .react-flow__edge-path { stroke: var(--color-accent); }
+.react-flow__handle { opacity: 0; }
+.react-flow__attribution { display: none; }
+.react-flow__controls-button {
+  background: var(--color-ink-800);
+  border-bottom: 1px solid var(--color-ink-700);
+  fill: var(--color-ink-300);
+}
+.react-flow__controls-button:hover { background: var(--color-ink-700); }
+
+@keyframes pulse-dot { 0%, 100% { opacity: 0.35; } 50% { opacity: 1; } }
+.pulse { animation: pulse-dot 1.4s ease-in-out infinite; }

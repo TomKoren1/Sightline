@@ -226,3 +226,31 @@ code — worth remembering when an inference failure makes no sense. And when
 TS7006 appears somewhere it has no business appearing, check the receiver
 rather than the parameter; assigning the expression to a deliberately wrong
 type is the fastest way to make the compiler tell you what it really thinks.
+
+---
+
+## #10 — Three versions of Vite in one workspace
+
+**Symptom.** `vite.config.ts` failed to typecheck with
+`Type 'Plugin<any>[]' is not assignable to type 'PluginOption'` — a plugin
+array rejected by the very config that expects plugins.
+
+**Diagnosis.** Classic duplicate-dependency error, stated obliquely. Both
+plugins resolved their `vite` peer to the root-hoisted copy, while
+`apps/web` had its own different major installed locally. The two `Plugin`
+types were structurally similar but nominally distinct, so neither was
+assignable to the other.
+
+`npm ls vite` showed the split. Untangling it took three attempts, because
+editing `package.json` and re-running `npm install` kept restoring the old
+resolution from a stale lockfile, and an intermediate state left `vitest`
+pulling a third major.
+
+**Fix.** Deleted `node_modules` and `package-lock.json`, reinstalled, then
+pinned `apps/web` to the same major the hoisted plugins had resolved to
+(`vite@^7.3.6`), rather than forcing the plugins down to the web app's
+version.
+
+**Worth noting.** The lockfile was the real obstacle, not the version
+constraint. When a dependency edit appears to have no effect, check what npm
+actually resolved before changing the constraint again.
