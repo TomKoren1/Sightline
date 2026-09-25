@@ -179,3 +179,113 @@ the model.
 
 **Cost.** It catches invented *identifiers*, not invented *relationships between
 real identifiers*. The eval suite covers that second class.
+
+---
+
+## ADR-007 — Replacing the supplied read-only role
+
+**Context.** The brief ships `infra/readonly-role.yaml`, invites us to change
+it, and asks us to say why if we do. Its evaluation criteria ask whether we
+understand "what 'read-only' really means". The original grants the AWS-managed
+`ReadOnlyAccess` policy to any principal in dave.io's account.
+
+**Decision.** Replaced. The original is kept as
+`infra/readonly-role.original.yaml` for comparison. Three changes, all
+narrowing:
+
+**1. `ReadOnlyAccess` → `SecurityAudit` + `ViewOnlyAccess` + an explicit Deny.**
+
+`ReadOnlyAccess` grants around 7,000 actions, including data-plane reads:
+`s3:GetObject`, `dynamodb:GetItem`, `ssm:GetParameter`,
+`secretsmanager:GetSecretValue`, `kinesis:GetRecords`, and `lambda:GetFunction`
+— which returns a presigned URL to the function's source code.
+
+An inventory product needs to know a bucket exists, how it is configured, and
+who can reach it. It never needs to read an object out of it. With
+`ReadOnlyAccess`, a compromise of dave.io's platform account becomes a
+compromise of every customer's *data*, not merely their inventory. That is a
+materially larger blast radius for capability the product does not use.
+
+`sqs:ReceiveMessage` is worth singling out because it is not read-only even
+literally: receiving a message starts its visibility timeout and can hide it
+from the consumer that should have processed it. A scanner holding that
+permission can disrupt a production queue by accident — which would breach the
+brief's hard rule through a permission nobody thought of as a write.
+
+The explicit `Deny` is the load-bearing part. Deny cannot be overridden by any
+Allow, including one a future AWS update to a managed policy might introduce.
+It turns "dave.io can see your infrastructure but not your data" from a
+statement about which policies we attached today into a property of the role.
+
+**2. Trust scoped to the scanner role, not `:root`.**
+
+`Principal: arn:aws:iam::<account>:root` does not mean the root user; it
+delegates to IAM in that account, so **every** principal there — every role,
+user and CI job — may assume the customer role if its own policy allows it.
+The ExternalId condition addresses the confused-deputy problem, which is a
+different threat: it stops a third party inducing dave.io to use its access,
+but places no limit on which internal principal does so. Naming the scanner
+role means a compromise of an unrelated dave.io workload does not reach
+customer accounts.
+
+**3. `sts:SourceIdentity` for attribution.**
+
+Lets the customer's own CloudTrail record which dave.io operator or system
+triggered a scan, immutably for the session's life. A customer granting a
+third party standing read access into their account should not have to take
+our word for who did what.
+
+**Cost.** `SecurityAudit` + `ViewOnlyAccess` do not cover quite everything:
+`s3:GetBucketPolicyStatus`, the Resource Explorer calls, and the Cost Explorer
+and CloudWatch reads that better idle-detection would need are added
+explicitly. Enumerating them is the point — the permission set stays auditable,
+and adding a capability to the scanner requires a visible change here.
+
+There is also a real operational cost: this template is more work to deploy
+than "attach ReadOnlyAccess", and every new AWS service the scanner supports
+may need a line added. That is the right direction for the friction to run.
+
+---
+
+## ADR-008 — Two tiers of evaluation
+
+**Context.** The brief asks how we know the agent's answers are right, and how
+we would know if a change made them worse. A single end-to-end suite answers
+neither well: it needs an API key, it is slow and non-deterministic, and when
+it fails it does not say whether the data or the reasoning was wrong.
+
+**Decision.** Two suites that fail for different reasons.
+
+**Tier 1 — ground truth over the data** (`src/evals/groundTruth.test.ts`).
+Seeds the mock account, runs a real scan, and asserts the result against the
+hand-written answer key in `topology.ts`. No model, no API key, ~2 seconds.
+It checks that the bucket with a neutralised policy is *not* public, that the
+inline-admin role *is* admin, that the private database is reachable by both
+expected chains, and that the publicly-flagged database is reachable by none.
+
+**Tier 2 — answer quality** (`npm run evals`). Fifteen cases run against the
+live agent, scored on the ARNs the answer cites, with precision and recall.
+Each case asserts what must be cited, what must **not** be (the traps), and
+which tools should have been chosen. Any unsupported citation fails the case
+outright.
+
+**Why the split.** Tier 1 runs in CI on every commit and catches the failure
+that matters most: an analyser regression that makes the agent confidently
+wrong through no fault of its own. Tier 2 catches prompt and tool-choice
+regressions, costs money, and needs a key.
+
+It also makes failures diagnosable. If tier 1 passes and tier 2 fails, the
+data is right and the agent misused it — a prompt or tool-description problem.
+If tier 1 fails, nothing about the agent is worth looking at yet.
+
+**Why score citations rather than text.** Citations are already validated
+against what the tools returned, so they are a stronger signal than string
+matching, and they are numeric — which is what makes "did this change make it
+worse?" answerable rather than a matter of opinion. Precision matters as much
+as recall precisely because the mock contains traps: an answer that names every
+bucket achieves perfect recall and is useless.
+
+**Cost.** Grading on citations misses answers that cite the right resources and
+describe them wrongly. `mustMention` / `mustNotMention` patterns cover the
+cases where that has teeth — the agent must say `analytics-db` is *not*
+exposed, not merely mention it.

@@ -10,7 +10,8 @@
     "evals": "tsx src/cli/evals.ts",
     "migrate": "tsx src/cli/migrate.ts",
     "typecheck": "tsc --noEmit",
-    "inspect": "tsx src/cli/inspect.ts"
+    "inspect": "tsx src/cli/inspect.ts",
+    "evals:ground-truth": "vitest run src/evals/groundTruth.test.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.128.0",

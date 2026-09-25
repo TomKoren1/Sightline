@@ -1,38 +1,86 @@
 AWSTemplateFormatVersion: "2010-09-09"
 Description: >
-  dave.io read-only access role.
+  dave.io read-only inventory role.
 
-  This template provisions a cross-account IAM role that dave.io assumes in
-  order to discover and inventory AWS resources in a customer account. It
-  grants the AWS-managed ReadOnlyAccess policy and nothing else. dave.io
-  cannot create, modify, or delete any resource via this role.
+  Replaces the original template in this repository (kept alongside as
+  readonly-role.original.yaml). Two things changed, both narrowing access:
+  the trust policy no longer trusts an entire AWS account, and the permission
+  set no longer grants the ability to read customer data. The reasoning is in
+  docs/DECISIONS.md (ADR-007) and summarised inline below.
 
-  Trust model: dave.io's platform account assumes this role using an
-  ExternalId that is unique per customer, mitigating the confused-deputy
-  attack pattern (see AWS docs on cross-account access).
+  ---------------------------------------------------------------------------
+  WHY THE ORIGINAL WAS CHANGED
+  ---------------------------------------------------------------------------
 
-  --------------------------------------------------------------------------
-  NOTE TO CANDIDATE
-  --------------------------------------------------------------------------
-  You do NOT need to deploy this template. It describes how dave.io obtains
-  access to a customer AWS account in production today. You can use it as
-  is, modify it, or replace it with something better. If you change it,
-  tell us why.
-  --------------------------------------------------------------------------
+  1. `ReadOnlyAccess` is not read-only in the sense an inventory product needs.
+
+     The AWS-managed `ReadOnlyAccess` policy grants roughly 7,000 actions,
+     including data-plane reads: `s3:GetObject`, `dynamodb:GetItem`,
+     `sqs:ReceiveMessage`, `ssm:GetParameter`, `lambda:GetFunction` (which
+     returns a presigned URL to the function's source), `kinesis:GetRecords`
+     and more.
+
+     dave.io needs to know that a bucket exists, who can reach it, and how it
+     is configured. It never needs to read an object out of it. Granting the
+     ability to do so means a compromise of dave.io's platform account becomes
+     a compromise of every customer's *data*, not just their inventory. That
+     is a materially different blast radius, and it is not one the product
+     needs to accept.
+
+     `sqs:ReceiveMessage` deserves a specific mention: it is not even read-only
+     in the literal sense. Receiving a message starts its visibility timeout,
+     hiding it from the consumer that should have processed it. A scanner
+     holding that permission can disrupt a production queue by accident.
+
+  2. Trusting `:root` trusts every principal in dave.io's account.
+
+     `Principal: arn:aws:iam::<dave.io>:root` does not mean "the root user". It
+     means "any principal in that account that IAM permits to call
+     AssumeRole" - every role, every user, every CI job. The ExternalId
+     condition prevents a third party from tricking dave.io into using its
+     access (the confused-deputy problem it is designed for), but it does
+     nothing to limit which *internal* principal can assume the role.
+
+     This version names the scanner role directly, so a compromise of some
+     unrelated workload inside dave.io does not reach customer accounts.
+
+  3. There was no way for a customer to attribute activity to a person.
+
+     Adding `sts:SourceIdentity` to the trust policy means the customer's own
+     CloudTrail records which dave.io operator or system triggered a scan, and
+     that value cannot be changed for the life of the session. Customers
+     auditing a third party with standing access should not have to take our
+     word for who did what.
+
+  ---------------------------------------------------------------------------
+  DEPLOYING
+
+    aws cloudformation deploy \
+      --template-file infra/readonly-role.yaml \
+      --stack-name daveio-readonly \
+      --capabilities CAPABILITY_NAMED_IAM \
+      --parameter-overrides \
+          DaveIoScannerRoleArn=arn:aws:iam::123456789012:role/DaveIoScanner \
+          ExternalId=<the value from your onboarding email>
+
+  Then send dave.io the RoleArn output. Nothing else is required.
+  ---------------------------------------------------------------------------
 
 Parameters:
-  DaveIoAccountId:
+  DaveIoScannerRoleArn:
     Type: String
-    Description: The dave.io platform AWS account ID that will assume this role.
-    Default: "123456789012"
-    AllowedPattern: "^[0-9]{12}$"
-    ConstraintDescription: Must be a 12-digit AWS account ID.
+    Description: >
+      The exact ARN of the dave.io role that performs scans. Deliberately not
+      an account id: this role should be assumable by one principal, not by
+      everything dave.io runs.
+    AllowedPattern: "^arn:aws:iam::[0-9]{12}:role/.+$"
+    ConstraintDescription: Must be a full IAM role ARN, not an account id.
 
   ExternalId:
     Type: String
     Description: >
       A unique, per-customer secret shared between dave.io and this account.
-      dave.io issues this value at onboarding. Treat it as a credential.
+      dave.io issues this at onboarding. Treat it as a credential.
     NoEcho: true
     MinLength: 16
     MaxLength: 128
@@ -42,32 +90,147 @@ Parameters:
     Description: Name of the IAM role to create.
     Default: "DaveIoReadOnlyRole"
 
+  AllowDataPlaneReads:
+    Type: String
+    Description: >
+      Leave as "false". Set to "true" only if a specific dave.io feature is
+      agreed to require reading object or record contents, and only for as
+      long as that feature is in use.
+    Default: "false"
+    AllowedValues: ["true", "false"]
+
+Conditions:
+  DenyDataPlane: !Equals [!Ref AllowDataPlaneReads, "false"]
+
 Resources:
   DaveIoReadOnlyRole:
     Type: AWS::IAM::Role
     Properties:
       RoleName: !Ref RoleName
       Description: >
-        Allows dave.io to read AWS resource metadata for inventory and
-        visualization. Grants no write or delete permissions.
+        Allows dave.io to read AWS resource metadata and configuration for
+        inventory, visualisation and security analysis. Grants no write
+        permissions and, by default, no access to the contents of objects,
+        records, parameters or secrets.
+      # One hour is the maximum a role assumed by another role can hold anyway
+      # (role chaining caps at 3600s), so asking for more is misleading. The
+      # scanner renews its session rather than requesting a long one.
       MaxSessionDuration: 3600
+
       AssumeRolePolicyDocument:
         Version: "2012-10-17"
         Statement:
-          - Effect: Allow
+          - Sid: AllowDaveIoScannerToAssume
+            Effect: Allow
             Principal:
-              AWS: !Sub "arn:aws:iam::${DaveIoAccountId}:root"
+              # The scanner role specifically - not the whole account.
+              AWS: !Ref DaveIoScannerRoleArn
             Action: sts:AssumeRole
             Condition:
               StringEquals:
+                # Mitigates the confused-deputy pattern: knowing this role's
+                # ARN is not sufficient to assume it.
                 sts:ExternalId: !Ref ExternalId
+
+          - Sid: AllowDaveIoScannerToSetSourceIdentity
+            Effect: Allow
+            Principal:
+              AWS: !Ref DaveIoScannerRoleArn
+            Action: sts:SetSourceIdentity
+            Condition:
+              StringEquals:
+                sts:ExternalId: !Ref ExternalId
+              StringLike:
+                # Attributes every session to a named dave.io operator or
+                # system, immutably, in this account's own CloudTrail.
+                sts:SourceIdentity: "daveio:*"
+
       ManagedPolicyArns:
-        - arn:aws:iam::aws:policy/ReadOnlyAccess
+        # SecurityAudit grants the configuration and policy reads that security
+        # analysis needs - IAM policy documents, security group rules, bucket
+        # policies, public access blocks.
+        - arn:aws:iam::aws:policy/SecurityAudit
+        # ViewOnlyAccess grants List/Describe across services so resources can
+        # be enumerated. Between them these cover everything this scanner
+        # calls, without the data-plane reads ReadOnlyAccess would add.
+        - arn:aws:iam::aws:policy/ViewOnlyAccess
+
+      Policies:
+        - PolicyName: DaveIoInventoryGaps
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              # A handful of calls this scanner makes that sit outside
+              # SecurityAudit and ViewOnlyAccess. Enumerated rather than
+              # covered by a wildcard, so the permission set stays auditable.
+              - Sid: InventoryReadsNotCoveredByManagedPolicies
+                Effect: Allow
+                Action:
+                  - "s3:GetBucketPolicyStatus"
+                  - "s3:GetBucketPublicAccessBlock"
+                  - "s3:GetAccountPublicAccessBlock"
+                  - "resource-explorer-2:ListIndexes"
+                  - "resource-explorer-2:Search"
+                  - "resource-explorer-2:GetIndex"
+                  - "ce:GetCostAndUsage"
+                  - "cloudwatch:GetMetricData"
+                  - "cloudwatch:GetMetricStatistics"
+                Resource: "*"
+
+        - !If
+          - DenyDataPlane
+          - PolicyName: DaveIoDenyDataPlaneReads
+            PolicyDocument:
+              Version: "2012-10-17"
+              Statement:
+                # An explicit Deny cannot be overridden by any Allow, including
+                # one a future managed-policy update might introduce. This is
+                # the load-bearing control: it is what makes "dave.io can see
+                # your infrastructure but not your data" a guarantee rather
+                # than a promise about which policies we attached today.
+                - Sid: NeverReadCustomerData
+                  Effect: Deny
+                  Action:
+                    # Object and record contents
+                    - "s3:GetObject"
+                    - "s3:GetObjectVersion"
+                    - "s3:GetObjectTorrent"
+                    - "dynamodb:GetItem"
+                    - "dynamodb:BatchGetItem"
+                    - "dynamodb:Query"
+                    - "dynamodb:Scan"
+                    - "kinesis:GetRecords"
+                    - "kinesis:GetShardIterator"
+                    # Secrets and configuration values
+                    - "secretsmanager:GetSecretValue"
+                    - "ssm:GetParameter"
+                    - "ssm:GetParameters"
+                    - "ssm:GetParametersByPath"
+                    - "kms:Decrypt"
+                    # Source code and deployment artefacts. GetFunction
+                    # returns a presigned URL to the function's code; the
+                    # configuration call we actually use is unaffected.
+                    - "lambda:GetFunction"
+                    - "codecommit:GetFile"
+                    - "codecommit:GetBlob"
+                    # Not read-only despite the name: receiving a message
+                    # starts its visibility timeout and can hide it from the
+                    # consumer that should have processed it.
+                    - "sqs:ReceiveMessage"
+                    # Console and instance access
+                    - "ec2:GetPasswordData"
+                    - "ec2-instance-connect:SendSSHPublicKey"
+                    - "ssm:StartSession"
+                  Resource: "*"
+          - !Ref AWS::NoValue
+
       Tags:
         - Key: ManagedBy
           Value: dave.io
         - Key: Purpose
           Value: read-only-inventory
+        - Key: DataAccess
+          Value: !If [DenyDataPlane, "metadata-only", "includes-data-plane"]
 
 Outputs:
   RoleArn:
@@ -76,8 +239,17 @@ Outputs:
     Export:
       Name: !Sub "${AWS::StackName}-RoleArn"
 
-  ExternalIdReminder:
-    Description: >
-      The ExternalId you provided at stack creation. dave.io needs both this
-      and the RoleArn above to complete onboarding.
-    Value: "Provided at stack creation — see your dave.io onboarding email."
+  DataAccessPosture:
+    Description: Whether this role can read the contents of customer data.
+    Value: !If
+      - DenyDataPlane
+      - "Metadata only. Reading object, record, parameter and secret contents is explicitly denied."
+      - "WARNING: data-plane reads are permitted. Set AllowDataPlaneReads=false unless a specific agreed feature requires them."
+
+  VerifyCommand:
+    Description: Confirm the deny actually works, from this account.
+    Value: !Sub >-
+      aws iam simulate-principal-policy
+      --policy-source-arn ${DaveIoReadOnlyRole.Arn}
+      --action-names s3:GetObject s3:ListBucket
+      --query 'EvaluationResults[].{Action:EvalActionName,Decision:EvalDecision}'
