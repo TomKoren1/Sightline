@@ -1409,3 +1409,45 @@ A smaller lesson inside the first bug: `flex-1` does not mean "shrink to fit".
 `min-width: auto` on flex items is one of the few CSS defaults that silently
 produces overflow rather than compression, and it is worth reaching for
 `min-w-0` by reflex whenever a flex child contains text.
+
+---
+
+## #35 — A documented command that did not exist
+
+**Symptom.** Working through the README command by command, `npm run query -w
+@daveio/api` failed: no such script.
+
+**Diagnosis.** `apps/api/src/cli/query.ts` existed, worked, and its own header
+comment gave that exact invocation. The npm script was simply never added. So
+the CLI had been written, documented in two places, and was unreachable by the
+command both of them named.
+
+**The wider problem.** This is the third time documentation in this repository
+has been wrong in a way nothing could catch. The CloudFormation template had
+never been deployed and did not work (#20). Its explanatory header was silently
+deleted twice (#22). And an audit found the README quoting eight ADRs where
+there were thirteen, fourteen assertions where there were fifteen, and a test
+count stale by thirty-eight.
+
+Each time the fix was manual and each time it rotted again, because the README
+is the one artefact everybody reads and nothing executes.
+
+**Fix.** The script, and then a guard of the same shape as the template tests:
+`readme.test.ts` extracts every `npm run …` the README tells you to type and
+asserts the script exists, then checks the counts it quotes — ADRs, agent tools,
+eval cases, tier-1 checks — against the files they describe.
+
+Verified to fire rather than pass vacuously: removing the `query` script and
+changing "fourteen ADRs" to "eleven" fails exactly those two cases and nothing
+else. That check matters more than usual here, since #23 and #27 are both
+entries about guards that silently could not fail.
+
+**What to take from it.** Instructions are an interface, and an interface with
+no tests drifts from the thing it describes. The test is eight lines of regex
+and it replaces two full manual audits, both of which I had already done and
+both of which had missed this one.
+
+It also argues for a specific habit: when a file's own comments document how to
+invoke it, that string should be derived from, or checked against, the thing
+that actually invokes it. `query.ts` was honest and wrong for as long as it
+existed.

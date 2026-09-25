@@ -11,6 +11,7 @@
     "migrate": "tsx src/cli/migrate.ts",
     "typecheck": "tsc --noEmit",
     "inspect": "tsx src/cli/inspect.ts",
+    "query": "tsx src/cli/query.ts",
     "evals:ground-truth": "vitest run src/evals/groundTruth.test.ts"
   },
   "dependencies": {

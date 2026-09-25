@@ -892,3 +892,24 @@ argument as ADR-012 and log #12: a console that cries wolf is one nobody reads.
 
 Verified by re-measuring after the fix — the Changes tab now ends at x=287, and
 the page loads with zero failed requests.
+
+---
+
+### `fix: add the missing query script, and guard the README against rot`
+
+Working through the README command by command found `npm run query -w
+@daveio/api` documented in the commands table, named in the CLI file's own
+header, and defined nowhere. The script existed and worked; it was simply never
+wired up. Engineering log #35.
+
+Rather than fix it and move on — which is what happened the last two times
+documentation here was wrong (#20, #22, and the count drift an audit caught) —
+`readme.test.ts` now extracts every `npm run …` the README tells the reader to
+type and asserts it exists, and checks the counts it quotes (ADRs, agent tools,
+tier-1 checks, tier-2 cases) against the files they describe.
+
+Verified to fire: removing the `query` script and changing "fourteen ADRs" to
+"eleven" fails exactly those two cases. That check matters here because #23 and
+#27 are both entries about guards that silently could not fail.
+
+234 unit tests.
