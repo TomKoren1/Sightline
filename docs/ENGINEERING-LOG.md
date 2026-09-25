@@ -590,3 +590,87 @@ variables. The template accepts a user ARN and documents the single-account case
 confusion and instead transmitted it. Documentation written by someone holding
 the whole model in their head will omit the distinction that is obvious to them,
 and the only reliable way to find out is to watch someone follow it.
+
+---
+
+## #20 — The IAM template had never been deployed, and did not work
+
+**Symptom.** Deploying `infra/readonly-role.yaml` to a real account failed and
+rolled back:
+
+```
+Policy arn:aws:iam::aws:policy/ViewOnlyAccess does not exist or is not
+attachable. (Status Code: 404)
+```
+
+**Diagnosis.** `ViewOnlyAccess` is an AWS **job function** policy, so it lives
+at `arn:aws:iam::aws:policy/job-function/ViewOnlyAccess`. The obvious ARN — the
+one every other managed policy uses, and the one I wrote — does not exist.
+`SecurityAudit`, attached on the line above, _is_ at the root, which makes the
+inconsistency easy to miss.
+
+Confirmed rather than guessed:
+
+```
+aws iam list-policies --scope AWS --query "Policies[?PolicyName=='ViewOnlyAccess'].Arn"
+-> arn:aws:iam::aws:policy/job-function/ViewOnlyAccess
+```
+
+**Why nothing caught it.** The template is documentation as far as this
+repository is concerned: nothing deploys it, no test exercises it, and the mock
+never sees it — moto is handed credentials, not a CloudFormation stack. The
+README describes its permissions in detail and ADR-007 argues carefully for
+them, and the artefact that would grant them had never been run once.
+
+A second trap followed: a stack that fails on creation sits in
+`ROLLBACK_COMPLETE`, which cannot be updated. It has to be deleted before
+redeploying, and `aws cloudformation deploy` does not say so.
+
+**Fix.** Corrected the ARN, deleted the failed stack, redeployed. Then verified
+the permission model against real IAM rather than trusting it:
+
+```
+aws iam simulate-principal-policy --policy-source-arn <role> --action-names ...
+
+  s3:GetObject                   explicitDeny
+  secretsmanager:GetSecretValue  explicitDeny
+  sqs:ReceiveMessage             explicitDeny
+  s3:ListBucket                  allowed
+  ec2:DescribeInstances          allowed
+  iam:ListRoles                  allowed
+  s3:DeleteBucket                implicitDeny
+```
+
+Every claim ADR-007 makes, confirmed by AWS's own policy simulator — including
+the `sqs:ReceiveMessage` deny that the whole argument for replacing
+`ReadOnlyAccess` turns on. `simulate-principal-policy` is in the template's
+outputs so a customer can run it themselves rather than taking our word for it.
+
+**What to take from it.** Infrastructure code that is never executed is a
+hypothesis. This one was argued for over several hundred words of documentation
+and had a 404 in it. The same is true of any artefact CI does not run: the
+scanner is tested every commit and the template it depends on was not, because
+one is code and the other looked like documentation.
+
+---
+
+## #21 — A configuration knob that existed only in code
+
+**Symptom.** `AWS_SCAN_REGIONS` was set empty in `.env` to trigger region
+discovery, and the scan still covered exactly three regions.
+
+**Diagnosis.** The key was not in `.env` at all — my edit had matched nothing —
+because it had never been in `.env.example` either. It existed only as a Zod
+default in `config.ts`, set to the three regions the mock uses. So the intended
+production behaviour (discover every enabled region) was unreachable by anyone
+who had not read the source.
+
+**Fix.** Documented in `.env.example`, along with `SCAN_CONCURRENCY` and
+`SCAN_FAULT_INJECTION`, which had the same problem. With discovery enabled the
+scan covered **17 regions, 70 units, 288 API calls, no failures** on a real
+account.
+
+**Worth recording** because the default was chosen to make the mock convenient
+and quietly became the product's behaviour. A default that suits your test
+fixture is worth a second look, and a setting absent from the example
+configuration effectively does not exist.
