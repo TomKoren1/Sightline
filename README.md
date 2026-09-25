@@ -48,10 +48,20 @@ receive the same permissive policy and only one becomes public — the other's
 access block neutralises it — which is the clearest demonstration that verdicts
 are computed rather than read off a field.
 
-The header has two more things worth opening. **Trust** shows what is checked
-and when it last ran: the data checks run on demand in milliseconds with no API
-key, and the last agent eval run is displayed. **Connection** is the onboarding
-guide for pointing this at a real AWS account.
+The header carries three more things.
+
+**Demo / My AWS** switches between the seeded fixture and a real account at
+runtime, without restarting or rewriting `.env`. Switching does not rescan, so
+the graph keeps showing the previous account until you run one — the banner says
+so rather than letting you read one account's inventory under another's name.
+
+**Trust** shows what is checked and when it last ran: the data checks run on
+demand in milliseconds with no API key, and the last agent eval run is shown.
+
+**Connection** is a step-by-step guide for pointing this at a real AWS account.
+It generates an external id, pre-fills the CloudFormation command with the
+identity this backend runs as, and tests the connection — diagnosing failures
+rather than echoing SDK errors.
 
 ### The LLM key
 
@@ -93,7 +103,7 @@ same code in both modes.
 | `npm run drift`                             | Change the mock account, so a second scan has a diff   |
 | `npm run inspect -w @daveio/api`            | Scan and print findings without touching the databases |
 | `npm run query -w @daveio/api`              | Run every curated query against the graph              |
-| `npm test`                                  | 101 unit tests                                         |
+| `npm test`                                  | 138 unit tests                                         |
 | `npm run verify`                            | Everything CI's static job runs — use before pushing   |
 | `npm run evals:ground-truth -w @daveio/api` | Tier-1 evals — no API key needed                       |
 | `npm run evals -w @daveio/api`              | Tier-2 agent evals — needs a key                       |
@@ -105,14 +115,15 @@ same code in both modes.
 The brief asks for mock data whose questions have non-obvious answers, so the
 account is built around traps that defeat a naive lookup:
 
-|                                         |                                                                                                                                                                                                                                |
-| --------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| **Two buckets, one policy**             | `northwind-public-assets` and `northwind-reports` carry byte-identical wildcard-principal policies. Only the first is public; the second is neutralised by `RestrictPublicBuckets`.                                            |
-| **A private database anyone can reach** | `northwind-prod-db` is `PubliclyAccessible: false` in a private subnet, and is reachable from the internet by **two** chains — three hops through the web and app tiers, and two through a bastion with SSH open to the world. |
-| **A public database nobody can reach**  | `analytics-db` is `PubliclyAccessible: true` and its security group opens no ports. The obvious answer is wrong.                                                                                                               |
-| **Admin hiding in plain sight**         | Three roles are effectively administrator. One carries `AdministratorAccess`, one grants `*:*` **inline** under the name `LegacyDeployRole`, and one is privileged but entirely unused.                                        |
-| **Money going nowhere**                 | Unattached volumes, an unassociated elastic IP, a stopped instance, and a NAT gateway in an abandoned region — about $99/month.                                                                                                |
-| **Three regions**                       | Production in `us-east-1`, staging in `eu-west-1` with RDP open to the world, and `ap-southeast-1` nobody has looked at in two years.                                                                                          |
+|                                         |                                                                                                                                                                                                                                                                                                                                                      |
+| --------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Two buckets, one policy**             | `northwind-public-assets` and `northwind-reports` carry byte-identical wildcard-principal policies. Only the first is public; the second is neutralised by `RestrictPublicBuckets`.                                                                                                                                                                  |
+| **Public vs unguarded**                 | Buckets with Block Public Access switched off are reported **separately** from public ones. Turning the block off grants nobody anything — it removes the guardrail that would neutralise a permissive policy, so an anonymous request still gets 403. Conflating the two is the most common misreading in this area ([ADR-012](docs/DECISIONS.md)). |
+| **A private database anyone can reach** | `northwind-prod-db` is `PubliclyAccessible: false` in a private subnet, and is reachable from the internet by **two** chains — three hops through the web and app tiers, and two through a bastion with SSH open to the world.                                                                                                                       |
+| **A public database nobody can reach**  | `analytics-db` is `PubliclyAccessible: true` and its security group opens no ports. The obvious answer is wrong.                                                                                                                                                                                                                                     |
+| **Admin hiding in plain sight**         | Three roles are effectively administrator. One carries `AdministratorAccess`, one grants `*:*` **inline** under the name `LegacyDeployRole`, and one is privileged but entirely unused.                                                                                                                                                              |
+| **Money going nowhere**                 | Unattached volumes, an unassociated elastic IP, a stopped instance, and a NAT gateway in an abandoned region — about $99/month.                                                                                                                                                                                                                      |
+| **Three regions**                       | Production in `us-east-1`, staging in `eu-west-1` with RDP open to the world, and `ap-southeast-1` nobody has looked at in two years.                                                                                                                                                                                                                |
 
 The answer key lives in [`packages/mock-aws/src/topology.ts`](packages/mock-aws/src/topology.ts)
 and is written by hand rather than generated from the code under test, so an
@@ -165,7 +176,7 @@ be quoted verbatim rather than paraphrased by a model that might get it wrong.
 
 ## How the agent works, and why it is built that way
 
-A plain tool-calling loop over **thirteen curated, parameterised tools** — no
+A plain tool-calling loop over **fifteen curated, parameterised tools** — no
 agent framework. The model chooses which tool to call and with what arguments;
 it never writes the query.
 

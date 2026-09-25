@@ -592,3 +592,99 @@ because a customer granting a third party standing access is reasonably
 interested in how it is constrained.
 
 **114 unit tests, evals 16/16 unchanged.**
+
+---
+
+### `fix: real-account mode was silently scanning the mock`
+
+Found by connecting a real AWS account. `AWS_ENDPOINT_URL` is an SDK-wide
+endpoint override that the SDK reads from `process.env` directly — and dotenv
+puts `.env` there. So with `AWS_MODE=real`, every request including
+`sts:AssumeRole` still went to moto. moto accepts any `AssumeRole`, so the
+connection test passed and a scan reported 98 resources of fixture data
+**labelled with the real account id**. `AWS_ACCESS_KEY_ID=mock` likewise
+shadowed `~/.aws/credentials`, being first in the SDK's chain.
+
+The uncomfortable part, recorded in engineering log #17: this project argues
+that a confident, plausible, wrong answer is the failure worth engineering
+against, and it then produced a fabricated inventory of somebody's account while
+every check it owns passed — because all of them validate data _after_ ingest
+and none asked whether ingest was talking to the right cloud.
+
+Also restored 47 lines Prettier had silently deleted from the CloudFormation
+template, and reworked the onboarding guide, which had transmitted the very
+confusion it existed to prevent.
+
+---
+
+### `fix(infra): correct the ViewOnlyAccess policy ARN, verified against real IAM`
+
+The template had never been deployed by anyone, and did not work:
+`ViewOnlyAccess` is a **job function** policy at
+`arn:aws:iam::aws:policy/job-function/ViewOnlyAccess`, not at the root like
+`SecurityAudit` on the line above. A real deployment failed and rolled back.
+
+Now verified with `iam simulate-principal-policy` rather than asserted:
+`s3:GetObject`, `secretsmanager:GetSecretValue` and `sqs:ReceiveMessage` all
+`explicitDeny`, while `ListBucket`, `DescribeInstances` and `ListRoles` are
+allowed. Every claim ADR-007 makes, confirmed by AWS's own simulator.
+
+Also documents `AWS_SCAN_REGIONS`, `SCAN_CONCURRENCY` and
+`SCAN_FAULT_INJECTION`, which existed only as code defaults — so region
+discovery was unreachable without reading the source. With it enabled: 17
+regions, 70 units, no failures.
+
+---
+
+### `test(infra): guard the template's permissions and reasoning`
+
+The template's explanatory header was silently truncated twice — once
+demonstrably by Prettier, once by something never identified. Both times ~74
+lines vanished, including the rationale the README points at, and nothing
+failed, because comments have no tests.
+
+17 tests now assert both halves: the permissions (job-function ViewOnlyAccess,
+no `ReadOnlyAccess`, explicit Deny on every named data-plane action, trust
+scoped to a principal not `:root`) and that the reasoning survives. Verified by
+simulating the corruption and confirming failure.
+
+---
+
+### `test: refuse to run the ground-truth suite against a real AWS account`
+
+With `.env` pointed at a real account, the suite seeded the fixture and then
+scanned the real estate — ten confusing failures, and a test run making live API
+calls against somebody's infrastructure. `npm run verify` never caught it
+because it excludes the eval directory.
+
+---
+
+### `feat: account toggle, and separating 'unprotected' from 'public'`
+
+A user disabled Block Public Access on a bucket and expected it to be reported
+public. It was not, correctly — no policy, owner-only ACL, anonymous GET returns 403. But the posture finding was invisible, so there are now two independent
+verdicts (ADR-012): `isPublic` means anonymous access is granted **now**,
+`isUnprotected` means nothing would stop it being granted. Separate tabs, a
+separate agent tool, and a prompt paragraph, because the model conflates them
+too.
+
+Adds a header toggle between the seeded demo account and a configured real one,
+switching at runtime without rewriting `.env` (ADR-013). That required `isMock`
+to stop being a constant captured at import — TypeScript then found all nine
+call sites except one in a test, where `!isMock` on a function is valid and
+always false, silently disabling the guard above.
+
+---
+
+### `fix: honour the onboarding variables in mock mode, and correct documentation drift`
+
+Audit follow-up. The toggle had made mock mode derive its role ARN and external
+id, silently ignoring `AWS_TARGET_ROLE_ARN` and `AWS_EXTERNAL_ID` — the
+project's own onboarding variables, shipped in `.env.example`. Editing them
+appeared to do nothing. They are honoured again whenever `.env` itself describes
+the mock, and derived only when `.env` describes a real account and the user has
+toggled away from it.
+
+Also corrects README drift accumulated across recent work: the test count, the
+tool count, and the header controls, plus the public/unguarded distinction in
+the mock-account table.

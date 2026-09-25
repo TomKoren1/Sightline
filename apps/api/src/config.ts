@@ -64,7 +64,7 @@ export const cfg = parsed.data;
  * The mode the process started in. `.env` decides this; the toggle does not
  * change it, so a restart always returns to a known state.
  */
-export const configuredMode = cfg.AWS_MODE;
+export const configuredMode: "mock" | "real" = cfg.AWS_MODE;
 
 /**
  * The mode currently in effect.
@@ -98,6 +98,25 @@ export function activeConnection(): {
   endpoint: string | null;
 } {
   if (activeMode === "mock") {
+    /**
+     * When `.env` itself describes the mock, its values are authoritative.
+     *
+     * `AWS_TARGET_ROLE_ARN` and `AWS_EXTERNAL_ID` are the onboarding variables
+     * the project ships with, and silently ignoring them because a runtime
+     * toggle exists would be a nasty surprise: editing them would appear to do
+     * nothing. So they are honoured whenever the configured mode is mock.
+     *
+     * They are only derived when `.env` describes a *real* account and the user
+     * has toggled to mock - where taking the real role ARN would be wrong, and
+     * there is nothing else to fall back to.
+     */
+    if (configuredMode === "mock") {
+      return {
+        roleArn: cfg.AWS_TARGET_ROLE_ARN,
+        externalId: cfg.AWS_EXTERNAL_ID,
+        endpoint: cfg.AWS_ENDPOINT_URL,
+      };
+    }
     const account = process.env["MOCK_AWS_ACCOUNT_ID"] ?? "123456789012";
     return {
       roleArn: `arn:aws:iam::${account}:role/DaveIoReadOnlyRole`,

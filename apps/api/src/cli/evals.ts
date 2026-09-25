@@ -15,7 +15,7 @@
 import { randomUUID } from "node:crypto";
 import { writeFile, mkdir } from "node:fs/promises";
 
-import { cfg } from "../config.js";
+import { cfg, isMock } from "../config.js";
 import { ask } from "../agent/agent.js";
 import { EVAL_CASES } from "../evals/cases.js";
 import { gradeCase, summarise, type CaseResult } from "../evals/grade.js";
@@ -36,6 +36,24 @@ try {
   if (!cfg.ANTHROPIC_API_KEY || cfg.ANTHROPIC_API_KEY === "replace-me") {
     console.error("ANTHROPIC_API_KEY is not set. Add it to .env and try again.");
     console.error("The ground-truth suite runs without a key: npx vitest run src/evals");
+    process.exit(1);
+  }
+
+  /**
+   * Refuse to run against a real account.
+   *
+   * Every case asserts against the seeded fixture - `northwind-prod-db`,
+   * `prod-bastion` and the rest. Against a real estate they would all fail for
+   * the same uninteresting reason, after spending money on sixteen model calls
+   * to get there. Same hazard as the ground-truth suite (engineering log #23),
+   * which is why it is checked the same way.
+   */
+  if (!isMock()) {
+    console.error(
+      "AWS_MODE is not 'mock'. These cases assert against the seeded fixture, so they\n" +
+        "would fail against a real account after spending money to do it.\n\n" +
+        "Either set AWS_MODE=mock in .env, or use the Demo toggle in the UI and re-scan.",
+    );
     process.exit(1);
   }
 

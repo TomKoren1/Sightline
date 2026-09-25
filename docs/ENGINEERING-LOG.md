@@ -747,3 +747,60 @@ have configured" eventually includes production credentials. Anything that can
 reach a real environment should assert it is not in one, first and loudly,
 rather than relying on the environment being right — the same argument as ADR-009
 and engineering log #17, arrived at from a third direction.
+
+---
+
+## #24 — The toggle quietly disabled the project's own onboarding variables
+
+**Symptom.** Found by auditing the repository against the brief rather than by
+any failure. `AWS_TARGET_ROLE_ARN` and `AWS_EXTERNAL_ID` — the two AWS
+onboarding variables the assignment itself ships, and the ones `.env.example`
+documents — had stopped having any effect in mock mode. Editing either appeared
+to do nothing.
+
+**Diagnosis.** Adding the runtime account toggle (ADR-013) meant the mock
+profile had to come from somewhere other than `.env`, because `.env` might be
+describing a real account that the user had toggled away from. I made the mock
+profile derive its role ARN and external id unconditionally, which solved that
+case and silently broke the ordinary one: a fresh clone, where `.env` _is_ the
+mock configuration.
+
+**Fix.** The mock profile now honours `.env` whenever the **configured** mode is
+mock, and derives values only when `.env` describes a real account and the user
+has toggled away from it. Verified by changing the external id and watching the
+connection endpoint report the new value.
+
+One consequence, stated rather than hidden: `.env` describes exactly one
+account. From a mock configuration the "My AWS" toggle is disabled, with a
+tooltip saying no real account is configured, because there is nowhere for real
+credentials to live. That is honest, and the alternative — a second set of
+`REAL_*` variables — buys little for a single-tenant tool.
+
+**What to take from it.** A feature added for the unusual case quietly changed
+the usual one. The toggle exists for a demo convenience; the variables it
+overrode are the project's primary interface. Worth asking, when a new mode
+needs configuration from somewhere other than the obvious place, whether the
+obvious place has just stopped working.
+
+---
+
+## #25 — The eval CLI would have run sixteen fixture questions at a real account
+
+**Symptom.** Noticed while fixing #24, before it bit anyone.
+
+**Diagnosis.** `npm run evals` reads the same configuration as the application.
+With `.env` pointed at a real account it would have asked sixteen questions
+about `northwind-prod-db`, `prod-bastion` and friends, failed all of them for
+the same uninteresting reason, and spent money on model calls to get there.
+
+Exactly the hazard the ground-truth suite had (#23), in the sibling command,
+and the fix for that one had not been generalised.
+
+**Fix.** The same guard: refuse unless `isMock()`, with a message pointing at
+both ways to get there — `AWS_MODE=mock`, or the UI's Demo toggle followed by a
+rescan.
+
+**Worth recording** because fixing a bug in one place and not looking for its
+siblings is how the second instance gets found in production. Both commands read
+application configuration and assert against a fixture; that shape is the thing
+to search for, not the specific file.
