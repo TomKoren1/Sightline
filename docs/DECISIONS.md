@@ -294,3 +294,49 @@ bucket achieves perfect recall and is useless.
 describe them wrongly. `mustMention` / `mustNotMention` patterns cover the
 cases where that has teeth — the agent must say `analytics-db` is _not_
 exposed, not merely mention it.
+
+---
+
+## ADR-009 — The read-only refusal is enforced in code, not prompted
+
+**Context.** The brief's one hard rule is that the agent must never change
+anything. Structurally it cannot: no tool can express a mutation, and the IAM
+role has no write permissions. But a user only learns that from what an answer
+_says_, and the eval suite caught the agent answering "please delete this
+volume" with the volume's details and a CLI command — safe, useful, and silent
+on the fact that dave.io holds no ability to touch their account.
+
+**Options.**
+
+- _Prompt harder._ Tried three times: stating the requirement, stating it
+  emphatically with explicit anti-patterns, and reordering the prompt after
+  discovering the Style rules were competing with it ("do not pad with caveats"
+  was being applied to the refusal). None held. Engineering log #15 has the
+  detail.
+- _Refuse to answer change requests at all._ Guarantees the outcome and makes
+  the product worse. The model's answer — confirming the resource, flagging
+  that it was tagged `production`, offering a snapshot first — is exactly what a
+  DevOps engineer wants.
+- _Enforce the statement in code, keep the answer._
+
+**Decision.** The third. `readOnlyGuard.ts` detects a mutation request directed
+at the agent, checks whether the answer already declines, and prepends an
+explicit notice only when it does not.
+
+**Why.** It is the same argument as ADR-004, applied to safety instead of
+security analysis: the part that must be true is computed deterministically, and
+the model is left doing what it is reliably good at. It also makes the property
+testable — eight unit tests, rather than a prompt whose compliance can only be
+sampled.
+
+The general principle, which is worth stating because it recurs: prompting is
+the right tool for tone, emphasis and preference; it is the wrong tool for a
+guarantee. The signal that you have crossed that line is finding yourself
+saying the same thing louder.
+
+**Cost.** Two. The detector is a heuristic over imperative verbs and request
+markers, so it will miss unusual phrasings — it is a second line of defence
+behind a prompt that usually works, not a parser. And when it fires on an
+answer that declined in wording the detector did not recognise, the notice is
+mildly redundant. Both failure directions are harmless, which is why a
+conservative heuristic is acceptable here; the reverse trade-off would not be.

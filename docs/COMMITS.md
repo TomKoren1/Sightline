@@ -469,3 +469,41 @@ now loads the repo-root file explicitly via `loadEnv(mode, repoRoot, "")`. And
 SSE responses are explicitly de-buffered in the proxy, which Vite would
 otherwise hold and deliver at the end — silently defeating scan progress
 reporting for exactly the remote case this change enables. Engineering log #14.
+
+---
+
+### `feat(api): enforce the read-only refusal in code rather than prompting for it`
+
+The eval suite caught the agent answering _"please delete the orphaned-vol-1
+volume"_ with the volume's details, its cost, a warning that it was tagged
+`production`, and the exact CLI command — safe, genuinely useful, and never
+saying that dave.io holds no ability to touch the account.
+
+That matters because the brief's hard rule is one this project _claims_, and
+every reply to a change request is where a user tests the claim. An answer that
+quietly declines by handing over a command reads like a missing feature.
+
+Three attempts to fix it by prompting failed. The third is the interesting one:
+verifying the built prompt showed the instruction was present and correct, which
+ruled out the obvious explanation and surfaced a conflict — the Style section's
+"do not pad with caveats" appeared _before_ the constraint, and the model was
+classifying the read-only statement as a caveat and dropping it. Reordering and
+exempting it explicitly still failed, three runs out of three.
+
+So the guarantee moved into `readOnlyGuard.ts`, which detects a change request
+directed at the agent, checks whether the answer already declines, and prepends
+an explicit notice only when it does not. The model's answer is kept in full;
+the useful part was never the problem.
+
+This is ADR-004's argument applied to safety rather than security analysis: the
+part that must be true is computed in code, and the model does what it is
+reliably good at. The general rule, now recorded in ADR-009: prompting is right
+for tone and emphasis and wrong for a guarantee, and the tell that you have
+crossed that line is finding yourself saying the same thing louder.
+
+Deliberately conservative — it fires on an instruction to the agent, not on any
+mention of a destructive verb, because a notice prepended to "which volumes
+could I safely delete?" would be noise, and noise is how a real notice stops
+being read. Eight unit tests pin both halves.
+
+**Eval suite now 15/15, mean F1 1.0, no unsupported citations.**

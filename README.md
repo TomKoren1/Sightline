@@ -192,13 +192,16 @@ reachable by none.
 **Tier 2 — answer quality.** Fifteen cases against the live agent, scored on
 the ARNs each answer cites, with precision and recall.
 
-Last recorded full run on `claude-sonnet-5`: **14/15, mean F1 0.933, no
-unsupported citations.** The single failure was a defect in the test rather
-than the answer — it expected the agent to cite the host named in the question
-when the question asked what that host could _reach_ (engineering log #13). The
-case has been corrected to assert the actual blast radius, and passes on
-re-run; a clean full-suite run has not been recorded since, because the API
-account ran out of credit partway through the next one. Each case asserts what
+Last recorded full run on `claude-sonnet-5`: **15/15, mean F1 1.0, no
+unsupported citations.**
+
+Getting there is the better advertisement for the suite than the score is. It
+caught two real problems. One was a defect in a test rather than an answer
+(engineering log #13). The other was the agent answering _"please delete this
+volume"_ with the volume's details and a CLI command — safe, useful, and never
+saying it could not act. Three attempts to fix that by prompting failed,
+including one where the Style rules turned out to be competing with the
+constraint; the guarantee now lives in code (ADR-009, engineering log #15). Each case asserts what
 must be cited, what must **not** be (the traps), and which tools should have
 been chosen. Precision matters as much as recall precisely because of the
 traps: an answer naming every bucket achieves perfect recall and is useless.

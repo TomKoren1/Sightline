@@ -35,6 +35,7 @@ import { summariseAccount } from "../db/queries.js";
 import { CitationTracker, validateCitations } from "./citations.js";
 import { buildSystemPrompt } from "./prompt.js";
 import { TOOL_DEFINITIONS, runTool } from "./tools.js";
+import { enforceReadOnlyNotice } from "./readOnlyGuard.js";
 
 /**
  * Cap the loop. Every iteration is a model call, so a model that keeps asking
@@ -222,12 +223,23 @@ export async function ask(options: AskOptions): Promise<AgentMessage> {
       "to a specific resource or region.";
   }
 
-  const { citations, warnings } = validateCitations(answer, tracker.allowed, tracker.known);
+  /**
+   * A request to change something must be answered with an explicit statement
+   * that we cannot. The prompt asks for this and the model does not reliably
+   * comply, so it is guaranteed here instead - see readOnlyGuard.ts.
+   */
+  const guarded = enforceReadOnlyNotice(question, answer);
+
+  const { citations, warnings } = validateCitations(
+    guarded.content,
+    tracker.allowed,
+    tracker.known,
+  );
 
   const message: AgentMessage = {
     id: messageId,
     role: "assistant",
-    content: answer,
+    content: guarded.content,
     createdAt: new Date().toISOString(),
     toolCalls,
     citations,
