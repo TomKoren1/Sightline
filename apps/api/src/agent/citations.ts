@@ -18,10 +18,26 @@
 import type { Citation } from "@daveio/shared";
 
 /**
- * Matches an AWS ARN. Trailing punctuation is excluded so that a sentence
- * ending in an ARN does not capture the full stop.
+ * Matches an AWS ARN.
+ *
+ * The excluded character class matters more than it looks. The model writes
+ * Markdown, so an ARN normally arrives wrapped in backticks or bold markers,
+ * and a greedy match swallows the closing delimiter - producing an identifier
+ * that matches nothing the tools returned and a spurious "unverified" warning
+ * on a perfectly good answer. A validator that cries wolf is worse than none,
+ * because the real warnings stop being read.
+ *
+ * Note the one delimiter deliberately NOT excluded: a colon. An ARN's final
+ * section can itself contain colons - `arn:aws:rds:eu-west-1:123:db:my-db` and
+ * SNS topic ARNs both do - so excluding it truncates those to their fifth
+ * section and produces exactly the false positive this class exists to avoid.
+ * A trailing colon is instead removed by TRAILING_NOISE below.
  */
-const ARN_PATTERN = /arn:[a-z0-9-]*:[a-z0-9-]*:[a-z0-9-]*:[0-9]*:[^\s,;)"'\]}]+/gi;
+const ARN_PATTERN =
+  /arn:[a-z0-9-]*:[a-z0-9-]*:[a-z0-9-]*:[0-9]*:[^\s,;!?()"'`*<>|[\]{}]+/gi;
+
+/** Trailing punctuation that is sentence or Markdown syntax, never part of an ARN. */
+const TRAILING_NOISE = /[.,;:!?)\]}`*_~>]+$/;
 
 export interface KnownResource {
   arn: string;
@@ -51,9 +67,9 @@ export function validateCitations(
   const seen = new Set<string>();
 
   for (const match of text.matchAll(ARN_PATTERN)) {
-    // Strip a trailing period that is sentence punctuation rather than part of
-    // the identifier. Real ARNs do not end in a dot.
-    const arn = match[0].replace(/\.+$/, "");
+    // Second line of defence: strip any trailing sentence or Markdown
+    // punctuation the character class above did not already exclude.
+    const arn = match[0].replace(TRAILING_NOISE, "");
     if (seen.has(arn)) continue;
     seen.add(arn);
 

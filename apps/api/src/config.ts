@@ -44,6 +44,12 @@ const schema = z.object({
   ANTHROPIC_MODEL: z.string().default("claude-sonnet-5"),
 
   BACKEND_PORT: z.coerce.number().int().positive().default(3000),
+  /**
+   * Bind address for the API. Loopback by default: the frontend reaches it
+   * through Vite's server-side proxy, so it does not need to be exposed even
+   * when the UI is served to another machine.
+   */
+  BACKEND_HOST: z.string().default("127.0.0.1"),
 });
 
 const parsed = schema.safeParse(process.env);

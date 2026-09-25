@@ -280,3 +280,83 @@ instance: `undefined` is not representable in JSON and vanishes silently, so
 any optional field on an API boundary needs normalising at the point it is
 built. TypeScript does not catch it — `before: unknown` is perfectly happy with
 `undefined`.
+
+---
+
+## #12 — The citation validator cried wolf at Markdown
+
+**Symptom.** The first live agent answer was correct, and the UI warned that it
+was unverified:
+
+> ⚠ The answer cites `arn:aws:s3:::northwind-public-assets``, which no tool
+> returned during this conversation.
+
+**Diagnosis.** The model writes Markdown, so it renders an ARN as
+`` `arn:aws:s3:::northwind-public-assets` ``. The ARN pattern's excluded
+character class did not include a backtick, so the match swallowed the closing
+one. The resulting string matched nothing the tools had returned, which is
+exactly the condition the validator is built to flag.
+
+This is worse than a cosmetic bug. A validator that produces false positives on
+correct answers trains the user to ignore it, which destroys the value of the
+true positives — the entire point of ADR-006.
+
+**Fix, and the second bug inside it.** Excluding Markdown delimiters was
+straightforward, but the first attempt also excluded `:` — which broke
+`arn:aws:rds:us-east-1:123456789012:db:northwind-prod-db`, truncating it at
+`...:db`. An ARN's final section can contain colons (RDS, SNS, Step Functions,
+Lambda), so the colon must stay matchable and is instead stripped only when
+trailing. Both variants now have regression tests, including the exact string
+the agent produced.
+
+**Why it took a live run to find.** Every prior test supplied bare ARNs,
+because that is how a person writing a test writes an ARN. The model writes
+prose. Fixtures that do not look like real model output will not find this
+class of bug — which is the argument for tier-2 evals existing at all.
+
+---
+
+## #13 — An eval failure that was a bad test
+
+**Symptom.** `blast-radius` failed: _"If prod-web-1 were compromised, what
+could it reach?"_ did not cite `prod-web-1`.
+
+**Diagnosis.** The answer was right and the test was wrong. The question asks
+what the host can _reach_, so the answer correctly cites the three targets —
+and `find_reachable_from` does not return the source among its results, so
+`prod-web-1` was never citable. The expectation had been written without
+thinking about which resources the tool actually returns.
+
+**Fix.** The case now asserts the real blast radius (`prod-app-1`,
+`order-processor`, and `northwind-prod-db` two hops away) plus that the answer
+follows the chain rather than stopping at directly-adjacent hosts. That is a
+stronger assertion than the one it replaced.
+
+**Worth recording** because the instinct on a red eval is to change the system.
+Here the honest fix was to the test — and the distinction matters, because
+"make the eval pass" and "make the agent better" are different activities that
+look identical in a diff. The tell was reading the actual answer before
+touching anything.
+
+---
+
+## #14 — Vite does not see the repo-root `.env`
+
+**Symptom.** `FRONTEND_HOST=0.0.0.0` in `.env` had no effect; the dev server
+kept binding loopback.
+
+**Diagnosis.** Two reasons at once. Vite loads `.env` from the **project root**
+— `apps/web`, not the repo root where this project keeps its single shared file
+— and it exposes only `VITE_`-prefixed keys to client code. Neither path puts
+anything into `process.env` for `vite.config.ts` itself, which sees only real
+shell environment variables.
+
+**Fix.** The config loads the repo-root file explicitly with
+`loadEnv(mode, repoRoot, "")` — empty prefix for all keys — rather than reading
+`process.env`. No extra dependency, and the backend and frontend keep sharing
+one `.env`.
+
+**Also fixed while here:** SSE responses are now explicitly de-buffered in the
+proxy. Vite would otherwise hold a scan's progress stream and deliver it at the
+end, which silently defeats the progress reporting when the UI is reached from
+another machine.

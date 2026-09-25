@@ -95,3 +95,103 @@ describe("CitationTracker", () => {
     expect(tracker.known.get(ARN_A)?.name).toBe("northwind-public-assets");
   });
 });
+
+/**
+ * Regression tests for a false positive found by running the agent for real.
+ *
+ * The model writes Markdown, so ARNs arrive wrapped in backticks, bold markers
+ * or parentheses. An earlier pattern captured the closing delimiter, producing
+ * an identifier no tool had returned and warning the user that a correct answer
+ * was unverified.
+ */
+describe("ARNs embedded in Markdown", () => {
+  const ARN = "arn:aws:s3:::northwind-public-assets";
+  const known = new Map([[ARN, { arn: ARN, name: "northwind-public-assets", kind: "S3Bucket" }]]);
+  const expectClean = (text: string) => {
+    const { citations, warnings } = validateCitations(text, new Set([ARN]), known);
+    expect(citations.map((c) => c.arn)).toEqual([ARN]);
+    expect(warnings).toEqual([]);
+  };
+
+  it("handles a backtick-wrapped ARN", () => expectClean(`The bucket \`${ARN}\` is public.`));
+
+  it("handles the exact shape the agent produced", () =>
+    expectClean(`- **northwind-public-assets** (\`${ARN}\`, us-east-1) — bucket policy allows \`*\``));
+
+  it("handles bold, parenthesised, and end-of-sentence forms", () => {
+    expectClean(`**${ARN}** is public.`);
+    expectClean(`Public: (${ARN})`);
+    expectClean(`Public: ${ARN}.`);
+    expectClean(`Check ${ARN}; it is public.`);
+    expectClean(`- ${ARN}\n- something else`);
+  });
+
+  it("handles a Markdown link", () => expectClean(`[the bucket](#${ARN}) is public`));
+
+  it("still flags a genuinely invented ARN wrapped in backticks", () => {
+    const { warnings } = validateCitations(
+      "Check `arn:aws:s3:::does-not-exist`.",
+      new Set([ARN]),
+      known,
+    );
+    expect(warnings).toHaveLength(1);
+  });
+
+  it("keeps ARNs whose resource id contains slashes and dots", () => {
+    const arn = "arn:aws:ec2:us-east-1:123456789012:instance/i-0abc.def";
+    const { citations, warnings } = validateCitations(
+      `Instance \`${arn}\` is exposed.`,
+      new Set([arn]),
+      new Map([[arn, { arn }]]),
+    );
+    expect(citations[0]?.arn).toBe(arn);
+    expect(warnings).toEqual([]);
+  });
+});
+
+/**
+ * The colon case. An ARN's resource section can contain colons, so the pattern
+ * must not treat one as a terminator - while a colon that is sentence
+ * punctuation still has to be stripped.
+ */
+describe("ARNs whose resource section contains colons", () => {
+  const RDS = "arn:aws:rds:us-east-1:123456789012:db:northwind-prod-db";
+
+  it("keeps the whole RDS ARN rather than truncating at :db", () => {
+    const { citations, warnings } = validateCitations(
+      `**northwind-prod-db** (\`${RDS}\`) is reachable.`,
+      new Set([RDS]),
+      new Map([[RDS, { arn: RDS, name: "northwind-prod-db", kind: "RdsInstance" }]]),
+    );
+    expect(citations.map((c) => c.arn)).toEqual([RDS]);
+    expect(warnings).toEqual([]);
+  });
+
+  it("handles other colon-bearing ARN shapes", () => {
+    for (const arn of [
+      "arn:aws:sns:us-east-1:123456789012:my-topic",
+      "arn:aws:rds:eu-west-1:123456789012:subgrp:prod-db-subnets",
+      "arn:aws:lambda:us-east-1:123456789012:function:order-processor",
+      "arn:aws:states:us-east-1:123456789012:execution:machine:run-1",
+    ]) {
+      const { citations, warnings } = validateCitations(
+        `See \`${arn}\` for detail.`,
+        new Set([arn]),
+        new Map([[arn, { arn }]]),
+      );
+      expect(citations[0]?.arn, arn).toBe(arn);
+      expect(warnings, arn).toEqual([]);
+    }
+  });
+
+  it("still strips a colon that is sentence punctuation", () => {
+    const arn = "arn:aws:s3:::my-bucket";
+    const { citations, warnings } = validateCitations(
+      `Public buckets: ${arn}: check it.`,
+      new Set([arn]),
+      new Map([[arn, { arn }]]),
+    );
+    expect(citations[0]?.arn).toBe(arn);
+    expect(warnings).toEqual([]);
+  });
+});

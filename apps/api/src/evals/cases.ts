@@ -120,9 +120,17 @@ export const EVAL_CASES: EvalCase[] = [
   {
     id: "blast-radius",
     question: "If prod-web-1 were compromised, what could it reach?",
-    expectResources: ["prod-web-1"],
+    // The reachable set, not the host named in the question. An earlier
+    // version of this case expected `prod-web-1` itself, which was simply a
+    // badly specified test: the question asks what it can reach, and
+    // find_reachable_from does not return the source among its results, so
+    // the source is not citable. Asserting the actual blast radius - including
+    // the database two hops away - is the stronger check.
+    expectResources: ["prod-app-1", "northwind-prod-db", "order-processor"],
     expectTools: ["find_reachable_from", "find_network_paths"],
-    rationale: "Exercises the forward direction of reachability rather than the inverse.",
+    mustMention: [/2 hops|two hops|via prod-app-1|through/i],
+    rationale:
+      "Exercises the forward direction of reachability, and that the answer follows the chain to the database rather than stopping at directly-adjacent hosts.",
   },
   {
     id: "region-inventory",

@@ -416,3 +416,56 @@ without anyone calling it a write.
 ordered so each step sets up the next, the three decisions worth leading with,
 the questions to expect with honest answers, a triage table for when something
 breaks mid-demo, and a direct account of what is unfinished.
+
+---
+
+### `fix(api): citation validator false positives on Markdown-wrapped ARNs`
+
+The first live agent run produced a correct answer and a warning saying it was
+unverified — the ARN pattern had swallowed the closing Markdown backtick. A
+validator that cries wolf on correct answers trains the user to ignore it,
+which destroys the value of the true positives and defeats ADR-006 entirely.
+
+Fixing it surfaced a second bug in the same line: excluding `:` as a delimiter
+truncates `arn:aws:rds:...:db:my-db` at its fifth section, because an ARN's
+final section can itself contain colons. Colons stay matchable and are stripped
+only when trailing.
+
+Nine regression tests, including the exact string the agent produced. Both bugs
+needed a live model to find, because every prior test supplied bare ARNs —
+which is how a person writes an ARN in a test, and not how a model writes one
+in prose. Engineering log #12.
+
+---
+
+### `fix(evals): correct a badly-specified blast-radius case`
+
+`blast-radius` failed because it expected the agent to cite the host named in
+the question, when the question asked what that host could _reach_ — and the
+tool does not return the source among its results, so it was never citable. The
+answer was right; the test was wrong.
+
+Now asserts the real blast radius, including the database two hops away, and
+that the answer follows the chain rather than stopping at adjacent hosts —
+a stronger assertion than the one it replaced. Engineering log #13 records why
+this distinction is worth being careful about: "make the eval pass" and "make
+the agent better" look identical in a diff.
+
+---
+
+### `feat: serve the UI to other machines over a tailnet`
+
+`FRONTEND_HOST` and `BACKEND_HOST` now control bind addresses, both defaulting
+to loopback.
+
+**Only the frontend needs exposing.** It already proxies `/api` server-side, so
+the backend stays on loopback and there is one open port rather than two —
+verified by confirming that port 3000 refuses connections over the tailnet
+while the UI works through it.
+
+Two things this needed. Vite loads `.env` from its own project root and only
+exposes `VITE_`-prefixed keys, so neither reached `vite.config.ts`; the config
+now loads the repo-root file explicitly via `loadEnv(mode, repoRoot, "")`. And
+SSE responses are explicitly de-buffered in the proxy, which Vite would
+otherwise hold and deliver at the end — silently defeating scan progress
+reporting for exactly the remote case this change enables. Engineering log #14.

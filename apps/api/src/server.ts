@@ -71,7 +71,7 @@ registerChatRoutes(app);
 
 try {
   await migrate();
-  await app.listen({ port: cfg.BACKEND_PORT, host: "0.0.0.0" });
+  await app.listen({ port: cfg.BACKEND_PORT, host: cfg.BACKEND_HOST });
   app.log.info(`AWS mode: ${cfg.AWS_MODE}`);
 } catch (err) {
   app.log.error(err);

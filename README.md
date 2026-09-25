@@ -190,7 +190,15 @@ reachable by both expected chains, and the publicly-flagged database is
 reachable by none.
 
 **Tier 2 — answer quality.** Fifteen cases against the live agent, scored on
-the ARNs each answer cites, with precision and recall. Each case asserts what
+the ARNs each answer cites, with precision and recall.
+
+Last recorded full run on `claude-sonnet-5`: **14/15, mean F1 0.933, no
+unsupported citations.** The single failure was a defect in the test rather
+than the answer — it expected the agent to cite the host named in the question
+when the question asked what that host could _reach_ (engineering log #13). The
+case has been corrected to assert the actual blast radius, and passes on
+re-run; a clean full-suite run has not been recorded since, because the API
+account ran out of credit partway through the next one. Each case asserts what
 must be cited, what must **not** be (the traps), and which tools should have
 been chosen. Precision matters as much as recall precisely because of the
 traps: an answer naming every bucket achieves perfect recall and is useless.
