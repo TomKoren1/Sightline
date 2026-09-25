@@ -386,10 +386,10 @@
       </dl>
 
       <div class="metrics">
-        <div><b>176</b><span>unit tests</span></div>
-        <div><b>18/18</b><span>agent evals · F1 1.0</span></div>
-        <div><b>13</b><span>decision records</span></div>
-        <div><b>32</b><span>logged problems</span></div>
+        <div><b>218</b><span>unit tests</span></div>
+        <div><b>21/21</b><span>agent evals · F1 1.0</span></div>
+        <div><b>14</b><span>decision records</span></div>
+        <div><b>34</b><span>logged problems</span></div>
       </div>
     </div>
 
@@ -426,7 +426,7 @@
         <li>
           <span>5</span>The agent
           <ul>
-            <li>Fifteen curated tools · Citation validation · Four layers of read-only</li>
+            <li>Sixteen curated tools · Citation validation · Remediation that is never applied</li>
           </ul>
         </li>
         <li>
@@ -436,13 +436,13 @@
           </ul>
         </li>
         <li>
-          <span>7</span>The thirteen decisions
+          <span>7</span>The fourteen decisions
           <ul>
             <li>Each ADR, the alternative rejected, and the reason</li>
           </ul>
         </li>
         <li>
-          <span>8</span>The thirty-two problems
+          <span>8</span>The thirty-four problems
           <ul>
             <li>Symptom, cause, fix and lesson for every one</li>
           </ul>
@@ -509,7 +509,7 @@
         <tr>
           <td><strong>AI</strong></td>
           <td>
-            A tool-calling agent over fifteen curated, parameterised tools; mechanical citation
+            A tool-calling agent over sixteen curated, parameterised tools; mechanical citation
             validation against the ARNs each tool actually returned; a read-only refusal enforced in
             code rather than prompted; and two eval tiers, one of which needs no API key and runs in
             CI.
@@ -882,7 +882,7 @@ npm run dev:api &amp; npm run dev:web
         abstractions, without removing any of the real work.
       </p>
 
-      <h3>Fifteen curated tools, not text-to-Cypher</h3>
+      <h3>Sixteen curated tools, not text-to-Cypher</h3>
       <p>
         The model chooses which tool to call and with what arguments; it never writes the query.
         Text-to-Cypher was the obvious alternative and was rejected on four counts:
@@ -955,6 +955,17 @@ npm run dev:api &amp; npm run dev:web
         </p>
       </div>
 
+      <h3>Remediation: the fix, written out, and never applied</h3>
+      <p>
+        Every finding carries the exact commands that would resolve it, what each might break, and a
+        read-only command to confirm it worked. There is no endpoint that runs them. The absence of
+        an <em>Apply</em> button is the feature — see ADR-014 — and the commands are computed from
+        the same evidence as the verdict, so they target the inline policy that actually grants
+        <code>*:*</code> rather than the <code>AdministratorAccess</code> a model would reach for.
+        The agent has a tool for it and is told to quote the result verbatim rather than compose its
+        own.
+      </p>
+
       <h3>One honest boundary</h3>
       <p>
         <strong>Neo4j Community has no role-based access control</strong>, so a genuinely read-only
@@ -982,13 +993,13 @@ npm run dev:api &amp; npm run dev:web
 
       <h3>Tier 2 — answer quality</h3>
       <p>
-        Eighteen cases against the live agent, scored on the ARNs each answer cites, with precision
-        and recall. Each case asserts what must be cited, what must <strong>not</strong> be (the
-        traps), and which tools should have been chosen.
+        Twenty-one cases against the live agent, scored on the ARNs each answer cites, with
+        precision and recall. Each case asserts what must be cited, what must
+        <strong>not</strong> be (the traps), and which tools should have been chosen.
       </p>
       <p>
         Last recorded full run on <code>claude-sonnet-5</code>:
-        <strong>18/18, mean F1 1.0, no unsupported citations.</strong>
+        <strong>21/21, mean F1 1.0, no unsupported citations.</strong>
       </p>
       <p>
         Precision matters as much as recall precisely because of the traps: an answer naming every
@@ -1045,7 +1056,7 @@ npm run dev:api &amp; npm run dev:web
 
     <!-- =================== 7 =================== -->
     <div class="section">
-      <h2><span class="num">7</span>The thirteen decisions</h2>
+      <h2><span class="num">7</span>The fourteen decisions</h2>
       <p class="muted small">
         Full records with alternatives and consequences in <code>docs/DECISIONS.md</code>.
       </p>
@@ -1127,6 +1138,32 @@ npm run dev:api &amp; npm run dev:web
         to have nowhere to say it was unguarded.
       </p>
 
+      <h3>ADR-014 — Remediation is generated and never applied</h3>
+      <p>
+        Every finding carries the exact commands that would fix it, what each one might break, and a
+        read-only command to confirm it worked — as <strong>strings</strong>. There is no endpoint
+        that executes them and no credential that could.
+      </p>
+      <p>
+        The obvious next step is a <em>Fix it</em> button, and it is the one thing this product must
+        not have: it would undo ADR-005, ADR-007 and ADR-009 in a single click, buying convenience
+        and selling the only property that makes standing access to a customer's account defensible.
+        The honest version is also more useful — the person who knows whether a public bucket is a
+        mistake or a deliberate CDN origin is at the keyboard, not in the scanner. So the product
+        removes the error-prone part, working out the precise command, and leaves the judgement
+        where the knowledge is.
+      </p>
+      <p>
+        <strong>Computed, not generated</strong>, by the argument in ADR-004. The fixture contains a
+        role whose admin comes from an inline policy named <code>legacy-deploy-inline</code>; a
+        model reaching for the obvious
+        <code>detach-role-policy --policy-arn …/AdministratorAccess</code> would emit a command that
+        runs cleanly and fixes nothing. And <code>caution</code> is a <em>required</em> field: an
+        unprotected bucket rates <strong>low</strong> because no anonymous access exists to lose,
+        while a genuinely public one rates high — ADR-012 carried to the last step. In the UI the
+        caution renders <em>above</em> the copy button, because below it, it is read second.
+      </p>
+
       <h3>ADR-013 — The account toggle switches at runtime and never writes <code>.env</code></h3>
       <p>
         Switching accounts from the UI must not rewrite configuration — a restart should always
@@ -1138,7 +1175,7 @@ npm run dev:api &amp; npm run dev:web
 
     <!-- =================== 8 =================== -->
     <div class="section">
-      <h2><span class="num">8</span>The thirty-two problems</h2>
+      <h2><span class="num">8</span>The thirty-four problems</h2>
       <p class="muted small">
         Full write-ups in <code>docs/ENGINEERING-LOG.md</code>. Each entry below gives the symptom,
         the cause, the fix, and what it generalises to.
@@ -1882,13 +1919,77 @@ npm run dev:api &amp; npm run dev:web
           </dd>
         </dl>
       </div>
+
+      <h3>Found by using it, not testing it</h3>
+
+      <div class="log">
+        <h3><span class="id">#33</span>Two test expectations that were wrong about the shell</h3>
+        <dl class="row">
+          <dt>Symptom</dt>
+          <dd>
+            Two of the first remediation tests failed, and both times the implementation was right.
+          </dd>
+          <dt>Cause</dt>
+          <dd>
+            <code>shellQuote("it's")</code> produced <code>'it'\''s'</code> and the test expected
+            <code>'it\'s'</code>. The intuitive form is the wrong one: a POSIX single-quoted string
+            has no escape character, so a quote cannot be backslash-escaped inside it — the quoting
+            must close, emit an escaped quote outside, and reopen.
+          </dd>
+          <dt>Fix</dt>
+          <dd>
+            Settled by running <code>printf '%s\n' 'it'\''s'</code> in a real shell rather than
+            arguing from memory. Had I "fixed" the implementation to match the test, every
+            remediation for a resource with an apostrophe in its name would have emitted a command
+            that fails on paste — with green tests.
+          </dd>
+          <dt>Lesson</dt>
+          <dd>
+            When a test and the code disagree about how an <em>external system</em> behaves, neither
+            is evidence. Go and ask the external system. #13 and #32 both went wrong by reasoning
+            about the disagreement instead of resolving it.
+          </dd>
+        </dl>
+      </div>
+
+      <div class="log">
+        <h3><span class="id">#34</span>Three UI bugs that only existed on screen</h3>
+        <dl class="row">
+          <dt>Context</dt>
+          <dd>
+            For most of this project there was no browser on the build host, so "the frontend works"
+            meant it compiled, served and returned correct JSON. Headless Chrome went in to render
+            this document; pointing it at the running app found three bugs in the first two
+            screenshots.
+          </dd>
+          <dt>Causes</dt>
+          <dd>
+            <strong>(1)</strong> Six findings tabs in a 288px sidebar, laid out
+            <code>flex-1</code> — which does not shrink them, because flex items default to
+            <code>min-width: auto</code> and overflow instead. They spilled across the graph pane
+            where the floating Filter button at <code>z-10</code> covered two of them, making part
+            of the primary navigation unreachable. <strong>(2)</strong> The copy button was
+            positioned absolutely inside the <code>&lt;pre&gt;</code> with padding reserved — fine
+            in the wide modal it was built for, broken in remediation's 320px panel where the block
+            scrolls horizontally and the padding scrolls away with it, leaving the button sitting on
+            the command. <strong>(3)</strong> A 404 on every page load for a missing favicon.
+          </dd>
+          <dt>Lesson</dt>
+          <dd>
+            All three are invisible to every test in the repository and would have survived any
+            number of green runs — and one of them hid part of the main navigation. The gap was not
+            rigour, it was never having looked. Where the output is visual, look at it; where it is
+            a command someone will run, run it.
+          </dd>
+        </dl>
+      </div>
     </div>
 
     <!-- =================== 9 =================== -->
     <div class="section">
       <h2><span class="num">9</span>Recurring failure patterns</h2>
       <p>
-        Thirty-two entries reduce to about five shapes. If you are asked "what did you learn
+        Thirty-four entries reduce to about five shapes. If you are asked "what did you learn
         building this?", this section is the answer — it is more convincing than any individual bug.
       </p>
 
@@ -2171,7 +2272,7 @@ npm run dev:api &amp; npm run dev:web
         <div class="q">What went wrong while you built it?</div>
         <div class="a">
           <p>
-            Thirty-two logged problems, and they reduce to about five shapes. The one I would lead
+            Thirty-four logged problems, and they reduce to about five shapes. The one I would lead
             with: three separate times I built a route to the same catastrophic output — a complete,
             confident, entirely fictional inventory of a real AWS account. Once from a leaked
             <code>AWS_ENDPOINT_URL</code> that the SDK reads directly from the environment, once
