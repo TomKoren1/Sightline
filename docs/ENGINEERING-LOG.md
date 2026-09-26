@@ -1737,3 +1737,42 @@ was the one that put two tenants in the same database and looked at what came
 back. Third time in this project that a test which merely restated the code's
 own assumptions proved nothing (#29, #30, #37) — and the first where the
 assumption was mine, written the same afternoon.
+
+---
+
+## #40 — A queue test that passed with the queue's guarantee removed
+
+**Problem.** `scan_jobs` promises one active scan per tenant, enforced by a
+partial unique index rather than by application code — the whole point being
+that two API replicas cannot both believe they are the only one. The tests
+looked thorough: enqueue twice, enqueue four times concurrently, check only one
+job exists.
+
+Then I dropped the index and ran them again. **All twelve passed.**
+
+**Cause.** Every test went through `enqueueScan`, which reads before it writes.
+In a single Node process, with a connection pool and `await` points, those reads
+and writes interleave politely enough that the application check alone produces
+the right answer. The tests were exercising the check, not the constraint — and
+the check is precisely the part that stops working when there are two processes,
+which is the only situation the index exists for.
+
+**Fix.** A test that writes directly, around the application path: insert one
+queued job, then insert a second active one, and expect Postgres to raise
+`23505`. That one fails immediately when the index is missing, which I confirmed
+the same way — by dropping it.
+
+**A second thing the index needed.** A worker killed mid-scan leaves a row
+marked `running` for ever, and the uniqueness index then refuses every future
+scan for that tenant: one crash, and that customer can never scan again.
+`reapStuckJobs` releases them, with a message that says what happened and that
+nothing in their account was changed. The guarantee and its failure mode arrived
+in the same commit, which is the only reason the second one was noticed.
+
+**What to take from it.** This is the fourth variant of one idea (#29, #30,
+#37, #39): **a test that cannot distinguish the mechanism from a coincidence is
+not testing the mechanism.** The distinguishing move is always the same and
+always cheap — remove the thing under test and confirm the test notices. It has
+now caught: a fixture that shared the code's blind spot, a check on a guard that
+silently matched nothing, a read-side guard that could not see a write-side
+defect, and now an application path that impersonates a database constraint.
