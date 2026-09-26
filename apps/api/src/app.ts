@@ -13,8 +13,7 @@ import { existsSync } from "node:fs";
 import Fastify from "fastify";
 import cors from "@fastify/cors";
 
-import { ENV_FILE } from "./config.js";
-import { cfg } from "./config.js";
+import { assertHostedInvariants, cfg, ENV_FILE } from "./config.js";
 import { getLatestScan } from "./db/repository.js";
 import { registerScanRoutes } from "./routes/scans.js";
 import { registerGraphRoutes } from "./routes/graph.js";
@@ -113,6 +112,13 @@ export async function buildApp() {
       lastScan: latest ? { id: latest.id, at: latest.startedAt, status: latest.status } : null,
     };
   });
+
+  /**
+   * Hosted mode removes capabilities rather than guarding them, so the check
+   * that they are actually absent belongs at startup - before a request can
+   * arrive, and loudly, rather than as a warning nobody reads (ADR-015).
+   */
+  assertHostedInvariants();
 
   registerScanRoutes(app);
   registerGraphRoutes(app);

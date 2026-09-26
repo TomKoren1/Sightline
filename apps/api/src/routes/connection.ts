@@ -27,6 +27,7 @@ import {
   configuredMode,
   configuredRegions,
   currentMode,
+  isHosted,
   isMock,
   setMode,
   targetRoleProblem,
@@ -204,6 +205,16 @@ export function registerConnectionRoutes(app: FastifyInstance): void {
    * rather than reusing credentials for the account we just left.
    */
   app.post<{ Body: { mode?: string } }>("/api/connection/mode", async (req, reply) => {
+    /**
+     * Not registered at all in hosted mode would be cleaner, but this route is
+     * registered alongside five others that *are* wanted there. So it answers
+     * 404 instead: an endpoint that does not exist, which is the truth, rather
+     * than 403, which would imply it exists and is forbidden to this caller.
+     */
+    if (isHosted()) {
+      return reply.code(404).send({ error: "Not found" });
+    }
+
     const mode = req.body?.mode;
     if (mode !== "mock" && mode !== "real") {
       return reply.code(400).send({ error: 'mode must be "mock" or "real"' });
