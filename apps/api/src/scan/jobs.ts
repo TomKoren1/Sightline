@@ -69,9 +69,7 @@ function toJob(row: JobRow): ScanJob {
  * scan that is already under way, and reporting a conflict would invite them
  * to retry until they got one.
  */
-export async function enqueueScan(
-  tenantId: TenantId,
-): Promise<{ job: ScanJob; created: boolean }> {
+export async function enqueueScan(tenantId: TenantId): Promise<{ job: ScanJob; created: boolean }> {
   const existing = await activeJob(tenantId);
   if (existing) return { job: existing, created: false };
 
