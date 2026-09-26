@@ -1548,3 +1548,74 @@ test run twice. It could not have been otherwise: CI runs Linux, the author's
 machine runs Linux, and the path has no spaces. Cross-platform correctness is
 not something a single-platform test suite can assert, and the honest response
 is a lint-style ban on the idiom rather than a test that pretends to cover it.
+
+---
+
+## #37 — HTTP 414 on every IAM role with a path
+
+**Reported by Tom**, against his own AWS account: clicking some resources — IAM
+roles and instance profiles specifically — showed nothing, and the request came
+back `414 URI Too Long`.
+
+**Cause.** Fastify caps a route parameter at **100 characters** by default.
+`/api/resources/:arn` carries an ARN as that parameter, and AWS creates
+service-linked roles with an IAM _path_:
+
+```
+arn:aws:iam::672299759593:role/aws-service-role/elasticloadbalancing.amazonaws.com/AWSServiceRoleForElasticLoadBalancing
+```
+
+120 characters. Over the cap, so `find-my-way` refused to route it and returned
+`FST_ERR_MAX_PARAM_LENGTH` with status 414 before any handler ran. The
+remediation route has the same shape, so **"How to fix" was broken for exactly
+the admin roles it matters most for.**
+
+In Tom's account, **10 of 19 IAM roles and instance profiles were over the cap**,
+the longest at 145 characters. More than half the IAM section of the product was
+unreachable.
+
+**Why the fixture never caught it.** Every role in the mock account has a short,
+path-less name — the longest fixture ARN is 61 characters encoded. Service-linked
+roles only exist in real accounts, where AWS creates them automatically for ELB,
+EKS, Auto Scaling, Trusted Advisor and a dozen other services. The fixture could
+not express the shape that broke.
+
+That is the third time (#29, #30, #37). Each time the mock was adversarial about
+everything I had thought of and silent about a category I had not.
+
+**Why no test could have caught it either.** `server.ts` created the Fastify
+instance and called `listen()` at module scope, so importing it bound a port. No
+test could issue an HTTP request at all — every test in this repository went
+straight to the query layer or the analysers, and the router was never exercised.
+A whole tier of the system had no test surface.
+
+**Fix.** Three parts, because the bug had three causes.
+
+- `maxParamLength: 2048`, reasoned against IAM's documented maxima rather than
+  picked round: a role path may be 512 characters and a role name 64, so the
+  longest legitimate IAM ARN is about 600 raw. The default is a routing
+  performance guard, not a security control.
+- `buildApp()` extracted into `app.ts`, with `server.ts` reduced to
+  build-migrate-listen. The HTTP layer is now injectable.
+- The fixture gains `AWSServiceRoleForElasticLoadBalancing` at
+  `/aws-service-role/elasticloadbalancing.amazonaws.com/`, so the mock contains
+  the shape that broke, and the answer key names it so deleting it fails a test.
+
+**A detail the verification turned up.** My first version of the test asserted
+the _encoded_ length exceeded 100, and one of its three cases passed even with
+the cap restored to 100. Fastify measures the **decoded** parameter: a
+95-character ARN that encodes to 109 sails through. So one third of the suite was
+proving nothing, and I only noticed because I re-ran it against the reintroduced
+bug and saw a green row that should have been red.
+
+The first attempt at _that_ check was also wrong — a `sed` whose pattern assumed
+two-space indentation silently matched nothing, so the "broken" run was actually
+the fixed code and everything passed. Two layers of verification theatre in one
+sitting.
+
+**What to take from it.** The lesson is not about Fastify's default. It is that
+**verifying a guard fires is itself an operation that can silently fail**, and
+the failure looks exactly like success. #23 and #27 are entries about guards that
+could not fire; this is an entry about a _check_ on a guard that could not fire.
+The defence is the same one that keeps working: make the thing fail on purpose
+and look at the actual output, rather than at the exit code.

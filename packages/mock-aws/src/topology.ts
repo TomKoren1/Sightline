@@ -73,6 +73,19 @@ export const GROUND_TRUTH = {
   /** Users that must NOT be flagged - the negative class for the above. */
   nonAdminUsers: ["northwind-metrics-reader"],
 
+  /**
+   * The service-linked role, named here so a test can assert the fixture still
+   * contains an ARN long enough to be interesting.
+   *
+   * Every other role in this account has a short, path-less name, and that gap
+   * let a routing bug reach a real user: percent-encoded, a service-linked
+   * role's ARN is 136 characters against Fastify's 100-character default cap,
+   * and clicking one returned HTTP 414 (engineering log #37). A fixture that
+   * cannot express the shape cannot catch the bug.
+   */
+  longArnRolePath: "/aws-service-role/elasticloadbalancing.amazonaws.com/",
+  longArnRoleName: "AWSServiceRoleForElasticLoadBalancing",
+
   /** Admin roles with an inline rather than managed grant. */
   inlineAdminRoles: ["LegacyDeployRole"],
 

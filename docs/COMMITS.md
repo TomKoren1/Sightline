@@ -945,3 +945,33 @@ reintroducing it); and the mechanism is pinned as an executable assertion.
 `.env` found here", and the README notes that `tsx watch` does not watch `.env`.
 
 242 unit tests.
+
+---
+
+### `fix(api): HTTP 414 on every IAM role with a path`
+
+Reported against a real AWS account: clicking IAM roles and instance profiles
+returned `414 URI Too Long` and the detail panel showed nothing. Engineering
+log #37.
+
+Fastify caps a route parameter at 100 characters by default.
+`/api/resources/:arn` carries an ARN, and AWS service-linked roles carry an IAM
+path — `arn:aws:iam::…:role/aws-service-role/elasticloadbalancing.amazonaws.com/AWSServiceRoleForElasticLoadBalancing`
+is 120. The router refused it before any handler ran, and the remediation route
+has the same shape, so "How to fix" was broken for exactly the admin roles it
+matters most for. **10 of 19 IAM roles and profiles in the reporting account
+were over the cap**, the longest at 145.
+
+Three causes, three fixes. `maxParamLength: 2048`, reasoned against IAM's
+documented maxima (512-char path, 64-char name) rather than picked round.
+`buildApp()` extracted from `server.ts`, which previously called `listen()` at
+module scope — so no test could issue an HTTP request and the router had no test
+surface at all. And the fixture gains a service-linked role with a path, because
+every mock role had a short path-less name and could not express the shape that
+broke — the third time the fixture shared the code's blind spot (#29, #30).
+
+Verified against the real account: all 10 previously-failing ARNs now return 200
+on both the detail and remediation routes. Verified as a regression guard by
+restoring the cap to 100 and watching four cases go red.
+
+248 unit tests.

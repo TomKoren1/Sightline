@@ -320,6 +320,37 @@ async function seedIam() {
   );
 
   /**
+   * A service-linked role, which exists here for one reason: its ARN is long.
+   *
+   * Real accounts are full of these — AWS creates them for ELB, ECS, EKS,
+   * Organizations and a dozen other services — and they carry an IAM *path*,
+   * so the ARN runs to
+   * `arn:aws:iam::<account>:role/aws-service-role/<service>/AWSServiceRoleFor…`.
+   * Percent-encoded into a URL that is 113 characters, which is what made
+   * clicking one in the UI return HTTP 414 against a real account while every
+   * fixture role worked fine at 61 (engineering log #37).
+   *
+   * Every role in this fixture had a short, path-less name, so the fixture
+   * could not express the shape that broke. It can now.
+   */
+  await client.send(
+    new CreateRoleCommand({
+      RoleName: "AWSServiceRoleForElasticLoadBalancing",
+      Path: "/aws-service-role/elasticloadbalancing.amazonaws.com/",
+      AssumeRolePolicyDocument: JSON.stringify({
+        Version: "2012-10-17",
+        Statement: [
+          {
+            Effect: "Allow",
+            Principal: { Service: "elasticloadbalancing.amazonaws.com" },
+            Action: "sts:AssumeRole",
+          },
+        ],
+      }),
+    }),
+  );
+
+  /**
    * IAM users, because "which principals are administrators?" is not a question
    * about roles.
    *
@@ -366,7 +397,7 @@ async function seedIam() {
   );
 
   log(
-    "IAM: 5 roles (3 effectively admin, 1 of them inline-only), 3 users (2 admin, 1 of them inline-only), 1 instance profile",
+    "IAM: 6 roles (3 effectively admin, 1 of them inline-only, 1 service-linked with a long ARN), 3 users (2 admin, 1 of them inline-only), 1 instance profile",
   );
   return { appProfileName: "NorthwindAppProfile" };
 }
