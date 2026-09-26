@@ -35,6 +35,7 @@ import { summariseAccount } from "../db/queries.js";
 import { CitationTracker, validateCitations } from "./citations.js";
 import { buildSystemPrompt } from "./prompt.js";
 import { runTool, toolDefinitions } from "./tools.js";
+import type { TenantId } from "../tenancy/tenant.js";
 import { enforceReadOnlyNotice } from "./readOnlyGuard.js";
 
 /**
@@ -60,6 +61,14 @@ function anthropic(): Anthropic {
 }
 
 export interface AskOptions {
+  /**
+   * Whose account is being asked about.
+   *
+   * Required rather than optional, and threaded to every tool call: the agent
+   * is the one component that reaches both databases, so a tenant it did not
+   * receive is a tenant it would have to guess (ADR-017).
+   */
+  tenantId: TenantId;
   question: string;
   /** Prior turns, so follow-up questions work. */
   history?: Array<{ role: "user" | "assistant"; content: string }>;
@@ -78,7 +87,7 @@ function serialiseResult(result: { rows: unknown[]; note?: string }): string {
 }
 
 export async function ask(options: AskOptions): Promise<AgentMessage> {
-  const { question, history = [], onEvent } = options;
+  const { tenantId, question, history = [], onEvent } = options;
   const emit = (event: AgentEvent) => onEvent?.(event);
   const messageId = randomUUID();
 
@@ -87,8 +96,8 @@ export async function ask(options: AskOptions): Promise<AgentMessage> {
   // Freshness and partial-failure context go into the system prompt, so the
   // model can warn about stale or missing data without being asked.
   const [latest, summary] = await Promise.all([
-    getLatestScan(),
-    summariseAccount().catch(() => null),
+    getLatestScan(tenantId),
+    summariseAccount(tenantId).catch(() => null),
   ]);
 
   const resourceCount = summary?.byKind.reduce((sum, k) => sum + k.count, 0) ?? 0;
@@ -157,7 +166,7 @@ export async function ask(options: AskOptions): Promise<AgentMessage> {
       let trace: ToolCallTrace;
 
       try {
-        const result = await runTool(use.name, input);
+        const result = await runTool(use.name, input, tenantId);
         tracker.record(result.rows, result.arns);
         const durationMs = Date.now() - startedAt;
 

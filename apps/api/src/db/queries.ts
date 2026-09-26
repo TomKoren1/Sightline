@@ -13,6 +13,7 @@
 import neo4j from "neo4j-driver";
 import { INTERNET_ARN } from "@daveio/shared";
 import { readQuery } from "./neo4j.js";
+import type { TenantId } from "../tenancy/tenant.js";
 
 /** Cap every query, so one bad question cannot drag the whole estate back. */
 const DEFAULT_LIMIT = 100;
@@ -36,14 +37,17 @@ export interface ResourceRow {
   [key: string]: unknown;
 }
 
-export async function listResources(params: {
-  kind?: string;
-  region?: string;
-  nameContains?: string;
-  limit?: number;
-}): Promise<ResourceRow[]> {
+export async function listResources(
+  tenantId: TenantId,
+  params: {
+    kind?: string;
+    region?: string;
+    nameContains?: string;
+    limit?: number;
+  },
+): Promise<ResourceRow[]> {
   return readQuery<ResourceRow>(
-    `MATCH (r:Resource)
+    `MATCH (r:Resource {tenantId: $tenantId})
      WHERE ($kind   IS NULL OR r.kind = $kind)
        AND ($region IS NULL OR r.region = $region)
        AND ($name   IS NULL OR toLower(r.name) CONTAINS toLower($name))
@@ -58,13 +62,17 @@ export async function listResources(params: {
       name: params.nameContains ?? null,
       limit: clamp(params.limit),
     },
+    tenantId,
   );
 }
 
 /** Everything known about one resource, plus its immediate neighbours. */
-export async function getResource(arnOrName: string): Promise<ResourceRow | null> {
+export async function getResource(
+  tenantId: TenantId,
+  arnOrName: string,
+): Promise<ResourceRow | null> {
   const rows = await readQuery<ResourceRow>(
-    `MATCH (r:Resource)
+    `MATCH (r:Resource {tenantId: $tenantId})
      WHERE r.arn = $key OR r.name = $key
      OPTIONAL MATCH (r)-[out]->(o:Resource)
      OPTIONAL MATCH (i:Resource)-[in]->(r)
@@ -74,6 +82,7 @@ export async function getResource(arnOrName: string): Promise<ResourceRow | null
             collect(DISTINCT {type: type(in),  arn: i.arn, name: i.name, kind: i.kind}) AS incoming
      LIMIT 1`,
     { key: arnOrName },
+    tenantId,
   );
   return rows[0] ?? null;
 }
@@ -85,15 +94,19 @@ export async function getResource(arnOrName: string): Promise<ResourceRow | null
  * and `publicReason` records the evidence. The agent reads both; it does not
  * re-derive the verdict.
  */
-export async function findPublicResources(params: { kind?: string; limit?: number } = {}) {
+export async function findPublicResources(
+  tenantId: TenantId,
+  params: { kind?: string; limit?: number } = {},
+) {
   return readQuery<ResourceRow>(
-    `MATCH (r:Resource)
+    `MATCH (r:Resource {tenantId: $tenantId})
      WHERE r.isPublic = true AND ($kind IS NULL OR r.kind = $kind)
      RETURN r.arn AS arn, r.kind AS kind, r.name AS name, r.region AS region,
             r.publicReason AS reason
      ORDER BY r.kind, r.name
      LIMIT $limit`,
     { kind: params.kind ?? null, limit: clamp(params.limit) },
+    tenantId,
   );
 }
 
@@ -112,9 +125,9 @@ export async function findPublicResources(params: { kind?: string; limit?: numbe
  * workload is a different risk from an admin role a service assumes, not a
  * lesser one.
  */
-export async function findAdminPrincipals(params: { limit?: number } = {}) {
+export async function findAdminPrincipals(tenantId: TenantId, params: { limit?: number } = {}) {
   return readQuery<ResourceRow>(
-    `MATCH (r:Resource)
+    `MATCH (r:Resource {tenantId: $tenantId})
      WHERE (r:IamRole OR r:IamUser) AND r.isAdmin = true
      OPTIONAL MATCH (p:InstanceProfile)-[:PROVIDES_ROLE]->(r)
      OPTIONAL MATCH (i:Ec2Instance)-[:HAS_INSTANCE_PROFILE]->(p)
@@ -131,6 +144,7 @@ export async function findAdminPrincipals(params: { limit?: number } = {}) {
      ORDER BY useCount DESC, r.name
      LIMIT $limit`,
     { limit: clamp(params.limit) },
+    tenantId,
   );
 }
 
@@ -142,12 +156,15 @@ export async function findAdminPrincipals(params: { limit?: number } = {}) {
  * variable-length match over a dense security group graph is how you hang a
  * Neo4j instance.
  */
-export async function findNetworkPaths(params: {
-  target: string;
-  source?: string;
-  maxHops?: number;
-  limit?: number;
-}) {
+export async function findNetworkPaths(
+  tenantId: TenantId,
+  params: {
+    target: string;
+    source?: string;
+    maxHops?: number;
+    limit?: number;
+  },
+) {
   const maxHops = Math.min(Math.max(1, params.maxHops ?? 5), 8);
   return readQuery<{
     hops: Array<{ arn: string; name: string; kind: string }>;
@@ -157,9 +174,9 @@ export async function findNetworkPaths(params: {
     // The hop bound is interpolated because Cypher does not allow a parameter
     // inside a variable-length pattern. It is clamped to 1..8 immediately
     // above and never reaches here as user text.
-    `MATCH (target:Resource)
+    `MATCH (target:Resource {tenantId: $tenantId})
      WHERE target.arn = $target OR target.name = $target
-     MATCH (source:Resource)
+     MATCH (source:Resource {tenantId: $tenantId})
      WHERE source.arn = $source OR source.name = $source
      MATCH path = (source)-[:CAN_REACH*1..${maxHops}]->(target)
      WITH [n IN nodes(path) | {arn: n.arn, name: n.name, kind: n.kind}] AS hops,
@@ -183,15 +200,19 @@ export async function findNetworkPaths(params: {
       source: params.source ?? INTERNET_ARN,
       limit: clamp(params.limit, 25),
     },
+    tenantId,
   );
 }
 
 /** What a resource can reach, rather than what can reach it. */
-export async function findReachableFrom(params: {
-  source: string;
-  maxHops?: number;
-  limit?: number;
-}) {
+export async function findReachableFrom(
+  tenantId: TenantId,
+  params: {
+    source: string;
+    maxHops?: number;
+    limit?: number;
+  },
+) {
   const maxHops = Math.min(Math.max(1, params.maxHops ?? 3), 8);
 
   /**
@@ -215,17 +236,18 @@ export async function findReachableFrom(params: {
    * (one row, the source), which a single query conflated into an empty result.
    */
   const [source] = await readQuery<ResourceRow>(
-    `MATCH (source:Resource)
+    `MATCH (source:Resource {tenantId: $tenantId})
      WHERE source.arn = $source OR source.name = $source
      RETURN source.arn AS arn, source.kind AS kind, source.name AS name,
             source.region AS region, 0 AS hops
      LIMIT 1`,
     { source: params.source },
+    tenantId,
   );
   if (!source) return [];
 
   const targets = await readQuery<ResourceRow>(
-    `MATCH (source:Resource)
+    `MATCH (source:Resource {tenantId: $tenantId})
      WHERE source.arn = $source OR source.name = $source
      MATCH path = (source)-[:CAN_REACH*1..${maxHops}]->(t:Resource)
      WITH t, min(length(path)) AS hops
@@ -233,6 +255,7 @@ export async function findReachableFrom(params: {
      ORDER BY hops, t.name
      LIMIT $limit`,
     { source: params.source, limit: clamp(params.limit) },
+    tenantId,
   );
 
   return [source, ...targets];
@@ -245,9 +268,12 @@ export async function findReachableFrom(params: {
  * gateway, and instances in no subnet at all - the second is rarer and easier
  * to miss, which is exactly why it is worth returning.
  */
-export async function findInstancesInPublicSubnets(params: { limit?: number } = {}) {
+export async function findInstancesInPublicSubnets(
+  tenantId: TenantId,
+  params: { limit?: number } = {},
+) {
   return readQuery<ResourceRow>(
-    `MATCH (i:Resource:Ec2Instance)
+    `MATCH (i:Resource:Ec2Instance {tenantId: $tenantId})
      OPTIONAL MATCH (i)-[:IN_SUBNET]->(s:Subnet)
      WITH i, s
      WHERE s IS NULL OR s.isPublic = true
@@ -260,13 +286,14 @@ export async function findInstancesInPublicSubnets(params: { limit?: number } = 
      ORDER BY i.name
      LIMIT $limit`,
     { limit: clamp(params.limit) },
+    tenantId,
   );
 }
 
 /** Billable and doing nothing, most expensive first. */
-export async function findIdleResources(params: { limit?: number } = {}) {
+export async function findIdleResources(tenantId: TenantId, params: { limit?: number } = {}) {
   return readQuery<ResourceRow>(
-    `MATCH (r:Resource)
+    `MATCH (r:Resource {tenantId: $tenantId})
      WHERE r.isIdle = true
      RETURN r.arn AS arn, r.kind AS kind, r.name AS name, r.region AS region,
             r.idleReason AS reason,
@@ -274,6 +301,7 @@ export async function findIdleResources(params: { limit?: number } = {}) {
      ORDER BY estimatedMonthlyCostUsd DESC, r.name
      LIMIT $limit`,
     { limit: clamp(params.limit) },
+    tenantId,
   );
 }
 
@@ -285,9 +313,9 @@ export async function findIdleResources(params: { limit?: number } = {}) {
  * the setting that would neutralise a permissive policy if one were added. A
  * posture finding, not an exposure finding.
  */
-export async function findUnprotectedBuckets(params: { limit?: number } = {}) {
+export async function findUnprotectedBuckets(tenantId: TenantId, params: { limit?: number } = {}) {
   return readQuery<ResourceRow>(
-    `MATCH (r:Resource:S3Bucket)
+    `MATCH (r:Resource:S3Bucket {tenantId: $tenantId})
      WHERE r.isUnprotected = true
      RETURN r.arn AS arn, 'S3Bucket' AS kind, r.name AS name, r.region AS region,
             r.unprotectedReason AS reason,
@@ -295,13 +323,14 @@ export async function findUnprotectedBuckets(params: { limit?: number } = {}) {
      ORDER BY r.name
      LIMIT $limit`,
     { limit: clamp(params.limit) },
+    tenantId,
   );
 }
 
 /** Security groups exposing a port to the whole internet. */
-export async function findOpenSecurityGroups(params: { limit?: number } = {}) {
+export async function findOpenSecurityGroups(tenantId: TenantId, params: { limit?: number } = {}) {
   return readQuery<ResourceRow>(
-    `MATCH (internet:Internet)-[e:CAN_REACH]->(r:Resource)
+    `MATCH (internet:Internet {tenantId: $tenantId})-[e:CAN_REACH]->(r:Resource)
      RETURN DISTINCT r.arn AS arn, r.kind AS kind, r.name AS name, r.region AS region,
             collect(DISTINCT e.ports) AS ports,
             head(collect(e.via)) AS securityGroup,
@@ -309,13 +338,17 @@ export async function findOpenSecurityGroups(params: { limit?: number } = {}) {
      ORDER BY r.name
      LIMIT $limit`,
     { limit: clamp(params.limit) },
+    tenantId,
   );
 }
 
 /** Free-text search across resource names and tags. */
-export async function searchResources(params: { text: string; limit?: number }) {
+export async function searchResources(
+  tenantId: TenantId,
+  params: { text: string; limit?: number },
+) {
   return readQuery<ResourceRow>(
-    `MATCH (r:Resource)
+    `MATCH (r:Resource {tenantId: $tenantId})
      WHERE toLower(r.name) CONTAINS toLower($text)
         OR toLower(coalesce(r.tagsJson, '')) CONTAINS toLower($text)
         OR toLower(r.arn) CONTAINS toLower($text)
@@ -323,19 +356,24 @@ export async function searchResources(params: { text: string; limit?: number }) 
      ORDER BY r.kind, r.name
      LIMIT $limit`,
     { text: params.text, limit: clamp(params.limit, 25) },
+    tenantId,
   );
 }
 
 /** Counts by kind and region - cheap orientation for an opening question. */
-export async function summariseAccount() {
+export async function summariseAccount(tenantId: TenantId) {
   const [byKind, byRegion, flags] = await Promise.all([
     readQuery<{ kind: string; count: number }>(
-      `MATCH (r:Resource) WHERE r.kind <> 'Internet'
+      `MATCH (r:Resource {tenantId: $tenantId}) WHERE r.kind <> 'Internet'
        RETURN r.kind AS kind, count(*) AS count ORDER BY count DESC`,
+      {},
+      tenantId,
     ),
     readQuery<{ region: string; count: number }>(
-      `MATCH (r:Resource) WHERE r.region IS NOT NULL
+      `MATCH (r:Resource {tenantId: $tenantId}) WHERE r.region IS NOT NULL
        RETURN r.region AS region, count(*) AS count ORDER BY count DESC`,
+      {},
+      tenantId,
     ),
     readQuery<{
       publicCount: number;
@@ -344,13 +382,15 @@ export async function summariseAccount() {
       idleCost: number;
       unprotectedCount: number;
     }>(
-      `MATCH (r:Resource)
+      `MATCH (r:Resource {tenantId: $tenantId})
        RETURN count(CASE WHEN r.isPublic = true THEN 1 END) AS publicCount,
               count(CASE WHEN r.isAdmin  = true THEN 1 END) AS adminCount,
               count(CASE WHEN r.isIdle   = true THEN 1 END) AS idleCount,
               count(CASE WHEN r.isUnprotected = true THEN 1 END) AS unprotectedCount,
               sum(CASE WHEN r.isIdle = true
                        THEN coalesce(r.estimatedMonthlyCostUsd, 0) ELSE 0 END) AS idleCost`,
+      {},
+      tenantId,
     ),
   ]);
   return { byKind, byRegion, ...(flags[0] ?? {}) };
@@ -358,10 +398,11 @@ export async function summariseAccount() {
 
 /** The whole graph, for the frontend to lay out. */
 export async function fetchGraph(
+  tenantId: TenantId,
   params: { region?: string; kinds?: string[]; limit?: number } = {},
 ) {
   const nodes = await readQuery<ResourceRow>(
-    `MATCH (r:Resource)
+    `MATCH (r:Resource {tenantId: $tenantId})
      WHERE ($region IS NULL OR r.region = $region OR r.region IS NULL)
        AND ($kinds  IS NULL OR r.kind IN $kinds)
      RETURN r.arn AS arn, r.kind AS kind, r.name AS name, r.region AS region,
@@ -371,15 +412,17 @@ export async function fetchGraph(
             coalesce(r.publicReason, r.adminReason, r.idleReason, r.unprotectedReason) AS reason
      LIMIT $limit`,
     { region: params.region ?? null, kinds: params.kinds ?? null, limit: clamp(params.limit, 500) },
+    tenantId,
   );
 
   const arns = new Set(nodes.map((n) => n.arn));
   const edges = await readQuery<{ from: string; to: string; type: string; ports: string | null }>(
-    `MATCH (a:Resource)-[r]->(b:Resource)
+    `MATCH (a:Resource {tenantId: $tenantId})-[r]->(b:Resource)
      WHERE a.arn IN $arns AND b.arn IN $arns
      RETURN a.arn AS from, b.arn AS to, type(r) AS type, r.ports AS ports
      LIMIT 2000`,
     { arns: [...arns] },
+    tenantId,
   );
 
   return { nodes, edges };

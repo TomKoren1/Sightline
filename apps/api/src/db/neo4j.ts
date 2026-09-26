@@ -25,6 +25,7 @@ import {
 } from "@daveio/shared";
 
 import { cfg } from "../config.js";
+import type { TenantId } from "../tenancy/tenant.js";
 
 let driver: Driver | null = null;
 
@@ -55,13 +56,47 @@ export async function closeDriver(): Promise<void> {
  * Enterprise this would additionally run as a user granted only `MATCH`.
  * See docs/ENGINEERING-LOG.md #7.
  */
+/**
+ * The tenant seam.
+ *
+ * Every graph read in this codebase goes through here, which is what makes
+ * this the one place tenant scoping can be enforced rather than remembered.
+ * A query that does not bind `$tenantId` is **refused**, not silently
+ * filtered: a query written without the predicate is a query whose author did
+ * not think about tenancy, and running a corrected version of it would hide
+ * that until the day the correction is missing (ADR-017).
+ *
+ * The check is lexical, which is the same shape as `cypherGuard.ts` and has
+ * the same honest limitation: it proves the parameter is *mentioned*, not that
+ * it is applied to the right pattern. That gap is why the real assurance is
+ * the behavioural test - seed two tenants, run every curated query as one,
+ * assert nothing belonging to the other comes back - and why this is the
+ * cheapest of three guards rather than the only one.
+ */
 export async function readQuery<T = Record<string, unknown>>(
   cypher: string,
   params: Record<string, unknown> = {},
+  tenantId?: TenantId,
 ): Promise<T[]> {
+  const scoped = tenantId ?? (params["tenantId"] as TenantId | undefined);
+  if (!scoped) {
+    throw new Error(
+      "Refusing to run an unscoped graph query: no tenant was supplied. " +
+        "Every read must be scoped to one tenant (ADR-017).",
+    );
+  }
+  if (!cypher.includes("$tenantId")) {
+    throw new Error(
+      "Refusing to run a graph query that does not bind $tenantId. " +
+        `Add the predicate to every anchor pattern. Query: ${cypher.slice(0, 120)}`,
+    );
+  }
+
   const session: Session = getDriver().session({ defaultAccessMode: neo4j.session.READ });
   try {
-    const result = await session.executeRead((tx) => tx.run(cypher, params));
+    const result = await session.executeRead((tx) =>
+      tx.run(cypher, { ...params, tenantId: scoped }),
+    );
     return result.records.map((record) => record.toObject() as T);
   } finally {
     await session.close();
@@ -71,12 +106,33 @@ export async function readQuery<T = Record<string, unknown>>(
 export async function ensureConstraints(): Promise<void> {
   const session = getDriver().session();
   try {
+    /**
+     * Identity is **(tenantId, arn)**, not arn.
+     *
+     * An ARN is unique within an AWS account, not across this database. Two
+     * tenants collide immediately on the synthetic nodes - `INTERNET_ARN` is
+     * the same string for everyone - and two tenants who connect the *same*
+     * AWS account collide on every real resource in it.
+     *
+     * With a plain uniqueness constraint on `arn`, the edge projection below
+     * (`MATCH (a:Resource {arn: row.from})`) would attach one tenant's
+     * relationships to another tenant's nodes. Not a query bug that a filter
+     * could fix later: the edge would genuinely exist, and every path query
+     * would traverse it.
+     */
     await session.run(
-      `CREATE CONSTRAINT resource_arn IF NOT EXISTS
-       FOR (r:Resource) REQUIRE r.arn IS UNIQUE`,
+      `CREATE CONSTRAINT resource_identity IF NOT EXISTS
+       FOR (r:Resource) REQUIRE (r.tenantId, r.arn) IS UNIQUE`,
     );
-    await session.run(`CREATE INDEX resource_kind IF NOT EXISTS FOR (r:Resource) ON (r.kind)`);
-    await session.run(`CREATE INDEX resource_name IF NOT EXISTS FOR (r:Resource) ON (r.name)`);
+    // The single-tenant constraint this replaces. Dropped rather than left
+    // behind, because it would reject a second tenant holding the same ARN.
+    await session.run(`DROP CONSTRAINT resource_arn IF EXISTS`);
+    await session.run(
+      `CREATE INDEX resource_tenant_kind IF NOT EXISTS FOR (r:Resource) ON (r.tenantId, r.kind)`,
+    );
+    await session.run(
+      `CREATE INDEX resource_tenant_name IF NOT EXISTS FOR (r:Resource) ON (r.tenantId, r.name)`,
+    );
   } finally {
     await session.close();
   }
@@ -137,6 +193,7 @@ function primitiveOrJson(value: unknown): unknown {
  * first.
  */
 export async function projectGraph(
+  tenantId: TenantId,
   scanId: string,
   resources: Resource[],
   relationships: Relationship[],
@@ -147,8 +204,9 @@ export async function projectGraph(
   try {
     await session.executeWrite(async (tx) => {
       // The previous projection goes in one statement, so readers see either
-      // the old graph or the new one.
-      await tx.run(`MATCH (n:Resource) DETACH DELETE n`);
+      // the old graph or the new one - and **only this tenant's**, which is
+      // the difference between rebuilding a projection and wiping the service.
+      await tx.run(`MATCH (n:Resource {tenantId: $tenantId}) DETACH DELETE n`, { tenantId });
 
       const byKind = new Map<string, Resource[]>();
       for (const resource of resources) {
@@ -165,7 +223,7 @@ export async function projectGraph(
           `UNWIND $rows AS row
            CREATE (n:Resource:${kind})
            SET n = row, n.scanId = $scanId`,
-          { rows: group.map(flattenProperties), scanId },
+          { rows: group.map((r) => ({ ...flattenProperties(r), tenantId })), scanId },
         );
       }
 
@@ -183,11 +241,12 @@ export async function projectGraph(
         // missing edges, not one full of phantom resources.
         await tx.run(
           `UNWIND $rows AS row
-           MATCH (a:Resource {arn: row.from})
-           MATCH (b:Resource {arn: row.to})
+           MATCH (a:Resource {tenantId: $tenantId, arn: row.from})
+           MATCH (b:Resource {tenantId: $tenantId, arn: row.to})
            CREATE (a)-[r:${type}]->(b)
            SET r = row.props`,
           {
+            tenantId,
             rows: group.map((rel) => ({
               from: rel.from,
               to: rel.to,
@@ -201,8 +260,10 @@ export async function projectGraph(
     });
 
     const counts = await readQuery<{ nodes: number; edges: number }>(
-      `MATCH (n:Resource) WITH count(n) AS nodes
-       MATCH ()-[r]->() RETURN nodes, count(r) AS edges`,
+      `MATCH (n:Resource {tenantId: $tenantId}) WITH count(n) AS nodes
+       MATCH (:Resource {tenantId: $tenantId})-[r]->() RETURN nodes, count(r) AS edges`,
+      {},
+      tenantId,
     );
     return counts[0] ?? { nodes: resources.length, edges: 0 };
   } finally {

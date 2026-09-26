@@ -21,6 +21,7 @@ import { readQuery } from "../db/neo4j.js";
 import { diffScans, getLatestScan, listScans } from "../db/repository.js";
 import { assertReadOnlyCypher } from "./cypherGuard.js";
 import { isHosted } from "../config.js";
+import type { TenantId } from "../tenancy/tenant.js";
 
 export interface ToolResult {
   rows: unknown[];
@@ -300,21 +301,25 @@ type ToolInput = Record<string, never> & Record<string, unknown>;
  * recover by calling a different tool, and an exception here would end the
  * turn with nothing to show the user.
  */
-export async function runTool(name: string, input: ToolInput): Promise<ToolResult> {
+export async function runTool(
+  name: string,
+  input: ToolInput,
+  tenantId: TenantId,
+): Promise<ToolResult> {
   switch (name) {
     case "summarise_account":
-      return wrap([await q.summariseAccount()]);
+      return wrap([await q.summariseAccount(tenantId)]);
 
     case "list_resources":
-      return wrap(await q.listResources(input));
+      return wrap(await q.listResources(tenantId, input));
 
     case "get_resource": {
-      const row = await q.getResource(String(input["arnOrName"] ?? ""));
+      const row = await q.getResource(tenantId, String(input["arnOrName"] ?? ""));
       return wrap(row ? [row] : [], row ? {} : { note: "No resource matched that ARN or name." });
     }
 
     case "suggest_remediation": {
-      const row = await q.getResource(String(input["arnOrName"] ?? ""));
+      const row = await q.getResource(tenantId, String(input["arnOrName"] ?? ""));
       if (!row) return wrap([], { note: "No resource matched that ARN or name." });
       const remediations = remediationsFor(remediationInputFromGraph(row as never));
       return wrap(remediations.length > 0 ? [{ arn: row.arn, remediations }] : [], {
@@ -326,13 +331,13 @@ export async function runTool(name: string, input: ToolInput): Promise<ToolResul
     }
 
     case "find_public_resources":
-      return wrap(await q.findPublicResources(input));
+      return wrap(await q.findPublicResources(tenantId, input));
 
     case "find_admin_principals":
-      return wrap(await q.findAdminPrincipals(input));
+      return wrap(await q.findAdminPrincipals(tenantId, input));
 
     case "find_network_paths": {
-      const rows = await q.findNetworkPaths({
+      const rows = await q.findNetworkPaths(tenantId, {
         target: String(input["target"] ?? ""),
         source: input["source"] ? String(input["source"]) : undefined,
         maxHops: input["maxHops"] ? Number(input["maxHops"]) : undefined,
@@ -347,35 +352,35 @@ export async function runTool(name: string, input: ToolInput): Promise<ToolResul
 
     case "find_reachable_from":
       return wrap(
-        await q.findReachableFrom({
+        await q.findReachableFrom(tenantId, {
           source: String(input["source"] ?? ""),
           maxHops: input["maxHops"] ? Number(input["maxHops"]) : undefined,
         }),
       );
 
     case "find_instances_in_public_subnets":
-      return wrap(await q.findInstancesInPublicSubnets(input));
+      return wrap(await q.findInstancesInPublicSubnets(tenantId, input));
 
     case "find_idle_resources":
-      return wrap(await q.findIdleResources(input));
+      return wrap(await q.findIdleResources(tenantId, input));
 
     case "find_unprotected_buckets":
-      return wrap(await q.findUnprotectedBuckets(input));
+      return wrap(await q.findUnprotectedBuckets(tenantId, input));
 
     case "find_open_security_groups":
-      return wrap(await q.findOpenSecurityGroups(input));
+      return wrap(await q.findOpenSecurityGroups(tenantId, input));
 
     case "search_resources":
-      return wrap(await q.searchResources({ text: String(input["text"] ?? "") }));
+      return wrap(await q.searchResources(tenantId, { text: String(input["text"] ?? "") }));
 
     case "list_scans":
-      return wrap(await listScans(Number(input["limit"] ?? 10)));
+      return wrap(await listScans(tenantId, Number(input["limit"] ?? 10)));
 
     case "diff_scans": {
       let from = input["fromScanId"] ? String(input["fromScanId"]) : null;
       let to = input["toScanId"] ? String(input["toScanId"]) : null;
       if (!from || !to) {
-        const scans = await listScans(2);
+        const scans = await listScans(tenantId, 2);
         if (scans.length < 2) {
           return wrap([], {
             note: "Only one scan exists, so there is nothing to compare it against yet.",
@@ -384,7 +389,7 @@ export async function runTool(name: string, input: ToolInput): Promise<ToolResul
         to = to ?? scans[0]!.id;
         from = from ?? scans[1]!.id;
       }
-      return wrap([await diffScans(from, to)]);
+      return wrap([await diffScans(tenantId, from, to)]);
     }
 
     case "graph_query": {

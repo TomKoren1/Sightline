@@ -23,6 +23,7 @@ import {
   saveScanResult,
 } from "../db/repository.js";
 import { runScan } from "../scan/runner.js";
+import { tenantOf } from "../tenancy/request.js";
 
 /**
  * Whether a scan is in flight.
@@ -34,10 +35,10 @@ import { runScan } from "../scan/runner.js";
 let scanInProgress = false;
 
 export function registerScanRoutes(app: FastifyInstance): void {
-  app.get("/api/scans", async () => ({ scans: await listScans(20) }));
+  app.get("/api/scans", async (req) => ({ scans: await listScans(tenantOf(req), 20) }));
 
-  app.get("/api/scans/latest", async (_req, reply) => {
-    const scan = await getLatestScan();
+  app.get("/api/scans/latest", async (req, reply) => {
+    const scan = await getLatestScan(tenantOf(req));
     if (!scan) {
       // Not an error: an account that has never been scanned is a normal
       // first-run state, and the UI renders an empty state from this.
@@ -47,7 +48,7 @@ export function registerScanRoutes(app: FastifyInstance): void {
   });
 
   app.get<{ Params: { id: string } }>("/api/scans/:id", async (req, reply) => {
-    const scan = await getScan(req.params.id);
+    const scan = await getScan(tenantOf(req), req.params.id);
     if (!scan) return reply.code(404).send({ error: "No such scan" });
     return reply.send({ scan });
   });
@@ -55,9 +56,10 @@ export function registerScanRoutes(app: FastifyInstance): void {
   app.get<{ Querystring: { from?: string; to?: string } }>(
     "/api/scans/diff",
     async (req, reply) => {
+      const tenantId = tenantOf(req);
       let { from, to } = req.query;
       if (!from || !to) {
-        const scans = await listScans(2);
+        const scans = await listScans(tenantId, 2);
         if (scans.length < 2) {
           return reply.send({
             diff: null,
@@ -67,12 +69,13 @@ export function registerScanRoutes(app: FastifyInstance): void {
         to ??= scans[0]!.id;
         from ??= scans[1]!.id;
       }
-      return reply.send({ diff: await diffScans(from, to) });
+      return reply.send({ diff: await diffScans(tenantId, from, to) });
     },
   );
 
   /** Run a scan, streaming progress as server-sent events. */
   app.post("/api/scans", async (req, reply) => {
+    const tenantId = tenantOf(req);
     if (scanInProgress) {
       return reply.code(409).send({ error: "A scan is already running" });
     }
@@ -99,24 +102,24 @@ export function registerScanRoutes(app: FastifyInstance): void {
     try {
       const result = await runScan({ scanId: streamId, onEvent: send });
 
-      scanId = await createScanRun(result.accountId, result.regions);
+      scanId = await createScanRun(tenantId, result.accountId, result.regions);
       const status = rollUpStatus(result.units);
 
-      await saveScanResult(scanId, {
+      await saveScanResult(tenantId, scanId, {
         status,
         units: result.units,
         resources: result.resources,
         relationships: result.relationships,
         apiCalls: callCounter.total(),
       });
-      await projectGraph(scanId, result.resources, result.relationships);
+      await projectGraph(tenantId, scanId, result.resources, result.relationships);
 
-      const run = await getScan(scanId);
+      const run = await getScan(tenantId, scanId);
       if (run) send({ type: "scan.finished", scanId, run });
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       req.log.error({ err }, "scan failed");
-      if (scanId) await failScanRun(scanId, message);
+      if (scanId) await failScanRun(tenantId, scanId, message);
       send({ type: "scan.failed", scanId: scanId ?? streamId, error: message });
     } finally {
       scanInProgress = false;

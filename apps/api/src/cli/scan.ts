@@ -16,6 +16,7 @@ import { closePool, migrate } from "../db/postgres.js";
 import { createScanRun, failScanRun, saveScanResult } from "../db/repository.js";
 import { closeDriver, projectGraph } from "../db/neo4j.js";
 import { runScan } from "../scan/runner.js";
+import { LOCAL_TENANT } from "../tenancy/tenant.js";
 
 const started = Date.now();
 let scanId: string | null = null;
@@ -39,10 +40,10 @@ try {
 
   // The run row is created once the account id is known, so a scan that never
   // got credentials does not leave an orphan row attributed to nobody.
-  scanId = await createScanRun(result.accountId, result.regions);
+  scanId = await createScanRun(LOCAL_TENANT, result.accountId, result.regions);
 
   const status = rollUpStatus(result.units);
-  await saveScanResult(scanId, {
+  await saveScanResult(LOCAL_TENANT, scanId, {
     status,
     units: result.units,
     resources: result.resources,
@@ -50,7 +51,12 @@ try {
     apiCalls: callCounter.total(),
   });
 
-  const projected = await projectGraph(scanId, result.resources, result.relationships);
+  const projected = await projectGraph(
+    LOCAL_TENANT,
+    scanId,
+    result.resources,
+    result.relationships,
+  );
 
   const failed = result.units.filter((u) => u.status === "failed").length;
   console.log(
@@ -63,7 +69,7 @@ try {
 } catch (err) {
   const message = err instanceof Error ? err.message : String(err);
   console.error(`\nScan failed: ${message}`);
-  if (scanId) await failScanRun(scanId, message);
+  if (scanId) await failScanRun(LOCAL_TENANT, scanId, message);
   process.exitCode = 1;
 } finally {
   await closeDriver();

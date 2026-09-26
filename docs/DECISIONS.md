@@ -643,3 +643,53 @@ a tenant to discover a tool that answers "disabled".
 refuses. A model can call a tool it was never offered — from a replayed
 conversation, or because the name appears in the prompt — so the list is a
 suggestion and the dispatch is the gate. Each is tested by deleting the other.
+
+---
+
+## ADR-017 — A single-tenant deployment is one tenant that always exists
+
+**Context.** The hosted service needs tenancy; the self-hosted project must keep
+working exactly as it does. The obvious approach — a tenant id that is optional,
+or a "single-tenant mode" that skips the scoping — produces a codebase with two
+paths through every query, one of which is only exercised in production.
+
+**Decision.** There is no unscoped path. `schema.sql` inserts a default tenant
+with a fixed uuid, the self-hosted product passes it everywhere, and the hosted
+service passes one resolved from the session. Every table holding customer data
+has `tenant_id NOT NULL` **with no default**, every repository function takes a
+tenant, and every graph query binds `$tenantId`.
+
+**Why no column default.** A default would make an insert that forgets the
+tenant succeed, landing the row in whichever tenant the default names — which in
+a shared database is somebody else's account. Without one it fails loudly, at
+the first test that runs it.
+
+**Why a branded type.** `TenantId` is a branded string, so a plain `string`
+cannot be passed where a tenant is required. Adding it turned "did anyone forget
+to scope this?" from a code review into eighteen compile errors, each one a call
+site that had been reading data without saying whose. That is the only version
+of this check that scales.
+
+**Why the graph seam refuses rather than filters.** `readQuery` throws when a
+query does not bind `$tenantId`, instead of appending a predicate. A query
+written without the predicate is a query whose author did not think about
+tenancy; silently correcting it would hide that until the day the correction is
+missing.
+
+**Node identity is `(tenantId, arn)`, not `arn`.** An ARN is unique within an
+AWS account, not across this database. Two tenants collide immediately on the
+synthetic `Internet` node, whose ARN is a constant, and completely if they
+connect the same AWS account. Under the original uniqueness constraint the edge
+projection matched endpoints by ARN alone, so one tenant's relationships would
+attach to another tenant's nodes — not a query bug a filter could fix later, but
+an edge that genuinely exists and that every path query would traverse. This is
+the failure the behavioural test below actually catches, and it was found by
+writing that test rather than by review.
+
+**Three guards, because they fail differently.** Static: every curated query
+binds the parameter. Runtime: `readQuery` refuses an unscoped query, and needs
+no database to do it. Behavioural: two tenants are projected into one graph,
+every curated query runs as one of them, and nothing belonging to the other may
+come back. Only the third can catch a query that binds the parameter and still
+leaks. Each was verified by breaking the thing it guards and watching the right
+test go red.
