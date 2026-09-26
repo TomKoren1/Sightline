@@ -35,10 +35,12 @@ const TOOL_LABELS: Record<string, string> = {
   find_reachable_from: "Working out blast radius",
   find_instances_in_public_subnets: "Checking subnet placement",
   find_idle_resources: "Looking for idle resources",
+  find_unprotected_buckets: "Checking bucket public-access guardrails",
   find_open_security_groups: "Checking security group exposure",
   search_resources: "Searching",
   list_scans: "Checking scan history",
   diff_scans: "Comparing scans",
+  suggest_remediation: "Working out how to fix it",
   graph_query: "Running a graph query",
 };
 

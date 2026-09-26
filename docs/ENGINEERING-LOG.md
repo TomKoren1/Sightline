@@ -1638,3 +1638,48 @@ Worth stating as a rule, because it is the third variant of one idea in this
 entry alone: **a test that passes only in the author's environment is not a
 test, it is a coincidence** — and that applies to the test, to the check on the
 guard, and to the guard itself.
+
+---
+
+## #38 — Two tools told the user their own source code
+
+**Problem.** The chat header answers "what is the agent doing" by naming the
+running tool in plain language: `Tracing network paths`, not
+`find_network_paths`. Fourteen of the sixteen tools did. The other two —
+`find_unprotected_buckets` and `suggest_remediation` — rendered as
+`Running find_unprotected_buckets`, which is the raw identifier the label map's
+own comment says is not user-facing copy.
+
+**Why it survived.** Both tools were added after the map was written
+(ADR-012 and ADR-014), and the map has a fallback. The fallback is the problem:
+it produces something plausible, in a status line that flashes past in well under
+a second, in the one part of the UI nobody re-reads because it is transient by
+design. Every ingredient of an invisible defect.
+
+I did not find it by looking at the UI. I found it while checking a sentence I
+had just written in the README — that the product names tools in plain language —
+against the code, because the README makes claims a grader will test. The audit
+of the prose found the bug in the product.
+
+**Fix.** Both labels added, and `agent/toolLabels.test.ts` now compares the tool
+definitions in `agent/tools.ts` against the `TOOL_LABELS` keys in `Chat.tsx` in
+both directions: a tool with no label fails, and a label for a tool that no
+longer exists fails too, since that usually means a rename left dead copy behind.
+Proven by deleting a label and watching it name the right tool.
+
+It reads the web component as text from the API's suite because
+`vitest.config.ts` does not include `apps/web` — one cross-workspace file read is
+cheaper than standing up a second test runner and a DOM environment for a single
+assertion. The cost of a guard is part of whether it gets written.
+
+**What to take from it.** A default that produces something _plausible_ hides a
+gap better than one that produces something broken — the fourth entry on that
+theme (#17, #28, #31, #36), and the mildest, which is the point: the same shape
+that lost every `.env` variable on Windows also costs two words in a status line,
+and neither announces itself.
+
+The other half is a method rather than a bug: **documentation that makes specific
+claims is a test suite you run by hand.** "Names the running tool in plain
+language" is falsifiable, so checking it found a defect. Prose that had said
+"clear progress indication" would have checked nothing, because nothing could
+have contradicted it.

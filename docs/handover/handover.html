@@ -386,7 +386,7 @@
       </dl>
 
       <div class="metrics">
-        <div><b>250</b><span>unit tests</span></div>
+        <div><b>253</b><span>unit tests</span></div>
         <div><b>21/21</b><span>agent evals · F1 1.0</span></div>
         <div><b>14</b><span>decision records</span></div>
         <div><b>37</b><span>logged problems</span></div>
@@ -442,7 +442,7 @@
           </ul>
         </li>
         <li>
-          <span>8</span>The thirty-seven problems
+          <span>8</span>The thirty-eight problems
           <ul>
             <li>Symptom, cause, fix and lesson for every one</li>
           </ul>
@@ -1175,7 +1175,7 @@ npm run dev:api &amp; npm run dev:web
 
     <!-- =================== 8 =================== -->
     <div class="section">
-      <h2><span class="num">8</span>The thirty-seven problems</h2>
+      <h2><span class="num">8</span>The thirty-eight problems</h2>
       <p class="muted small">
         Full write-ups in <code>docs/ENGINEERING-LOG.md</code>. Each entry below gives the symptom,
         the cause, the fix, and what it generalises to.
@@ -2120,13 +2120,63 @@ npm run dev:api &amp; npm run dev:web
           </dd>
         </dl>
       </div>
+
+      <div class="log">
+        <h3><span class="id">#38</span>Two tools told the user their own source code</h3>
+        <dl class="row">
+          <dt>Symptom</dt>
+          <dd>
+            The chat header names the running tool in plain language —
+            <code>Tracing network paths</code>. Two of the sixteen tools instead showed
+            <code>Running find_unprotected_buckets</code> and
+            <code>Running suggest_remediation</code>: the raw identifier that the label map's own
+            comment says is not user-facing copy.
+          </dd>
+          <dt>Cause</dt>
+          <dd>
+            Both tools were added after the label map was written (ADR-012 and ADR-014), and the map
+            falls back to the tool name. The fallback is the defect: it produces something
+            <em>plausible</em>, in a status line that flashes past in under a second, in the one
+            part of the UI nobody re-reads because it is transient by design.
+          </dd>
+          <dt>How it was found</dt>
+          <dd>
+            Not by looking at the UI. By checking a sentence in the README — "names the running tool
+            in plain language" — against the code, because the README makes claims a grader will
+            test. The audit of the prose found the bug in the product.
+          </dd>
+          <dt>Fix</dt>
+          <dd>
+            Both labels added, and <code>agent/toolLabels.test.ts</code> compares the tool
+            definitions against the label keys in <em>both</em> directions — a tool with no label
+            fails, and a label for a tool that no longer exists fails too, since that usually means
+            a rename left dead copy behind. Proven by deleting a label and watching it name the
+            right tool. It reads the web component as text from the API suite because
+            <code>vitest.config.ts</code> does not include <code>apps/web</code>: one
+            cross-workspace file read is cheaper than a second test runner and a DOM environment for
+            one assertion, and the cost of a guard is part of whether it gets written.
+          </dd>
+          <dt>Lesson</dt>
+          <dd>
+            <strong
+              >Documentation that makes specific claims is a test suite you run by hand.</strong
+            >
+            "Names the running tool in plain language" is falsifiable, so checking it found a
+            defect; prose that said "clear progress indication" would have checked nothing. And a
+            default that produces something plausible hides a gap better than one that breaks — the
+            fourth entry on that theme (#17, #28, #31, #36) and the mildest, which is the point: the
+            same shape that lost every <code>.env</code> variable on Windows also costs two words in
+            a status line.
+          </dd>
+        </dl>
+      </div>
     </div>
 
     <!-- =================== 9 =================== -->
     <div class="section">
       <h2><span class="num">9</span>Recurring failure patterns</h2>
       <p>
-        Thirty-seven entries reduce to about five shapes. If you are asked "what did you learn
+        Thirty-eight entries reduce to about five shapes. If you are asked "what did you learn
         building this?", this section is the answer — it is more convincing than any individual bug.
       </p>
 

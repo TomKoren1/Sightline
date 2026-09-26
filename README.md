@@ -137,7 +137,7 @@ is one of only two variables where blank is meaningful rather than unset.
 | `npm run drift`                             | Change the mock account, so a second scan has a diff   |
 | `npm run inspect -w @daveio/api`            | Scan and print findings without touching the databases |
 | `npm run query -w @daveio/api`              | Run every curated query against the graph              |
-| `npm test`                                  | 250 unit tests                                         |
+| `npm test`                                  | 253 unit tests                                         |
 | `npm run verify`                            | Everything CI's static job runs — use before pushing   |
 | `npm run evals:ground-truth -w @daveio/api` | Tier-1 evals — no API key needed                       |
 | `npm run evals -w @daveio/api`              | Tier-2 agent evals — needs a key                       |
@@ -162,6 +162,56 @@ account is built around traps that defeat a naive lookup:
 The answer key lives in [`packages/mock-aws/src/topology.ts`](packages/mock-aws/src/topology.ts)
 and is written by hand rather than generated from the code under test, so an
 analyser bug cannot grade itself as correct.
+
+---
+
+## The brief's seven items, and where each one lives
+
+The definition of done asks that the seven numbered items in "The problem" are
+addressed in code or explained. All seven are in code, so this is a map rather
+than an argument.
+
+| #     | Item                              | Where it lives                                                                                                                                                                                                                                                                                                                                                                                                                 |
+| ----- | --------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| **1** | Connect with the read-only role   | [`infra/readonly-role.yaml`](infra/readonly-role.yaml), replaced for the reasons under "Notes on the brief", with the original kept beside it as [`readonly-role.original.yaml`](infra/readonly-role.original.yaml) for comparison. `sts:AssumeRole` with an external id in [`aws/credentials.ts`](apps/api/src/aws/credentials.ts). The **Connection** panel walks a customer through deploying it and then tests the result. |
+| **2** | Discover and ingest               | Six collectors — EC2, VPC, S3, IAM, RDS, Lambda — in [`scan/collectors/`](apps/api/src/scan/collectors), over every enabled region. Resource Explorer is an optional fast path; SDK enumeration is the tested default. Full pagination, `retryMode: "adaptive"`, and one independently-failable unit per service per region.                                                                                                   |
+| **3** | Store resources and relationships | Both databases, doing different jobs: Postgres is the system of record and the history that change detection diffs against; Neo4j is a projection rebuilt from it, because the agent's hardest questions are path questions ([ADR-003](docs/DECISIONS.md)).                                                                                                                                                                    |
+| **4** | The agent                         | Sixteen curated tools in [`agent/`](apps/api/src/agent), a read-only Cypher escape hatch behind two independent guards, and citations validated against the ARNs the tools actually returned.                                                                                                                                                                                                                                  |
+| **5** | Visualize the graph               | React Flow in [`GraphView.tsx`](apps/web/src/components/GraphView.tsx), laid out left-to-right with Dagre so reachability reads the way people expect it to: the internet on the left, the database at the end of the chain.                                                                                                                                                                                                   |
+| **6** | Chat, with resources findable     | Every ARN the agent cites is highlighted in the graph, with a count in the header and a way to clear it. Clicking any node opens its properties, its findings and its remediation.                                                                                                                                                                                                                                             |
+| **7** | Communicate state                 | Below — it is the item most often skipped, so it gets its own section.                                                                                                                                                                                                                                                                                                                                                         |
+
+### Communicating state
+
+Seven states, all of which answer one question the user is really asking: _can I
+trust what I am looking at?_ That is why most of them live in one component
+([`ScanBanner.tsx`](apps/web/src/components/ScanBanner.tsx)) rather than being
+scattered.
+
+- **Empty.** An empty database offers to run the first scan, rather than
+  presenting an empty canvas and leaving the user to find the button.
+- **Progress.** The scanner streams an event per completed unit, so the header
+  counts real services — `Scanning — 7/14 services` — instead of animating a
+  bar on a timer.
+- **Freshness.** `64 resources across 3 regions · scanned 4m ago`, which turns
+  amber and says `(stale)` after an hour. Inventory is a snapshot and saying so
+  is cheaper than being wrong.
+- **Refresh.** Rescan is always one click, and disabled while a scan is running.
+- **Partial failure.** The state most worth being loud about, because the data
+  looks complete and is not: a scan of fourteen units (six services, three regions, two of them global) does not fail because one
+  did. The banner names the service, the region and the error, and says results
+  below are incomplete. Set `SCAN_FAULT_INJECTION=rds:eu-west-1` to demonstrate
+  it on demand.
+- **Error.** A scan that fails outright reports why, not "something went wrong".
+- **What the agent is doing.** The names of the running tools in plain language
+  — `Tracing network paths`, `Checking for admin privileges` — because a spinner and a tool name cost
+  the same to render and only one of them is an answer. Tokens stream as they
+  arrive, and every reply keeps an expandable trail of the tool calls behind it.
+
+One more, which the brief does not ask for but the runtime account toggle
+creates: switching between the demo account and a real one does not rescan, so
+the graph still holds the previous account's inventory. The banner says so
+rather than quietly relabelling one account's resources with another's name.
 
 ---
 
@@ -227,9 +277,16 @@ There is still a `graph_query` escape hatch for genuinely novel questions. It
 runs behind a lexical write-clause validator **and** inside a Neo4j read
 transaction, because neither layer is trusted alone.
 
-No framework, because the two decisions that actually define this agent — the
-tool boundary and citation validation — are precisely what a framework would
-hide behind its own abstractions, without removing any of the real work.
+No framework, including the suggested **Deep Agents** — which I read before
+deciding against it. Its value is planning, sub-agents and a filesystem for
+long-horizon work that outgrows a context window, and the questions here are
+one or two tool calls deep against a graph that is already summarised. What it
+would have cost is the part that matters: the two decisions that actually
+define this agent are the tool boundary and citation validation, and both live
+exactly where a framework puts its own abstractions. Validating that every ARN
+in an answer came from a tool result means holding the tool results, which means
+owning the loop. The result is one 250-line file, and I can say precisely what
+the model was given on every turn.
 
 **"Never change anything" is enforced at four layers**, not asserted in a
 prompt: the IAM role has no write permissions and an explicit deny on data

@@ -975,3 +975,36 @@ on both the detail and remediation routes. Verified as a regression guard by
 restoring the cap to 100 and watching four cases go red.
 
 248 unit tests.
+
+### `docs: map the brief's seven items, and fix the UX claim that turned out to be false`
+
+The README argued its design decisions well but left a grader doing clerical
+work. The definition of done asks that the seven numbered items in "The problem"
+are addressed; nothing in the README said where each one lived. And item 7 —
+communicate scan progress, freshness, refresh, empty, partial-failure and
+agent-in-progress state — was the least documented part of the project despite
+being one of the more carefully built, because it lives almost entirely in one
+component and never got its own section.
+
+So: a table mapping all seven items to the files that implement them, and a
+section on the seven states describing what each one actually renders. Every
+claim in it was checked against the code before it was written, which is how the
+next part happened.
+
+**The audit of the prose found a bug in the product.** I wrote that the chat
+names the running tool in plain language, then went to verify it: fourteen of the
+sixteen tools do, and `find_unprotected_buckets` and `suggest_remediation`
+rendered as `Running find_unprotected_buckets` — the raw identifier the label
+map's own comment says is not user-facing copy. Both were added after the map was
+written (ADR-012, ADR-014) and the fallback made them look fine. Labels added,
+and `agent/toolLabels.test.ts` now compares definitions to labels in both
+directions so the next added tool cannot ship unlabelled. Engineering log #38.
+
+Also in here: the suggested **Deep Agents** framework is now named and argued
+with rather than silently passed over — the brief offers it, and "no framework"
+is a more convincing answer when it is visibly a choice. And `render.js` becomes
+`render.cjs`, because the repository root declares `"type": "module"` and the
+handover README's own regeneration command failed with
+`require is not defined in ES module scope` when run from inside the repo.
+
+253 unit tests.
