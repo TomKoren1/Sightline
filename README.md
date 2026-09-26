@@ -193,7 +193,7 @@ scattered.
 - **Progress.** The scanner streams an event per completed unit, so the header
   counts real services — `Scanning — 7/14 services` — instead of animating a
   bar on a timer.
-- **Freshness.** `64 resources across 3 regions · scanned 4m ago`, which turns
+- **Freshness.** `101 resources across 3 regions · scanned 4m ago`, which turns
   amber and says `(stale)` after an hour. Inventory is a snapshot and saying so
   is cheaper than being wrong.
 - **Refresh.** Rescan is always one click, and disabled while a scan is running.
@@ -506,3 +506,7 @@ docs/               decisions, engineering log, commit log, walkthrough
 - **[docs/COMMITS.md](docs/COMMITS.md)** — what each commit changed and why.
 - **[docs/WALKTHROUGH.md](docs/WALKTHROUGH.md)** — a guided tour of the running
   system.
+- **[docs/handover/](docs/handover/)** — two print documents: a project handover
+  (decisions, problems, limits) and a **codebase tour** that walks every source
+  file, traces the four request paths hop by hop with line numbers, and indexes
+  likely questions to the file that answers them.

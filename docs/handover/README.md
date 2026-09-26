@@ -1,23 +1,33 @@
-# Handover document
+# Handover documents
 
-`dave-io-assignment-handover.pdf` — a knowledge-transfer document covering the
-whole project: what was asked and built, the architecture, the fourteen
-decisions, all thirty-eight logged problems with their lessons, the recurring
-failure patterns, the known limits, and a set of likely interview questions with
-answers grounded in the code.
+Two print documents, written to be read on their own by someone who has not seen
+the codebase. They answer different questions and are deliberately not merged.
 
-It is written to be read on its own, by someone who has not seen the codebase.
+**`dave-io-assignment-handover.pdf`** — the project: what was asked and built,
+the architecture, the fourteen decisions, all thirty-eight logged problems with
+their lessons, the recurring failure patterns, the known limits, and likely
+interview questions with answers grounded in the code.
+
+**`dave-io-assignment-codebase-tour.pdf`** — the code: what every source file is
+for, the four request paths traced hop by hop with line numbers, the data model,
+the test suite file by file, and an index from "what someone might ask" to "the
+file to open". Written to be open on a second screen while answering questions.
 
 ## Regenerating
 
-`handover.html` is the source. It is authored as a print document — A4, page
-breaks per section, print colour — and rendered with headless Chrome.
+`handover.html` and `codebase-tour.html` are the sources. Both are authored as
+print documents — A4, page breaks per section, print colour — and rendered with
+headless Chrome. They share one stylesheet by copy, since neither is served.
 
 ```bash
 npm install puppeteer            # in a scratch directory, not this repo
 npx puppeteer browsers install chrome
 node render.cjs handover.html dave-io-assignment-handover.pdf
+node render.cjs codebase-tour.html dave-io-assignment-codebase-tour.pdf
 ```
+
+The footer label defaults to each document's own `<title>`; pass a third
+argument to override it.
 
 The extension is `.cjs` deliberately: the script is CommonJS and the repository
 root declares `"type": "module"`, so as `render.js` it fails with
@@ -30,3 +40,9 @@ exits with code 127 and `error while loading shared libraries`.
 
 Page numbers come from the print job in `render.cjs`, not from a CSS
 `@page { @bottom-center }` counter — declaring both renders the number twice.
+
+## A note on the line numbers in the tour
+
+The codebase tour cites file and line for every hop in its traces. Line numbers
+drift; symbol names do not. If a number is stale, the function named beside it
+is still the right thing to open.

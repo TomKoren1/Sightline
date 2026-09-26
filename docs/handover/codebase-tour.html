@@ -1,0 +1,2479 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>dave.io Engineering Assignment — Codebase Tour</title>
+    <style>
+      /* Margins and the page number come from the print job (see render.js),
+         not from @page — declaring a counter here as well renders it twice. */
+      @page {
+        size: A4;
+      }
+
+      :root {
+        --ink: #14171a;
+        --muted: #5b6570;
+        --faint: #8a949e;
+        --rule: #d8dde2;
+        --bg-soft: #f6f7f9;
+        --accent: #0f5c8c;
+        --danger: #9b2c2c;
+        --good: #216e39;
+        --mono: ui-monospace, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        font-family: "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, serif;
+        font-size: 10.5pt;
+        line-height: 1.52;
+        color: var(--ink);
+        -webkit-font-smoothing: antialiased;
+      }
+
+      h1,
+      h2,
+      h3,
+      h4 {
+        font-family: -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+        line-height: 1.22;
+        margin: 0;
+        page-break-after: avoid;
+      }
+
+      /* ---------- cover ---------- */
+      .cover {
+        height: 245mm;
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        page-break-after: always;
+      }
+      .cover .eyebrow {
+        font-family: var(--mono);
+        font-size: 8.5pt;
+        letter-spacing: 0.14em;
+        text-transform: uppercase;
+        color: var(--accent);
+        margin-bottom: 10mm;
+      }
+      .cover h1 {
+        font-size: 30pt;
+        letter-spacing: -0.02em;
+        margin-bottom: 5mm;
+      }
+      .cover .sub {
+        font-size: 13pt;
+        color: var(--muted);
+        max-width: 135mm;
+        line-height: 1.45;
+      }
+      .cover .rule {
+        height: 3px;
+        width: 52mm;
+        background: var(--accent);
+        margin: 11mm 0;
+      }
+      .cover dl {
+        display: grid;
+        grid-template-columns: 34mm 1fr;
+        gap: 2.2mm 6mm;
+        margin: 0;
+        font-family: -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
+        font-size: 9.5pt;
+      }
+      .cover dt {
+        color: var(--faint);
+        font-variant: small-caps;
+        letter-spacing: 0.04em;
+      }
+      .cover dd {
+        margin: 0;
+      }
+
+      .metrics {
+        display: grid;
+        grid-template-columns: repeat(4, 1fr);
+        gap: 4mm;
+        margin-top: 12mm;
+        padding-top: 7mm;
+        border-top: 1px solid var(--rule);
+      }
+      .metrics div {
+        font-family: -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
+      }
+      .metrics b {
+        display: block;
+        font-size: 19pt;
+        letter-spacing: -0.02em;
+        color: var(--accent);
+        font-weight: 600;
+      }
+      .metrics span {
+        font-size: 8pt;
+        color: var(--faint);
+        text-transform: uppercase;
+        letter-spacing: 0.07em;
+      }
+
+      /* ---------- structure ---------- */
+      .section {
+        page-break-before: always;
+      }
+      h2 {
+        font-size: 17pt;
+        letter-spacing: -0.015em;
+        padding-bottom: 3mm;
+        border-bottom: 2px solid var(--ink);
+        margin-bottom: 6mm;
+      }
+      h2 .num {
+        font-family: var(--mono);
+        font-size: 11pt;
+        color: var(--accent);
+        margin-right: 4mm;
+        font-weight: 400;
+      }
+      h3 {
+        font-size: 12pt;
+        margin-top: 8mm;
+        margin-bottom: 2.5mm;
+      }
+      h4 {
+        font-size: 10.5pt;
+        margin-top: 5mm;
+        margin-bottom: 1.5mm;
+        color: var(--muted);
+      }
+      p {
+        margin: 0 0 3.2mm;
+        orphans: 2;
+        widows: 2;
+      }
+      ul,
+      ol {
+        margin: 0 0 3.2mm;
+        padding-left: 6mm;
+      }
+      li {
+        margin-bottom: 1.4mm;
+      }
+      strong {
+        font-weight: 600;
+      }
+      a {
+        color: var(--accent);
+        text-decoration: none;
+      }
+
+      code {
+        font-family: var(--mono);
+        font-size: 8.8pt;
+        background: var(--bg-soft);
+        padding: 0.4mm 1.1mm;
+        border-radius: 2px;
+        border: 1px solid #e6e9ec;
+      }
+      pre {
+        font-family: var(--mono);
+        font-size: 8.3pt;
+        line-height: 1.45;
+        background: var(--bg-soft);
+        border: 1px solid var(--rule);
+        border-left: 3px solid var(--accent);
+        padding: 3mm 3.5mm;
+        margin: 0 0 3.5mm;
+        overflow-x: auto;
+        white-space: pre-wrap;
+        page-break-inside: avoid;
+      }
+      pre code {
+        background: none;
+        border: none;
+        padding: 0;
+        font-size: inherit;
+      }
+
+      table {
+        width: 100%;
+        border-collapse: collapse;
+        font-family: -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
+        font-size: 9pt;
+        margin: 0 0 4mm;
+        page-break-inside: avoid;
+      }
+      th {
+        text-align: left;
+        font-weight: 600;
+        border-bottom: 1.5px solid var(--ink);
+        padding: 1.8mm 2.5mm 1.8mm 0;
+        vertical-align: bottom;
+      }
+      td {
+        border-bottom: 1px solid var(--rule);
+        padding: 1.8mm 2.5mm 1.8mm 0;
+        vertical-align: top;
+      }
+      td:last-child,
+      th:last-child {
+        padding-right: 0;
+      }
+
+      /* ---------- TOC ---------- */
+      .toc {
+        page-break-after: always;
+      }
+      .toc ol {
+        list-style: none;
+        padding: 0;
+        margin: 0;
+        font-family: -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
+      }
+      .toc > ol > li {
+        margin-bottom: 3mm;
+        font-size: 11pt;
+      }
+      .toc > ol > li > span:first-child {
+        font-family: var(--mono);
+        color: var(--accent);
+        margin-right: 3.5mm;
+        font-size: 9.5pt;
+      }
+      .toc ul {
+        list-style: none;
+        padding-left: 11mm;
+        margin: 1.5mm 0 0;
+        font-size: 9pt;
+        color: var(--muted);
+      }
+      .toc ul li {
+        margin-bottom: 0.7mm;
+      }
+
+      /* ---------- callouts ---------- */
+      .box {
+        border: 1px solid var(--rule);
+        background: var(--bg-soft);
+        padding: 3.5mm 4mm;
+        margin: 0 0 4mm;
+        page-break-inside: avoid;
+      }
+      .box.lesson {
+        border-left: 3px solid var(--good);
+        background: #f2f8f4;
+      }
+      .box.warn {
+        border-left: 3px solid var(--danger);
+        background: #fdf4f4;
+      }
+      .box.key {
+        border-left: 3px solid var(--accent);
+      }
+      .box h4 {
+        margin: 0 0 1.5mm;
+        color: var(--ink);
+        font-size: 9.5pt;
+        text-transform: uppercase;
+        letter-spacing: 0.06em;
+      }
+      .box p:last-child,
+      .box ul:last-child {
+        margin-bottom: 0;
+      }
+
+      /* ---------- log entries ---------- */
+      .log {
+        page-break-inside: avoid;
+        margin-bottom: 6mm;
+        padding-bottom: 5mm;
+        border-bottom: 1px solid var(--rule);
+      }
+      .log:last-child {
+        border-bottom: none;
+      }
+      .log h3 {
+        margin-top: 0;
+        font-size: 11pt;
+      }
+      .log h3 .id {
+        font-family: var(--mono);
+        color: var(--accent);
+        margin-right: 2.5mm;
+        font-size: 10pt;
+      }
+      .log .row {
+        display: grid;
+        grid-template-columns: 22mm 1fr;
+        gap: 1.2mm 4mm;
+        font-size: 9.5pt;
+      }
+      .log .row dt {
+        font-family: -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
+        font-size: 8pt;
+        text-transform: uppercase;
+        letter-spacing: 0.06em;
+        color: var(--faint);
+        padding-top: 0.6mm;
+      }
+      .log .row dd {
+        margin: 0;
+      }
+
+      .qa {
+        margin-bottom: 5mm;
+        page-break-inside: avoid;
+      }
+      .qa .q {
+        font-family: -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
+        font-weight: 600;
+        font-size: 10pt;
+        margin-bottom: 1.5mm;
+      }
+      .qa .q::before {
+        content: "Q";
+        font-family: var(--mono);
+        color: var(--accent);
+        margin-right: 2.5mm;
+      }
+      .qa .a {
+        padding-left: 6mm;
+        border-left: 2px solid var(--rule);
+      }
+      .qa .a p:last-child {
+        margin-bottom: 0;
+      }
+
+      .tight li {
+        margin-bottom: 0.6mm;
+      }
+      .muted {
+        color: var(--muted);
+      }
+      .small {
+        font-size: 9pt;
+      }
+      .nobreak {
+        page-break-inside: avoid;
+      }
+    </style>
+    <style>
+      /* Additions for the code tour: file tables and call traces. */
+      table.files {
+        font-size: 8.6pt;
+      }
+      table.files td:first-child,
+      table.files th:first-child {
+        width: 42mm;
+      }
+      table.files td:nth-child(2),
+      table.files th:nth-child(2) {
+        width: 11mm;
+        text-align: right;
+        color: var(--faint);
+        font-variant-numeric: tabular-nums;
+      }
+      table.files code {
+        font-size: 8.2pt;
+        background: none;
+        border: none;
+        padding: 0;
+        color: var(--ink);
+      }
+      .trace {
+        counter-reset: hop;
+        margin: 0 0 5mm;
+      }
+      .trace .hop {
+        display: grid;
+        grid-template-columns: 6mm 1fr;
+        gap: 0 3mm;
+        padding-bottom: 2.6mm;
+        page-break-inside: avoid;
+      }
+      .trace .hop::before {
+        counter-increment: hop;
+        content: counter(hop);
+        font-family: var(--mono);
+        font-size: 8pt;
+        color: var(--accent);
+        border: 1px solid var(--rule);
+        border-radius: 50%;
+        width: 5.4mm;
+        height: 5.4mm;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        margin-top: 0.4mm;
+      }
+      .trace .hop .where {
+        font-family: var(--mono);
+        font-size: 8.4pt;
+        color: var(--accent);
+      }
+      .trace .hop .what {
+        font-size: 9.4pt;
+      }
+      .trace .hop .what em {
+        color: var(--muted);
+      }
+      .askindex td:first-child {
+        width: 62mm;
+        font-family: -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
+        font-weight: 600;
+      }
+      .askindex {
+        font-size: 8.8pt;
+      }
+      .askindex code {
+        font-size: 8.2pt;
+      }
+      .twocol {
+        column-count: 2;
+        column-gap: 7mm;
+      }
+      .twocol p {
+        margin-bottom: 2.4mm;
+      }
+    </style>
+  </head>
+  <body>
+    <!-- =================== COVER =================== -->
+    <div class="cover">
+      <div class="eyebrow">dave.io engineering assignment</div>
+      <h1>Codebase Tour</h1>
+      <div class="sub">
+        A file-by-file guide to the project: what every source file is for, the four request paths
+        traced hop by hop with line numbers, and an index from "what someone might ask" to "the file
+        to open".
+      </div>
+      <div class="rule"></div>
+      <dl>
+        <dt>Author</dt>
+        <dd>Tom</dd>
+        <dt>Repository</dt>
+        <dd>dave.io_home-assignment</dd>
+        <dt>Companion to</dt>
+        <dd>dave-io-assignment-handover.pdf (the decisions and the problems)</dd>
+        <dt>Purpose</dt>
+        <dd>Answering questions about the code with the code open</dd>
+      </dl>
+      <div class="metrics">
+        <div><b>13.2k</b><span>lines, excl. tests</span></div>
+        <div><b>80</b><span>source files</span></div>
+        <div><b>253</b><span>unit tests</span></div>
+        <div><b>4</b><span>traced paths</span></div>
+      </div>
+    </div>
+
+    <!-- =================== TOC =================== -->
+    <div class="toc">
+      <h2>Contents</h2>
+      <ol>
+        <li>
+          <span>1</span>How to use this document
+          <ul>
+            <li>The eight files that matter most</li>
+            <li>Reading orders: ten minutes, an hour</li>
+          </ul>
+        </li>
+        <li>
+          <span>2</span>The shape of the repository
+          <ul>
+            <li>The tree, with sizes</li>
+            <li>Why the boundaries fall where they do</li>
+          </ul>
+        </li>
+        <li><span>3</span>Trace: a scan, end to end</li>
+        <li><span>4</span>Trace: a question, end to end</li>
+        <li><span>5</span>Trace: connecting a real AWS account</li>
+        <li><span>6</span>Trace: a finding becomes a fix</li>
+        <li>
+          <span>7</span>The data model
+          <ul>
+            <li>Twenty node kinds, thirteen edge types</li>
+            <li>Postgres tables, and what is derived</li>
+          </ul>
+        </li>
+        <li>
+          <span>8</span>File reference — apps/api
+          <ul>
+            <li>aws/ · scan/ · db/ · agent/ · remediation/ · routes/ · evals/ · cli/</li>
+          </ul>
+        </li>
+        <li><span>9</span>File reference — apps/web</li>
+        <li><span>10</span>File reference — packages and infra</li>
+        <li><span>11</span>The test suite, file by file</li>
+        <li><span>12</span>If they ask X, open Y</li>
+        <li><span>13</span>Worth knowing without looking it up</li>
+      </ol>
+    </div>
+
+    <!-- =================== 1 =================== -->
+    <div class="section">
+      <h2><span class="num">1</span>How to use this document</h2>
+
+      <p>
+        The handover PDF explains <em>why</em> this project is the way it is. This one explains
+        <em>where things are</em>. It is written to be open on a second screen while someone asks
+        questions about the code, so every claim in it carries a file and, where it helps, a line
+        number.
+      </p>
+
+      <p>
+        Line numbers were correct when this was generated and drift as the code changes. Treat them
+        as "near the top" / "about two thirds down" rather than as exact addresses, and use the
+        symbol names, which do not move.
+      </p>
+
+      <h3>The eight files that matter most</h3>
+
+      <p>
+        Eighty source files and twenty-one test files, and this is where the substance is. If
+        someone reads nothing else, read these.
+      </p>
+
+      <table>
+        <tr>
+          <th>File</th>
+          <th>Why it matters</th>
+        </tr>
+        <tr>
+          <td><code>scan/runner.ts</code></td>
+          <td>
+            Scan orchestration, and the one design commitment that shapes the whole product: a scan
+            does not fail, it reports per-unit outcomes.
+          </td>
+        </tr>
+        <tr>
+          <td><code>scan/pipeline.ts</code></td>
+          <td>
+            Where raw AWS JSON becomes verdicts. Every security fact in the product is computed
+            here, over the whole estate at once, never by the model.
+          </td>
+        </tr>
+        <tr>
+          <td><code>scan/analysers/publicAccess.ts</code></td>
+          <td>
+            The best single example of why the model is not allowed to answer: four inputs interact,
+            and three of them can cancel a fourth.
+          </td>
+        </tr>
+        <tr>
+          <td><code>db/queries.ts</code></td>
+          <td>
+            The curated query library — thirteen hand-written Cypher queries that are the only
+            questions the agent can ask.
+          </td>
+        </tr>
+        <tr>
+          <td><code>agent/tools.ts</code></td>
+          <td>
+            The tool boundary: sixteen parameterised tools over those queries. The model picks and
+            fills in arguments; it never writes a query.
+          </td>
+        </tr>
+        <tr>
+          <td><code>agent/citations.ts</code></td>
+          <td>
+            Every ARN in an answer is checked against what the tools actually returned. This is the
+            answer to "why should we trust it".
+          </td>
+        </tr>
+        <tr>
+          <td><code>infra/readonly-role.yaml</code></td>
+          <td>
+            The replacement read-only role: <code>SecurityAudit</code> +
+            <code>ViewOnlyAccess</code>, an explicit deny on data-plane reads, trust scoped to one
+            principal with an external id.
+          </td>
+        </tr>
+        <tr>
+          <td><code>packages/mock-aws/src/topology.ts</code></td>
+          <td>
+            The hand-written answer key. Ground-truth tests grade the scanner against this, so an
+            analyser bug cannot mark its own homework.
+          </td>
+        </tr>
+      </table>
+
+      <h3>Reading orders</h3>
+
+      <h4>Ten minutes</h4>
+      <p>
+        <code>packages/shared/src/model.ts</code> (what a resource is) →
+        <code>scan/runner.ts</code> (how one is found) → <code>scan/pipeline.ts</code> (how it gets
+        a verdict) → <code>agent/tools.ts</code> (what the model may ask).
+      </p>
+
+      <h4>An hour</h4>
+      <p>
+        The four traces in sections 3–6, in order, with the files open. They cover every layer and
+        cross every boundary in the system, which no single file does.
+      </p>
+
+      <div class="box key">
+        <h4>The one-sentence architecture</h4>
+        <p>
+          The scanner reads AWS and writes Postgres; Postgres is the system of record and the
+          history; Neo4j is a projection rebuilt from it; the agent reads only Neo4j, only through
+          curated tools; the UI reads the API and never AWS.
+        </p>
+      </div>
+    </div>
+    <!-- =================== 2 =================== -->
+    <div class="section">
+      <h2><span class="num">2</span>The shape of the repository</h2>
+
+      <p>
+        An npm workspace monorepo: two applications, two shared packages, one infrastructure
+        directory. TypeScript throughout, so the resource model is one type definition shared by the
+        scanner, the API, the agent and the React components (ADR-001).
+      </p>
+
+      <pre><code>dave.io_home-assignment
+├── apps/
+│   ├── api/                 backend: scan, store, agent, HTTP   (~8.1k lines)
+│   │   └── src/
+│   │       ├── aws/         credentials, clients, regions, ARNs
+│   │       ├── scan/        collectors, analysers, orchestration
+│   │       ├── db/          Postgres schema + repo, Neo4j projection, queries
+│   │       ├── agent/       tools, guards, citations, the loop
+│   │       ├── remediation/ verdict → the command that would fix it
+│   │       ├── routes/      the HTTP surface
+│   │       ├── evals/       ground-truth checks, agent cases, grading
+│   │       └── cli/         scan, inspect, query, evals, migrate
+│   └── web/                 React + Vite frontend                (~3.1k lines)
+│       └── src/components/  graph, chat, findings, panels
+├── packages/
+│   ├── shared/              the domain model and wire types      (~450 lines)
+│   └── mock-aws/            the seeded customer account + answer key (~1.2k lines)
+├── infra/
+│   ├── readonly-role.yaml   the replacement role (deployed, tested)
+│   └── readonly-role.original.yaml   the brief's original, kept for comparison
+└── docs/                    decisions, engineering log, commits, walkthrough</code></pre>
+
+      <h3>Why the boundaries fall where they do</h3>
+
+      <p>
+        <strong><code>packages/shared</code> exists so the model cannot drift.</strong> A resource
+        kind is one <code>as const</code> array; adding a kind without handling it in the graph
+        projection or the UI colour map is a type error rather than a runtime surprise.
+      </p>
+
+      <p>
+        <strong><code>aws/</code> is separate from <code>scan/</code></strong> because one is about
+        <em>how we talk to AWS</em> (assume-role, retries, endpoints, region discovery) and the
+        other is about <em>what we ask it</em>. The only difference between scanning the mock and
+        scanning a real account lives in <code>aws/clients.ts</code> — an endpoint override — which
+        is why the same scanner code is exercised by both.
+      </p>
+
+      <p>
+        <strong>Collectors never interpret.</strong> A collector returns resources and the
+        relationships it can see locally. Anything that needs two resources to be true at once —
+        "this instance is exposed", "this role is admin", "this volume is idle" — is computed later,
+        in <code>scan/pipeline.ts</code>, over the whole estate. That split is why a security
+        verdict can be unit-tested without AWS, a database, or a network.
+      </p>
+
+      <p>
+        <strong><code>db/queries.ts</code> is the agent's only vocabulary.</strong> The agent
+        directory holds no Cypher except the guarded escape hatch. Someone reviewing what the agent
+        can possibly do reads one file.
+      </p>
+
+      <p>
+        <strong><code>packages/mock-aws</code> is a workspace, not a fixture directory,</strong>
+        because the seeder builds the account through the real AWS SDK against moto. The resources
+        the scanner later discovers were produced by the same API surface AWS would produce, not
+        hand-written JSON that happens to match what the code expects.
+      </p>
+
+      <div class="box">
+        <h4>Where the mock boundary actually is</h4>
+        <p>
+          Exactly one place: <code>aws/clients.ts</code> sets an <code>endpoint</code> override and
+          static credentials when <code>AWS_MODE=mock</code>. Every other file — collectors,
+          analysers, pipeline, repository, projection — is identical in both modes and untestable
+          against one but not the other. The scanner cannot tell the difference, which is the point.
+        </p>
+      </div>
+    </div>
+
+    <!-- =================== 3 =================== -->
+    <div class="section">
+      <h2><span class="num">3</span>Trace: a scan, end to end</h2>
+
+      <p>
+        Triggered by <code>npm run scan</code> or by <code>POST /api/scans</code> from the UI. The
+        two entry points do the same work in the same order; the route additionally streams
+        progress.
+      </p>
+
+      <div class="trace">
+        <div class="hop">
+          <div>
+            <div class="where">cli/scan.ts:26 · routes/scans.ts:75</div>
+            <div class="what">
+              Entry. <code>migrate()</code> first, so the schema exists, then
+              <code>runScan()</code>.
+              <em
+                >The route creates the scan row and opens a server-sent event stream before doing
+                any work, so the UI can show progress from the first unit.</em
+              >
+            </div>
+          </div>
+        </div>
+        <div class="hop">
+          <div>
+            <div class="where">scan/runner.ts:102 → aws/credentials.ts:107</div>
+            <div class="what">
+              <code>getSession()</code> assumes the customer role with an external id and caches the
+              credentials until they are near expiry. Concurrent callers during a refresh share one
+              in-flight <code>AssumeRole</code> rather than stampeding STS — a scan fans out across
+              every region at once and they all miss the cache in the same millisecond.
+              <em
+                >This is where the account id comes from — it is read from the assumed session,
+                never from configuration, which is what stops a mock scan being labelled with a real
+                account's number.</em
+              >
+            </div>
+          </div>
+        </div>
+        <div class="hop">
+          <div>
+            <div class="where">aws/regions.ts</div>
+            <div class="what">
+              Region discovery via <code>DescribeRegions</code>, filtered to what is actually
+              enabled, intersected with <code>AWS_SCAN_REGIONS</code> when set.
+              <em
+                >Guessing regions wastes an API call per service per region and still misses the one
+                the customer actually uses.</em
+              >
+            </div>
+          </div>
+        </div>
+        <div class="hop">
+          <div>
+            <div class="where">scan/runner.ts:128</div>
+            <div class="what">
+              The unit list is built: one <code>(service, region)</code> pair per regional service,
+              one global unit for IAM and S3. Six services over three regions is fourteen units.
+            </div>
+          </div>
+        </div>
+        <div class="hop">
+          <div>
+            <div class="where">scan/runner.ts:197 → scan/limiter.ts:12</div>
+            <div class="what">
+              <code>runWithConcurrency(tasks, SCAN_CONCURRENCY)</code>.
+              <em
+                >Unbounded fan-out on a real account is a few hundred simultaneous AWS calls and
+                guaranteed throttling. Thirty lines: a fixed pool of workers pulling from a shared
+                index, and no rejection handling, because a failed unit is an outcome rather than a
+                thrown error.</em
+              >
+            </div>
+          </div>
+        </div>
+        <div class="hop">
+          <div>
+            <div class="where">scan/runner.ts:175 → scan/collectors/*.ts</div>
+            <div class="what">
+              Each unit calls one collector. Each returns resources plus the relationships visible
+              locally. A collector that throws fails <em>its own unit only</em>:
+              <code>explainFailure()</code> at line 71 turns the SDK error into something a user can
+              act on (<code>AccessDenied</code> becomes "Not permitted to read rds in eu-west-1. The
+              role is missing a Describe/List permission for this service."), and the scan
+              continues.
+            </div>
+          </div>
+        </div>
+        <div class="hop">
+          <div>
+            <div class="where">scan/runner.ts:200 → scan/pipeline.ts:64</div>
+            <div class="what">
+              <code>annotate()</code> runs once over the merged estate: synthetic
+              <code>Account</code>, <code>Region</code> and <code>Internet</code> nodes, then the
+              four analysers in order — admin (line 117), public access (123), idle (142),
+              reachability (145).
+            </div>
+          </div>
+        </div>
+        <div class="hop">
+          <div>
+            <div class="where">db/repository.ts:45</div>
+            <div class="what">
+              <code>saveScanResult()</code> writes units, resource snapshots and relationship
+              snapshots in one transaction.
+              <em
+                >All or nothing: a half-written scan would be worse than no scan, because it would
+                read as complete.</em
+              >
+            </div>
+          </div>
+        </div>
+        <div class="hop">
+          <div>
+            <div class="where">db/neo4j.ts:139</div>
+            <div class="what">
+              <code>projectGraph()</code> rebuilds the graph wholesale from that scan's snapshots,
+              inside one transaction.
+              <em
+                >Postgres is written first deliberately: if the projection fails the scan is still
+                durable and can be re-projected without going back to AWS.</em
+              >
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="box lesson">
+        <h4>The question this trace answers</h4>
+        <p>
+          "What happens if one region is throttled or one permission is missing?" Nothing fails. The
+          unit fails, the banner names it, the other thirteen units still produce a graph, and the
+          scan is recorded as <code>partial</code> rather than <code>succeeded</code> — computed by
+          <code>rollUpStatus()</code> in <code>packages/shared/src/scan.ts</code>, which has its own
+          tests.
+        </p>
+      </div>
+    </div>
+    <!-- =================== 4 =================== -->
+    <div class="section">
+      <h2><span class="num">4</span>Trace: a question, end to end</h2>
+
+      <p>
+        "Which S3 buckets are public?" typed into the chat panel. This is the path most worth being
+        able to narrate, because every AI-engineering decision in the project is visible along it.
+      </p>
+
+      <div class="trace">
+        <div class="hop">
+          <div>
+            <div class="where">web/components/Chat.tsx:88 → web/src/api.ts:203</div>
+            <div class="what">
+              <code>POST /api/chat</code> over <code>fetch</code>, reading a server-sent event
+              stream from the response body.
+              <em
+                >Not <code>EventSource</code>, which cannot send a request body — noted in
+                <code>web/src/api.ts</code> where the reader lives.</em
+              >
+            </div>
+          </div>
+        </div>
+        <div class="hop">
+          <div>
+            <div class="where">routes/chat.ts:29</div>
+            <div class="what">
+              Opens the stream, then calls <code>ask()</code> with an <code>emit</code> callback.
+              Every event the agent produces is forwarded to the browser as it happens; the final
+              message is also persisted to the <code>messages</code> table.
+            </div>
+          </div>
+        </div>
+        <div class="hop">
+          <div>
+            <div class="where">agent/agent.ts:80</div>
+            <div class="what">
+              <code>ask()</code>. First it loads the latest scan and an account summary and puts
+              them in the system prompt, so the model knows when the data is from and how big the
+              account is before it calls anything.
+            </div>
+          </div>
+        </div>
+        <div class="hop">
+          <div>
+            <div class="where">agent/agent.ts:116</div>
+            <div class="what">
+              The loop, capped at <code>MAX_ITERATIONS</code>: stream a model turn, collect tool-use
+              blocks, run them, hand the results back, repeat until the model answers in prose. Text
+              blocks emitted <em>during</em> tool-calling turns become
+              <code>agent.thinking</code> events rather than being dropped.
+            </div>
+          </div>
+        </div>
+        <div class="hop">
+          <div>
+            <div class="where">agent/tools.ts:273</div>
+            <div class="what">
+              <code>runTool()</code> dispatches by name to one curated query —
+              <code>find_public_resources</code> → <code>q.findPublicResources()</code>. Sixteen
+              cases, one <code>graph_query</code> escape hatch.
+              <em>The model chose the tool and the arguments; it did not write the query.</em>
+            </div>
+          </div>
+        </div>
+        <div class="hop">
+          <div>
+            <div class="where">db/queries.ts:88</div>
+            <div class="what">
+              Hand-written Cypher, run in a Neo4j <em>read</em> transaction. It matches on
+              <code>isPublic = true</code> — a property computed during the scan — and returns the
+              <code>publicReason</code> alongside it, so the answer can quote evidence rather than
+              assert a verdict.
+            </div>
+          </div>
+        </div>
+        <div class="hop">
+          <div>
+            <div class="where">agent/citations.ts:122</div>
+            <div class="what">
+              Every ARN in every tool result is recorded in a
+              <code>CitationTracker</code> as the loop runs.
+            </div>
+          </div>
+        </div>
+        <div class="hop">
+          <div>
+            <div class="where">agent/agent.ts:231 → agent/readOnlyGuard.ts:134</div>
+            <div class="what">
+              <code>enforceReadOnlyNotice(question, answer)</code>. If the question asked for a
+              change (<code>requestsMutation()</code>, line 105) and the answer does not already
+              decline (<code>assertsReadOnly()</code>, line 121), the refusal is prepended.
+              <em
+                >It runs on the finished answer rather than short-circuiting the question, because
+                the model's answer is usually genuinely useful — it names the resource, its state
+                and the command an engineer would run. Only the missing sentence is added. The
+                prompt asks for this too and the model does not reliably comply, which is exactly
+                why it is code (ADR-009).</em
+              >
+            </div>
+          </div>
+        </div>
+        <div class="hop">
+          <div>
+            <div class="where">agent/citations.ts:59</div>
+            <div class="what">
+              <code>validateCitations()</code> extracts every ARN-shaped string from the finished
+              answer and checks each against what the tools actually returned. Unknown ARNs are
+              reported, not silently kept.
+              <em
+                >This is the mechanism behind "how do you know it isn't making things up", and it
+                caught a real hallucination — engineering log #32, where a tool returned paths but
+                not the resource they started from, and the model filled the gap with a plausible
+                truncated ARN.</em
+              >
+            </div>
+          </div>
+        </div>
+        <div class="hop">
+          <div>
+            <div class="where">agent/agent.ts:249 → Chat.tsx:113</div>
+            <div class="what">
+              <code>agent.finished</code> carries the message, its tool-call trail and its validated
+              citations. The UI highlights every cited ARN in the graph and keeps the trail
+              expandable under the answer.
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="box key">
+        <h4>Four guarantees along one path</h4>
+        <p>
+          The role cannot write; the scanner only calls
+          <code>Describe</code>/<code>List</code>/<code>Get</code>; no tool can express a mutation;
+          raw Cypher is lexically validated (<code>agent/cypherGuard.ts</code>) <em>and</em> run in
+          a read transaction. Independent layers, so no single mistake removes the guarantee.
+        </p>
+      </div>
+    </div>
+
+    <!-- =================== 5 =================== -->
+    <div class="section">
+      <h2><span class="num">5</span>Trace: connecting a real AWS account</h2>
+
+      <p>
+        The onboarding flow. Its design rule is that the product
+        <strong>guides</strong> onboarding and never <strong>performs</strong> it: nothing here
+        deploys a stack or writes a customer's configuration (ADR-010).
+      </p>
+
+      <div class="trace">
+        <div class="hop">
+          <div>
+            <div class="where">web/components/ConnectionGuide.tsx</div>
+            <div class="what">
+              Four steps with copyable commands. Opened from the header, and also linked from the
+              empty state.
+            </div>
+          </div>
+        </div>
+        <div class="hop">
+          <div>
+            <div class="where">routes/connection.ts:243</div>
+            <div class="what">
+              <code>GET /api/connection/external-id</code> generates a per-customer external id.
+              <em
+                >The customer pastes it into their own stack; it is a shared secret that prevents
+                the confused-deputy problem, not a password.</em
+              >
+            </div>
+          </div>
+        </div>
+        <div class="hop">
+          <div>
+            <div class="where">routes/connection.ts:120 → aws/principal.ts:49</div>
+            <div class="what">
+              <code>GET /api/connection</code> reports who this backend runs as, converted for a
+              trust policy. <code>assumablePrincipalArn()</code> exists because
+              <code>sts:GetCallerIdentity</code> answers a <em>different question</em> from the one
+              a trust policy asks: it returns the <strong>session</strong> ARN
+              (<code>arn:aws:sts::…:assumed-role/Role/session</code>), and a trust policy needs the
+              <strong>identity</strong>
+              (<code>arn:aws:iam::…:role/Role</code>). The guide showed the wrong one until a real
+              deployment failed on it.
+            </div>
+          </div>
+        </div>
+        <div class="hop">
+          <div>
+            <div class="where">aws/principal.ts:156</div>
+            <div class="what">
+              <code>validateAssumeRoleTarget()</code> checks the configured target is a role,
+              because <code>sts:AssumeRole</code> cannot assume a <em>user</em> — the exact mix-up a
+              customer makes when they paste their own identity into the scanner's configuration. It
+              names the mistake instead of failing later with <code>AccessDenied</code>.
+            </div>
+          </div>
+        </div>
+        <div class="hop">
+          <div>
+            <div class="where">routes/connection.ts:254</div>
+            <div class="what">
+              <code>POST /api/connection/test</code> attempts the assume-role and
+              <em>diagnoses</em> the failure: trust policy names a different principal, external id
+              mismatch, role does not exist, wrong account. Each maps to a specific next action
+              rather than echoing the SDK error.
+            </div>
+          </div>
+        </div>
+        <div class="hop">
+          <div>
+            <div class="where">routes/connection.ts:206</div>
+            <div class="what">
+              <code>POST /api/connection/mode</code> switches between the demo account and the real
+              one at runtime.
+              <em
+                >It does not rewrite <code>.env</code>, and it does not rescan — the banner says the
+                graph still holds the previous account's data until you run one (ADR-013).</em
+              >
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <p>
+        The stack the customer deploys is <code>infra/readonly-role.yaml</code>, and it has its own
+        test file — <code>infra/template.test.ts</code>, twenty-two assertions — because the
+        original template turned out never to have been deployed. That file checks the permission
+        set, the explicit deny, the trust scoping, the external-id condition, and the two
+        CloudFormation length limits that a real deployment rejected.
+      </p>
+    </div>
+    <!-- =================== 6 =================== -->
+    <div class="section">
+      <h2><span class="num">6</span>Trace: a finding becomes a fix</h2>
+
+      <p>
+        Clicking a flagged node opens the verdict and, beside it, the exact commands that would fix
+        it. Nothing in the product runs them (ADR-014). This trace is short but crosses three
+        boundaries, and the last one is the interesting one.
+      </p>
+
+      <div class="trace">
+        <div class="hop">
+          <div>
+            <div class="where">scan/pipeline.ts:123 → analysers/publicAccess.ts</div>
+            <div class="what">
+              At scan time, the verdict and its reason are written onto the resource as
+              <code>derived.isPublic</code> / <code>derived.publicReason</code>.
+              <em>The fix and the verdict therefore come from the same evidence, computed once.</em>
+            </div>
+          </div>
+        </div>
+        <div class="hop">
+          <div>
+            <div class="where">db/neo4j.ts:139</div>
+            <div class="what">
+              The projection promotes derived facts to top-level node properties, and JSON-encodes
+              nested ones.
+              <em
+                >Neo4j properties must be primitives or arrays of primitives, so a public access
+                block or a list of ingress rules is stored as a string.</em
+              >
+            </div>
+          </div>
+        </div>
+        <div class="hop">
+          <div>
+            <div class="where">routes/graph.ts:37</div>
+            <div class="what">
+              <code>GET /api/resources/:arn/remediation</code>.
+              <em
+                >This route and its sibling are why <code>maxParamLength</code> is 2048 in
+                <code>app.ts</code>: an ARN is the path parameter, and a service-linked role's ARN
+                is 120 characters — over Fastify's default cap of 100, which returned
+                <code>414</code> for ten of nineteen IAM roles in a real account.</em
+              >
+            </div>
+          </div>
+        </div>
+        <div class="hop">
+          <div>
+            <div class="where">remediation/fromGraph.ts:87</div>
+            <div class="what">
+              <code>remediationInputFromGraph()</code> parses those JSON-string properties back into
+              objects, and filters incoming edges to the four that mean "in use".
+              <em
+                >Parsing is best-effort by design: a property that will not parse is dropped rather
+                than thrown on, because a 500 on a detail page is worse than one missing
+                suggestion.</em
+              >
+            </div>
+          </div>
+        </div>
+        <div class="hop">
+          <div>
+            <div class="where">remediation/remediation.ts:529</div>
+            <div class="what">
+              <code>remediationsFor(input)</code> — one generator per finding kind, ordered public →
+              exposed → admin → unprotected → idle. Each returns commands, a <code>caution</code> (a
+              required field, not optional), a risk rating, and a read-only command to verify the
+              fix worked.
+            </div>
+          </div>
+        </div>
+        <div class="hop">
+          <div>
+            <div class="where">web/components/Remediation.tsx</div>
+            <div class="what">
+              Rendered with a copy button and <strong>no apply button</strong>. The caution is
+              rendered <em>above</em> the commands, because a warning under the thing it warns about
+              is decoration.
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="box lesson">
+        <h4>The detail worth showing someone</h4>
+        <p>
+          <code>LegacyDeployRole</code> in the fixture is an administrator by way of an
+          <em>inline</em> policy named <code>legacy-deploy-inline</code> — no
+          <code>AdministratorAccess</code> attached. The generator selects the managed-policy detach
+          only when a policy ARN actually matches (line 201), so for this role it emits none, and
+          instead produces "replace the inline policy": save the current document to
+          <code>backup.json</code> with <code>get-role-policy</code>, write a scoped replacement,
+          then <code>put-role-policy</code>. The obvious
+          <code>detach-role-policy --policy-arn …/AdministratorAccess</code> would have exited zero
+          and changed nothing.
+        </p>
+        <p>
+          The <code>caution</code> is generated from the graph too: the edges into the role name
+          what uses it, so the warning reads "<em>legacy-image-resizer</em> currently uses this
+          role, and will lose every permission it grants the moment this is applied". For a
+          <em>user</em>, the text deliberately says the opposite — nothing visibly using it is not
+          evidence it is unused, because access keys live in CI pipelines and on laptops where an
+          inventory cannot see them.
+        </p>
+      </div>
+    </div>
+
+    <!-- =================== 7 =================== -->
+    <div class="section">
+      <h2><span class="num">7</span>The data model</h2>
+
+      <p>
+        One type definition, in <code>packages/shared/src/model.ts</code>, shared by the scanner,
+        the projection, the agent's queries and the React components. Twenty node kinds and thirteen
+        edge types (ADR-003).
+      </p>
+
+      <h3>Node kinds</h3>
+      <p>
+        <code>Account</code> · <code>Region</code> · <code>Vpc</code> · <code>Subnet</code> ·
+        <code>SecurityGroup</code> · <code>InternetGateway</code> · <code>NatGateway</code> ·
+        <code>RouteTable</code> · <code>Ec2Instance</code> · <code>EbsVolume</code> ·
+        <code>ElasticIp</code> · <code>S3Bucket</code> · <code>IamRole</code> ·
+        <code>IamUser</code> · <code>IamPolicy</code> · <code>InstanceProfile</code> ·
+        <code>RdsInstance</code> · <code>DbSubnetGroup</code> · <code>LambdaFunction</code> ·
+        <code>Internet</code>
+      </p>
+      <p>
+        <code>Account</code>, <code>Region</code> and <code>Internet</code> are synthetic — they are
+        not AWS resources. <code>Internet</code> exists so that "what can reach the production
+        database?" is a path query from a node rather than a special case in code.
+      </p>
+
+      <h3>Edge types</h3>
+      <table>
+        <tr>
+          <th>Edge</th>
+          <th>Meaning</th>
+        </tr>
+        <tr>
+          <td><code>IN_REGION</code> <code>IN_VPC</code> <code>IN_SUBNET</code></td>
+          <td>Containment. Cheap, and what makes region and tier questions trivial.</td>
+        </tr>
+        <tr>
+          <td>
+            <code>HAS_SECURITY_GROUP</code> <code>ROUTES_TO</code> <code>USES_SUBNET_GROUP</code>
+          </td>
+          <td>Network structure as AWS reports it, before any interpretation.</td>
+        </tr>
+        <tr>
+          <td><code>ATTACHED_TO</code></td>
+          <td>Volume to instance, elastic IP to instance. Absence is the idle signal.</td>
+        </tr>
+        <tr>
+          <td>
+            <code>HAS_INSTANCE_PROFILE</code> <code>PROVIDES_ROLE</code> <code>EXECUTES_AS</code>
+            <code>HAS_POLICY</code> <code>CAN_ASSUME</code>
+          </td>
+          <td>
+            The identity chain. <code>EXECUTES_AS</code> is how a trivial Lambda turns out to be
+            running as an administrator.
+          </td>
+        </tr>
+        <tr>
+          <td><code>CAN_REACH</code></td>
+          <td>
+            <strong>Derived, not observed.</strong> Computed by
+            <code>analysers/reachability.ts</code> from security group rules, subnet routing and
+            public-accessibility flags, carrying the ports and the evidence that justified it.
+          </td>
+        </tr>
+      </table>
+
+      <h3>Derived facts</h3>
+      <p>
+        Every verdict is a flag paired with a human-readable reason, because the agent is instructed
+        to quote the reason — a DevOps engineer needs to be able to disagree with a finding, which
+        means seeing the evidence.
+      </p>
+      <table>
+        <tr>
+          <th>Field</th>
+          <th>Question it answers</th>
+        </tr>
+        <tr>
+          <td><code>isPublic</code> / <code>publicReason</code></td>
+          <td>Reachable by an anonymous principal, or from the internet.</td>
+        </tr>
+        <tr>
+          <td><code>isUnprotected</code> / <code>unprotectedReason</code></td>
+          <td>
+            Nothing <em>prevents</em> this becoming public. Deliberately separate from
+            <code>isPublic</code>: a bucket with Block Public Access off is not public, it has lost
+            a guardrail (ADR-012).
+          </td>
+        </tr>
+        <tr>
+          <td><code>isAdmin</code> / <code>adminReason</code></td>
+          <td>Effective <code>*:*</code>, by any combination of managed and inline policy.</td>
+        </tr>
+        <tr>
+          <td>
+            <code>isIdle</code> / <code>idleReason</code> / <code>estimatedMonthlyCostUsd</code>
+          </td>
+          <td>Provisioned, billable, structurally unused.</td>
+        </tr>
+      </table>
+
+      <h3>Postgres tables</h3>
+      <p>
+        In <code>apps/api/src/db/schema.sql</code>. Everything is append-only per scan — a scan
+        never updates a previous scan's rows, which is what makes change detection answerable and
+        lets a bad scan be discarded without corrupting history.
+      </p>
+      <table>
+        <tr>
+          <th>Table</th>
+          <th>Holds</th>
+        </tr>
+        <tr>
+          <td><code>scan_runs</code></td>
+          <td>One row per scan: account, status, regions, counts, API calls.</td>
+        </tr>
+        <tr>
+          <td><code>scan_units</code></td>
+          <td>
+            One row per <code>(service, region)</code> — the unit of partial failure, and the table
+            the banner reads. <code>region</code> is <code>'global'</code> rather than NULL so it
+            can be part of the primary key.
+          </td>
+        </tr>
+        <tr>
+          <td><code>resource_snapshots</code></td>
+          <td>
+            Immutable snapshot per resource per scan, with a <code>fingerprint</code> hash of the
+            queryable state — so diffing two scans is an index-backed join, not a JSONB comparison
+            across thousands of rows.
+          </td>
+        </tr>
+        <tr>
+          <td><code>relationship_snapshots</code></td>
+          <td>The edges as of that scan.</td>
+        </tr>
+        <tr>
+          <td><code>conversations</code> / <code>messages</code></td>
+          <td>
+            Chat history, plus the audit trail: which tools ran, which ARNs were cited, and whether
+            any citation was unsupported. Kept out of the graph so chat volume never competes with
+            the agent's own queries.
+          </td>
+        </tr>
+        <tr>
+          <td><code>eval_runs</code></td>
+          <td>
+            Eval results over time, so a regression in answer quality is visible rather than
+            discovered in a demo.
+          </td>
+        </tr>
+      </table>
+
+      <div class="box key">
+        <h4>The sentence that answers "why two databases?"</h4>
+        <p>
+          Postgres answers "what did this account look like at 09:00, and what changed since?" — a
+          history question, and relational storage with an immutable snapshot per scan is the right
+          shape. Neo4j answers "what can reach the production database?" — a variable-length path
+          question, which is three lines of Cypher and a recursive CTE nobody enjoys reviewing. The
+          graph is disposable; it is rebuilt from Postgres, never written to directly.
+        </p>
+      </div>
+    </div>
+    <!-- =================== 8 =================== -->
+    <div class="section">
+      <h2><span class="num">8</span>File reference — apps/api</h2>
+
+      <p>
+        Every non-test file, with the thing worth saying about it. Sizes are lines including the
+        header comments, which in this codebase carry the reasoning.
+      </p>
+
+      <h3><code>src/aws/</code> — how we talk to AWS</h3>
+      <table class="files">
+        <tr>
+          <th>File</th>
+          <th>Ln</th>
+          <th>What it is for</th>
+        </tr>
+        <tr>
+          <td><code>credentials.ts</code></td>
+          <td>143</td>
+          <td>
+            Cross-account assume-role with an external id. dave.io never holds customer keys. Caches
+            the session, shares one in-flight refresh between concurrent callers, and takes the
+            account id from the assumed session rather than from configuration.
+          </td>
+        </tr>
+        <tr>
+          <td><code>clients.ts</code></td>
+          <td>118</td>
+          <td>
+            Every AWS client, built one way. <code>retryMode: "adaptive"</code> (client-side rate
+            limiting on top of exponential backoff with jitter) and an API call counter. The
+            <strong>only</strong> place that knows whether we are talking to moto or to AWS.
+          </td>
+        </tr>
+        <tr>
+          <td><code>regions.ts</code></td>
+          <td>43</td>
+          <td>
+            Region discovery from <code>DescribeRegions</code>, so disabled regions cost nothing and
+            enabled ones are not missed.
+          </td>
+        </tr>
+        <tr>
+          <td><code>arns.ts</code></td>
+          <td>46</td>
+          <td>
+            ARN construction and tag normalisation. Most EC2 APIs return bare ids
+            (<code>vpc-0abc</code>), and the graph needs one stable identity per resource, so we
+            build the ARN AWS would have given.
+          </td>
+        </tr>
+        <tr>
+          <td><code>principal.ts</code></td>
+          <td>176</td>
+          <td>
+            Session ARN → trust-policy principal, and validation that an assume-role target is a
+            role rather than a user. Written after a real deployment failed on the distinction.
+          </td>
+        </tr>
+        <tr>
+          <td><code>resourceExplorer.ts</code></td>
+          <td>144</td>
+          <td>
+            The brief's suggested fast path, used as one. Needs an index that only exists if the
+            customer created it — and a read-only role cannot create one — so SDK enumeration stays
+            the tested default.
+          </td>
+        </tr>
+      </table>
+
+      <h3><code>src/scan/</code> — what we ask it, and what it means</h3>
+      <table class="files">
+        <tr>
+          <th>File</th>
+          <th>Ln</th>
+          <th>What it is for</th>
+        </tr>
+        <tr>
+          <td><code>runner.ts</code></td>
+          <td>205</td>
+          <td>
+            Orchestration. Builds the unit list, runs it under the limiter, turns SDK errors into
+            actionable text, emits progress events. <strong>A scan does not fail.</strong>
+          </td>
+        </tr>
+        <tr>
+          <td><code>pipeline.ts</code></td>
+          <td>161</td>
+          <td>
+            <code>annotate()</code>: synthetic nodes, then the four analysers over the whole estate.
+            Cross-resource facts live here because they cannot be known one resource at a time.
+          </td>
+        </tr>
+        <tr>
+          <td><code>limiter.ts</code></td>
+          <td>30</td>
+          <td>
+            Bounded concurrency. A fixed worker pool over a shared index, no rejection handling.
+          </td>
+        </tr>
+        <tr>
+          <td><code>collectors/vpc.ts</code></td>
+          <td>303</td>
+          <td>
+            The network substrate every reachability answer is built from: VPCs, subnets, route
+            tables, gateways, security group rules.
+          </td>
+        </tr>
+        <tr>
+          <td><code>collectors/iam.ts</code></td>
+          <td>323</td>
+          <td>
+            Does the most work per resource, because "which roles have admin?" needs policy
+            documents, not names. Roles and users, managed and inline, with a shared managed-policy
+            cache.
+          </td>
+        </tr>
+        <tr>
+          <td><code>collectors/ec2.ts</code></td>
+          <td>194</td>
+          <td>
+            Instances, volumes, elastic IPs — collected <em>especially</em> when attached to
+            nothing, since that is the clearest waste signal.
+          </td>
+        </tr>
+        <tr>
+          <td><code>collectors/rds.ts</code></td>
+          <td>122</td>
+          <td>
+            Instances and subnet groups. Records <code>PubliclyAccessible</code> but deliberately
+            does not treat it as the answer to "is this exposed?".
+          </td>
+        </tr>
+        <tr>
+          <td><code>collectors/s3.ts</code></td>
+          <td>120</td>
+          <td>
+            Buckets. Global namespace, so one unit, resolving each bucket's home region
+            individually.
+          </td>
+        </tr>
+        <tr>
+          <td><code>collectors/lambda.ts</code></td>
+          <td>74</td>
+          <td>
+            Functions, and the execution-role edge — the one that turns an image resizer into an
+            administrator.
+          </td>
+        </tr>
+        <tr>
+          <td><code>collectors/types.ts</code></td>
+          <td>29</td>
+          <td>The contract every collector implements, plus output merging.</td>
+        </tr>
+        <tr>
+          <td><code>analysers/publicAccess.ts</code></td>
+          <td>177</td>
+          <td>
+            Four interacting inputs: bucket policy, ACL, Block Public Access, and account-level
+            settings. Produces both the exposure verdict and the separate posture verdict.
+          </td>
+        </tr>
+        <tr>
+          <td><code>analysers/reachability.ts</code></td>
+          <td>187</td>
+          <td>
+            Security group rules and routing → <code>CAN_REACH</code> edges, with ports and
+            evidence, so paths become a query rather than a code path.
+          </td>
+        </tr>
+        <tr>
+          <td><code>analysers/policy.ts</code></td>
+          <td>100</td>
+          <td>
+            IAM policy evaluation. Deliberately small and conservative — not a full evaluator, and
+            the header says which constructs it does not model.
+          </td>
+        </tr>
+        <tr>
+          <td><code>analysers/idle.ts</code></td>
+          <td>134</td>
+          <td>
+            Structural waste only: attached to nothing, associated with nothing, stopped. No usage
+            metrics, so no claim the data cannot support.
+          </td>
+        </tr>
+      </table>
+
+      <h3><code>src/db/</code> — storage</h3>
+      <table class="files">
+        <tr>
+          <th>File</th>
+          <th>Ln</th>
+          <th>What it is for</th>
+        </tr>
+        <tr>
+          <td><code>schema.sql</code></td>
+          <td>110</td>
+          <td>Six tables, append-only per scan, with the reasoning in comments.</td>
+        </tr>
+        <tr>
+          <td><code>postgres.ts</code></td>
+          <td>70</td>
+          <td>Pool and migration. One idempotent schema file, applied at startup.</td>
+        </tr>
+        <tr>
+          <td><code>repository.ts</code></td>
+          <td>344</td>
+          <td>
+            Reads and writes scans. Batched inside a transaction — all or nothing. Also
+            <code>diffScans()</code>, which is a fingerprint join rather than a JSONB comparison.
+          </td>
+        </tr>
+        <tr>
+          <td><code>neo4j.ts</code></td>
+          <td>211</td>
+          <td>
+            The projection: rebuilt wholesale per scan in one transaction, derived facts promoted to
+            top-level properties, nested values JSON-encoded because Neo4j takes only primitives.
+          </td>
+        </tr>
+        <tr>
+          <td><code>queries.ts</code></td>
+          <td>386</td>
+          <td>
+            <strong>Thirteen hand-written queries — the agent's entire vocabulary.</strong> Anyone
+            auditing what the agent can do reads this one file.
+          </td>
+        </tr>
+      </table>
+
+      <h3><code>src/agent/</code> — the AI layer</h3>
+      <table class="files">
+        <tr>
+          <th>File</th>
+          <th>Ln</th>
+          <th>What it is for</th>
+        </tr>
+        <tr>
+          <td><code>agent.ts</code></td>
+          <td>251</td>
+          <td>The tool-calling loop. No framework. Streams tokens, tool calls and tool results.</td>
+        </tr>
+        <tr>
+          <td><code>tools.ts</code></td>
+          <td>375</td>
+          <td>
+            Sixteen tool definitions plus the dispatch. The model picks and parameterises; it never
+            writes a query.
+          </td>
+        </tr>
+        <tr>
+          <td><code>citations.ts</code></td>
+          <td>151</td>
+          <td>
+            The trust mechanism: every ARN in an answer checked against what the tools returned.
+            Unsupported citations are surfaced as warnings, not swallowed.
+          </td>
+        </tr>
+        <tr>
+          <td><code>cypherGuard.ts</code></td>
+          <td>127</td>
+          <td>
+            An allowlist of opening clauses plus a denylist of write keywords, applied after string
+            literals and comments are stripped — so a node named "DELETE ME" cannot trip it and,
+            more importantly, a write cannot hide inside a string. Lexical, not a parser, and
+            deliberately strict: a wrong rejection costs one retry, a wrong acceptance breaks the
+            brief's hard rule.
+          </td>
+        </tr>
+        <tr>
+          <td><code>readOnlyGuard.ts</code></td>
+          <td>144</td>
+          <td>
+            Guarantees a change request is answered with an explicit refusal, keeping the useful
+            part of the answer.
+          </td>
+        </tr>
+        <tr>
+          <td><code>prompt.ts</code></td>
+          <td>95</td>
+          <td>
+            The system prompt, written for one reader: an engineer about to act. Instructs the model
+            to quote computed reasons rather than reason about policy itself.
+          </td>
+        </tr>
+      </table>
+
+      <h3>
+        <code>src/remediation/</code>, <code>src/routes/</code>, <code>src/evals/</code>,
+        <code>src/cli/</code>
+      </h3>
+      <table class="files">
+        <tr>
+          <th>File</th>
+          <th>Ln</th>
+          <th>What it is for</th>
+        </tr>
+        <tr>
+          <td><code>remediation/remediation.ts</code></td>
+          <td>541</td>
+          <td>
+            One generator per finding kind. <code>caution</code> is a required field. Nothing
+            executes.
+          </td>
+        </tr>
+        <tr>
+          <td><code>remediation/fromGraph.ts</code></td>
+          <td>120</td>
+          <td>
+            The seam that parses JSON-string properties back, so the generators stay pure functions
+            of a plain object and testable without a database.
+          </td>
+        </tr>
+        <tr>
+          <td><code>app.ts</code></td>
+          <td>124</td>
+          <td>
+            The Fastify app with no listener, so tests can <code>inject()</code>. Carries
+            <code>maxParamLength: 2048</code> and the health endpoint that explains a missing API
+            key.
+          </td>
+        </tr>
+        <tr>
+          <td><code>server.ts</code></td>
+          <td>27</td>
+          <td>Build, migrate, listen, handle signals. Nothing else.</td>
+        </tr>
+        <tr>
+          <td><code>config.ts</code></td>
+          <td>368</td>
+          <td>
+            Zod-validated environment, read once. Treats a blank value as unset, resolves the
+            <code>.env</code> path with <code>fileURLToPath</code>, and reports configuration
+            problems as text the UI can show.
+          </td>
+        </tr>
+        <tr>
+          <td><code>routes/scans.ts</code></td>
+          <td>126</td>
+          <td>Scan history, the diff, and the streaming <code>POST /api/scans</code>.</td>
+        </tr>
+        <tr>
+          <td><code>routes/graph.ts</code></td>
+          <td>63</td>
+          <td>
+            Graph, summary, resource detail, remediation, search, findings — all over curated
+            queries.
+          </td>
+        </tr>
+        <tr>
+          <td><code>routes/chat.ts</code></td>
+          <td>114</td>
+          <td>The agent's event stream, and conversation persistence.</td>
+        </tr>
+        <tr>
+          <td><code>routes/evals.ts</code></td>
+          <td>141</td>
+          <td>
+            Runs the ground-truth checks on demand and reports the last agent eval run — the Trust
+            panel's backend.
+          </td>
+        </tr>
+        <tr>
+          <td><code>routes/connection.ts</code></td>
+          <td>307</td>
+          <td>
+            Onboarding: identity, external id, connection test with diagnosis, runtime mode switch.
+          </td>
+        </tr>
+        <tr>
+          <td><code>evals/checks.ts</code></td>
+          <td>349</td>
+          <td>
+            Ground-truth checks as <em>data</em>, so the same definitions run from the test suite
+            and from the product's Trust panel.
+          </td>
+        </tr>
+        <tr>
+          <td><code>evals/cases.ts</code></td>
+          <td>269</td>
+          <td>
+            Twenty-one agent eval cases, including the brief's six example questions verbatim.
+          </td>
+        </tr>
+        <tr>
+          <td><code>evals/grade.ts</code></td>
+          <td>128</td>
+          <td>
+            Scores on cited ARNs (precision, recall, F1) rather than text similarity, because
+            citations are already validated.
+          </td>
+        </tr>
+        <tr>
+          <td><code>cli/*.ts</code></td>
+          <td>~400</td>
+          <td>
+            <code>scan</code>, <code>inspect</code> (scan and print findings with no databases),
+            <code>query</code> (run every curated query), <code>evals</code>, <code>migrate</code>.
+          </td>
+        </tr>
+      </table>
+    </div>
+    <!-- =================== 9 =================== -->
+    <div class="section">
+      <h2><span class="num">9</span>File reference — apps/web</h2>
+
+      <p>
+        React, Vite, TanStack Query, React Flow (xyflow), Tailwind. About 3,100 lines. The frontend
+        holds no security logic at all — it renders verdicts computed during the scan, which is why
+        the same finding reads identically in the UI, in the agent's answer and in the CLI.
+      </p>
+
+      <table class="files">
+        <tr>
+          <th>File</th>
+          <th>Ln</th>
+          <th>What it is for</th>
+        </tr>
+        <tr>
+          <td><code>App.tsx</code></td>
+          <td>287</td>
+          <td>
+            The shell and all shared state: banner on top, findings left, graph centre, chat right.
+            The graph is the shared surface — both the sidebar and the agent highlight nodes on it.
+            Queries for graph, summary and findings are <code>enabled: hasScan</code>, so an empty
+            database makes no pointless requests and the empty state stays clean.
+          </td>
+        </tr>
+        <tr>
+          <td><code>api.ts</code></td>
+          <td>258</td>
+          <td>
+            Thin client. Holds the SSE reader used by both scan and chat —
+            <code>EventSource</code> cannot send a request body, so both stream over
+            <code>fetch</code>.
+          </td>
+        </tr>
+        <tr>
+          <td><code>components/GraphView.tsx</code></td>
+          <td>198</td>
+          <td>
+            React Flow. Nodes carry their verdict, so an exposed instance is visible without
+            clicking, and cited nodes are highlighted.
+          </td>
+        </tr>
+        <tr>
+          <td><code>components/Chat.tsx</code></td>
+          <td>370</td>
+          <td>
+            Names the running tool in plain language rather than showing a spinner, streams tokens,
+            and keeps an expandable tool-call trail under every answer.
+          </td>
+        </tr>
+        <tr>
+          <td><code>components/ScanBanner.tsx</code></td>
+          <td>172</td>
+          <td>
+            Six of the seven UX states in one component — progress, freshness, staleness, refresh,
+            partial failure, error — because they are all the same question: can I trust this?
+          </td>
+        </tr>
+        <tr>
+          <td><code>components/Findings.tsx</code></td>
+          <td>243</td>
+          <td>
+            Standing answers to the questions the tool exists to answer, available without typing.
+            Clicking a row highlights it in the graph.
+          </td>
+        </tr>
+        <tr>
+          <td><code>components/ChangesPanel.tsx</code></td>
+          <td>240</td>
+          <td>
+            The scan diff, separating material change from bookkeeping. Built server-side long
+            before it was visible here, which was the wrong way round.
+          </td>
+        </tr>
+        <tr>
+          <td><code>components/ResourceDetail.tsx</code></td>
+          <td>218</td>
+          <td>Properties, verdicts with their reasons, neighbours, and the remediation panel.</td>
+        </tr>
+        <tr>
+          <td><code>components/Remediation.tsx</code></td>
+          <td>134</td>
+          <td>
+            The fix, with a copy button and no apply button. The caution renders above the commands.
+          </td>
+        </tr>
+        <tr>
+          <td><code>components/TrustPanel.tsx</code></td>
+          <td>243</td>
+          <td>
+            "How much should I trust this?" answered inside the product: the ground-truth checks run
+            on demand with no API key, plus the last agent eval run.
+          </td>
+        </tr>
+        <tr>
+          <td><code>components/ConnectionGuide.tsx</code></td>
+          <td>337</td>
+          <td>Four-step onboarding with copyable commands and a diagnosing connection test.</td>
+        </tr>
+        <tr>
+          <td><code>components/ModeToggle.tsx</code></td>
+          <td>110</td>
+          <td>
+            Demo ↔ real account at runtime, with a visible reason when it is unavailable rather than
+            a dead control.
+          </td>
+        </tr>
+        <tr>
+          <td><code>components/Copyable.tsx</code></td>
+          <td>49</td>
+          <td>
+            Command block plus copy button, shared by onboarding and remediation. The button sits
+            above the block, not over it.
+          </td>
+        </tr>
+        <tr>
+          <td><code>components/Modal.tsx</code></td>
+          <td>56</td>
+          <td>Overlay; closes on backdrop click and Escape.</td>
+        </tr>
+        <tr>
+          <td><code>layout.ts</code></td>
+          <td>49</td>
+          <td>
+            Dagre, left to right: internet on the left, database at the end of the chain. A force
+            layout looks livelier and makes that relationship harder to see.
+          </td>
+        </tr>
+        <tr>
+          <td><code>kinds.ts</code></td>
+          <td>49</td>
+          <td>
+            Colour and icon per resource kind, where colour carries meaning — network muted,
+            identity set apart, because IAM is not part of the network picture.
+          </td>
+        </tr>
+      </table>
+    </div>
+
+    <!-- =================== 10 =================== -->
+    <div class="section">
+      <h2><span class="num">10</span>File reference — packages and infra</h2>
+
+      <h3><code>packages/shared</code></h3>
+      <table class="files">
+        <tr>
+          <th>File</th>
+          <th>Ln</th>
+          <th>What it is for</th>
+        </tr>
+        <tr>
+          <td><code>model.ts</code></td>
+          <td>164</td>
+          <td>
+            Resource kinds, edge types, derived facts, the <code>Resource</code> and
+            <code>Relationship</code> shapes. The single source of truth for what this product
+            thinks an AWS account is.
+          </td>
+        </tr>
+        <tr>
+          <td><code>scan.ts</code></td>
+          <td>155</td>
+          <td>
+            Scan lifecycle types, the service and global-service lists, and
+            <code>rollUpStatus()</code> — which decides <code>succeeded</code> /
+            <code>partial</code> / <code>failed</code> and has its own tests, because that verdict
+            is what the whole partial-failure story rests on.
+          </td>
+        </tr>
+        <tr>
+          <td><code>remediation.ts</code></td>
+          <td>75</td>
+          <td>
+            The <code>Remediation</code> shape, with <code>caution</code> required rather than
+            optional, plus <code>shellQuote()</code>.
+          </td>
+        </tr>
+        <tr>
+          <td><code>agent.ts</code></td>
+          <td>56</td>
+          <td>The agent wire types — every event the stream can carry, shared by API and UI.</td>
+        </tr>
+      </table>
+
+      <h3><code>packages/mock-aws</code></h3>
+      <table class="files">
+        <tr>
+          <th>File</th>
+          <th>Ln</th>
+          <th>What it is for</th>
+        </tr>
+        <tr>
+          <td><code>topology.ts</code></td>
+          <td>155</td>
+          <td>
+            <strong>The answer key</strong>, written by hand rather than generated from the code
+            under test — so an analyser bug cannot grade itself correct. Ground-truth tests compare
+            the scanner's output against this.
+          </td>
+        </tr>
+        <tr>
+          <td><code>seed.ts</code></td>
+          <td>780</td>
+          <td>
+            Builds the account through the real AWS SDK against moto: three regions, two buckets
+            with identical policies and different outcomes, a private database reachable two ways, a
+            public database reachable none, three admin roles, two admin users, and about $103/month
+            of waste.
+          </td>
+        </tr>
+        <tr>
+          <td><code>drift.ts</code></td>
+          <td>156</td>
+          <td>
+            Simulates a day passing — a bucket goes public, a port opens, an instance stops — so
+            change detection has something real to detect. Re-seeding would not do: it would change
+            everything at once.
+          </td>
+        </tr>
+        <tr>
+          <td><code>clients.ts</code></td>
+          <td>56</td>
+          <td>
+            Static credentials, deliberately not the scanner's assume-role path: conceptually the
+            seeder
+            <em>is</em> the customer, not dave.io.
+          </td>
+        </tr>
+      </table>
+
+      <h3><code>infra/</code></h3>
+      <table class="files">
+        <tr>
+          <th>File</th>
+          <th>Ln</th>
+          <th>What it is for</th>
+        </tr>
+        <tr>
+          <td><code>readonly-role.yaml</code></td>
+          <td>326</td>
+          <td>
+            The replacement role: <code>SecurityAudit</code> + <code>ViewOnlyAccess</code>, an
+            explicit <code>Deny</code> on data-plane reads (<code>s3:GetObject</code>,
+            <code>secretsmanager:GetSecretValue</code>, <code>sqs:ReceiveMessage</code> and
+            friends), trust scoped to the scanner principal with an external-id condition, and
+            <code>sts:SourceIdentity</code> so the customer can attribute every scan in their own
+            CloudTrail. Deployed and tested, not written and hoped over.
+          </td>
+        </tr>
+        <tr>
+          <td><code>readonly-role.original.yaml</code></td>
+          <td>83</td>
+          <td>The brief's original, kept for side-by-side comparison.</td>
+        </tr>
+        <tr>
+          <td><code>template.test.ts</code></td>
+          <td>220</td>
+          <td>
+            Twenty-two assertions over the template: the permission set, the deny list, trust
+            scoping, the external-id condition, and the two CloudFormation length limits a real
+            deployment rejected.
+          </td>
+        </tr>
+      </table>
+    </div>
+    <!-- =================== 11 =================== -->
+    <div class="section">
+      <h2><span class="num">11</span>The test suite, file by file</h2>
+
+      <p>
+        253 tests across 21 files. Two tiers plus a set of guards. What is unusual here is not the
+        count — it is that several of these tests exist to catch a <em>class</em> of mistake that
+        was actually made, rather than to cover a line.
+      </p>
+
+      <table class="files">
+        <tr>
+          <th>File</th>
+          <th>#</th>
+          <th>What it guards</th>
+        </tr>
+        <tr>
+          <td><code>remediation/remediation.test.ts</code></td>
+          <td>35</td>
+          <td>
+            That each generator reads the real evidence — including that an inline admin grant does
+            not produce a managed-policy detach — and that shell quoting survives a bucket name with
+            a quote in it.
+          </td>
+        </tr>
+        <tr>
+          <td><code>infra/template.test.ts</code></td>
+          <td>22</td>
+          <td>
+            The CloudFormation template, including two length limits a real deployment rejected.
+            Written because the original template had never been deployed.
+          </td>
+        </tr>
+        <tr>
+          <td><code>analysers/publicAccess.test.ts</code></td>
+          <td>20</td>
+          <td>
+            The four-input interaction, in both directions: a permissive policy that
+            <em>is</em> public, and a byte-identical one that is not.
+          </td>
+        </tr>
+        <tr>
+          <td><code>agent/citations.test.ts</code></td>
+          <td>19</td>
+          <td>
+            That an ARN the tools never returned is caught, including near-miss and truncated forms.
+          </td>
+        </tr>
+        <tr>
+          <td><code>evals/readme.test.ts</code></td>
+          <td>17</td>
+          <td>
+            Every <code>npm run</code> the README documents exists, and every count it quotes is
+            true. Written after the README documented a script that did not exist.
+          </td>
+        </tr>
+        <tr>
+          <td><code>evals/groundTruth.test.ts</code></td>
+          <td>17</td>
+          <td>
+            <strong>Tier 1.</strong> Runs the fifteen checks in <code>evals/checks.ts</code> against
+            a real scan of the mock, comparing with the hand-written answer key. No API key, no
+            model, deterministic. Skipped without infrastructure.
+          </td>
+        </tr>
+        <tr>
+          <td><code>aws/principal.test.ts</code></td>
+          <td>14</td>
+          <td>
+            Session ARN → principal ARN for every identity shape, and that root and federated
+            identities return a <em>reason</em> rather than a guess.
+          </td>
+        </tr>
+        <tr>
+          <td><code>agent/cypherGuard.test.ts</code></td>
+          <td>13</td>
+          <td>
+            Writes rejected, writes hidden in strings and comments rejected, legitimate reads
+            allowed.
+          </td>
+        </tr>
+        <tr>
+          <td><code>analysers/policy.test.ts</code></td>
+          <td>13</td>
+          <td>
+            Effective <code>*:*</code> through managed, inline, wildcard and combination forms.
+          </td>
+        </tr>
+        <tr>
+          <td><code>shared/scan.test.ts</code></td>
+          <td>13</td>
+          <td>
+            <code>rollUpStatus()</code> — the verdict the whole partial-failure story rests on.
+          </td>
+        </tr>
+        <tr>
+          <td><code>config.test.ts</code></td>
+          <td>10</td>
+          <td>Blank values treated as unset, and the configuration problems the UI reports.</td>
+        </tr>
+        <tr>
+          <td><code>agent/readOnlyGuard.test.ts</code></td>
+          <td>8</td>
+          <td>
+            A change request always gets an explicit refusal; an answer that already declines is
+            left alone.
+          </td>
+        </tr>
+        <tr>
+          <td><code>routes/resourceArn.test.ts</code></td>
+          <td>8</td>
+          <td>
+            That the router carries a full-length IAM ARN. Split deliberately: a config assertion
+            that needs nothing and runs on every commit, plus an HTTP suite gated behind
+            <code>SKIP_INTEGRATION</code>.
+          </td>
+        </tr>
+        <tr>
+          <td><code>config.paths.test.ts</code></td>
+          <td>7</td>
+          <td>
+            That no file addresses the filesystem with <code>URL.pathname</code> — a flat
+            repository-wide ban, including in files that do not exist yet. The Windows
+            <code>.env</code> bug.
+          </td>
+        </tr>
+        <tr>
+          <td><code>remediation/fromGraph.test.ts</code></td>
+          <td>7</td>
+          <td>JSON-string properties parsed back, malformed ones dropped rather than thrown on.</td>
+        </tr>
+        <tr>
+          <td><code>analysers/reachability.test.ts</code></td>
+          <td>7</td>
+          <td>Multi-hop paths, and the public database that nothing can reach.</td>
+        </tr>
+        <tr>
+          <td><code>analysers/idle.test.ts</code></td>
+          <td>6</td>
+          <td>
+            Structural waste, including the elastic IP whose unassociated state is an empty string.
+          </td>
+        </tr>
+        <tr>
+          <td><code>aws/resourceExplorer.test.ts</code></td>
+          <td>6</td>
+          <td>That a missing index degrades to SDK enumeration instead of failing the scan.</td>
+        </tr>
+        <tr>
+          <td><code>aws/paginate.test.ts</code></td>
+          <td>4</td>
+          <td>
+            That pagination actually paginates — including a second page nobody would notice was
+            missing.
+          </td>
+        </tr>
+        <tr>
+          <td><code>scan/limiter.test.ts</code></td>
+          <td>4</td>
+          <td>
+            Concurrency is bounded, order is preserved, and a failing task does not stop the pool.
+          </td>
+        </tr>
+        <tr>
+          <td><code>agent/toolLabels.test.ts</code></td>
+          <td>3</td>
+          <td>
+            Every tool the model can call has user-facing copy, in both directions. The newest
+            guard, and the smallest.
+          </td>
+        </tr>
+      </table>
+
+      <h3>The two eval tiers</h3>
+      <p>
+        <strong>Tier 1 — is the data right?</strong> <code>evals/checks.ts</code> holds fifteen
+        checks as data, so the same definitions run from Vitest and from the Trust panel in the
+        product. No API key, no model, milliseconds.
+      </p>
+      <p>
+        <strong>Tier 2 — does the agent use it right?</strong> Twenty-one cases in
+        <code>evals/cases.ts</code>, graded on cited ARNs with precision, recall and F1 rather than
+        text similarity (<code>evals/grade.ts</code>). Needs a key; run with
+        <code>npm run evals -w @daveio/api</code>. Current state: 21/21, mean F1 1.0.
+      </p>
+
+      <div class="box">
+        <h4>Why grade on citations rather than wording</h4>
+        <p>
+          Citations are already validated against tool output, so they are a far stronger signal
+          than string overlap — and they cannot be gamed by an answer that happens to use the right
+          words. Two
+          <code>mustNotMention</code> patterns were deleted during development for the opposite
+          reason: a lexical pattern cannot test a negated claim, because "northwind-reports is
+          <em>not</em>
+          public" contains the string it was looking for.
+        </p>
+      </div>
+    </div>
+
+    <!-- =================== 12 =================== -->
+    <div class="section">
+      <h2><span class="num">12</span>If they ask X, open Y</h2>
+
+      <p>The index to use live. Question on the left, the file to put on screen on the right.</p>
+
+      <table class="askindex">
+        <tr>
+          <th>If they ask…</th>
+          <th>Open</th>
+        </tr>
+        <tr>
+          <td>How does it get into a customer account?</td>
+          <td>
+            <code>aws/credentials.ts</code> + <code>infra/readonly-role.yaml</code> (trust policy at
+            the bottom)
+          </td>
+        </tr>
+        <tr>
+          <td>Why not just use <code>ReadOnlyAccess</code>?</td>
+          <td>
+            <code>infra/readonly-role.yaml</code> — the <code>Deny</code> statement, and the header
+            comments
+          </td>
+        </tr>
+        <tr>
+          <td>What happens if a region is throttled?</td>
+          <td>
+            <code>scan/runner.ts:71</code> (<code>explainFailure</code>) and
+            <code>shared/scan.ts</code> (<code>rollUpStatus</code>)
+          </td>
+        </tr>
+        <tr>
+          <td>How do you handle pagination?</td>
+          <td>
+            Any collector — e.g. <code>collectors/ec2.ts</code> — plus
+            <code>aws/paginate.test.ts</code>
+          </td>
+        </tr>
+        <tr>
+          <td>Rate limits?</td>
+          <td>
+            <code>aws/clients.ts</code> (<code>retryMode: "adaptive"</code>) and
+            <code>scan/limiter.ts</code>
+          </td>
+        </tr>
+        <tr>
+          <td>Why Neo4j <em>and</em> Postgres?</td>
+          <td>
+            <code>db/schema.sql</code> next to
+            <code>db/queries.ts:145</code> (<code>findNetworkPaths</code>)
+          </td>
+        </tr>
+        <tr>
+          <td>Is this bucket public? How do you know?</td>
+          <td>
+            <code>analysers/publicAccess.ts</code>, then the two identical fixture policies in
+            <code>seed.ts</code>
+          </td>
+        </tr>
+        <tr>
+          <td>What stops the agent changing something?</td>
+          <td>
+            <code>agent/tools.ts</code> (no mutation expressible),
+            <code>agent/cypherGuard.ts</code>, <code>agent/readOnlyGuard.ts</code>, the role's
+            <code>Deny</code>
+          </td>
+        </tr>
+        <tr>
+          <td>How do you know the agent isn't hallucinating?</td>
+          <td>
+            <code>agent/citations.ts</code> — then the tool-call trail in the UI on a live answer
+          </td>
+        </tr>
+        <tr>
+          <td>Why no agent framework?</td>
+          <td><code>agent/agent.ts</code> — the whole loop is one readable file</td>
+        </tr>
+        <tr>
+          <td>How would you know if a change made it worse?</td>
+          <td>
+            <code>evals/cases.ts</code> + <code>evals/grade.ts</code>, and the Trust panel in the
+            running UI
+          </td>
+        </tr>
+        <tr>
+          <td>What breaks on 10,000 resources?</td>
+          <td>
+            <code>db/neo4j.ts:139</code> (whole-graph rebuild) and
+            <code>routes/graph.ts</code> (unpaginated graph fetch) — both named in the README
+          </td>
+        </tr>
+        <tr>
+          <td>What changed since the last scan?</td>
+          <td>
+            <code>db/repository.ts:271</code> (<code>diffScans</code>, fingerprint join) +
+            <code>ChangesPanel.tsx</code>
+          </td>
+        </tr>
+        <tr>
+          <td>How does the UI know a scan partly failed?</td>
+          <td>
+            <code>ScanBanner.tsx</code> — the failed-units block, and
+            <code>SCAN_FAULT_INJECTION</code> to demo it
+          </td>
+        </tr>
+        <tr>
+          <td>Why is there no "fix it" button?</td>
+          <td>
+            <code>remediation/remediation.ts</code> and <code>Remediation.tsx</code> — ADR-014
+          </td>
+        </tr>
+        <tr>
+          <td>Is the mock data realistic?</td>
+          <td>
+            <code>mock-aws/src/seed.ts</code> — built through the AWS SDK against moto, not
+            hand-written JSON
+          </td>
+        </tr>
+        <tr>
+          <td>How do you know the scanner is right?</td>
+          <td>
+            <code>mock-aws/src/topology.ts</code> (hand-written answer key) +
+            <code>evals/checks.ts</code>
+          </td>
+        </tr>
+        <tr>
+          <td>What was the hardest bug?</td>
+          <td>
+            <code>docs/ENGINEERING-LOG.md</code> #29 (admin analysis ignored IAM users) or #32 (the
+            invented ARN)
+          </td>
+        </tr>
+        <tr>
+          <td>Would this work on Windows?</td>
+          <td>
+            <code>config.ts</code> (<code>fileURLToPath</code>) and
+            <code>config.paths.test.ts</code>
+          </td>
+        </tr>
+        <tr>
+          <td>What would you do next?</td>
+          <td>README, "What I would build next" — and the honest answer is the incremental scan</td>
+        </tr>
+      </table>
+    </div>
+
+    <!-- =================== 13 =================== -->
+    <div class="section">
+      <h2><span class="num">13</span>Worth knowing without looking it up</h2>
+
+      <h3>The numbers</h3>
+      <table>
+        <tr>
+          <td>Source files / lines (excl. tests)</td>
+          <td>80 files, ~13,200 lines</td>
+        </tr>
+        <tr>
+          <td>Tests</td>
+          <td>253 across 21 files</td>
+        </tr>
+        <tr>
+          <td>Agent tools</td>
+          <td>16, over 13 curated queries</td>
+        </tr>
+        <tr>
+          <td>Node kinds / edge types</td>
+          <td>20 / 13</td>
+        </tr>
+        <tr>
+          <td>Services collected</td>
+          <td>6 — EC2, VPC, S3, IAM, RDS, Lambda</td>
+        </tr>
+        <tr>
+          <td>Scan units in the demo</td>
+          <td>14 — four regional services × three regions, plus two global</td>
+        </tr>
+        <tr>
+          <td>Mock account</td>
+          <td>3 regions, ~101 resources, ~$103/month of waste</td>
+        </tr>
+        <tr>
+          <td>Evals</td>
+          <td>Tier 1: 15 ground-truth checks. Tier 2: 21 cases, mean F1 1.0</td>
+        </tr>
+        <tr>
+          <td>ADRs / log entries</td>
+          <td>14 / 38</td>
+        </tr>
+      </table>
+
+      <h3>The five things that are true about the architecture</h3>
+      <ol>
+        <li>
+          <strong>Security reasoning is computed in code, never by the model.</strong> Every verdict
+          is a property on a node with a reason string attached, written during the scan.
+        </li>
+        <li>
+          <strong>The agent cannot express a mutation.</strong> Not "is told not to" — cannot. Four
+          independent layers.
+        </li>
+        <li>
+          <strong>Postgres is the system of record; the graph is disposable.</strong> Rebuilt per
+          scan, never written to directly.
+        </li>
+        <li>
+          <strong>A scan does not fail.</strong> It produces per-unit outcomes, and the UI is loud
+          about the partial case.
+        </li>
+        <li>
+          <strong>The mock differs from a real account in exactly one place.</strong> An endpoint
+          override in <code>aws/clients.ts</code>.
+        </li>
+      </ol>
+
+      <h3>The honest limits, stated before anyone asks</h3>
+      <ul>
+        <li>
+          <strong>Neo4j Community has no role-based access control</strong>, so a read-only database
+          <em>user</em> is not available — the read transaction is the guarantee. In production: an
+          Enterprise read-only role or a replica.
+        </li>
+        <li>
+          <strong>The projection is a whole-graph rebuild.</strong> Fine at a few thousand
+          resources; the first thing to change for a large account is an incremental projection
+          keyed on the fingerprints already in Postgres.
+        </li>
+        <li>
+          <strong><code>GET /api/graph</code> is unpaginated.</strong> The UI filters by kind, but
+          the API hands over the whole graph — the next thing to break after the projection.
+        </li>
+        <li>
+          <strong>The IAM analyser is deliberately partial.</strong> No permission boundaries, no
+          SCPs, no condition-key evaluation. It says so in its own header, and it would rather miss
+          an admin than invent one.
+        </li>
+        <li>
+          <strong>Idle detection is structural, not usage-based.</strong> Nothing here reads
+          CloudWatch, so "unused" means "attached to nothing", which is a claim the data actually
+          supports.
+        </li>
+      </ul>
+
+      <div class="box lesson">
+        <h4>If you only remember one thing to say about the code</h4>
+        <p>
+          The interesting decisions are all the same decision:
+          <strong
+            >put the judgement in code that can be tested, and leave the model to choose which
+            tested thing to run.</strong
+          >
+          That is the tool boundary, the computed verdicts, the validated citations, the
+          generated-never-applied remediation, and the hand-written answer key. Everything else
+          follows from it.
+        </p>
+      </div>
+    </div>
+  </body>
+</html>
