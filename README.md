@@ -424,10 +424,12 @@ queue instead of an in-process scan. The storage model already carries
    The role already grants the permissions.
 3. **An LLM judge over a larger eval set.** Closes the gap named above, and
    makes prompt changes safe to make quickly.
-4. **Change detection as a first-class feature.** Scan diffing exists and the
-   agent can query it, but the UI does not surface it. "What changed since
-   yesterday, and does any of it matter?" is the question that makes this a
-   product someone opens daily rather than once.
+4. **Scheduled scans, so change detection runs without being asked.** Diffing
+   exists, the agent can query it and the **Changes** tab surfaces it — but
+   every scan is still triggered by a human, so "what changed overnight?" is
+   only answerable if somebody remembered to scan last night. A scheduled scan
+   plus a digest of what materially changed is what makes this a product
+   someone opens daily rather than one they remember to use.
 5. **More of the account.** ELB, ECS, EKS, API Gateway, CloudFront and
    Route 53. The collector interface is deliberately small — each is an
    afternoon — and load balancers in particular would fill a real gap in the
