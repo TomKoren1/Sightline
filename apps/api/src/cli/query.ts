@@ -10,6 +10,7 @@
 
 import { closeDriver } from "../db/neo4j.js";
 import * as q from "../db/queries.js";
+import { LOCAL_TENANT } from "../tenancy/tenant.js";
 
 const bold = (s: string) => `\x1b[1m${s}\x1b[0m`;
 const dim = (s: string) => `\x1b[2m${s}\x1b[0m`;
@@ -20,7 +21,7 @@ const show = (title: string, rows: unknown[]) => {
 };
 
 try {
-  const summary = await q.summariseAccount();
+  const summary = await q.summariseAccount(LOCAL_TENANT);
   console.log(`${bold("Account summary")}`);
   console.log(
     `  ${summary.byKind.map((k) => `${k.kind}:${k.count}`).join(" ")}\n` +
@@ -29,13 +30,16 @@ try {
       `idleCost:$${summary.idleCost}`,
   );
 
-  show("findPublicResources(S3Bucket)", await q.findPublicResources({ kind: "S3Bucket" }));
-  show("findAdminPrincipals", await q.findAdminPrincipals({}));
-  show("findInstancesInPublicSubnets", await q.findInstancesInPublicSubnets({}));
-  show("findIdleResources", await q.findIdleResources({}));
-  show("findOpenSecurityGroups", await q.findOpenSecurityGroups({}));
+  show(
+    "findPublicResources(S3Bucket)",
+    await q.findPublicResources(LOCAL_TENANT, { kind: "S3Bucket" }),
+  );
+  show("findAdminPrincipals", await q.findAdminPrincipals(LOCAL_TENANT, {}));
+  show("findInstancesInPublicSubnets", await q.findInstancesInPublicSubnets(LOCAL_TENANT, {}));
+  show("findIdleResources", await q.findIdleResources(LOCAL_TENANT, {}));
+  show("findOpenSecurityGroups", await q.findOpenSecurityGroups(LOCAL_TENANT, {}));
 
-  const paths = await q.findNetworkPaths({ target: "northwind-prod-db", maxHops: 5 });
+  const paths = await q.findNetworkPaths(LOCAL_TENANT, { target: "northwind-prod-db", maxHops: 5 });
   console.log(`\n${bold("findNetworkPaths(northwind-prod-db)")} ${dim(`(${paths.length} paths)`)}`);
   for (const path of paths) {
     console.log("  " + path.hops.map((h) => h.name).join(" -> "));
@@ -43,7 +47,7 @@ try {
       console.log(dim(`      ${edge.ports.join(", ")} via ${edge.via}`));
   }
 
-  const analytics = await q.findNetworkPaths({ target: "analytics-db", maxHops: 5 });
+  const analytics = await q.findNetworkPaths(LOCAL_TENANT, { target: "analytics-db", maxHops: 5 });
   console.log(
     `\n${bold("findNetworkPaths(analytics-db)")} ${dim(`(${analytics.length} paths - expected 0)`)}`,
   );

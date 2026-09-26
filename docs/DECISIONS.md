@@ -557,3 +557,139 @@ The generators also need maintaining alongside the analysers: a new verdict with
 no remediation is a finding that dead-ends. That is a real cost, and the reason
 the contract tests assert that every remediation has a caution and a read-only
 verify command rather than trusting each generator to remember.
+
+---
+
+## ADR-015 — Hosted mode removes capabilities rather than guarding them
+
+**Context.** Everything in this project so far assumes one operator, one AWS
+account and one graph. The hosted service breaks all three assumptions at once,
+and several capabilities that are harmless under the old assumptions become
+dangerous under the new ones:
+
+- the **mock account** is a development fixture with no meaning for a tenant;
+- the **runtime mode toggle** is process-wide, so on a shared process it would
+  be one tenant switching an account out from under every other;
+- the **endpoint override** exists so the scanner can talk to moto, and it
+  redirects _signed_ AWS calls — in a service that assumes roles into customer
+  accounts, an attacker-supplied endpoint is an attacker-supplied AWS;
+- **static AWS keys in the environment** are how a developer points the scanner
+  at their own account; the hosted platform identity comes from the pod.
+
+**Decision.** A `DEPLOYMENT_MODE` of `self-hosted` (the default, and what the
+graded project is) or `hosted`. In hosted mode these capabilities do not exist:
+the process refuses to start if any of them is configured, and the code paths
+that would use them are gated independently.
+
+**Why refuse at startup rather than warn.** Each of these is a configuration
+mistake that produces a working system with a silently wrong security property.
+A warning is read once, at a moment when the operator is looking at something
+else. `assertHostedInvariants()` throws before a request can arrive, and reports
+_every_ problem at once, because one restart per problem is a bad way to learn
+about three.
+
+**Why it is a pure function.** `hostedInvariantViolations(env)` takes an
+environment and returns reasons. That makes each invariant testable directly
+rather than by launching a process and reading its exit code, and the test suite
+asserts both halves: that hosted mode refuses each one, and that **self-hosted
+mode says nothing at all** — because a guard that accidentally fired everywhere
+would break the demo, the graders' clone and every existing test, while looking
+like success from a green hosted assertion.
+
+**Three layers on the endpoint specifically.** `activeConnection()` already
+returns no endpoint in real mode; hosted mode cannot reach mock mode at all; and
+`effectiveEndpoint()` returns null in hosted mode regardless. The first two are
+about configuration, the third is about the value actually handed to the SDK.
+The failure it prevents is signed requests sent to somebody else's server, which
+is worth three cheap layers.
+
+---
+
+## ADR-016 — The agent's raw-Cypher escape hatch is disabled in hosted mode
+
+**Context.** `graph_query` lets the model ask something the sixteen curated
+tools cannot express. It is guarded twice: `cypherGuard.ts` rejects write
+clauses lexically after stripping strings and comments, and the query runs
+inside a Neo4j read transaction that rejects writes on its own (ADR-005).
+
+In the hosted service, tenants share one Neo4j database — Community edition has
+exactly one — with isolation enforced by a `tenantId` predicate on every query
+(ADR-017).
+
+**Decision.** In hosted mode the tool is not offered and, independently, the
+dispatch refuses it. Self-hosted keeps it unchanged.
+
+**Why the existing guards do not cover this.** They defend against _writes_.
+Neither knows _whose_ data a read touches. With one tenant that distinction does
+not exist, because there is only one account in the graph. With many, an
+unfiltered `MATCH (r:Resource) RETURN r` is a cross-tenant read — and it is not
+a write, so both existing layers pass it, correctly, having been asked a
+different question.
+
+**The alternative, and why it was rejected.** A rewriter could parse the model's
+Cypher and force a `tenantId` predicate onto every `MATCH`. That is a third
+layer whose correctness depends on handling every Cypher shape — `UNION`,
+`CALL {}`, pattern comprehensions, subqueries — and whose failure mode is
+silent, cross-customer, and discovered by the customer. Removing the capability
+has no failure mode at all.
+
+**Consistency.** This is the argument this project already makes about mutation:
+the agent cannot change anything because no tool _expresses_ a change, not
+because something catches it afterwards (ADR-005, ADR-009). A capability that
+cannot be made safe is removed, and the Trust panel says so rather than leaving
+a tenant to discover a tool that answers "disabled".
+
+**Gated in two places on purpose.** The tool list is filtered _and_ the dispatch
+refuses. A model can call a tool it was never offered — from a replayed
+conversation, or because the name appears in the prompt — so the list is a
+suggestion and the dispatch is the gate. Each is tested by deleting the other.
+
+---
+
+## ADR-017 — A single-tenant deployment is one tenant that always exists
+
+**Context.** The hosted service needs tenancy; the self-hosted project must keep
+working exactly as it does. The obvious approach — a tenant id that is optional,
+or a "single-tenant mode" that skips the scoping — produces a codebase with two
+paths through every query, one of which is only exercised in production.
+
+**Decision.** There is no unscoped path. `schema.sql` inserts a default tenant
+with a fixed uuid, the self-hosted product passes it everywhere, and the hosted
+service passes one resolved from the session. Every table holding customer data
+has `tenant_id NOT NULL` **with no default**, every repository function takes a
+tenant, and every graph query binds `$tenantId`.
+
+**Why no column default.** A default would make an insert that forgets the
+tenant succeed, landing the row in whichever tenant the default names — which in
+a shared database is somebody else's account. Without one it fails loudly, at
+the first test that runs it.
+
+**Why a branded type.** `TenantId` is a branded string, so a plain `string`
+cannot be passed where a tenant is required. Adding it turned "did anyone forget
+to scope this?" from a code review into eighteen compile errors, each one a call
+site that had been reading data without saying whose. That is the only version
+of this check that scales.
+
+**Why the graph seam refuses rather than filters.** `readQuery` throws when a
+query does not bind `$tenantId`, instead of appending a predicate. A query
+written without the predicate is a query whose author did not think about
+tenancy; silently correcting it would hide that until the day the correction is
+missing.
+
+**Node identity is `(tenantId, arn)`, not `arn`.** An ARN is unique within an
+AWS account, not across this database. Two tenants collide immediately on the
+synthetic `Internet` node, whose ARN is a constant, and completely if they
+connect the same AWS account. Under the original uniqueness constraint the edge
+projection matched endpoints by ARN alone, so one tenant's relationships would
+attach to another tenant's nodes — not a query bug a filter could fix later, but
+an edge that genuinely exists and that every path query would traverse. This is
+the failure the behavioural test below actually catches, and it was found by
+writing that test rather than by review.
+
+**Three guards, because they fail differently.** Static: every curated query
+binds the parameter. Runtime: `readQuery` refuses an unscoped query, and needs
+no database to do it. Behavioural: two tenants are projected into one graph,
+every curated query runs as one of them, and nothing belonging to the other may
+come back. Only the third can catch a query that binds the parameter and still
+leaks. Each was verified by breaking the thing it guards and watching the right
+test go red.

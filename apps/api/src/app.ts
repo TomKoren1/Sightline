@@ -13,8 +13,8 @@ import { existsSync } from "node:fs";
 import Fastify from "fastify";
 import cors from "@fastify/cors";
 
-import { ENV_FILE } from "./config.js";
-import { cfg } from "./config.js";
+import { assertHostedInvariants, cfg, ENV_FILE, isHosted } from "./config.js";
+import { defaultTenantId } from "./tenancy/tenant.js";
 import { getLatestScan } from "./db/repository.js";
 import { registerScanRoutes } from "./routes/scans.js";
 import { registerGraphRoutes } from "./routes/graph.js";
@@ -79,8 +79,14 @@ export async function buildApp() {
     }
 
     try {
-      const { readQuery } = await import("./db/neo4j.js");
-      await readQuery("RETURN 1 AS ok");
+      /**
+       * A liveness probe, not a data read - so it goes through the driver
+       * directly rather than through `readQuery`, whose job is to refuse
+       * anything unscoped. Making the probe carry a tenant would mean either
+       * inventing one or weakening the seam, and this query touches no node.
+       */
+      const { pingGraph } = await import("./db/neo4j.js");
+      await pingGraph();
       checks["neo4j"] = "ok";
     } catch (err) {
       checks["neo4j"] = err instanceof Error ? err.message : "error";
@@ -102,7 +108,13 @@ export async function buildApp() {
           ? `ANTHROPIC_API_KEY not set in ${ENV_FILE} - chat will fail. Restart the API after editing it; configuration is read once at startup.`
           : `ANTHROPIC_API_KEY not set, and no .env found at ${ENV_FILE} - chat will fail. Copy .env.example to .env, or pass the variable through the environment.`;
 
-    const latest = await getLatestScan().catch(() => null);
+    /**
+     * Health is about this process, not about a tenant - so it reports the
+     * default tenant's last scan when self-hosted, and no scan at all when
+     * hosted, where "the" scan does not exist. An unauthenticated endpoint
+     * must not report another tenant's activity, however harmless it looks.
+     */
+    const latest = isHosted() ? null : await getLatestScan(defaultTenantId()).catch(() => null);
 
     return {
       status: Object.values(checks).every((v) => v === "ok" || v.startsWith("configured"))
@@ -113,6 +125,13 @@ export async function buildApp() {
       lastScan: latest ? { id: latest.id, at: latest.startedAt, status: latest.status } : null,
     };
   });
+
+  /**
+   * Hosted mode removes capabilities rather than guarding them, so the check
+   * that they are actually absent belongs at startup - before a request can
+   * arrive, and loudly, rather than as a warning nobody reads (ADR-015).
+   */
+  assertHostedInvariants();
 
   registerScanRoutes(app);
   registerGraphRoutes(app);

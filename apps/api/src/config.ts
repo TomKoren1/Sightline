@@ -90,6 +90,33 @@ const schema = z.object({
   ANTHROPIC_API_KEY: blankAsUnset(z.string().optional()),
   ANTHROPIC_MODEL: blankAsUnset(z.string().default("claude-sonnet-5")),
 
+  /**
+   * Where this process is running, which decides what it is *allowed* to do.
+   *
+   * `self-hosted` is everything this project has been until now: one operator,
+   * one AWS account, the mock available, the runtime toggle available, the
+   * agent's raw-Cypher escape hatch available.
+   *
+   * `hosted` is the multi-tenant service. Several capabilities that are
+   * harmless with one tenant are dangerous with many, so they are **removed**
+   * rather than guarded - see `hostedInvariantViolations` and ADR-015. This is
+   * deliberately not switchable at runtime: unlike AWS_MODE, nothing should be
+   * able to move a running process between these two worlds.
+   */
+  /**
+   * KMS key for per-tenant secrets. Required in hosted mode; absent in a
+   * self-hosted deployment, which uses SECRETS_LOCAL_KEY instead.
+   */
+  AWS_KMS_KEY_ID: blankAsUnset(z.string().optional()),
+
+  /**
+   * Passphrase for local secret encryption. Any length - it is hashed to a
+   * 256-bit key - so the operator's instruction is "a long random string".
+   */
+  SECRETS_LOCAL_KEY: blankAsUnset(z.string().optional()),
+
+  DEPLOYMENT_MODE: blankAsUnset(z.enum(["self-hosted", "hosted"]).default("self-hosted")),
+
   BACKEND_PORT: blankAsUnset(z.coerce.number().int().positive().default(3000)),
   /**
    * Bind address for the API. Loopback by default: the frontend reaches it
@@ -128,7 +155,74 @@ export const isMock = (): boolean => activeMode === "mock";
 export const currentMode = (): "mock" | "real" => activeMode;
 
 export function setMode(mode: "mock" | "real"): void {
+  // The toggle is a single-tenant convenience. In the hosted service there is
+  // no "the" account to switch, and a process-wide flag would be shared by
+  // every tenant on it - so the capability does not exist there at all.
+  if (isHosted()) {
+    throw new Error("The account mode toggle is not available in hosted mode");
+  }
   activeMode = mode;
+}
+
+/**
+ * Is this the multi-tenant hosted service?
+ *
+ * Read per call rather than captured at import, for the same reason `isMock`
+ * is: a module-level boolean is invisible in a stack trace and impossible to
+ * vary in a test. Unlike the AWS mode, nothing can change this while running.
+ */
+export const isHosted = (): boolean => cfg.DEPLOYMENT_MODE === "hosted";
+
+/**
+ * Configuration that must not exist in hosted mode, as a list of reasons.
+ *
+ * A pure function of an environment rather than a startup side effect, so each
+ * invariant can be tested directly instead of by launching a process and
+ * reading its exit code.
+ *
+ * Every entry here is a capability that is *fine* with one tenant and
+ * dangerous with many. The endpoint override is the sharpest: it exists so the
+ * scanner can talk to moto, and it redirects **signed AWS calls** to whatever
+ * host it names. In a service that assumes roles into customer accounts, an
+ * attacker-supplied endpoint is an attacker-supplied AWS.
+ */
+export function hostedInvariantViolations(
+  env: Pick<typeof cfg, "DEPLOYMENT_MODE" | "AWS_MODE" | "AWS_ENDPOINT_URL"> & {
+    AWS_ACCESS_KEY_ID?: string | undefined;
+  },
+): string[] {
+  if (env.DEPLOYMENT_MODE !== "hosted") return [];
+
+  const problems: string[] = [];
+  if (env.AWS_MODE === "mock") {
+    problems.push(
+      "AWS_MODE=mock: the mock account is a development fixture and has no meaning for a tenant",
+    );
+  }
+  if (env.AWS_ENDPOINT_URL) {
+    problems.push(
+      "AWS_ENDPOINT_URL is set: an endpoint override redirects signed AWS calls, " +
+        "so it must be unset in a service that assumes roles into customer accounts",
+    );
+  }
+  if (env.AWS_ACCESS_KEY_ID) {
+    problems.push(
+      "AWS_ACCESS_KEY_ID is set: the hosted platform identity comes from the pod's " +
+        "own credentials, not from per-account keys in the environment",
+    );
+  }
+  return problems;
+}
+
+/** Throws with every reason at once, rather than one per restart. */
+export function assertHostedInvariants(): void {
+  const problems = hostedInvariantViolations(cfg);
+  if (problems.length > 0) {
+    throw new Error(
+      `Refusing to start in hosted mode:\n  - ${problems.join("\n  - ")}\n` +
+        "These are capabilities that are safe with one tenant and not with many (ADR-015).",
+    );
+  }
 }
 
 /**
@@ -223,6 +317,20 @@ export function activeConnection(): {
     };
   }
   return { roleArn: cfg.AWS_TARGET_ROLE_ARN, externalId: cfg.AWS_EXTERNAL_ID, endpoint: null };
+}
+
+/**
+ * The endpoint override, or null when it must not be honoured.
+ *
+ * `activeConnection()` already returns null in real mode, and hosted mode
+ * cannot reach mock mode at all (`assertHostedInvariants`). This is the third
+ * layer, and it exists because the first two are about *configuration* while
+ * this one is about the value actually handed to the SDK. Cheap, and the
+ * failure it prevents is signed requests sent to somebody else's server.
+ */
+export function effectiveEndpoint(): string | null {
+  if (isHosted()) return null;
+  return activeConnection().endpoint;
 }
 
 /**

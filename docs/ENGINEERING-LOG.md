@@ -1683,3 +1683,96 @@ claims is a test suite you run by hand.** "Names the running tool in plain
 language" is falsifiable, so checking it found a defect. Prose that had said
 "clear progress indication" would have checked nothing, because nothing could
 have contradicted it.
+
+---
+
+## #39 — Two tenants, one ARN, one node
+
+**Problem.** Adding tenancy to the graph looked like a filtering exercise: put
+`tenantId` on every node, add it to every query, done. The behavioural test
+written to prove that worked — two tenants projected into one graph, every
+curated query run as one of them — failed on a case I had added almost as an
+afterthought: a relationship that crossed from one tenant to the other.
+
+**Cause.** Node identity. The uniqueness constraint was on `arn` alone, which is
+correct for one AWS account and wrong for a shared database. The edge projection
+matches its endpoints by ARN:
+
+```cypher
+MATCH (a:Resource {arn: row.from})
+MATCH (b:Resource {arn: row.to})
+CREATE (a)-[r:TYPE]->(b)
+```
+
+With two tenants holding the same ARN, that matches whichever node exists — so
+tenant B's relationship attaches to tenant A's node. Not a query bug that a
+missing filter caused, and not one a filter could fix afterwards: the edge
+genuinely exists, and every path query traverses it. "What can reach the
+production database?" would answer with another customer's infrastructure.
+
+**And it is not a contrived case.** Two tenants share an ARN the moment either
+of these happens, both of which are ordinary:
+
+- the synthetic `Internet` node, whose ARN is a **constant** — so this occurs
+  for every pair of tenants, immediately, on the node that every reachability
+  path starts from;
+- two customers connecting the same AWS account, which is what a managed service
+  provider does on their first day.
+
+**Fix.** Identity is `(tenantId, arn)`: a composite uniqueness constraint —
+which Neo4j Community does support, checked before relying on it, since node
+_key_ constraints are Enterprise-only — and both endpoints matched on tenant and
+ARN. The old single-column constraint is dropped explicitly rather than left
+behind, because it would reject the second tenant to hold a given ARN.
+
+**What to take from it.** The two lexical guards I wrote first — every query
+binds `$tenantId`, `readQuery` refuses one that does not — both passed the whole
+time. They are guards on _queries_, and this was a defect in _writes_. A filter
+cannot exclude a row that should never have been connected in the first place.
+
+That generalises past this bug: **isolation is a property of how data is
+written, not only of how it is read.** The read-side guards are still worth
+having, and they are still the cheap ones, but the only guard that found this
+was the one that put two tenants in the same database and looked at what came
+back. Third time in this project that a test which merely restated the code's
+own assumptions proved nothing (#29, #30, #37) — and the first where the
+assumption was mine, written the same afternoon.
+
+---
+
+## #40 — A queue test that passed with the queue's guarantee removed
+
+**Problem.** `scan_jobs` promises one active scan per tenant, enforced by a
+partial unique index rather than by application code — the whole point being
+that two API replicas cannot both believe they are the only one. The tests
+looked thorough: enqueue twice, enqueue four times concurrently, check only one
+job exists.
+
+Then I dropped the index and ran them again. **All twelve passed.**
+
+**Cause.** Every test went through `enqueueScan`, which reads before it writes.
+In a single Node process, with a connection pool and `await` points, those reads
+and writes interleave politely enough that the application check alone produces
+the right answer. The tests were exercising the check, not the constraint — and
+the check is precisely the part that stops working when there are two processes,
+which is the only situation the index exists for.
+
+**Fix.** A test that writes directly, around the application path: insert one
+queued job, then insert a second active one, and expect Postgres to raise
+`23505`. That one fails immediately when the index is missing, which I confirmed
+the same way — by dropping it.
+
+**A second thing the index needed.** A worker killed mid-scan leaves a row
+marked `running` for ever, and the uniqueness index then refuses every future
+scan for that tenant: one crash, and that customer can never scan again.
+`reapStuckJobs` releases them, with a message that says what happened and that
+nothing in their account was changed. The guarantee and its failure mode arrived
+in the same commit, which is the only reason the second one was noticed.
+
+**What to take from it.** This is the fourth variant of one idea (#29, #30,
+#37, #39): **a test that cannot distinguish the mechanism from a coincidence is
+not testing the mechanism.** The distinguishing move is always the same and
+always cheap — remove the thing under test and confirm the test notices. It has
+now caught: a fixture that shared the code's blind spot, a check on a guard that
+silently matched nothing, a read-side guard that could not see a write-side
+defect, and now an application path that impersonates a database constraint.

@@ -13,6 +13,7 @@ import { z } from "zod";
 import type { AgentEvent } from "@daveio/shared";
 
 import { ask } from "../agent/agent.js";
+import { tenantOf } from "../tenancy/request.js";
 import { pool } from "../db/postgres.js";
 import { getLatestScan } from "../db/repository.js";
 
@@ -31,11 +32,12 @@ export function registerChatRoutes(app: FastifyInstance): void {
     if (!parsed.success) {
       return reply.code(400).send({ error: "Invalid request", details: parsed.error.flatten() });
     }
+    const tenantId = tenantOf(req);
     const { question, history } = parsed.data;
 
     // Answering from an empty graph produces confident nonsense, so it is
     // refused with something the UI can act on rather than attempted.
-    const latest = await getLatestScan();
+    const latest = await getLatestScan(tenantId);
     if (!latest) {
       return reply.code(409).send({
         error: "No scan has completed yet. Run a scan before asking questions.",
@@ -55,7 +57,7 @@ export function registerChatRoutes(app: FastifyInstance): void {
     const send = (event: AgentEvent) => reply.raw.write(`data: ${JSON.stringify(event)}\n\n`);
 
     try {
-      const message = await ask({ question, history: history ?? [], onEvent: send });
+      const message = await ask({ tenantId, question, history: history ?? [], onEvent: send });
 
       // Persisted after the fact, including the full audit trail. A failure to
       // persist must not lose the answer the user is already reading.

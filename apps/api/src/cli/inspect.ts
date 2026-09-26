@@ -13,6 +13,7 @@
 import { INTERNET_ARN, rollUpStatus } from "@daveio/shared";
 import { runScan } from "../scan/runner.js";
 import { callCounter } from "../aws/clients.js";
+import { LOCAL_TENANT } from "../tenancy/tenant.js";
 
 const bold = (s: string) => `\x1b[1m${s}\x1b[0m`;
 const dim = (s: string) => `\x1b[2m${s}\x1b[0m`;
