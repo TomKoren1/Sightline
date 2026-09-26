@@ -13,7 +13,11 @@ import { existsSync } from "node:fs";
 import Fastify from "fastify";
 import cors from "@fastify/cors";
 
+import cookie from "@fastify/cookie";
+
 import { assertHostedInvariants, cfg, ENV_FILE, isHosted } from "./config.js";
+import { registerAuth } from "./auth/hook.js";
+import { registerAuthRoutes } from "./routes/auth.js";
 import { defaultTenantId } from "./tenancy/tenant.js";
 import { getLatestScan } from "./db/repository.js";
 import { registerScanRoutes } from "./routes/scans.js";
@@ -57,7 +61,22 @@ export async function buildApp() {
     maxParamLength: 2048,
   });
 
-  await app.register(cors, { origin: true });
+  /**
+   * Cookies, for the session. Registered before the auth hook so the hook can
+   * read them - plugin order in Fastify is load order.
+   */
+  await app.register(cookie);
+  registerAuth(app);
+
+  await app.register(cors, {
+    /**
+     * Credentials cross-origin require an explicit origin, never `true`: the
+     * browser refuses `Access-Control-Allow-Origin: *` with cookies, and
+     * echoing the request's origin back would allow every site.
+     */
+    origin: isHosted() ? (cfg.PUBLIC_BASE_URL ?? false) : true,
+    credentials: true,
+  });
 
   /**
    * Health, with enough detail to be useful.
@@ -133,6 +152,7 @@ export async function buildApp() {
    */
   assertHostedInvariants();
 
+  registerAuthRoutes(app);
   registerScanRoutes(app);
   registerGraphRoutes(app);
   registerChatRoutes(app);

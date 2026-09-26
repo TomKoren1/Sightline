@@ -6,6 +6,7 @@
  * question from the user's point of view: can I trust what I am looking at?
  */
 
+import type React from "react";
 import type { ScanRun, ScanUnit } from "@daveio/shared";
 
 import { ModeToggle } from "./ModeToggle.js";
@@ -24,6 +25,8 @@ function relativeAge(iso: string): string {
 }
 
 export interface ScanBannerProps {
+  /** Rendered in the header when a hosted deployment has someone signed in. */
+  accountMenu?: React.ReactNode;
   scan: ScanRun | null;
   scanning: boolean;
   progress: { completed: number; total: number } | null;
@@ -37,6 +40,7 @@ export interface ScanBannerProps {
 }
 
 export function ScanBanner({
+  accountMenu,
   scan,
   scanning,
   progress,
@@ -96,6 +100,7 @@ export function ScanBanner({
 
         <div className="flex items-center gap-1.5">
           <ModeToggle onSwitched={onModeSwitched} />
+          {accountMenu}
           <span className="mx-0.5 h-4 w-px bg-ink-700" aria-hidden />
           <button
             onClick={onOpenConnection}

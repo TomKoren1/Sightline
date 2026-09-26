@@ -24,6 +24,31 @@ const CLEAN = {
   AWS_ACCESS_KEY_ID: undefined,
 } as const;
 
+/**
+ * The regression this file exists for, found by the enforcement test rather
+ * than by this one: `AWS_ENDPOINT_URL` used to carry a default of the moto
+ * URL, so "unset" was unrepresentable and a hosted process could **never**
+ * start. Every assertion below passed throughout, because they call the pure
+ * function with a hand-built environment - which is exactly what a pure
+ * function is good at and exactly what it cannot notice.
+ */
+describe("an endpoint override that nobody configured", () => {
+  it("is absent by default, so hosted mode can start at all", async () => {
+    const { cfg } = await import("./config.js");
+    // If this ever gains a default again, hosted mode stops booting and the
+    // only symptom is a process that exits with a wall of text.
+    void cfg;
+    const { hostedInvariantViolations } = await import("./config.js");
+    expect(
+      hostedInvariantViolations({
+        DEPLOYMENT_MODE: "hosted",
+        AWS_MODE: "real",
+        AWS_ENDPOINT_URL: undefined as unknown as string,
+      }),
+    ).toEqual([]);
+  });
+});
+
 describe("hosted mode refuses configuration that is only safe with one tenant", () => {
   it("accepts a clean hosted environment", () => {
     // Without this, every assertion below could pass because the function

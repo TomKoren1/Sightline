@@ -54,6 +54,17 @@ export default defineConfig(({ mode }) => {
             });
           },
         },
+        /**
+         * The OAuth routes live outside `/api` because Google redirects a
+         * *browser* to them, and `/auth/google/callback` is what gets
+         * registered with Google. Proxying them in development means the
+         * whole sign-in round trip works against the Vite origin, so the
+         * redirect URI is the same shape locally as in production.
+         */
+        "/auth": {
+          target: `http://127.0.0.1:${env["BACKEND_PORT"] ?? 3000}`,
+          changeOrigin: true,
+        },
       },
     },
   };

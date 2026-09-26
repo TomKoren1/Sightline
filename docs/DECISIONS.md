@@ -693,3 +693,62 @@ every curated query runs as one of them, and nothing belonging to the other may
 come back. Only the third can catch a query that binds the parameter and still
 leaks. Each was verified by breaking the thing it guards and watching the right
 test go red.
+
+---
+
+## ADR-018 — Google only, sessions as signed cookies, no auth library
+
+**Context.** The hosted service needs to know who is asking. The options were a
+hosted identity provider (Auth0, Clerk), an auth framework, or the protocol.
+
+**Decision.** Google OAuth 2.0 authorization code flow, written against the
+protocol. One provider. Sessions are HMAC-signed cookies with no server-side
+store.
+
+**Why one provider.** Each additional provider is another consent screen to
+keep correct, another set of claims to map, and another way for the same person
+to end up with two accounts. Google covers the intended users. GitHub is a
+`users.provider` value away if that turns out to be wrong — the schema already
+allows it.
+
+**Why no library.** The flow is three URLs and two checks. The checks are the
+part worth getting right, and a library performs them somewhere I would have to
+go and read anyway to know what it actually verifies. The same reasoning as
+ADR-005: the decisions that matter are the ones a dependency would hide.
+
+**Why signed cookies rather than a session store.** Several API replicas behind
+one ingress would otherwise need a shared store. The cookie carries two
+identifiers and two timestamps — no tokens, no email, nothing of the tenant's —
+so there is nothing in it worth stealing beyond the session itself, and that
+expires in eight hours. The format is a JWT's shape without a JWT library,
+because the parts of JWT that earn a library (algorithm negotiation, key
+rotation, third-party verification) are the parts not wanted here. `alg: none`
+is impossible when there is no algorithm field.
+
+**What is deliberately not verified.** The id token's RSA signature against
+Google's JWKS. The token is not accepted from the browser: it is fetched by
+this server, over TLS, directly from `oauth2.googleapis.com`, in exchange for a
+code and this service's client secret. Google's documentation says verification
+is unnecessary for exactly this case. The claims that still matter are checked —
+and `aud` is the one that does: a token minted for a **different** Google
+application is genuinely from Google and genuinely signed, and accepting it
+would let anyone with their own Google app sign in as anybody here.
+
+**Matching is on the provider subject, never on email.** Google subjects are
+stable; email addresses are renamed, reassigned inside a Workspace, and — when
+unverified — not evidence of anything. Matching on email is how one person ends
+up inside somebody else's account.
+
+**One hook, not per-route middleware.** Authentication is a single
+`preHandler`, so a route added later cannot forget it. Routes opt _out_, and
+the exemption list is three entries long and readable at a glance: `/auth/*`,
+`/api/me`, `/api/health`. The test that matters drives the real app and asserts
+every tenant-data route returns 401 without a session — because the question is
+not whether `decodeSession` works but whether someone can read an inventory
+without signing in.
+
+**`Secure` follows the scheme, not the mode.** A Secure cookie over plain http
+is dropped silently, which presents as "signing in does nothing". Tying the
+flag to `PUBLIC_BASE_URL` starting with `https://` means a developer testing
+the hosted path over `http://<tailnet-ip>` — which, unlike `localhost`, is not
+a secure context — gets a working login instead of an invisible failure.

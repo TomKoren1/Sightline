@@ -62,7 +62,16 @@ const schema = z.object({
    * Nothing else about the scanner changes between the two.
    */
   AWS_MODE: blankAsUnset(z.enum(["mock", "real"]).default("mock")),
-  AWS_ENDPOINT_URL: blankAsUnset(z.string().default("http://localhost:5000")),
+  /**
+   * Endpoint override, for talking to moto instead of AWS.
+   *
+   * **No default**, deliberately. It used to default to the moto URL, which
+   * made "unset" unrepresentable - and hosted mode, which refuses to start
+   * when an override is configured, could therefore never start at all. The
+   * mock supplies the fallback at the point of use, where it is a mock
+   * concern rather than a global one.
+   */
+  AWS_ENDPOINT_URL: blankAsUnset(z.string().optional()),
   AWS_TARGET_ROLE_ARN: blankAsUnset(
     z.string().default("arn:aws:iam::123456789012:role/DaveIoReadOnlyRole"),
   ),
@@ -114,6 +123,30 @@ const schema = z.object({
    * 256-bit key - so the operator's instruction is "a long random string".
    */
   SECRETS_LOCAL_KEY: blankAsUnset(z.string().optional()),
+
+  /**
+   * Google OAuth. The only identity provider: no passwords are stored here,
+   * ever, and one provider is one fewer consent screen to keep correct.
+   */
+  GOOGLE_CLIENT_ID: blankAsUnset(z.string().optional()),
+  GOOGLE_CLIENT_SECRET: blankAsUnset(z.string().optional()),
+
+  /**
+   * Signing key for session cookies. Sessions are a signed cookie rather than
+   * a server-side store, so several API replicas need no shared session
+   * database - but they do need the same secret, which is why it is
+   * configuration rather than something generated at boot.
+   */
+  SESSION_SECRET: blankAsUnset(z.string().optional()),
+
+  /**
+   * The public origin this service is reached at, e.g. https://dave.example.
+   *
+   * Used to build the OAuth redirect URI, which must match what is registered
+   * with Google **exactly**. Deriving it from the request Host header instead
+   * would let a forged header redirect an authorisation code somewhere else.
+   */
+  PUBLIC_BASE_URL: blankAsUnset(z.string().optional()),
 
   DEPLOYMENT_MODE: blankAsUnset(z.enum(["self-hosted", "hosted"]).default("self-hosted")),
 
@@ -171,6 +204,9 @@ export function setMode(mode: "mock" | "real"): void {
  * is: a module-level boolean is invisible in a stack trace and impossible to
  * vary in a test. Unlike the AWS mode, nothing can change this while running.
  */
+/** Where moto listens, when nothing says otherwise. */
+const MOCK_ENDPOINT = "http://localhost:5000";
+
 export const isHosted = (): boolean => cfg.DEPLOYMENT_MODE === "hosted";
 
 /**
@@ -298,7 +334,7 @@ export function activeConnection(): {
       return {
         roleArn: cfg.AWS_TARGET_ROLE_ARN,
         externalId: cfg.AWS_EXTERNAL_ID,
-        endpoint: cfg.AWS_ENDPOINT_URL,
+        endpoint: cfg.AWS_ENDPOINT_URL ?? MOCK_ENDPOINT,
       };
     }
 
@@ -313,7 +349,7 @@ export function activeConnection(): {
     return {
       roleArn: `arn:aws:iam::${account}:role/DaveIoReadOnlyRole`,
       externalId: "local-dev-external-id-0000",
-      endpoint: cfg.AWS_ENDPOINT_URL,
+      endpoint: cfg.AWS_ENDPOINT_URL ?? MOCK_ENDPOINT,
     };
   }
   return { roleArn: cfg.AWS_TARGET_ROLE_ARN, externalId: cfg.AWS_EXTERNAL_ID, endpoint: null };
