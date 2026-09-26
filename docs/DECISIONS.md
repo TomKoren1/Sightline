@@ -557,3 +557,89 @@ The generators also need maintaining alongside the analysers: a new verdict with
 no remediation is a finding that dead-ends. That is a real cost, and the reason
 the contract tests assert that every remediation has a caution and a read-only
 verify command rather than trusting each generator to remember.
+
+---
+
+## ADR-015 — Hosted mode removes capabilities rather than guarding them
+
+**Context.** Everything in this project so far assumes one operator, one AWS
+account and one graph. The hosted service breaks all three assumptions at once,
+and several capabilities that are harmless under the old assumptions become
+dangerous under the new ones:
+
+- the **mock account** is a development fixture with no meaning for a tenant;
+- the **runtime mode toggle** is process-wide, so on a shared process it would
+  be one tenant switching an account out from under every other;
+- the **endpoint override** exists so the scanner can talk to moto, and it
+  redirects _signed_ AWS calls — in a service that assumes roles into customer
+  accounts, an attacker-supplied endpoint is an attacker-supplied AWS;
+- **static AWS keys in the environment** are how a developer points the scanner
+  at their own account; the hosted platform identity comes from the pod.
+
+**Decision.** A `DEPLOYMENT_MODE` of `self-hosted` (the default, and what the
+graded project is) or `hosted`. In hosted mode these capabilities do not exist:
+the process refuses to start if any of them is configured, and the code paths
+that would use them are gated independently.
+
+**Why refuse at startup rather than warn.** Each of these is a configuration
+mistake that produces a working system with a silently wrong security property.
+A warning is read once, at a moment when the operator is looking at something
+else. `assertHostedInvariants()` throws before a request can arrive, and reports
+_every_ problem at once, because one restart per problem is a bad way to learn
+about three.
+
+**Why it is a pure function.** `hostedInvariantViolations(env)` takes an
+environment and returns reasons. That makes each invariant testable directly
+rather than by launching a process and reading its exit code, and the test suite
+asserts both halves: that hosted mode refuses each one, and that **self-hosted
+mode says nothing at all** — because a guard that accidentally fired everywhere
+would break the demo, the graders' clone and every existing test, while looking
+like success from a green hosted assertion.
+
+**Three layers on the endpoint specifically.** `activeConnection()` already
+returns no endpoint in real mode; hosted mode cannot reach mock mode at all; and
+`effectiveEndpoint()` returns null in hosted mode regardless. The first two are
+about configuration, the third is about the value actually handed to the SDK.
+The failure it prevents is signed requests sent to somebody else's server, which
+is worth three cheap layers.
+
+---
+
+## ADR-016 — The agent's raw-Cypher escape hatch is disabled in hosted mode
+
+**Context.** `graph_query` lets the model ask something the sixteen curated
+tools cannot express. It is guarded twice: `cypherGuard.ts` rejects write
+clauses lexically after stripping strings and comments, and the query runs
+inside a Neo4j read transaction that rejects writes on its own (ADR-005).
+
+In the hosted service, tenants share one Neo4j database — Community edition has
+exactly one — with isolation enforced by a `tenantId` predicate on every query
+(ADR-017).
+
+**Decision.** In hosted mode the tool is not offered and, independently, the
+dispatch refuses it. Self-hosted keeps it unchanged.
+
+**Why the existing guards do not cover this.** They defend against _writes_.
+Neither knows _whose_ data a read touches. With one tenant that distinction does
+not exist, because there is only one account in the graph. With many, an
+unfiltered `MATCH (r:Resource) RETURN r` is a cross-tenant read — and it is not
+a write, so both existing layers pass it, correctly, having been asked a
+different question.
+
+**The alternative, and why it was rejected.** A rewriter could parse the model's
+Cypher and force a `tenantId` predicate onto every `MATCH`. That is a third
+layer whose correctness depends on handling every Cypher shape — `UNION`,
+`CALL {}`, pattern comprehensions, subqueries — and whose failure mode is
+silent, cross-customer, and discovered by the customer. Removing the capability
+has no failure mode at all.
+
+**Consistency.** This is the argument this project already makes about mutation:
+the agent cannot change anything because no tool _expresses_ a change, not
+because something catches it afterwards (ADR-005, ADR-009). A capability that
+cannot be made safe is removed, and the Trust panel says so rather than leaving
+a tenant to discover a tool that answers "disabled".
+
+**Gated in two places on purpose.** The tool list is filtered _and_ the dispatch
+refuses. A model can call a tool it was never offered — from a replayed
+conversation, or because the name appears in the prompt — so the list is a
+suggestion and the dispatch is the gate. Each is tested by deleting the other.

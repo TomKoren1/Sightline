@@ -20,6 +20,7 @@ import { remediationsFor } from "../remediation/remediation.js";
 import { readQuery } from "../db/neo4j.js";
 import { diffScans, getLatestScan, listScans } from "../db/repository.js";
 import { assertReadOnlyCypher } from "./cypherGuard.js";
+import { isHosted } from "../config.js";
 
 export interface ToolResult {
   rows: unknown[];
@@ -261,6 +262,35 @@ export const TOOL_DEFINITIONS: Anthropic.Tool[] = [
   },
 ];
 
+/**
+ * The one tool that is not available to a hosted tenant.
+ *
+ * `cypherGuard.ts` and the Neo4j read transaction both defend against
+ * *writes*. Neither knows *whose* data a read touches, and with one tenant
+ * that gap does not exist, because there is only one account in the graph.
+ *
+ * In the hosted service the graph is shared, so an unfiltered
+ * `MATCH (r:Resource)` is a cross-tenant read - and it is not a write, so both
+ * existing layers pass it. The alternative was a rewriter injecting a tenant
+ * predicate into arbitrary Cypher; its failure mode is silent and
+ * cross-customer, which is the worst kind. The capability is removed instead,
+ * which is what this project already does about mutation: the agent cannot
+ * change anything because no tool *expresses* a change (ADR-015, ADR-016).
+ */
+const HOSTED_UNAVAILABLE_TOOLS = new Set(["graph_query"]);
+
+/**
+ * The tools this process actually offers.
+ *
+ * A function rather than the exported constant, because what is available
+ * depends on where this is running - and because handing the model a list it
+ * cannot use produces a failed turn rather than an answer.
+ */
+export function toolDefinitions(): Anthropic.Tool[] {
+  if (!isHosted()) return TOOL_DEFINITIONS;
+  return TOOL_DEFINITIONS.filter((tool) => !HOSTED_UNAVAILABLE_TOOLS.has(tool.name));
+}
+
 type ToolInput = Record<string, never> & Record<string, unknown>;
 
 /**
@@ -358,6 +388,17 @@ export async function runTool(name: string, input: ToolInput): Promise<ToolResul
     }
 
     case "graph_query": {
+      // Also refused here, not only filtered from the list above. A model can
+      // call a tool it was never offered - from a replayed conversation, or
+      // because a name appears in the prompt - and the list is a suggestion
+      // while this is the gate.
+      if (isHosted()) {
+        return {
+          rows: [],
+          arns: [],
+          note: "Raw graph queries are disabled on the hosted service. Use the curated tools.",
+        };
+      }
       const cypher = String(input["cypher"] ?? "");
       const guard = assertReadOnlyCypher(cypher);
       if (!guard.ok) {

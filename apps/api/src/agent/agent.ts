@@ -34,7 +34,7 @@ import { getLatestScan } from "../db/repository.js";
 import { summariseAccount } from "../db/queries.js";
 import { CitationTracker, validateCitations } from "./citations.js";
 import { buildSystemPrompt } from "./prompt.js";
-import { TOOL_DEFINITIONS, runTool } from "./tools.js";
+import { runTool, toolDefinitions } from "./tools.js";
 import { enforceReadOnlyNotice } from "./readOnlyGuard.js";
 
 /**
@@ -117,7 +117,7 @@ export async function ask(options: AskOptions): Promise<AgentMessage> {
       model: cfg.ANTHROPIC_MODEL,
       max_tokens: 4096,
       system,
-      tools: TOOL_DEFINITIONS,
+      tools: toolDefinitions(),
       messages,
     });
 
