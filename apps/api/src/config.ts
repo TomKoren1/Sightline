@@ -1,11 +1,35 @@
 /** Process configuration, read once and validated at startup. */
 
+import { fileURLToPath } from "node:url";
+
 import { config as loadDotenv } from "dotenv";
 import { z } from "zod";
 
 import { validateAssumeRoleTarget } from "./aws/principal.js";
 
-loadDotenv({ path: new URL("../../../.env", import.meta.url).pathname, quiet: true });
+/**
+ * Where `.env` lives, as a **filesystem** path.
+ *
+ * `new URL(...).pathname` is a URL path, not a filesystem path, and the two
+ * differ whenever the real path needs escaping. On Windows it yields
+ * `/C:/projects/app/.env` - a leading slash before the drive letter, which
+ * `fs` cannot open. On any OS, a directory containing a space yields
+ * `/home/me/My%20Projects/.env`, which `fs` also cannot open.
+ *
+ * Either way `dotenv` failed with ENOENT, and because it was called with
+ * `quiet: true` it failed **silently** - so no variable from `.env` was ever
+ * loaded. The Zod defaults below happen to match `.env.example`, so Postgres,
+ * Neo4j and the mock kept working and only `ANTHROPIC_API_KEY`, which has no
+ * default, visibly broke. A Windows user got "ANTHROPIC_API_KEY not set" while
+ * looking at the key in their `.env`, and any other value they had edited was
+ * being ignored too (engineering log #36).
+ *
+ * `fileURLToPath` is the documented conversion and is correct on every
+ * platform. `URL.pathname` should never be used to address the filesystem.
+ */
+export const ENV_FILE = fileURLToPath(new URL("../../../.env", import.meta.url));
+
+loadDotenv({ path: ENV_FILE, quiet: true });
 
 /**
  * Treat an empty value as an unset one.

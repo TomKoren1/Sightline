@@ -6,11 +6,14 @@
  *   npm run seed && npm run scan && npm run drift && npm run scan
  */
 
+import { fileURLToPath } from "node:url";
+
 import { config } from "dotenv";
 import { drift } from "./drift.js";
 import { waitForMoto } from "./clients.js";
 
-config({ path: new URL("../../../.env", import.meta.url).pathname, quiet: true });
+// See apps/api/src/config.ts and engineering log #36.
+config({ path: fileURLToPath(new URL("../../../.env", import.meta.url)), quiet: true });
 
 console.log("Applying drift to the mock account...");
 await waitForMoto();

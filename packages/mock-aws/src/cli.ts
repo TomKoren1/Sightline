@@ -1,10 +1,15 @@
 #!/usr/bin/env tsx
 /** Seeds the mock AWS account. `npm run seed` from the repo root. */
 
+import { fileURLToPath } from "node:url";
+
 import { config } from "dotenv";
 import { seed } from "./seed.js";
 
-config({ path: new URL("../../../.env", import.meta.url).pathname, quiet: true });
+// fileURLToPath, not URL.pathname: the latter is a URL path and cannot address
+// the filesystem on Windows or through any directory needing escaping. See
+// apps/api/src/config.ts and engineering log #36.
+config({ path: fileURLToPath(new URL("../../../.env", import.meta.url)), quiet: true });
 
 seed()
   .then((summary) => {

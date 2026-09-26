@@ -14,6 +14,7 @@
 
 import { randomUUID } from "node:crypto";
 import { writeFile, mkdir } from "node:fs/promises";
+import { fileURLToPath } from "node:url";
 
 import { cfg, isMock } from "../config.js";
 import { ask } from "../agent/agent.js";
@@ -134,7 +135,10 @@ try {
 
   // Also written to disk, so a CI run can publish it as an artifact and a
   // regression can be diffed against a previous run.
-  const dir = new URL("../../../../evals/results/", import.meta.url).pathname;
+  // fileURLToPath keeps the trailing separator, so the concatenation below
+  // still works - and unlike URL.pathname it produces a path mkdir can use on
+  // Windows and through directories containing spaces (engineering log #36).
+  const dir = fileURLToPath(new URL("../../../../evals/results/", import.meta.url));
   await mkdir(dir, { recursive: true });
   await writeFile(
     `${dir}${new Date().toISOString().replace(/[:.]/g, "-")}.json`,

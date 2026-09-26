@@ -913,3 +913,35 @@ Verified to fire: removing the `query` script and changing "fourteen ADRs" to
 #27 are both entries about guards that silently could not fail.
 
 234 unit tests.
+
+---
+
+### `fix: load .env on Windows (URL.pathname is not a filesystem path)`
+
+Reported from a Windows laptop: a real key in `.env`, and
+`"agent":"ANTHROPIC_API_KEY not set"`. Engineering log #36.
+
+Four files built a filesystem path with
+`new URL(..., import.meta.url).pathname`. That is a URL path, which on Windows
+yields `/C:/projects/app/.env` — a leading slash before the drive letter — and
+on any OS percent-encodes a directory containing a space. `fs` opens neither,
+and `dotenv`'s `quiet: true` made the ENOENT silent, so **no variable from
+`.env` was ever loaded**.
+
+Only chat broke because the Zod defaults happen to match `.env.example`; every
+other edited value was being ignored just as completely, with no symptom. A
+Windows user switching to `AWS_MODE=real` would have silently scanned the mock.
+Same shape as #28's blank `AWS_REGION=`: a default concealing a config failure.
+
+Not a Windows-only bug — verified on Linux that a checkout under a path with a
+space fails identically. Fixed with `fileURLToPath` in the API config, the seed
+and drift CLIs, and the `evals/results/` path.
+
+Guarded three ways: the computed path must land beside `.env.example`; **no
+source file anywhere may use `import.meta.url).pathname`** (verified to fire by
+reintroducing it); and the mechanism is pinned as an executable assertion.
+
+`/api/health` now names the `.env` it read and distinguishes "not set" from "no
+`.env` found here", and the README notes that `tsx watch` does not watch `.env`.
+
+242 unit tests.

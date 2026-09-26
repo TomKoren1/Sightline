@@ -1451,3 +1451,100 @@ It also argues for a specific habit: when a file's own comments document how to
 invoke it, that string should be derived from, or checked against, the thing
 that actually invokes it. `query.ts` was honest and wrong for as long as it
 existed.
+
+---
+
+## #36 — `.env` was never loaded on Windows, and the defaults hid it
+
+**Reported by Tom**, who ran the project on a Windows laptop, put a real key in
+`.env`, and got `"agent":"ANTHROPIC_API_KEY not set - chat will fail"` while
+looking at the key in the file. Everything else worked: Postgres, Neo4j, the
+scan, the graph.
+
+**Cause.** Four files built a filesystem path like this:
+
+```ts
+new URL("../../../.env", import.meta.url).pathname;
+```
+
+`URL.pathname` is a **URL** path, not a filesystem path. The two coincide only
+when nothing in the path needs escaping — which is true on the machine this was
+written on, and false in two ordinary situations:
+
+```
+Windows           ->  /C:/devops/projects/app/.env     leading slash, drive letter
+a space in a dir  ->  /home/me/My%20Projects/.env      percent-encoded
+```
+
+`fs` cannot open either. `dotenv` returned ENOENT, and because it was called
+with `quiet: true` it failed **silently** — so not one variable from `.env` was
+loaded.
+
+**Why only chat broke.** The Zod schema's defaults happen to match
+`.env.example`, so Postgres, Neo4j and the mock endpoint all kept working on
+defaults that coincidentally matched. `ANTHROPIC_API_KEY` is the one variable
+with no default, so it was the only visible symptom — and it pointed at the
+wrong thing. Every other value Tom might have edited (ports, passwords,
+`AWS_MODE=real`, scan regions) was being ignored just as completely, with no
+symptom at all. A Windows user switching to a real AWS account would have
+silently scanned the mock.
+
+That is the same shape as engineering log #28's blank `AWS_REGION=`: a
+configuration failure masked by a default, where the default is the thing that
+makes it hard to find.
+
+**It is not a Windows bug.** Verified here on Linux, which is the part the
+original report did not cover:
+
+```
+pathname      : …/My%20Projects/.env   exists: false   dotenv: FAILED ENOENT
+fileURLToPath : …/My Projects/.env     exists: true    dotenv: ok, key loaded
+```
+
+Any checkout under a directory containing a space, a `#`, or a non-ASCII
+character fails identically on macOS and Linux. The Windows case is simply the
+one that shows up first, because every Windows path starts with a drive letter.
+
+**Fix.** `fileURLToPath` from `node:url`, which is the documented conversion and
+correct on every platform, in all four places: the API config (which serves the
+server and every API CLI), the seed CLI, the drift CLI, and the `evals/results/`
+directory path.
+
+**Three guards, because the bug had three properties worth preventing.**
+
+1. The computed `.env` path must land in the directory that contains
+   `.env.example`, and must not look like a URL path.
+2. **No source file anywhere may use `import.meta.url).pathname`.** `URL.pathname`
+   has legitimate uses; none of them are in this codebase, and every use of it
+   here was a bug. A flat ban is enforceable in eight lines and would have
+   prevented all four at once. Verified to fire: reintroducing it in the seed
+   CLI fails the test and names the file.
+3. The mechanism itself is pinned as an executable assertion, so the reasoning
+   above cannot quietly become folklore.
+
+**And the message that made it a mystery.** `/api/health` said "ANTHROPIC_API_KEY
+not set", which was true and useless. It now names the file it read, and
+distinguishes "you have not set it" from "no `.env` found at this path" — the
+second being the one a user cannot guess. The README also now says that
+`tsx watch` does not watch `.env`, so editing it while the API is running
+changes nothing until a restart.
+
+**What to take from it.** Two things.
+
+The first is narrow and worth memorising: **`URL.pathname` is not a filesystem
+path.** It is one of a small set of APIs that look interchangeable with the
+right one and differ only in cases you will not hit locally.
+
+The second is the recurring one. This is the fourth entry where a default
+concealed a failure (#17, #28, #31, #36), and the pattern is always the same:
+the fallback is reasonable, the fallback matches what the file would have said,
+and so the system works while being misconfigured. A default that silently
+substitutes for configuration the user believes they supplied is a trap — which
+is why `quiet: true` on a loader whose failure mode is "load nothing" was the
+real mistake, not the path expression.
+
+The bug also survived every check this repository has, including a clean-clone
+test run twice. It could not have been otherwise: CI runs Linux, the author's
+machine runs Linux, and the path has no spaces. Cross-platform correctness is
+not something a single-platform test suite can assert, and the honest response
+is a lint-style ban on the idiom rather than a test that pretends to cover it.

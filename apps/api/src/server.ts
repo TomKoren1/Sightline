@@ -1,8 +1,11 @@
 /** HTTP server. */
 
+import { existsSync } from "node:fs";
+
 import Fastify from "fastify";
 import cors from "@fastify/cors";
 
+import { ENV_FILE } from "./config.js";
 import { cfg } from "./config.js";
 import { migrate, closePool } from "./db/postgres.js";
 import { closeDriver } from "./db/neo4j.js";
@@ -50,10 +53,21 @@ app.get("/api/health", async () => {
     checks["neo4j"] = err instanceof Error ? err.message : "error";
   }
 
+  /**
+   * When the key is missing, say where we looked for it.
+   *
+   * "ANTHROPIC_API_KEY not set" is true and was actively misleading to a user
+   * who was looking at the key in their `.env` at the time: the real fault was
+   * that `.env` had not been read at all (engineering log #36). Naming the file
+   * distinguishes "you have not set it" from "we could not find your file", and
+   * the second is the one you cannot guess.
+   */
   checks["agent"] =
     cfg.ANTHROPIC_API_KEY && cfg.ANTHROPIC_API_KEY !== "replace-me"
       ? `configured (${cfg.ANTHROPIC_MODEL})`
-      : "ANTHROPIC_API_KEY not set - chat will fail";
+      : existsSync(ENV_FILE)
+        ? `ANTHROPIC_API_KEY not set in ${ENV_FILE} - chat will fail. Restart the API after editing it; configuration is read once at startup.`
+        : `ANTHROPIC_API_KEY not set, and no .env found at ${ENV_FILE} - chat will fail. Copy .env.example to .env, or pass the variable through the environment.`;
 
   const latest = await getLatestScan().catch(() => null);
 

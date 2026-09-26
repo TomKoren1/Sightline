@@ -78,7 +78,12 @@ ANTHROPIC_MODEL=claude-sonnet-5   # default
 
 Everything except chat works without one — the scan, the graph, the findings
 sidebar, and the entire tier-1 eval suite. `/api/health` tells you whether a
-key is configured rather than making you discover it through a failed request.
+key is configured rather than making you discover it through a failed request,
+and names the `.env` it read if the key is missing.
+
+**Restart the API after editing `.env`.** Configuration is read once at startup
+and `tsx watch` does not watch `.env`, so an edit while `npm run dev:api` is
+running changes nothing until you restart it.
 
 ### Running against a real AWS account
 
@@ -132,7 +137,7 @@ is one of only two variables where blank is meaningful rather than unset.
 | `npm run drift`                             | Change the mock account, so a second scan has a diff   |
 | `npm run inspect -w @daveio/api`            | Scan and print findings without touching the databases |
 | `npm run query -w @daveio/api`              | Run every curated query against the graph              |
-| `npm test`                                  | 234 unit tests                                         |
+| `npm test`                                  | 242 unit tests                                         |
 | `npm run verify`                            | Everything CI's static job runs — use before pushing   |
 | `npm run evals:ground-truth -w @daveio/api` | Tier-1 evals — no API key needed                       |
 | `npm run evals -w @daveio/api`              | Tier-2 agent evals — needs a key                       |
