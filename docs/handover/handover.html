@@ -386,10 +386,10 @@
       </dl>
 
       <div class="metrics">
-        <div><b>242</b><span>unit tests</span></div>
+        <div><b>248</b><span>unit tests</span></div>
         <div><b>21/21</b><span>agent evals · F1 1.0</span></div>
         <div><b>14</b><span>decision records</span></div>
-        <div><b>36</b><span>logged problems</span></div>
+        <div><b>37</b><span>logged problems</span></div>
       </div>
     </div>
 
@@ -442,7 +442,7 @@
           </ul>
         </li>
         <li>
-          <span>8</span>The thirty-six problems
+          <span>8</span>The thirty-seven problems
           <ul>
             <li>Symptom, cause, fix and lesson for every one</li>
           </ul>
@@ -1175,7 +1175,7 @@ npm run dev:api &amp; npm run dev:web
 
     <!-- =================== 8 =================== -->
     <div class="section">
-      <h2><span class="num">8</span>The thirty-six problems</h2>
+      <h2><span class="num">8</span>The thirty-seven problems</h2>
       <p class="muted small">
         Full write-ups in <code>docs/ENGINEERING-LOG.md</code>. Each entry below gives the symptom,
         the cause, the fix, and what it generalises to.
@@ -2066,13 +2066,67 @@ npm run dev:api &amp; npm run dev:web
           </dd>
         </dl>
       </div>
+
+      <div class="log">
+        <h3><span class="id">#37</span>HTTP 414 on every IAM role with a path</h3>
+        <dl class="row">
+          <dt>Symptom</dt>
+          <dd>
+            Against a real account, clicking IAM roles and instance profiles showed nothing and
+            returned <code>414 URI Too Long</code>.
+          </dd>
+          <dt>Cause</dt>
+          <dd>
+            Fastify caps a route parameter at 100 characters by default.
+            <code>/api/resources/:arn</code> carries an ARN, and AWS service-linked roles carry an
+            IAM <em>path</em> —
+            <code
+              >…:role/aws-service-role/elasticloadbalancing.amazonaws.com/AWSServiceRoleForElasticLoadBalancing</code
+            >
+            is 120 characters — so the router refused it before any handler ran. The remediation
+            route has the same shape, so "How to fix" was broken for exactly the admin roles it
+            matters most for.
+            <strong
+              >10 of 19 IAM roles and profiles in the reporting account were over the cap</strong
+            >, the longest at 145.
+          </dd>
+          <dt>Why nothing caught it</dt>
+          <dd>
+            Two reasons. Every fixture role had a short, path-less name (longest ARN 61 encoded), so
+            the mock could not express the shape — the third time the fixture shared the code's
+            blind spot (#29, #30). And <code>server.ts</code> called <code>listen()</code> at module
+            scope, so importing it bound a port: no test could issue an HTTP request, and the router
+            had no test surface at all.
+          </dd>
+          <dt>Fix</dt>
+          <dd>
+            <code>maxParamLength: 2048</code>, reasoned against IAM's documented maxima rather than
+            picked round; <code>buildApp()</code> extracted so the HTTP layer is injectable; and a
+            service-linked role added to the fixture, named in the answer key so deleting it fails a
+            test.
+          </dd>
+          <dt>Lesson</dt>
+          <dd>
+            My first version of the regression check asserted the <em>encoded</em> length, and one
+            case passed even with the bug restored — Fastify measures the
+            <em>decoded</em> parameter. The attempt before that used a <code>sed</code> whose
+            indentation did not match, so the "broken" run was actually the fixed code.
+            <strong
+              >Verifying that a guard fires is itself an operation that can silently fail, and the
+              failure looks exactly like success.</strong
+            >
+            #23 and #27 are about guards that could not fire; this is about a check on a guard that
+            could not fire. Make it fail on purpose and read the actual output, not the exit code.
+          </dd>
+        </dl>
+      </div>
     </div>
 
     <!-- =================== 9 =================== -->
     <div class="section">
       <h2><span class="num">9</span>Recurring failure patterns</h2>
       <p>
-        Thirty-six entries reduce to about five shapes. If you are asked "what did you learn
+        Thirty-seven entries reduce to about five shapes. If you are asked "what did you learn
         building this?", this section is the answer — it is more convincing than any individual bug.
       </p>
 
@@ -2114,9 +2168,10 @@ npm run dev:api &amp; npm run dev:web
 
       <h3>4. A fixture that shares the code's blind spot proves nothing</h3>
       <p>
-        Bugs #29 and #30. The mock account was built to be adversarial about everything I thought of
-        — and contained no IAM users, and no answer-key entry for the orphaned elastic IP. Both
-        analyses passed every test while being wrong.
+        Bugs #29, #30 and #37. The mock account was built to be adversarial about everything I
+        thought of — and contained no IAM users, no answer-key entry for the orphaned elastic IP,
+        and no role with an IAM path. All three passed every test while being wrong, and the third
+        left more than half the IAM section of the product unreachable in a real account.
         <strong>Rule:</strong> a green suite over a fixture you also wrote is evidence about
         consistency, not correctness. Point the thing at reality and disbelieve a clean result.
       </p>
@@ -2366,7 +2421,7 @@ npm run dev:api &amp; npm run dev:web
         <div class="q">What went wrong while you built it?</div>
         <div class="a">
           <p>
-            Thirty-six logged problems, and they reduce to about five shapes. The one I would lead
+            Thirty-seven logged problems, and they reduce to about five shapes. The one I would lead
             with: three separate times I built a route to the same catastrophic output — a complete,
             confident, entirely fictional inventory of a real AWS account. Once from a leaked
             <code>AWS_ENDPOINT_URL</code> that the SDK reads directly from the environment, once
