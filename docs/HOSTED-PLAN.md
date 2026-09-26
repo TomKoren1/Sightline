@@ -1,7 +1,19 @@
 # Hosting plan — from single-tenant demo to a real multi-tenant site
 
-Status: **plan only**. No application code has been written against this.
-Branch: `feat/hosted`. `main` stays exactly as submitted.
+Status: **Phases 0-3 built**, except authentication. Branch: `feat/hosted`;
+`main` stays exactly as submitted. Nothing here has been deployed, and no AWS
+resource has been created - the KMS key, the IAM user and the cluster are
+Tom's to provision.
+
+| Phase                                  | State                                                    |
+| -------------------------------------- | -------------------------------------------------------- |
+| 0 — hosted mode, capabilities removed  | **done** (ADR-015, ADR-016)                              |
+| 1 — tenancy in the data layer          | **done** (ADR-017)                                       |
+| 2 — per-tenant secrets and connections | **done**, except the UI                                  |
+| 3 — isolation guards and the job queue | **done**; the worker process is not written yet          |
+| 3 — OAuth, sessions, `users` rows      | **not started** — `tenantOf()` is the seam it plugs into |
+| 4 — Kubernetes and Cloudflare          | not started                                              |
+| 5 — hardening                          | not started                                              |
 
 The target: a public site where someone signs in, connects their own AWS
 account through the read-only role, supplies their own Anthropic key, and gets
