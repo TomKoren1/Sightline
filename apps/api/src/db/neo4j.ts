@@ -103,6 +103,23 @@ export async function readQuery<T = Record<string, unknown>>(
   }
 }
 
+/**
+ * Is the graph reachable?
+ *
+ * Deliberately not `readQuery`: that function refuses any query without a
+ * tenant, which is correct for reads of tenant data and wrong for a health
+ * probe that reads none. Keeping them separate means the seam never needs an
+ * exception, and an exception is what a seam like this dies of.
+ */
+export async function pingGraph(): Promise<void> {
+  const session = getDriver().session({ defaultAccessMode: neo4j.session.READ });
+  try {
+    await session.run("RETURN 1 AS ok");
+  } finally {
+    await session.close();
+  }
+}
+
 export async function ensureConstraints(): Promise<void> {
   const session = getDriver().session();
   try {

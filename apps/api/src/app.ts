@@ -79,8 +79,14 @@ export async function buildApp() {
     }
 
     try {
-      const { readQuery } = await import("./db/neo4j.js");
-      await readQuery("RETURN 1 AS ok");
+      /**
+       * A liveness probe, not a data read - so it goes through the driver
+       * directly rather than through `readQuery`, whose job is to refuse
+       * anything unscoped. Making the probe carry a tenant would mean either
+       * inventing one or weakening the seam, and this query touches no node.
+       */
+      const { pingGraph } = await import("./db/neo4j.js");
+      await pingGraph();
       checks["neo4j"] = "ok";
     } catch (err) {
       checks["neo4j"] = err instanceof Error ? err.message : "error";
