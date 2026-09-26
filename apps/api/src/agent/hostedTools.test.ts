@@ -14,6 +14,8 @@
 
 import { afterEach, describe, expect, it, vi } from "vitest";
 
+import { LOCAL_TENANT } from "../tenancy/tenant.js";
+
 const ORIGINAL = { ...process.env };
 
 afterEach(() => {
@@ -64,9 +66,13 @@ describe("calling graph_query anyway", () => {
     const { runTool } = await toolsIn("hosted");
     // `ToolInput` is deliberately hostile to construct by hand - the dispatch
     // takes whatever the model sent, which is `unknown` by nature.
-    const result = await runTool("graph_query", {
-      cypher: "MATCH (r:Resource) RETURN r",
-    } as unknown as Parameters<typeof runTool>[1]);
+    const result = await runTool(
+      "graph_query",
+      {
+        cypher: "MATCH (r:Resource) RETURN r",
+      } as unknown as Parameters<typeof runTool>[1],
+      LOCAL_TENANT,
+    );
     expect(result.rows).toEqual([]);
     expect(result.note).toContain("disabled on the hosted service");
   });

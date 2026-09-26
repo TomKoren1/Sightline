@@ -33,6 +33,7 @@ import {
   targetRoleProblem,
 } from "../config.js";
 import { assumablePrincipalArn } from "../aws/principal.js";
+import { tenantOf } from "../tenancy/request.js";
 import { accountIdFromArn, getSession, resetSession } from "../aws/credentials.js";
 import { getLatestScan } from "../db/repository.js";
 
@@ -118,8 +119,8 @@ function diagnose(
 
 export function registerConnectionRoutes(app: FastifyInstance): void {
   /** Current connection state, with nothing secret in the response. */
-  app.get("/api/connection", async () => {
-    const latest = await getLatestScan().catch(() => null);
+  app.get("/api/connection", async (req) => {
+    const latest = await getLatestScan(tenantOf(req)).catch(() => null);
     const connection = activeConnection();
     const accountId = accountIdFromArn(connection.roleArn);
 
