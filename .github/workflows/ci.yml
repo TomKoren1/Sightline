@@ -37,7 +37,12 @@ jobs:
 
       - name: Unit tests
         # The integration suite needs the compose stack and runs in the next
-        # job; this one must stay fast and dependency-free.
+        # job; this one must stay fast and dependency-free. SKIP_INTEGRATION
+        # also switches off the suites that issue real HTTP requests, which
+        # would otherwise spend thirty seconds per request timing out against
+        # databases that are not here (engineering log #37).
+        env:
+          SKIP_INTEGRATION: "1"
         run: npx vitest run --exclude '**/evals/**'
 
       - name: Build frontend
@@ -88,6 +93,11 @@ jobs:
         # Tier 1 of the eval suite (ADR-008). Needs no API key, and catches the
         # regression that matters most: an analyser becoming quietly wrong.
         run: npx vitest run apps/api/src/evals/groundTruth.test.ts
+
+      - name: HTTP routing against the live stack
+        # Proves the router reaches its handlers for a real, full-length ARN.
+        # Needs the databases, so it cannot run in the unit job.
+        run: npx vitest run apps/api/src/routes/resourceArn.test.ts
 
       - name: Verify the API serves what the scan produced
         run: |

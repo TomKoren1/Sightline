@@ -1619,3 +1619,22 @@ the failure looks exactly like success. #23 and #27 are entries about guards tha
 could not fire; this is an entry about a _check_ on a guard that could not fire.
 The defence is the same one that keeps working: make the thing fail on purpose
 and look at the actual output, rather than at the exit code.
+
+**Postscript: the fix broke CI, for a related reason.** The routing test issues
+real HTTP requests, so the handler runs, so it reads Neo4j. That is deliberate —
+a routing test that stubbed the handler would not prove the route is reachable in
+the product. But I put it in the unit job, whose entire design is that it needs no
+infrastructure. Every request spent thirty seconds discovering there was no
+database, and a three-minute job became five.
+
+It passed locally because the databases are running on this machine — the same
+shape as the bug it was written to catch, where the author's environment silently
+supplies what the test depends on. Split in two: a config assertion that reads
+`maxParamLength` off the app Fastify actually built, which needs nothing and runs
+on every commit, and the HTTP suite gated behind `SKIP_INTEGRATION` and run in the
+job that has the compose stack. The unit job is back to 1.6 seconds.
+
+Worth stating as a rule, because it is the third variant of one idea in this
+entry alone: **a test that passes only in the author's environment is not a
+test, it is a coincidence** — and that applies to the test, to the check on the
+guard, and to the guard itself.

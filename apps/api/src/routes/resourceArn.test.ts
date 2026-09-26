@@ -39,6 +39,20 @@ afterAll(async () => {
   await app.close();
 });
 
+/**
+ * Issuing a request runs the handler, which reads Neo4j. That is deliberate -
+ * a routing test that stubbed the handler would not prove the route is
+ * reachable in the product - but it means these belong with the integration
+ * suite rather than the dependency-free unit job, which has no databases and
+ * would spend thirty seconds per request discovering that. Same gate the
+ * ground-truth suite uses.
+ *
+ * The config assertion below needs nothing and runs everywhere, so the
+ * regression is still caught on every commit even when the HTTP suite is
+ * skipped.
+ */
+const HAS_INFRA = !process.env["SKIP_INTEGRATION"];
+
 /** The shape AWS really produces for a service-linked role. */
 const SERVICE_LINKED =
   "arn:aws:iam::672299759593:role/aws-service-role/elasticloadbalancing.amazonaws.com/AWSServiceRoleForElasticLoadBalancing";
@@ -49,7 +63,7 @@ const INSTANCE_PROFILE =
 /** An IAM path at its documented maximum is the worst legitimate case. */
 const LONGEST_LEGITIMATE = `arn:aws:iam::672299759593:role/${"a/".repeat(120)}${"n".repeat(64)}`;
 
-describe("a long ARN routes rather than being rejected", () => {
+describe.runIf(HAS_INFRA)("a long ARN routes rather than being rejected", () => {
   it.each([
     ["a service-linked role", SERVICE_LINKED],
     ["an instance profile with a path", INSTANCE_PROFILE],
@@ -92,6 +106,28 @@ describe("a long ARN routes rather than being rejected", () => {
       url: `/api/resources/${encodeURIComponent("arn:aws:s3:::northwind-public-assets")}`,
     });
     expect([200, 404]).toContain(res.statusCode);
+  });
+});
+
+/**
+ * The regression itself, asserted without touching a database.
+ *
+ * This is the guard that runs on every commit. It reads the limit off the app
+ * Fastify actually built, so it fails if someone removes the option, lowers it,
+ * or replaces the constructor - which is the whole regression - and it costs
+ * nothing, because no request is issued.
+ */
+describe("the router can carry a full-length ARN", () => {
+  it("configures maxParamLength above the longest legitimate IAM ARN", () => {
+    // IAM: path <= 512, role name <= 64, plus the arn:aws:iam::<12>:role/
+    // prefix. Fastify measures the decoded parameter, so this is the bound.
+    const longestLegitimateArn = 512 + 64 + "arn:aws:iam::123456789012:role/".length;
+    expect(app.initialConfig.maxParamLength ?? 100).toBeGreaterThan(longestLegitimateArn);
+  });
+
+  it("is not left on the default, which broke every service-linked role", () => {
+    expect(app.initialConfig.maxParamLength).not.toBe(100);
+    expect(app.initialConfig.maxParamLength ?? 100).toBeGreaterThan(SERVICE_LINKED.length);
   });
 });
 
