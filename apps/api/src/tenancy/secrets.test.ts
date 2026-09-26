@@ -29,7 +29,10 @@ const load = () => import("./secrets.js");
 describe("round trip", () => {
   it("returns exactly what was encrypted", async () => {
     const { encryptSecret, decryptSecret } = await load();
-    const secret = "sk-ant-api03-not-a-real-key";
+    // Deliberately not shaped like a real Anthropic key. A fixture that
+    // matches the pattern trips this repo's own secret scanner, and a scanner
+    // trained to ignore test files is a scanner that misses the real thing.
+    const secret = "tenant-secret-placeholder-value";
     expect(await decryptSecret(await encryptSecret(secret))).toBe(secret);
   });
 
@@ -48,7 +51,7 @@ describe("round trip", () => {
 describe("the ciphertext itself", () => {
   it("never contains the plaintext", async () => {
     const { encryptSecret } = await load();
-    const secret = "sk-ant-distinctive-marker";
+    const secret = "distinctive-marker-not-a-key";
     const blob = (await encryptSecret(secret)).toString("utf8");
     expect(blob).not.toContain(secret);
     expect(blob).not.toContain("distinctive");
@@ -97,8 +100,8 @@ describe("the ciphertext itself", () => {
 describe("masking", () => {
   it("shows enough to recognise a key and not enough to use it", async () => {
     const { maskSecret } = await load();
-    const masked = maskSecret("sk-ant-api03-abcdefghijklmnop9f2c");
-    expect(masked).toBe("sk-…9f2c");
+    const masked = maskSecret("key-placeholder-abcdefghijklmnop9f2c");
+    expect(masked).toBe("key…9f2c");
     expect(masked).not.toContain("abcdefgh");
   });
 
