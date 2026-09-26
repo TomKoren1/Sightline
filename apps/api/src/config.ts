@@ -103,6 +103,18 @@ const schema = z.object({
    * deliberately not switchable at runtime: unlike AWS_MODE, nothing should be
    * able to move a running process between these two worlds.
    */
+  /**
+   * KMS key for per-tenant secrets. Required in hosted mode; absent in a
+   * self-hosted deployment, which uses SECRETS_LOCAL_KEY instead.
+   */
+  AWS_KMS_KEY_ID: blankAsUnset(z.string().optional()),
+
+  /**
+   * Passphrase for local secret encryption. Any length - it is hashed to a
+   * 256-bit key - so the operator's instruction is "a long random string".
+   */
+  SECRETS_LOCAL_KEY: blankAsUnset(z.string().optional()),
+
   DEPLOYMENT_MODE: blankAsUnset(z.enum(["self-hosted", "hosted"]).default("self-hosted")),
 
   BACKEND_PORT: blankAsUnset(z.coerce.number().int().positive().default(3000)),
