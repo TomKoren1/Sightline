@@ -386,10 +386,10 @@
       </dl>
 
       <div class="metrics">
-        <div><b>234</b><span>unit tests</span></div>
+        <div><b>242</b><span>unit tests</span></div>
         <div><b>21/21</b><span>agent evals · F1 1.0</span></div>
         <div><b>14</b><span>decision records</span></div>
-        <div><b>35</b><span>logged problems</span></div>
+        <div><b>36</b><span>logged problems</span></div>
       </div>
     </div>
 
@@ -442,7 +442,7 @@
           </ul>
         </li>
         <li>
-          <span>8</span>The thirty-five problems
+          <span>8</span>The thirty-six problems
           <ul>
             <li>Symptom, cause, fix and lesson for every one</li>
           </ul>
@@ -1175,7 +1175,7 @@ npm run dev:api &amp; npm run dev:web
 
     <!-- =================== 8 =================== -->
     <div class="section">
-      <h2><span class="num">8</span>The thirty-five problems</h2>
+      <h2><span class="num">8</span>The thirty-six problems</h2>
       <p class="muted small">
         Full write-ups in <code>docs/ENGINEERING-LOG.md</code>. Each entry below gives the symptom,
         the cause, the fix, and what it generalises to.
@@ -2015,13 +2015,64 @@ npm run dev:api &amp; npm run dev:web
           </dd>
         </dl>
       </div>
+
+      <div class="log">
+        <h3>
+          <span class="id">#36</span><code>.env</code> was never loaded on Windows, and the defaults
+          hid it
+        </h3>
+        <dl class="row">
+          <dt>Symptom</dt>
+          <dd>
+            Reported from a Windows laptop: a real key in <code>.env</code>, and
+            <code>"agent":"ANTHROPIC_API_KEY not set"</code>. Everything else worked — Postgres,
+            Neo4j, the scan, the graph.
+          </dd>
+          <dt>Cause</dt>
+          <dd>
+            Four files built a filesystem path with
+            <code>new URL(…, import.meta.url).pathname</code>. That is a <em>URL</em> path: on
+            Windows it yields <code>/C:/projects/app/.env</code>, and on any OS it percent-encodes a
+            directory containing a space. <code>fs</code> opens neither, and <code>dotenv</code>'s
+            <code>quiet: true</code> made the ENOENT silent — so not one variable from
+            <code>.env</code> was ever loaded.
+          </dd>
+          <dt>Why only chat broke</dt>
+          <dd>
+            The Zod defaults happen to match <code>.env.example</code>, so everything else ran on
+            defaults that coincidentally agreed. <code>ANTHROPIC_API_KEY</code> is the only variable
+            with no default. Every other edited value — ports, passwords,
+            <code>AWS_MODE=real</code>, scan regions — was ignored just as completely with no
+            symptom at all.
+          </dd>
+          <dt>Fix</dt>
+          <dd>
+            <code>fileURLToPath</code> in all four places, plus three guards: the computed path must
+            land beside <code>.env.example</code>;
+            <strong>no source file anywhere may use <code>import.meta.url).pathname</code></strong>
+            (verified to fire by reintroducing it); and the mechanism is pinned as an executable
+            assertion. <code>/api/health</code> now names the file it read and distinguishes "not
+            set" from "no <code>.env</code> found here".
+          </dd>
+          <dt>Lesson</dt>
+          <dd>
+            Narrowly: <code>URL.pathname</code> is not a filesystem path. Broadly: this is the
+            fourth entry where a <em>default concealed a failure</em> (#17, #28, #31, #36). The
+            fallback is reasonable, it matches what the file would have said, and so the system
+            works while being misconfigured. It also survived every check here, twice — CI runs
+            Linux, the author's machine runs Linux, and neither path has a space. A single-platform
+            suite cannot assert cross-platform correctness, so the honest response is a ban on the
+            idiom rather than a test pretending to cover it.
+          </dd>
+        </dl>
+      </div>
     </div>
 
     <!-- =================== 9 =================== -->
     <div class="section">
       <h2><span class="num">9</span>Recurring failure patterns</h2>
       <p>
-        Thirty-five entries reduce to about five shapes. If you are asked "what did you learn
+        Thirty-six entries reduce to about five shapes. If you are asked "what did you learn
         building this?", this section is the answer — it is more convincing than any individual bug.
       </p>
 
@@ -2032,6 +2083,17 @@ npm run dev:api &amp; npm run dev:web
         agree. The output each time is a fabricated inventory of a real account.
         <strong>Rule:</strong> when two configuration values must be consistent, compute one from
         the other or refuse — never document the requirement and hope.
+      </p>
+
+      <h3>1b. A default that conceals a failure</h3>
+      <p>
+        Bugs #17, #28, #31 and #36. Each time a fallback was reasonable, matched what the missing
+        configuration would have said, and therefore let the system run while misconfigured —
+        scanning the mock under a real account's name, building AWS clients with an empty region, or
+        ignoring a <code>.env</code> that was never read. The symptom always surfaces somewhere
+        unrelated, or not at all. <strong>Rule:</strong> a default that silently substitutes for
+        configuration the user believes they supplied is a trap. Prefer failing, or say loudly which
+        source actually won.
       </p>
 
       <h3>2. "Absent" and "empty" are different facts</h3>
@@ -2304,7 +2366,7 @@ npm run dev:api &amp; npm run dev:web
         <div class="q">What went wrong while you built it?</div>
         <div class="a">
           <p>
-            Thirty-five logged problems, and they reduce to about five shapes. The one I would lead
+            Thirty-six logged problems, and they reduce to about five shapes. The one I would lead
             with: three separate times I built a route to the same catastrophic output — a complete,
             confident, entirely fictional inventory of a real AWS account. Once from a leaked
             <code>AWS_ENDPOINT_URL</code> that the SDK reads directly from the environment, once
