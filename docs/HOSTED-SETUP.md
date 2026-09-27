@@ -110,41 +110,39 @@ variable is not good enough for other people's secrets (ADR-015).
 ## 4. The scanner's own AWS identity
 
 The identity this service assumes customer roles _from_. On a bare cluster
-there is no IRSA, so this is an IAM user with an access key, exactly as the
-sibling project does it.
+there is no IRSA, so this is an IAM user with an access key — the same
+conclusion the sibling project reached.
 
-**Where:** IAM → Users → create user → no console access → attach an inline
-policy:
+**This is Terraform now**, in [`infra/platform/`](../infra/platform):
 
-```json
-{
-  "Version": "2012-10-17",
-  "Statement": [
-    {
-      "Sid": "AssumeCustomerScannerRoles",
-      "Effect": "Allow",
-      "Action": "sts:AssumeRole",
-      "Resource": "arn:aws:iam::*:role/DaveIoReadOnlyRole"
-    },
-    {
-      "Sid": "TenantSecrets",
-      "Effect": "Allow",
-      "Action": ["kms:Encrypt", "kms:Decrypt", "kms:DescribeKey"],
-      "Resource": "<the KMS key ARN>"
-    }
-  ]
-}
+```bash
+cd infra/platform
+cp terraform.tfvars.example terraform.tfvars   # the defaults are usually right
+terraform init
+terraform apply
 ```
 
-The `Resource` on the first statement is scoped to the **role name the
-customer template creates**, so a stolen credential cannot assume arbitrary
-roles it happens to discover. Customers who rename the role cannot connect —
-which is the intended trade.
+It creates one user with exactly two permissions — `kms:Encrypt`/`Decrypt`/
+`DescribeKey` on the key from §3, and `sts:AssumeRole` on
+`arn:aws:iam::*:role/DaveIoReadOnlyRole`. The account is a wildcard because
+every customer has a different one; the role name is not, so a stolen
+credential cannot assume arbitrary roles it discovers.
 
-Its access key goes into a SealedSecret for the pod, **not** into `.env`:
-hosted mode refuses to start with `AWS_ACCESS_KEY_ID` in the environment.
+The key is **looked up, not created**, so `destroy` here cannot delete a key
+holding another application's data.
 
----
+Then read the outputs. The secrets are marked `sensitive`, so `apply` does not
+print them into a terminal, a CI log or a screenshot:
+
+```bash
+terraform output -raw platform_access_key_id      # → AWS_ACCESS_KEY_ID
+terraform output -raw platform_secret_access_key  # → AWS_SECRET_ACCESS_KEY
+terraform output platform_user_arn                # → what customers put in their stack
+```
+
+Both secrets go into the SealedSecret, **never** into `.env`: hosted mode
+refuses to start when `AWS_ACCESS_KEY_ID` looks like a placeholder, and a
+plain `.env` on a cluster is a file nobody rotates.
 
 ## 5. Cloudflare Tunnel
 

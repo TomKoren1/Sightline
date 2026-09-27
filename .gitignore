@@ -34,3 +34,11 @@ pnpm-debug.log*
 .scan-cache/
 evals/results/
 *.local.json
+
+# Terraform state holds the platform user's secret access key in plaintext.
+# The sibling project committed its state; this one does not, and the values
+# are recoverable with `terraform output -raw` or by rotating the key.
+infra/platform/.terraform/
+infra/platform/*.tfstate
+infra/platform/*.tfstate.*
+infra/platform/terraform.tfvars
