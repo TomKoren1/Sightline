@@ -41,9 +41,8 @@ import {
   markVerified,
   upsertConnection,
 } from "../tenancy/connections.js";
-import { generateExternalId } from "../tenancy/secrets.js";
 import { limitConfig, limits } from "../security/limits.js";
-import { getExternalId } from "../tenancy/connections.js";
+import { getExternalId, getOrIssueExternalId } from "../tenancy/connections.js";
 import { getTenant, setDemoMode } from "../tenancy/tenants.js";
 import { accountIdFromArn, getSession, resetSession } from "../aws/credentials.js";
 import { getLatestScan } from "../db/repository.js";
@@ -351,14 +350,20 @@ export function registerConnectionRoutes(app: FastifyInstance): void {
       };
     }
 
+    /**
+     * Issued here, not at save time.
+     *
+     * This value is shown so the customer can paste it into their
+     * CloudFormation stack, and it has to be the same string this service
+     * later presents when assuming the role. Generating one for display and
+     * another on save produced a stack and a service that disagreed, which
+     * surfaces as AccessDenied with nothing to suggest why.
+     */
     const tenantId = tenantOf(req);
-    const existing = await getExternalId(tenantId);
     return {
-      externalId: existing ?? generateExternalId(),
-      stored: existing !== null,
-      note: existing
-        ? "This is your account's external id. It must match the one in your CloudFormation stack."
-        : "Generated for you. It is stored when you save the connection below.",
+      externalId: await getOrIssueExternalId(tenantId),
+      stored: true,
+      note: "This is your account's external id. It must match the one in your CloudFormation stack.",
     };
   });
 
@@ -401,15 +406,15 @@ export function registerConnectionRoutes(app: FastifyInstance): void {
       }
 
       /**
-       * Reuse the external id already issued to this tenant.
+       * The external id is not touched here.
        *
-       * Rotating it on every save would silently break a customer who had
-       * already deployed their stack with the previous one - they would see
-       * AccessDenied and have no reason to suspect us. A rotation is a
-       * deliberate action, not a side effect of editing a role ARN.
+       * It belongs to the tenant and was issued when they first opened the
+       * guide; the customer's stack already contains it. Rotating it as a side
+       * effect of editing a role ARN would silently break them, with
+       * AccessDenied and no reason to suspect us.
        */
-      const externalId = (await getExternalId(tenantId)) ?? generateExternalId();
-      await upsertConnection(tenantId, { roleArn, externalId });
+      const externalId = await getOrIssueExternalId(tenantId);
+      await upsertConnection(tenantId, { roleArn });
       resetSession(tenantId);
 
       return reply.send({

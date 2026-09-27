@@ -1867,3 +1867,49 @@ time: break the thing on purpose, and require the test to notice.
 
 The companion habit, now also a test: **any assertion over a collection needs a
 sibling assertion that the collection is not empty.**
+
+---
+
+## #43 — The external id shown was not the external id stored
+
+**Problem.** Found by writing a test for the journey rather than for a layer:
+sign in, open the Connection panel, save a role, check what happened. Two
+consecutive reads of `/api/connection/external-id` returned **different
+values**.
+
+**Why that is serious.** The external id is the string the customer pastes
+into their CloudFormation stack, and the string this service presents when it
+assumes their role. They have to be identical. The panel generated one for
+display, the customer deployed a stack containing it, and saving the
+connection generated _another_ one to store. The result is `AccessDenied` on a
+connection that looks correct from both ends, with nothing in the message
+suggesting the two ids disagree — the single most confusing failure this
+product could produce, because the customer's stack is right, the role ARN is
+right, and the only wrong thing is invisible to them.
+
+**Cause, and the fix.** The id lived on `connections`, so it could not exist
+until a role ARN did — but the customer needs it _before_ the role, because it
+goes in the stack that creates the role. The display path papered over that by
+generating a throwaway.
+
+It now lives on the **tenant**, issued the first time it is asked for and
+reused for ever. That is also the right model: an external id identifies this
+customer to AWS and does not depend on which role they point at, which is what
+AWS's own guidance says. Rotation exists and is deliberate — never a side
+effect of editing a role ARN, because a customer whose stack already has the
+old one would start failing with no reason to suspect us.
+
+**What made it findable.** Nothing else would have. Every layer was correct on
+its own: the generator produces unguessable ids, the store encrypts them, the
+route returns one. The defect was that two correct code paths produced
+different values for something that had to be one value, which only a test
+that _uses the product in order_ can see. The suite had thirty tests around
+this feature and not one of them opened the panel twice.
+
+**What to take from it.** **Test the journey, not only the layers.** Layer
+tests find defects inside a boundary; this class of bug lives between two
+boundaries that are each behaving correctly. The journey test is now eleven
+steps — sign in, look, be refused, take an id, paste a bad ARN, save a good
+one, check the neighbour cannot see it, explore the demo, and confirm both
+tenants still see empty accounts — and it took an afternoon to write and found
+a bug in its first run.

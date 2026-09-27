@@ -18,7 +18,7 @@
 import type { PoolClient } from "pg";
 
 import { pool } from "../db/postgres.js";
-import { decryptSecret, encryptSecret } from "./secrets.js";
+import { decryptSecret, encryptSecret, generateExternalId } from "./secrets.js";
 import type { TenantId } from "./tenant.js";
 
 export type ConnectionStatus = "pending" | "verified" | "failed" | "disconnected";
@@ -59,35 +59,86 @@ export async function getConnection(tenantId: TenantId): Promise<Connection | nu
  * connection state in the UI - never needs the secret, and a function that
  * returns it by default is one that will eventually return it into a response
  * body. Callers have to ask.
+ *
+ * Stored on the **tenant**, not the connection: it identifies this customer to
+ * AWS and does not depend on which role they point at, and it has to exist
+ * before a role does - the customer needs it to deploy the stack that creates
+ * the role in the first place.
  */
 export async function getExternalId(tenantId: TenantId): Promise<string | null> {
-  const { rows } = await pool.query(
-    `SELECT external_id_encrypted FROM connections WHERE tenant_id = $1`,
-    [tenantId],
-  );
+  const { rows } = await pool.query(`SELECT external_id_encrypted FROM tenants WHERE id = $1`, [
+    tenantId,
+  ]);
   const blob = rows[0]?.external_id_encrypted;
   return blob ? decryptSecret(blob) : null;
+}
+
+/**
+ * The tenant's external id, issuing one the first time it is asked for.
+ *
+ * Issuing on read rather than on save is the whole point: the customer is
+ * shown this value so they can put it in their CloudFormation stack, and that
+ * has to be the same string the service will later present when assuming the
+ * role. Generating a fresh one at save time produced a stack and a service
+ * that disagreed, which surfaces as AccessDenied with nothing to suggest why.
+ *
+ * The write is conditional, so two browser tabs asking at once still end up
+ * with one id rather than the second overwriting the first.
+ */
+export async function getOrIssueExternalId(tenantId: TenantId): Promise<string> {
+  const existing = await getExternalId(tenantId);
+  if (existing) return existing;
+
+  const issued = generateExternalId();
+  await pool.query(
+    `UPDATE tenants SET external_id_encrypted = $2
+      WHERE id = $1 AND external_id_encrypted IS NULL`,
+    [tenantId, await encryptSecret(issued)],
+  );
+  // Re-read rather than returning what we generated: if another request won
+  // the race, theirs is the one now stored.
+  return (await getExternalId(tenantId)) ?? issued;
+}
+
+/**
+ * Issue a new external id, invalidating the old one.
+ *
+ * Deliberately explicit and never a side effect of editing a role ARN: a
+ * customer who has already deployed their stack would start getting
+ * AccessDenied with no reason to suspect us.
+ */
+export async function rotateExternalId(tenantId: TenantId): Promise<string> {
+  const issued = generateExternalId();
+  await pool.query(`UPDATE tenants SET external_id_encrypted = $2 WHERE id = $1`, [
+    tenantId,
+    await encryptSecret(issued),
+  ]);
+  await pool.query(
+    `UPDATE connections SET status = 'pending', last_error = NULL, updated_at = now()
+      WHERE tenant_id = $1`,
+    [tenantId],
+  );
+  return issued;
 }
 
 /** Create or replace a tenant's connection. The external id is rotated with it. */
 export async function upsertConnection(
   tenantId: TenantId,
-  params: { roleArn: string; externalId: string },
+  params: { roleArn: string },
 ): Promise<void> {
-  const encrypted = await encryptSecret(params.externalId);
   await pool.query(
-    `INSERT INTO connections (tenant_id, role_arn, external_id_encrypted, status, updated_at)
-     VALUES ($1, $2, $3, 'pending', now())
+    `INSERT INTO connections (tenant_id, role_arn, status, updated_at)
+     VALUES ($1, $2, 'pending', now())
      ON CONFLICT (tenant_id) DO UPDATE SET
        role_arn = EXCLUDED.role_arn,
-       external_id_encrypted = EXCLUDED.external_id_encrypted,
-       -- A changed role or external id invalidates the previous verification:
-       -- the connection is unproven again until it is tested.
+       -- A changed role invalidates the previous verification: the connection
+       -- is unproven again until it is tested. The external id is untouched,
+       -- because the customer's stack already contains it.
        status = 'pending',
        account_id = NULL,
        last_error = NULL,
        updated_at = now()`,
-    [tenantId, params.roleArn, encrypted],
+    [tenantId, params.roleArn],
   );
 }
 
