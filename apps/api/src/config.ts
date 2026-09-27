@@ -125,6 +125,20 @@ const schema = z.object({
   SECRETS_LOCAL_KEY: blankAsUnset(z.string().optional()),
 
   /**
+   * Acknowledge that a hosted process is encrypting tenant secrets with a key
+   * from its own environment.
+   *
+   * Hosted mode requires KMS: a key sitting in an environment variable is
+   * readable by anything that can read the process, and these are other
+   * people's credentials. The escape hatch exists because running the hosted
+   * code path locally - which is how the sign-in flow gets tested - has no
+   * KMS and no tenants to endanger.
+   *
+   * Named so it cannot be set by accident or mistaken for a default.
+   */
+  SECRETS_ALLOW_LOCAL_KEY: blankAsUnset(z.coerce.boolean().default(false)),
+
+  /**
    * Google OAuth. The only identity provider: no passwords are stored here,
    * ever, and one provider is one fewer consent screen to keep correct.
    */
@@ -237,6 +251,8 @@ export const isHosted = (): boolean => cfg.DEPLOYMENT_MODE === "hosted";
 export function hostedInvariantViolations(
   env: Pick<typeof cfg, "DEPLOYMENT_MODE" | "AWS_MODE" | "AWS_ENDPOINT_URL"> & {
     AWS_ACCESS_KEY_ID?: string | undefined;
+    AWS_KMS_KEY_ID?: string | undefined;
+    SECRETS_ALLOW_LOCAL_KEY?: boolean | undefined;
   },
 ): string[] {
   if (env.DEPLOYMENT_MODE !== "hosted") return [];
@@ -273,6 +289,24 @@ export function hostedInvariantViolations(
    * log #17 and #28. So the rule is about *what the key is*, not whether one
    * exists.
    */
+  /**
+   * Tenant secrets must be encrypted with KMS, not with a key from the
+   * environment.
+   *
+   * This check lived in `secrets.ts` and was called by nothing but its own
+   * tests, so hosted mode documented a requirement it did not enforce - which
+   * is worse than not having it, because the documentation is what people
+   * believe. Found by asking where the KMS key was supposed to go.
+   */
+  if (!env.AWS_KMS_KEY_ID && !env.SECRETS_ALLOW_LOCAL_KEY) {
+    problems.push(
+      "AWS_KMS_KEY_ID is not set: tenant secrets - an Anthropic key and an AWS external id - " +
+        "would be encrypted with a key from this process's environment, which is readable by " +
+        "anything that can read the process. Set it, or set SECRETS_ALLOW_LOCAL_KEY=true to " +
+        "acknowledge the compromise (intended for running the hosted path locally)",
+    );
+  }
+
   if (env.AWS_ACCESS_KEY_ID && !looksLikeRealAccessKey(env.AWS_ACCESS_KEY_ID)) {
     problems.push(
       `AWS_ACCESS_KEY_ID does not look like a real AWS key ("${env.AWS_ACCESS_KEY_ID.slice(0, 4)}…"): ` +

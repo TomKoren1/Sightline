@@ -1913,3 +1913,38 @@ steps — sign in, look, be refused, take an id, paste a bad ARN, save a good
 one, check the neighbour cannot see it, explore the demo, and confirm both
 tenants still see empty accounts — and it took an afternoon to write and found
 a bug in its first run.
+
+---
+
+## #44 — A requirement that was documented but not enforced
+
+**Problem.** Asked where the KMS key should go, I went to check what happens
+without one — and found that hosted mode starts perfectly happily. The check
+existed (`secretsConfigProblem()`), was correct, was tested, and was called by
+**nothing but its own tests**.
+
+Both the ADR and the setup guide say hosted mode refuses to start without KMS.
+It did not. Tenant secrets — an Anthropic key and the external id that
+authorises an AssumeRole into a customer's account — would have been encrypted
+with whatever was in `SECRETS_LOCAL_KEY`, silently, in production.
+
+**Why it is worse than having no check.** A test suite passing over a function
+nobody calls reads exactly like a working guard, and the documentation is what
+people believe. Nobody would have looked again.
+
+**Fix.** Folded into `hostedInvariantViolations`, which is called at startup
+and already refuses the other four. It needs either `AWS_KMS_KEY_ID` or
+`SECRETS_ALLOW_LOCAL_KEY=true` — an escape hatch named so it cannot be set by
+accident or mistaken for a default, because running the hosted path locally
+has no KMS and no tenant to endanger.
+
+Adding it immediately failed nineteen tests, every one of which builds a
+hosted app. That is the check working: each now says out loud that it is
+using a local key.
+
+**What to take from it.** A guard has two halves, and the tests only ever
+cover one of them. `secrets.test.ts` proved the function returns the right
+answer; nothing proved anyone asks it. The pattern to watch for is a pure
+function exported for testability whose only importer is its own test file —
+which is a one-line search, and is now worth running before trusting any
+"refuses to start" sentence in the docs.

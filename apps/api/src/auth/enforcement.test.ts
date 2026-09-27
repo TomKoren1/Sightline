@@ -24,6 +24,9 @@ afterEach(async () => {
 async function hostedApp(): Promise<FastifyInstance> {
   vi.resetModules();
   process.env["DEPLOYMENT_MODE"] = "hosted";
+  // No KMS in a test run, and no tenant to endanger: the hosted invariant
+  // requires this to be said out loud rather than assumed.
+  process.env["SECRETS_ALLOW_LOCAL_KEY"] = "true";
   process.env["AWS_MODE"] = "real";
   // Blank, not deleted: `.env` is re-read on every module reset and dotenv
   // fills in anything absent, so deleting a variable puts it straight back.

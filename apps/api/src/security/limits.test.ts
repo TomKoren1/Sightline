@@ -24,6 +24,7 @@ afterEach(() => {
 async function buildIn(mode: "hosted" | "self-hosted"): Promise<FastifyInstance> {
   vi.resetModules();
   process.env["DEPLOYMENT_MODE"] = mode;
+  process.env["SECRETS_ALLOW_LOCAL_KEY"] = "true";
   if (mode === "hosted") {
     process.env["AWS_MODE"] = "real";
     process.env["AWS_ENDPOINT_URL"] = "";

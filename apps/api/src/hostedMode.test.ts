@@ -22,6 +22,10 @@ const CLEAN = {
   AWS_MODE: "real",
   AWS_ENDPOINT_URL: "",
   AWS_ACCESS_KEY_ID: undefined,
+  // Tenant secrets go to KMS. The alternative - a key in this process's
+  // environment - is refused unless explicitly acknowledged.
+  AWS_KMS_KEY_ID: "alias/daveio-tenant-secrets",
+  SECRETS_ALLOW_LOCAL_KEY: false,
 } as const;
 
 /**
@@ -44,6 +48,7 @@ describe("an endpoint override that nobody configured", () => {
         DEPLOYMENT_MODE: "hosted",
         AWS_MODE: "real",
         AWS_ENDPOINT_URL: undefined as unknown as string,
+        AWS_KMS_KEY_ID: "alias/daveio-tenant-secrets",
       }),
     ).toEqual([]);
   });
@@ -126,7 +131,30 @@ describe("hosted mode refuses configuration that is only safe with one tenant", 
       AWS_ENDPOINT_URL: "http://localhost:5000",
       AWS_ACCESS_KEY_ID: "mock",
     });
-    expect(problems).toHaveLength(3);
+    // Three above, plus the missing KMS key.
+    expect(problems).toHaveLength(4);
+  });
+
+  /**
+   * Tenant secrets are other people's credentials, so the default has to be
+   * KMS - and the local-key path has to be something somebody chose.
+   */
+  it("refuses to encrypt tenant secrets with a key from the environment", () => {
+    const problems = hostedInvariantViolations({ ...CLEAN, AWS_KMS_KEY_ID: undefined });
+    expect(problems).toHaveLength(1);
+    expect(problems[0]).toContain("AWS_KMS_KEY_ID");
+  });
+
+  it("allows it when the compromise is acknowledged by name", () => {
+    // How the hosted path is run locally, where there is no KMS and no tenant
+    // to endanger.
+    expect(
+      hostedInvariantViolations({
+        ...CLEAN,
+        AWS_KMS_KEY_ID: undefined,
+        SECRETS_ALLOW_LOCAL_KEY: true,
+      }),
+    ).toEqual([]);
   });
 
   /**
@@ -140,6 +168,7 @@ describe("hosted mode refuses configuration that is only safe with one tenant", 
         AWS_MODE: "mock",
         AWS_ENDPOINT_URL: "http://localhost:5000",
         AWS_ACCESS_KEY_ID: "mock",
+        AWS_KMS_KEY_ID: undefined,
       }),
     ).toEqual([]);
   });

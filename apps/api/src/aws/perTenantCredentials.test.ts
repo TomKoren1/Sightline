@@ -29,6 +29,9 @@ afterEach(() => {
 async function hosted() {
   vi.resetModules();
   process.env["DEPLOYMENT_MODE"] = "hosted";
+  // No KMS in a test run, and no tenant to endanger: the hosted invariant
+  // requires this to be said out loud rather than assumed.
+  process.env["SECRETS_ALLOW_LOCAL_KEY"] = "true";
   process.env["AWS_MODE"] = "real";
   process.env["AWS_ENDPOINT_URL"] = "";
   process.env["AWS_ACCESS_KEY_ID"] = "";
