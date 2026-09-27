@@ -56,6 +56,24 @@ exactly the three dependencies it always did, so if the containerised path
 misbehaves on a platform I cannot test, the instructions above are unaffected.
 Both paths are covered by CI.
 
+### Tearing it down
+
+```bash
+docker compose --profile app down -v     # use this one, whichever way you started it
+```
+
+The `--profile app` flag is **required to clean up if you ever started that
+profile**, and harmless if you did not. Without it, Compose only removes the
+services in the default configuration, so the API and nginx containers are left
+running against databases that no longer exist, and the network cannot be
+removed. That is a Compose behaviour rather than a choice here —
+`--remove-orphans` does not cover profiled services either.
+
+`-v` deletes the volumes, which means every scan, the graph, agent traces and
+recorded eval runs. And note that **any** `down` empties the mock AWS account,
+because moto holds it in memory — so after tearing down, `npm run seed` before
+`npm run scan`, or the scan discovers an empty account.
+
 Two details behind it. Every connection default in `config.ts` is `localhost`,
 which is right on a laptop and wrong inside a container, so the container
 hostnames are set in the compose service's `environment:` block — which takes

@@ -2110,6 +2110,27 @@ events in the response, not merely `scan.finished` — and the graph and finding
 come back through the proxy. Locally I also confirmed events arrive a second
 before the run completes rather than all at once.
 
+**A second thing the profile broke, found by asking.** `docker compose down -v`
+no longer cleans up. Compose removes only the services in the **default**
+configuration, so the api, web and seed containers survive — left running against
+databases that have just been deleted — and the network cannot be removed
+(`Resource is still in use`). `--remove-orphans` does not help either: Compose
+v5.5.0 does not treat profiled services as orphans.
+
+So the teardown command is `docker compose --profile app down -v`, which is
+harmless when the profile was never started and therefore the only one worth
+documenting. Verified all four ways round: profile up then plain down (leaks
+three containers), profile up then `--remove-orphans` (still leaks them), profile
+up then profile down (clean), and deps-only then profile down (clean).
+
+This is the more instructive half of the entry. The healthcheck bug announced
+itself; **this one is silent and leaves the system in a state that looks torn
+down.** A convenience added at one end of a workflow changed the meaning of a
+command at the other end, and nothing in the change itself pointed there. The
+only reason it was caught before a reviewer hit it is that someone asked whether
+the old command still worked — which is a better question than it sounds, and the
+honest answer needed an experiment rather than a recollection.
+
 **What to take from it.** **A healthcheck is a claim about a system, and it can
 be wrong in the direction that says "broken" as easily as the direction that says
 "fine".** Most of this log is the second kind — a plausible default hiding a gap

@@ -2,6 +2,12 @@
 #
 #   docker compose up -d                  dependencies only (the documented path)
 #   docker compose --profile app up -d    the whole thing, including the app
+#   docker compose --profile app down -v  tear down, whichever way you started
+#
+# The flag is needed on `down` too: without it Compose only removes the services
+# in the default configuration, leaving the api and web containers running
+# against databases that no longer exist. It is harmless if the profile was never
+# started, so it is the one teardown command to remember.
 #
 # The `app` profile is additive and opt-in. Without it this file behaves exactly
 # as it always has, so the instructions in the README cannot be broken by the
