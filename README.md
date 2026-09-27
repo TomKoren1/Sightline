@@ -137,7 +137,7 @@ is one of only two variables where blank is meaningful rather than unset.
 | `npm run drift`                             | Change the mock account, so a second scan has a diff   |
 | `npm run inspect -w @daveio/api`            | Scan and print findings without touching the databases |
 | `npm run query -w @daveio/api`              | Run every curated query against the graph              |
-| `npm test`                                  | 259 unit tests                                         |
+| `npm test`                                  | 273 unit tests                                         |
 | `npm run verify`                            | Everything CI's static job runs — use before pushing   |
 | `npm run evals:ground-truth -w @daveio/api` | Tier-1 evals — no API key needed                       |
 | `npm run evals -w @daveio/api`              | Tier-2 agent evals — needs a key                       |
@@ -348,6 +348,15 @@ unsupported is flagged on the response and shown to the user. This turns the
 most dangerous failure mode — a confident, plausible, invented identifier —
 from something a prompt hopes to prevent into something the system detects.
 Any unsupported citation fails an eval case outright.
+
+**An outage cannot masquerade as a regression.** A case that never reached the
+model is recorded as `errored` rather than failed, excluded from the mean, and a
+run that did not complete is not written to `eval_runs` at all — so it cannot
+replace the baseline the next run is diffed against. A spend cap aborts the run
+instead of repeating itself twenty times, and exits `2` where a quality
+regression exits `1`. This exists because the alternative happened: four capped
+cases reported "17/21, mean F1 0.81", which reads as an agent that got worse
+(engineering log #40).
 
 **How I would know a change made it worse:** tier 1 fails in CI within
 seconds; tier 2 produces a mean F1 and a pass count, stored in `eval_runs` and

@@ -1778,3 +1778,104 @@ that produces plausible output** — #17, #28, #31, #36, #38, and now this. Here
 is at its worst, because `generating…` on both sides of the trust relationship
 does not fail: it succeeds, against the wrong secret. The rule that keeps coming
 back is that the broken state has to _look_ broken.
+
+---
+
+## #40 — A spend cap was reported as an agent regression
+
+**Symptom.** The Trust panel, after a routine eval run:
+
+> **17/21 cases passed** · mean F1 0.81, no unsupported citations
+
+The four failures were the last four cases in the array, in order, each with
+**0 tools** and a duration under a second. Every other case took five to
+fourteen seconds and called at least one tool.
+
+**What it actually was.** Reproduced on the first attempt:
+
+```
+400 {"type":"error","error":{"type":"invalid_request_error",
+"message":"You have reached your specified API usage limits.
+You will regain access on 2026-10-01 at 00:00 UTC."}}
+```
+
+The Anthropic account hit its configured spend cap at case 18. Nothing about the
+agent changed. A wrong answer still costs a model round trip, so **0 tools in
+0.3 seconds is not an answer at all** — that shape is the tell, and it is the
+only reason the report was questioned rather than believed.
+
+**Why this was worth fixing rather than explaining away.** Three compounding
+defects, and the third is the serious one.
+
+1. **A refused request was scored as a wrong answer.** The runner caught the
+   error and recorded `passed: false, f1: 0`, so `summarise()` averaged four
+   zeroes into the mean. 0.81 is arithmetically correct and means nothing: it is
+   a number about the API's availability wearing the costume of a number about
+   answer quality. The right reading is _17 ran, 17 passed, 4 never happened._
+
+2. **The run continued after an error that could not improve.** The cap applies
+   to the account, so cases 19, 20 and 21 were always going to fail identically.
+   Three wasted round trips, and a page of red that looks like a systemic
+   collapse rather than one billing event.
+
+3. **The run was then written to `eval_runs`, replacing the baseline.** That
+   table is what the Trust panel reads and what the next run is diffed against.
+   So an outage silently overwrote the last real measurement — and because the
+   number it produced was _plausible_, nothing announced that the reference point
+   was gone. The brief asks "how would you know if a change made it worse?" The
+   honest answer, before this fix, was _you wouldn't: a billing event and a
+   regression are indistinguishable, and the billing event destroys the evidence._
+
+**Fix.** `errored` on `CaseResult`, set when the case never reached the model.
+`summarise()` averages over graded cases only and reports `graded`, `passed`,
+`failed` and `errored` separately. `isTerminalApiError()` aborts the run on a
+spend cap, quota, rate limit or rejected key — matched on message text, because
+Anthropic returns the usage-limit refusal as `400 invalid_request_error`, which
+by status code alone is indistinguishable from a genuinely malformed request, and
+those two need opposite responses. An incomplete run is **not** inserted into
+`eval_runs`; it is written to `evals/results/` with `-incomplete` in the filename,
+so the evidence survives without becoming the reference. Exit code `2` for an
+incomplete run against `1` for a quality regression, so CI can tell "this commit
+made the agent worse" from "the API was unavailable".
+
+`/api/evals/latest` also recomputes the mean from the stored cases and classifies
+a legacy `threw:` failure as errored, because a row written _before_ this fix is
+still the most recent one on a machine that ran the capped suite — mine reported
+17/21 for as long as it stood. The Trust panel renders a third state, `—` with
+"did not run", rather than a red ✗.
+
+**The guards.** `evals/summarise.test.ts`. The first test reconstructs the exact
+run and asserts that the old arithmetic produced **0.81** while the new reporting
+gives 17/17 at F1 1.0 — the bug is pinned by its own number. The third guards the
+inverse mistake: dropping errored cases from numerator and denominator without
+counting them, so a run that half-executed and half-regressed would look
+partially fine. Four more cover the classifier's boundary: it must abort on a cap,
+a low balance, a rate limit and a bad key, and must **not** abort on a malformed
+request, a model typo, a bad tool schema, or a 529 overload — the one case where
+the next question genuinely may succeed. All four proven by restoring the old
+behaviour and watching the right test fail.
+
+`isTerminalApiError` lives in `evals/terminalError.ts` rather than in
+`cli/evals.ts` for a mundane reason worth recording: that file is a script with
+top-level await, so importing it to test a predicate would run the whole eval
+suite and spend money doing it. Testability changed where the code lives.
+
+**Two things I got wrong on the way.** The abort message first read _"1 case
+errored and 21 of 21 never ran"_ for a run where one case was attempted and
+twenty were not — a message about miscounting that miscounted. And while
+diagnosing this I ran the suite to reproduce, which wrote its own `0/4` row and
+left the Trust panel reporting `0/4` until I deleted it. **The diagnostic
+reproduced the defect it was diagnosing**, which is as good a demonstration as
+the test is: any command that writes to the baseline is dangerous by default, and
+that is now exactly what the fix prevents.
+
+**What to take from it.** **A plausible number is more dangerous than an error.**
+Sixth entry on that theme (#17, #28, #31, #36, #38, #39), and the most expensive,
+because here the plausible value did not merely hide a gap — it overwrote the
+evidence that would have exposed it, and it did so in the one surface whose entire
+purpose is telling a user how much to trust the answers.
+
+The generalisation: **a measurement pipeline must distinguish "the thing measured
+badly" from "the measurement did not happen."** Collapsing those is how an
+availability problem becomes a quality claim, and the collapse always favours the
+wrong conclusion, because a zero looks like data.

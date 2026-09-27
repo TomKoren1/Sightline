@@ -290,6 +290,20 @@ worse?" answerable rather than a matter of opinion. Precision matters as much
 as recall precisely because the mock contains traps: an answer that names every
 bucket achieves perfect recall and is useless.
 
+**An outage is not a regression.** A case that never reached the model is
+recorded as `errored`, not as a failure: it is excluded from `meanF1`, scores are
+stated out of the cases that actually ran, and a run that did not complete is
+**not written to `eval_runs`** — so an incomplete run cannot replace the baseline
+the next run is compared against. A terminal error (spend cap, quota, rejected
+key) aborts the run rather than repeating itself across every remaining case, and
+exits `2` where a quality regression exits `1`, because the two need different
+responses: repeat the measurement, versus investigate the change.
+
+This is here because the alternative was not hypothetical. Four cases erroring
+after a spend cap was reached reported **"17/21 cases passed, mean F1 0.81"** in
+the Trust panel. Every number was arithmetically correct and the conclusion a
+reader draws from them — the agent got worse — was false (engineering log #40).
+
 **Cost.** Grading on citations misses answers that cite the right resources and
 describe them wrongly. `mustMention` / `mustNotMention` patterns cover the
 cases where that has teeth — the agent must say `analytics-db` is _not_

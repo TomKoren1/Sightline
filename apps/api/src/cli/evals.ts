@@ -20,6 +20,7 @@ import { cfg, isMock } from "../config.js";
 import { ask } from "../agent/agent.js";
 import { EVAL_CASES } from "../evals/cases.js";
 import { gradeCase, summarise, type CaseResult } from "../evals/grade.js";
+import { isTerminalApiError } from "../evals/terminalError.js";
 import { listResources } from "../db/queries.js";
 import { closeDriver } from "../db/neo4j.js";
 import { closePool, pool } from "../db/postgres.js";
@@ -74,6 +75,8 @@ try {
   );
 
   const results: CaseResult[] = [];
+  /** Set to the error message when the run stopped early; suppresses the insert. */
+  let aborted: string | null = null;
 
   // Sequential on purpose: parallel runs hit rate limits and make timings
   // meaningless, and a suite this size does not need the speed.
@@ -108,30 +111,94 @@ try {
         failures: [`threw: ${message}`],
         answer: "",
         durationMs: Date.now() - started,
+        // Marks this as "never ran" rather than "answered badly", which is what
+        // keeps it out of meanF1 and out of the stored baseline.
+        errored: message,
       });
+
+      if (isTerminalApiError(message)) {
+        aborted = message;
+        const remaining = cases.length - results.length;
+        if (remaining > 0) {
+          console.log(
+            red(
+              `\n  Aborting: this will fail identically for the remaining ${remaining} case${
+                remaining === 1 ? "" : "s"
+              }.`,
+            ),
+          );
+        }
+        break;
+      }
     }
   }
 
   const summary = summarise(results);
+  const incomplete = aborted !== null || summary.errored > 0 || results.length < cases.length;
+
+  /**
+   * Attempted but refused, versus never attempted at all.
+   *
+   * Three different numbers, and the first draft of this message conflated the
+   * last two - reporting "1 case errored and 21 of 21 never ran" for a run where
+   * one case was attempted and twenty were not. A message about miscounting that
+   * miscounts is worse than none.
+   */
+  const notAttempted = cases.length - results.length;
+
+  // Scores are stated out of what actually ran. "17/21" when four never left
+  // the machine is not a worse score, it is a different measurement.
   console.log(
-    `\n${bold("Result")} ${summary.passed}/${summary.total} passed · mean F1 ${summary.meanF1}` +
+    `\n${bold("Result")} ` +
+      (summary.graded === 0
+        ? red("nothing was graded")
+        : `${summary.passed}/${summary.graded} passed · mean F1 ${summary.meanF1}`) +
       (summary.unsupportedCitations > 0
         ? red(` · ${summary.unsupportedCitations} unsupported citations`)
         : green(" · no unsupported citations")),
   );
+  if (summary.errored > 0 || notAttempted > 0) {
+    const parts: string[] = [];
+    if (summary.errored > 0) {
+      parts.push(`${summary.errored} case${summary.errored === 1 ? "" : "s"} errored`);
+    }
+    if (notAttempted > 0) parts.push(`${notAttempted} not attempted`);
+    console.log(
+      red(`       ${parts.join(", ")} of ${cases.length}. These are NOT answer-quality failures.`),
+    );
+    if (aborted) console.log(dim(`       ${aborted}`));
+  }
 
   const runId = randomUUID();
-  await pool.query(
-    `INSERT INTO eval_runs (id, model, total, passed, mean_f1, results) VALUES ($1,$2,$3,$4,$5,$6)`,
-    [
-      runId,
-      cfg.ANTHROPIC_MODEL,
-      summary.total,
-      summary.passed,
-      summary.meanF1,
-      JSON.stringify(results),
-    ],
-  );
+
+  /**
+   * An incomplete run is not a baseline.
+   *
+   * The stored run is what the Trust panel shows and what the next run is
+   * diffed against, so writing a partial one replaces a real measurement with
+   * an artefact of an outage - and it does so silently, because the number it
+   * produces looks like a plausible score. The disk copy is still written, with
+   * `-incomplete` in the name, so the evidence survives without becoming the
+   * reference.
+   */
+  if (incomplete) {
+    console.log(
+      red("\n  Not recorded to eval_runs: the run did not complete, so it is not a baseline."),
+    );
+    console.log(dim("  The previous recorded run is left as the reference. Re-run when able."));
+  } else {
+    await pool.query(
+      `INSERT INTO eval_runs (id, model, total, passed, mean_f1, results) VALUES ($1,$2,$3,$4,$5,$6)`,
+      [
+        runId,
+        cfg.ANTHROPIC_MODEL,
+        summary.total,
+        summary.passed,
+        summary.meanF1,
+        JSON.stringify(results),
+      ],
+    );
+  }
 
   // Also written to disk, so a CI run can publish it as an artifact and a
   // regression can be diffed against a previous run.
@@ -140,13 +207,32 @@ try {
   // Windows and through directories containing spaces (engineering log #36).
   const dir = fileURLToPath(new URL("../../../../evals/results/", import.meta.url));
   await mkdir(dir, { recursive: true });
+  const stamp = new Date().toISOString().replace(/[:.]/g, "-");
+  const file = `${dir}${stamp}${incomplete ? "-incomplete" : ""}.json`;
   await writeFile(
-    `${dir}${new Date().toISOString().replace(/[:.]/g, "-")}.json`,
-    JSON.stringify({ runId, model: cfg.ANTHROPIC_MODEL, summary, results }, null, 2),
+    file,
+    JSON.stringify(
+      { runId, model: cfg.ANTHROPIC_MODEL, incomplete, aborted, summary, results },
+      null,
+      2,
+    ),
   );
-  console.log(dim(`Written to evals/results/ and eval_runs (${runId.slice(0, 8)})`));
+  console.log(
+    dim(
+      incomplete
+        ? `Written to evals/results/ only (${stamp}-incomplete.json)`
+        : `Written to evals/results/ and eval_runs (${runId.slice(0, 8)})`,
+    ),
+  );
 
-  if (summary.failed > 0) process.exitCode = 1;
+  /**
+   * Distinct exit codes, because the two outcomes need different responses: a
+   * quality regression is a change to investigate, an incomplete run is a
+   * measurement to repeat. Collapsing both into 1 means CI cannot tell "this
+   * commit made the agent worse" from "the API was unavailable".
+   */
+  if (incomplete) process.exitCode = 2;
+  else if (summary.failed > 0) process.exitCode = 1;
 } finally {
   await closeDriver();
   await closePool();

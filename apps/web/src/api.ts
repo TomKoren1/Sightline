@@ -70,6 +70,8 @@ export interface AgentEvalCase {
   failures: string[];
   unsupportedCitations: number;
   durationMs: number;
+  /** Non-null when the request never reached the model, rather than the answer being wrong. */
+  errored: string | null;
 }
 
 export interface AgentEvalRun {
@@ -78,8 +80,13 @@ export interface AgentEvalRun {
   model: string;
   total: number;
   passed: number;
+  /** Cases that actually ran. `passed` and `meanF1` are out of this, not `total`. */
+  graded: number;
+  errored: number;
   meanF1: number;
   unsupportedCitations: number;
+  /** Present when some cases never ran, so the run is not a quality measurement. */
+  incompleteNote?: string;
   cases: AgentEvalCase[];
 }
 

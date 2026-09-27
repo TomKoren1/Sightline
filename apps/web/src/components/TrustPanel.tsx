@@ -147,13 +147,21 @@ export function TrustPanel() {
           <>
             <div
               className={`mb-2 rounded border px-2.5 py-1.5 text-[12px] ${
-                agent.passed === agent.total
-                  ? "border-good/40 bg-good/10 text-good"
-                  : "border-warn/40 bg-warn/10 text-warn"
+                agent.errored > 0
+                  ? "border-ink-600 bg-ink-850 text-ink-300"
+                  : agent.passed === agent.graded
+                    ? "border-good/40 bg-good/10 text-good"
+                    : "border-warn/40 bg-warn/10 text-warn"
               }`}
             >
+              {/*
+                Out of `graded`, not `total`. A run where four cases never
+                reached the model is not a score of 17/21 - it is a score of
+                17/17 plus an outage, and conflating them reads as a regression
+                that did not happen.
+              */}
               <strong>
-                {agent.passed}/{agent.total} cases passed
+                {agent.passed}/{agent.graded} cases passed
               </strong>{" "}
               <span className="opacity-75">
                 mean F1 {agent.meanF1}
@@ -161,6 +169,11 @@ export function TrustPanel() {
                   ? ", no unsupported citations"
                   : `, ${agent.unsupportedCitations} unsupported citations`}
               </span>
+              {agent.incompleteNote && (
+                <p className="mt-1 rounded border border-warn/40 bg-warn/10 px-1.5 py-1 text-[10px] leading-relaxed text-warn">
+                  {agent.incompleteNote}
+                </p>
+              )}
               <div className="mt-0.5 text-[10px] opacity-70">
                 {agent.model} · {new Date(agent.startedAt).toLocaleString()}
                 {evalRun.data?.currentModel && evalRun.data.currentModel !== agent.model && (
@@ -178,15 +191,22 @@ export function TrustPanel() {
                   key={c.id}
                   className="flex items-baseline gap-2 rounded px-1 py-0.5 text-[11px] hover:bg-ink-850"
                 >
-                  <span className={c.passed ? "text-good" : "text-danger"}>
-                    {c.passed ? "✓" : "✗"}
+                  {/* A third state: "did not run" is not a failure. */}
+                  <span
+                    className={c.errored ? "text-ink-500" : c.passed ? "text-good" : "text-danger"}
+                  >
+                    {c.errored ? "—" : c.passed ? "✓" : "✗"}
                   </span>
-                  <span className="flex-1 truncate text-ink-300" title={c.question}>
+                  <span
+                    className={`flex-1 truncate ${c.errored ? "text-ink-500" : "text-ink-300"}`}
+                    title={c.errored ? `did not run — ${c.errored}` : c.question}
+                  >
                     {c.question}
                   </span>
                   <span className="shrink-0 font-mono text-[10px] text-ink-400">
-                    {c.toolsCalled.length} tool{c.toolsCalled.length === 1 ? "" : "s"} ·{" "}
-                    {(c.durationMs / 1000).toFixed(1)}s
+                    {c.errored
+                      ? "did not run"
+                      : `${c.toolsCalled.length} tool${c.toolsCalled.length === 1 ? "" : "s"} · ${(c.durationMs / 1000).toFixed(1)}s`}
                   </span>
                 </div>
               ))}

@@ -27,6 +27,17 @@ export interface CaseResult {
   failures: string[];
   answer: string;
   durationMs: number;
+  /**
+   * Set when the case never reached the model — a rate limit, a spend cap, a
+   * dropped connection.
+   *
+   * Distinct from `passed: false` on purpose. A wrong answer is a measurement;
+   * a request that was refused is the absence of one, and scoring it zero
+   * reports a billing event as an answer-quality regression. That happened:
+   * four cases erroring after a spend cap was reached rendered as "17/21, mean
+   * F1 0.81" in the Trust panel, which reads as the agent getting worse.
+   */
+  errored?: string;
 }
 
 export interface NameResolver {
@@ -115,13 +126,26 @@ export function gradeCase(
   };
 }
 
+/**
+ * Roll up a run.
+ *
+ * `meanF1` is averaged over **graded** cases only. Including a case that never
+ * reached the model drags the mean towards zero in proportion to how much of
+ * the run failed to execute, which is a number about the API's availability
+ * wearing the costume of a number about answer quality.
+ */
 export function summarise(results: CaseResult[]) {
-  const passed = results.filter((r) => r.passed).length;
-  const meanF1 = results.length === 0 ? 0 : results.reduce((s, r) => s + r.f1, 0) / results.length;
+  const graded = results.filter((r) => !r.errored);
+  const errored = results.length - graded.length;
+  const passed = graded.filter((r) => r.passed).length;
+  const meanF1 = graded.length === 0 ? 0 : graded.reduce((s, r) => s + r.f1, 0) / graded.length;
   return {
     total: results.length,
+    /** How many actually ran. `passed` and `meanF1` are out of this, not `total`. */
+    graded: graded.length,
     passed,
-    failed: results.length - passed,
+    failed: graded.length - passed,
+    errored,
     meanF1: Math.round(meanF1 * 1000) / 1000,
     unsupportedCitations: results.reduce((s, r) => s + r.unsupportedCitations.length, 0),
   };

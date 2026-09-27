@@ -109,18 +109,41 @@ export function registerEvalRoutes(app: FastifyInstance): void {
       failures: string[];
       unsupportedCitations: string[];
       durationMs: number;
+      errored?: string;
     };
 
-    const cases = (row.results as StoredCase[]).map((c) => ({
-      id: c.id,
-      question: c.question,
-      passed: c.passed,
-      f1: c.f1,
-      toolsCalled: c.toolsCalled,
-      failures: c.failures,
-      unsupportedCitations: c.unsupportedCitations?.length ?? 0,
-      durationMs: c.durationMs,
-    }));
+    /**
+     * A case that never reached the model, as opposed to one that answered badly.
+     *
+     * Newer runs carry `errored` directly, and an incomplete run is no longer
+     * recorded at all. Rows written before that fix have neither, so the
+     * `threw:` prefix the runner used is read as the same signal - otherwise a
+     * spend cap keeps rendering as an agent regression for as long as that row
+     * remains the most recent one.
+     */
+    const erroredReason = (c: StoredCase): string | null =>
+      c.errored ??
+      c.failures?.find((f) => f.startsWith("threw: "))?.slice("threw: ".length) ??
+      null;
+
+    const cases = (row.results as StoredCase[]).map((c) => {
+      const errored = erroredReason(c);
+      return {
+        id: c.id,
+        question: c.question,
+        passed: c.passed,
+        f1: c.f1,
+        toolsCalled: c.toolsCalled,
+        failures: c.failures,
+        unsupportedCitations: c.unsupportedCitations?.length ?? 0,
+        durationMs: c.durationMs,
+        /** Non-null when the request failed rather than the answer being wrong. */
+        errored,
+      };
+    });
+
+    const errored = cases.filter((c) => c.errored !== null);
+    const graded = cases.length - errored.length;
 
     return {
       run: {
@@ -129,7 +152,27 @@ export function registerEvalRoutes(app: FastifyInstance): void {
         model: row.model,
         total: row.total,
         passed: row.passed,
-        meanF1: row.mean_f1,
+        /** How many cases actually ran. `passed` is out of this, not `total`. */
+        graded,
+        errored: errored.length,
+        /**
+         * Recomputed from the stored cases rather than read from `mean_f1`,
+         * which for a pre-fix row averaged in a zero for every case that never
+         * ran. Leaving that number in place would keep reporting an outage as a
+         * quality score.
+         */
+        meanF1:
+          graded === 0
+            ? 0
+            : Math.round(
+                (cases.filter((c) => c.errored === null).reduce((s, c) => s + (c.f1 ?? 0), 0) /
+                  graded) *
+                  1000,
+              ) / 1000,
+        incompleteNote:
+          errored.length > 0
+            ? `${errored.length} of ${cases.length} cases never reached the model, so this run is not a measurement of answer quality. Re-run to get a clean baseline.`
+            : undefined,
         unsupportedCitations: cases.reduce((s, c) => s + c.unsupportedCitations, 0),
         cases,
       },
