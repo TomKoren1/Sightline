@@ -1,0 +1,18 @@
+# Prometheus discovery for the API pod.
+#
+# This cluster scrapes by annotation rather than by ServiceMonitor (the sibling
+# project's backend does the same), so these three lines on the pod template
+# are the whole integration. Paste them into the Deployment's
+# `spec.template.metadata.annotations` when the chart exists — this file is a
+# reference, not something to apply on its own.
+#
+# The port is the API's, not the web service's: the tunnel exposes the web
+# service publicly, and /metrics is reachable only on the pod network.
+apiVersion: v1
+kind: Pod
+metadata:
+  name: EXAMPLE-not-for-applying
+  annotations:
+    prometheus.io/scrape: "true"
+    prometheus.io/path: "/metrics"
+    prometheus.io/port: "3000"

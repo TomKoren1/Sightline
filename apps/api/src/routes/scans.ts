@@ -27,6 +27,13 @@ import { tenantOf } from "../tenancy/request.js";
 import { isHosted } from "../config.js";
 import { getConnection } from "../tenancy/connections.js";
 import { getTenant } from "../tenancy/tenants.js";
+import {
+  awsApiCalls,
+  scanDuration,
+  scanUnitsFailed,
+  scansFinished,
+  scansStarted,
+} from "../observability/metrics.js";
 import { completeJob, enqueueScan, failJob, activeJob } from "../scan/jobs.js";
 
 /**
@@ -144,6 +151,8 @@ export function registerScanRoutes(app: FastifyInstance): void {
     // it to correlate, and the final event carries the persisted run.
     const streamId = randomUUID();
     let scanId: string | null = null;
+    const startedAt = Date.now();
+    scansStarted.inc();
 
     try {
       const result = await runScan({ tenantId: tenantId, scanId: streamId, onEvent: send });
@@ -162,6 +171,21 @@ export function registerScanRoutes(app: FastifyInstance): void {
 
       await completeJob(job.id, scanId);
 
+      /**
+       * `partial` is counted separately from `succeeded` on purpose: a scan
+       * that lost a region still returns 200 and looks healthy in request
+       * metrics, which is exactly the state this product exists to be honest
+       * about.
+       */
+      scansFinished.inc({ status });
+      scanDuration.observe((Date.now() - startedAt) / 1000);
+      awsApiCalls.inc(callCounter.total());
+      for (const unit of result.units) {
+        if (unit.status === "failed") {
+          scanUnitsFailed.inc({ aws_service: unit.service, code: unit.errorCode ?? "unknown" });
+        }
+      }
+
       const run = await getScan(tenantId, scanId);
       if (run) send({ type: "scan.finished", scanId, run });
     } catch (err) {
@@ -169,6 +193,8 @@ export function registerScanRoutes(app: FastifyInstance): void {
       req.log.error({ err }, "scan failed");
       if (scanId) await failScanRun(tenantId, scanId, message);
       await failJob(job.id, message);
+      scansFinished.inc({ status: "failed" });
+      scanDuration.observe((Date.now() - startedAt) / 1000);
       send({ type: "scan.failed", scanId: scanId ?? streamId, error: message });
     } finally {
       // The job row is already terminal by here. Nothing to release: a scan

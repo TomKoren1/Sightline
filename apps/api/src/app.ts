@@ -17,6 +17,8 @@ import cookie from "@fastify/cookie";
 
 import { assertHostedInvariants, cfg, ENV_FILE, isHosted } from "./config.js";
 import { registerAuth } from "./auth/hook.js";
+import { loggerOptions } from "./observability/logging.js";
+import { registerMetrics } from "./observability/httpMetrics.js";
 import { registerAuthRoutes } from "./routes/auth.js";
 import { defaultTenantId } from "./tenancy/tenant.js";
 import { getLatestScan } from "./db/repository.js";
@@ -28,7 +30,7 @@ import { registerConnectionRoutes } from "./routes/connection.js";
 
 export async function buildApp() {
   const app = Fastify({
-    logger: { level: process.env["LOG_LEVEL"] ?? "info" },
+    logger: loggerOptions,
     // SSE responses are written directly to the raw socket and can outlive the
     // default timeout on a slow scan.
     connectionTimeout: 0,
@@ -151,6 +153,13 @@ export async function buildApp() {
    * arrive, and loudly, rather than as a warning nobody reads (ADR-015).
    */
   assertHostedInvariants();
+
+  /**
+   * Metrics and request timing, registered before the routes so every one of
+   * them is counted - including the ones added later, which is the failure
+   * mode of instrumenting handlers individually.
+   */
+  registerMetrics(app);
 
   registerAuthRoutes(app);
   registerScanRoutes(app);

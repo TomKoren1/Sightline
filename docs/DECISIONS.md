@@ -837,3 +837,50 @@ resolving regional endpoints itself the moment the option is set.
 **What this does not change.** A demo tenant's graph is still their own: the
 projection is tenant-scoped, so two tenants both exploring the demo have
 separate inventories of the same fixture, and neither can see the other's.
+
+---
+
+## ADR-021 — Metrics carry no tenant, logs do
+
+**Context.** The cluster already runs Prometheus, Grafana and Loki. Connecting
+this service to them raises one question that is easy to get wrong and hard to
+undo: what may appear in a metric label.
+
+**Decision.** `/metrics` is served unauthenticated and carries **no tenant id,
+no ARN, no URL and no error message**. Route labels are Fastify's _pattern_
+(`/api/resources/:arn`), status is bucketed to a class, and error labels are
+codes (`ThrottlingException`) rather than messages. Per-tenant attribution goes
+in the logs instead, which are queryable and access-controlled.
+
+**Why.** Two reasons that point the same way. Prometheus keeps a time series
+per label combination, so a tenant id or an ARN does not merely leak — it grows
+the series count without bound until the scrape _is_ the outage. And a metrics
+endpoint is retained for months and scraped by something that has no session
+and cannot be given one: Prometheus. Keeping it free of customer data is what
+makes serving it without authentication defensible rather than an oversight.
+
+**What is measured.** Three questions: is it serving (rate, errors, latency),
+is the product doing its job (scans, outcomes, duration, queue depth, AWS call
+rate), and is anything quietly wrong. The third is the one that needed thought,
+because those failures all return 200:
+
+- `partial` is a first-class scan outcome beside `succeeded` and `failed` — a
+  scan that lost a region looks perfectly healthy in request metrics;
+- failed `(service, region)` units, by AWS service and error code;
+- **`daveio_agent_unsupported_citations_total`** — ARNs an answer cited that no
+  tool returned. An answer carrying one is a 200 with a fluent paragraph in it,
+  so without this counter a regression in grounding is invisible until somebody
+  acts on a resource that does not exist (ADR-006).
+
+**Redaction is configuration, not discipline.** Discipline is a property of
+whoever writes the next log statement. Pino's `redact` covers the paths these
+values travel in, and the test runs pino for real and greps the bytes it
+produced — checking the path list against itself would pass for a path that is
+spelled wrong or nested one level deeper than expected, which is most of the
+ways a redaction list is actually wrong.
+
+**The dashboard is tested.** A Grafana JSON file is something nobody runs, so
+it rots the way the README did (engineering log #35): a metric is renamed,
+every test still passes, and a panel shows "No data" at the moment someone
+needs it. A test asserts that every metric the dashboard queries exists in the
+registry, and that the ConfigMap and the file on disk are the same dashboard.

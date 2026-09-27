@@ -1826,3 +1826,44 @@ wrong when there are many. The fix is the same each time, and the compiler can
 enforce it: make the thing a parameter, and let every call site that forgot it
 fail to build. Adding `TenantId` to the client factories produced a list of
 exactly the places that had been reaching for an account without saying which.
+
+---
+
+## #42 — A metrics guard that inspected nothing
+
+**Problem.** The rule for metric labels is simple and absolute: no tenant id,
+no ARN, no URL — unbounded label values are both a customer-data leak and an
+unbounded series count. So the test read every metric out of the registry and
+asserted none of them declared a forbidden label.
+
+Then I added a `tenant_id` label on purpose to watch it fail. **It passed.**
+
+**Cause.** `registry.getMetricsAsJSON()` returns `help`, `name`, `type`,
+`values` and `aggregator`. It does **not** return `labelNames`. The test read
+`(metric as { labelNames?: string[] }).labelNames ?? []` — `undefined`, every
+time, for every metric — and then found no forbidden labels in an empty list.
+
+The optional chaining is what made it silent. `?? []` is a perfectly ordinary
+defensive idiom, and here it turned "this property does not exist" into "this
+metric has no labels", which reads identically to a pass.
+
+**Fix.** Read the declared names off the metric objects themselves, where
+prom-client does expose `labelNames`, and add a test asserting the inspection
+found labelled metrics at all — so the suite cannot pass by examining nothing.
+Both guards were then re-checked by breaking each on purpose: a `tenant_id`
+label, and a metric shadowing the registry's default `service` label.
+
+**A real bug found on the way.** The failed-unit counter was labelled
+`service`, which is also the registry's default label naming the application.
+The metric's own value wins, so a scan failure in RDS would have produced a
+series claiming the application was called `rds`. Renamed to `aws_service`,
+with a test that refuses any metric declaring `service`.
+
+**What to take from it.** Fifth entry on this theme (#29, #30, #37, #39, #40),
+and the first where the vacuum came from a **defensive default rather than a
+missing case**. `?? []`, `?? {}`, `|| ""` are how a test stops testing without
+looking any different — and the only reliable detector is the same one every
+time: break the thing on purpose, and require the test to notice.
+
+The companion habit, now also a test: **any assertion over a collection needs a
+sibling assertion that the collection is not empty.**

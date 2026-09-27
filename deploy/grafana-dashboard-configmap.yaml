@@ -1,0 +1,844 @@
+# The dashboard, provisioned the way this cluster already does it: a ConfigMap
+# labelled `grafana_dashboard: "1"`, which the Grafana sidecar picks up and
+# loads without anyone clicking Import. Same mechanism as the sibling project.
+#
+#   kubectl apply -f deploy/grafana-dashboard-configmap.yaml
+#
+# The dashboard selects its own Prometheus data source through a template
+# variable rather than hard-coding a uid, so it works on a cluster whose data
+# source was provisioned with a different name.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: daveio-api-grafana-dashboard
+  labels:
+    grafana_dashboard: "1"
+data:
+  daveio-api.json: |
+    {
+      "title": "dave.io \u2014 AWS inventory API",
+      "uid": "daveio-api",
+      "tags": ["daveio"],
+      "timezone": "browser",
+      "schemaVersion": 39,
+      "version": 1,
+      "refresh": "30s",
+      "time": {
+        "from": "now-6h",
+        "to": "now"
+      },
+      "editable": true,
+      "templating": {
+        "list": [
+          {
+            "name": "datasource",
+            "type": "datasource",
+            "query": "prometheus",
+            "current": {},
+            "hide": 0,
+            "label": "Data source"
+          }
+        ]
+      },
+      "panels": [
+        {
+          "id": 900,
+          "type": "row",
+          "title": "Serving",
+          "gridPos": {
+            "h": 1,
+            "w": 24,
+            "x": 0,
+            "y": 0
+          },
+          "collapsed": false,
+          "panels": []
+        },
+        {
+          "id": 2,
+          "title": "Request rate",
+          "type": "timeseries",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "gridPos": {
+            "h": 7,
+            "w": 8,
+            "x": 0,
+            "y": 1
+          },
+          "description": "By status class. A rising 5xx is the page; a rising 4xx is usually a client or an expired session.",
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${datasource}"
+              },
+              "expr": "sum by (status) (rate(daveio_http_requests_total[5m]))",
+              "legendFormat": "{{status}}",
+              "refId": "A"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "reqps",
+              "custom": {
+                "fillOpacity": 8,
+                "lineWidth": 1,
+                "showPoints": "never"
+              }
+            },
+            "overrides": []
+          },
+          "options": {
+            "legend": {
+              "displayMode": "list",
+              "placement": "bottom",
+              "showLegend": true
+            },
+            "tooltip": {
+              "mode": "multi",
+              "sort": "desc"
+            }
+          }
+        },
+        {
+          "id": 3,
+          "title": "Latency p95",
+          "type": "timeseries",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "gridPos": {
+            "h": 7,
+            "w": 8,
+            "x": 8,
+            "y": 1
+          },
+          "description": "Per route pattern. Chat and scan routes are streams and are expected to be slow; a slow /api/summary is not.",
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${datasource}"
+              },
+              "expr": "histogram_quantile(0.95, sum by (le, route) (rate(daveio_http_request_duration_seconds_bucket[5m])))",
+              "legendFormat": "{{route}}",
+              "refId": "A"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "s",
+              "custom": {
+                "fillOpacity": 8,
+                "lineWidth": 1,
+                "showPoints": "never"
+              }
+            },
+            "overrides": []
+          },
+          "options": {
+            "legend": {
+              "displayMode": "list",
+              "placement": "bottom",
+              "showLegend": true
+            },
+            "tooltip": {
+              "mode": "multi",
+              "sort": "desc"
+            }
+          }
+        },
+        {
+          "id": 4,
+          "title": "Errors",
+          "type": "timeseries",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "gridPos": {
+            "h": 7,
+            "w": 8,
+            "x": 16,
+            "y": 1
+          },
+          "description": "Auth failures are separated because they are usually expected traffic (expired cookies), not incidents.",
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${datasource}"
+              },
+              "expr": "sum(rate(daveio_http_requests_total{status=\"5xx\"}[5m]))",
+              "legendFormat": "5xx",
+              "refId": "A"
+            },
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${datasource}"
+              },
+              "expr": "sum(rate(daveio_auth_failures_total[5m]))",
+              "legendFormat": "auth failures",
+              "refId": "B"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "reqps",
+              "custom": {
+                "fillOpacity": 8,
+                "lineWidth": 1,
+                "showPoints": "never"
+              }
+            },
+            "overrides": []
+          },
+          "options": {
+            "legend": {
+              "displayMode": "list",
+              "placement": "bottom",
+              "showLegend": true
+            },
+            "tooltip": {
+              "mode": "multi",
+              "sort": "desc"
+            }
+          }
+        },
+        {
+          "id": 904,
+          "type": "row",
+          "title": "Scans",
+          "gridPos": {
+            "h": 1,
+            "w": 24,
+            "x": 0,
+            "y": 8
+          },
+          "collapsed": false,
+          "panels": []
+        },
+        {
+          "id": 6,
+          "title": "Scan outcomes",
+          "type": "timeseries",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "gridPos": {
+            "h": 7,
+            "w": 8,
+            "x": 0,
+            "y": 9
+          },
+          "description": "`partial` is its own series on purpose: a scan that lost a region still returns 200 and looks healthy in the request metrics above.",
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${datasource}"
+              },
+              "expr": "sum by (status) (increase(daveio_scans_finished_total[1h]))",
+              "legendFormat": "{{status}}",
+              "refId": "A"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "short",
+              "custom": {
+                "fillOpacity": 8,
+                "lineWidth": 1,
+                "showPoints": "never"
+              }
+            },
+            "overrides": []
+          },
+          "options": {
+            "legend": {
+              "displayMode": "list",
+              "placement": "bottom",
+              "showLegend": true
+            },
+            "tooltip": {
+              "mode": "multi",
+              "sort": "desc"
+            }
+          }
+        },
+        {
+          "id": 7,
+          "title": "Failed units by service",
+          "type": "timeseries",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "gridPos": {
+            "h": 7,
+            "w": 8,
+            "x": 8,
+            "y": 9
+          },
+          "description": "A scan does not fail because one (service, region) unit did. This is where that shows up. A steady AccessDenied for one service usually means a customer's role is missing a permission.",
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${datasource}"
+              },
+              "expr": "sum by (aws_service, code) (increase(daveio_scan_units_failed_total[6h]))",
+              "legendFormat": "{{aws_service}} {{code}}",
+              "refId": "A"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "short",
+              "custom": {
+                "fillOpacity": 8,
+                "lineWidth": 1,
+                "showPoints": "never"
+              }
+            },
+            "overrides": []
+          },
+          "options": {
+            "legend": {
+              "displayMode": "list",
+              "placement": "bottom",
+              "showLegend": true
+            },
+            "tooltip": {
+              "mode": "multi",
+              "sort": "desc"
+            }
+          }
+        },
+        {
+          "id": 8,
+          "title": "Scan duration p95",
+          "type": "stat",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "gridPos": {
+            "h": 7,
+            "w": 4,
+            "x": 16,
+            "y": 9
+          },
+          "description": "",
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${datasource}"
+              },
+              "expr": "histogram_quantile(0.95, sum by (le) (rate(daveio_scan_duration_seconds_bucket[6h])))",
+              "legendFormat": "p95",
+              "refId": "A"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "s",
+              "custom": {}
+            },
+            "overrides": []
+          },
+          "options": {
+            "colorMode": "value",
+            "graphMode": "area",
+            "textMode": "auto",
+            "reduceOptions": {
+              "calcs": ["lastNotNull"],
+              "fields": "",
+              "values": false
+            }
+          }
+        },
+        {
+          "id": 9,
+          "title": "Queue depth",
+          "type": "timeseries",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "gridPos": {
+            "h": 7,
+            "w": 4,
+            "x": 20,
+            "y": 9
+          },
+          "description": "Queued work that is not draining means the worker is stuck. Running jobs older than the reaper's timeout are released automatically.",
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${datasource}"
+              },
+              "expr": "sum by (status) (daveio_scan_queue_depth)",
+              "legendFormat": "{{status}}",
+              "refId": "A"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "short",
+              "custom": {
+                "fillOpacity": 8,
+                "lineWidth": 1,
+                "showPoints": "never"
+              }
+            },
+            "overrides": []
+          },
+          "options": {
+            "legend": {
+              "displayMode": "list",
+              "placement": "bottom",
+              "showLegend": true
+            },
+            "tooltip": {
+              "mode": "multi",
+              "sort": "desc"
+            }
+          }
+        },
+        {
+          "id": 10,
+          "title": "AWS API calls",
+          "type": "timeseries",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "gridPos": {
+            "h": 6,
+            "w": 12,
+            "x": 0,
+            "y": 16
+          },
+          "description": "Throttling shows up here first: the adaptive retry mode slows down, so the rate flattens before anything fails.",
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${datasource}"
+              },
+              "expr": "rate(daveio_aws_api_calls_total[5m])",
+              "legendFormat": "calls/s",
+              "refId": "A"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "reqps",
+              "custom": {
+                "fillOpacity": 8,
+                "lineWidth": 1,
+                "showPoints": "never"
+              }
+            },
+            "overrides": []
+          },
+          "options": {
+            "legend": {
+              "displayMode": "list",
+              "placement": "bottom",
+              "showLegend": true
+            },
+            "tooltip": {
+              "mode": "multi",
+              "sort": "desc"
+            }
+          }
+        },
+        {
+          "id": 910,
+          "type": "row",
+          "title": "Agent",
+          "gridPos": {
+            "h": 1,
+            "w": 24,
+            "x": 0,
+            "y": 22
+          },
+          "collapsed": false,
+          "panels": []
+        },
+        {
+          "id": 12,
+          "title": "Ungrounded citations",
+          "type": "stat",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "gridPos": {
+            "h": 7,
+            "w": 6,
+            "x": 0,
+            "y": 23
+          },
+          "description": "ARNs an answer cited that no tool returned. The most important number here: such an answer is a 200 with a fluent paragraph in it, so a regression in grounding is invisible everywhere else. Anything above zero is worth reading the conversation.",
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${datasource}"
+              },
+              "expr": "sum(increase(daveio_agent_unsupported_citations_total[24h]))",
+              "legendFormat": "last 24h",
+              "refId": "A",
+              "instant": true
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "short",
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "green",
+                    "value": null
+                  },
+                  {
+                    "color": "red",
+                    "value": 1
+                  }
+                ]
+              }
+            },
+            "overrides": []
+          },
+          "options": {
+            "colorMode": "value",
+            "graphMode": "area",
+            "textMode": "auto",
+            "reduceOptions": {
+              "calcs": ["lastNotNull"],
+              "fields": "",
+              "values": false
+            }
+          }
+        },
+        {
+          "id": 13,
+          "title": "Questions by outcome",
+          "type": "timeseries",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "gridPos": {
+            "h": 7,
+            "w": 9,
+            "x": 6,
+            "y": 23
+          },
+          "description": "",
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${datasource}"
+              },
+              "expr": "sum by (outcome) (increase(daveio_agent_questions_total[1h]))",
+              "legendFormat": "{{outcome}}",
+              "refId": "A"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "short",
+              "custom": {
+                "fillOpacity": 8,
+                "lineWidth": 1,
+                "showPoints": "never"
+              }
+            },
+            "overrides": []
+          },
+          "options": {
+            "legend": {
+              "displayMode": "list",
+              "placement": "bottom",
+              "showLegend": true
+            },
+            "tooltip": {
+              "mode": "multi",
+              "sort": "desc"
+            }
+          }
+        },
+        {
+          "id": 14,
+          "title": "Answer latency p95",
+          "type": "timeseries",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "gridPos": {
+            "h": 7,
+            "w": 9,
+            "x": 15,
+            "y": 23
+          },
+          "description": "",
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${datasource}"
+              },
+              "expr": "histogram_quantile(0.95, sum by (le) (rate(daveio_agent_answer_duration_seconds_bucket[1h])))",
+              "legendFormat": "p95",
+              "refId": "A"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "s",
+              "custom": {
+                "fillOpacity": 8,
+                "lineWidth": 1,
+                "showPoints": "never"
+              }
+            },
+            "overrides": []
+          },
+          "options": {
+            "legend": {
+              "displayMode": "list",
+              "placement": "bottom",
+              "showLegend": true
+            },
+            "tooltip": {
+              "mode": "multi",
+              "sort": "desc"
+            }
+          }
+        },
+        {
+          "id": 15,
+          "title": "Tool calls",
+          "type": "timeseries",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "gridPos": {
+            "h": 7,
+            "w": 24,
+            "x": 0,
+            "y": 30
+          },
+          "description": "Which curated tools the model actually reaches for. A tool that is never called is either badly described or unnecessary; a spike in graph_query means the curated set is missing something.",
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${datasource}"
+              },
+              "expr": "sum by (tool) (increase(daveio_agent_tool_calls_total[6h]))",
+              "legendFormat": "{{tool}}",
+              "refId": "A"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "short",
+              "custom": {
+                "fillOpacity": 8,
+                "lineWidth": 1,
+                "showPoints": "never"
+              }
+            },
+            "overrides": []
+          },
+          "options": {
+            "legend": {
+              "displayMode": "list",
+              "placement": "bottom",
+              "showLegend": true
+            },
+            "tooltip": {
+              "mode": "multi",
+              "sort": "desc"
+            }
+          }
+        },
+        {
+          "id": 915,
+          "type": "row",
+          "title": "Tenants",
+          "gridPos": {
+            "h": 1,
+            "w": 24,
+            "x": 0,
+            "y": 37
+          },
+          "collapsed": false,
+          "panels": []
+        },
+        {
+          "id": 17,
+          "title": "Tenants",
+          "type": "timeseries",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "gridPos": {
+            "h": 6,
+            "w": 8,
+            "x": 0,
+            "y": 38
+          },
+          "description": "unconnected: signed in, no AWS account yet. pending: saved a role, not verified. connected: verified.",
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${datasource}"
+              },
+              "expr": "sum by (state) (daveio_tenants)",
+              "legendFormat": "{{state}}",
+              "refId": "A"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "short",
+              "custom": {
+                "fillOpacity": 8,
+                "lineWidth": 1,
+                "showPoints": "never"
+              }
+            },
+            "overrides": []
+          },
+          "options": {
+            "legend": {
+              "displayMode": "list",
+              "placement": "bottom",
+              "showLegend": true
+            },
+            "tooltip": {
+              "mode": "multi",
+              "sort": "desc"
+            }
+          }
+        },
+        {
+          "id": 18,
+          "title": "Auth failures by reason",
+          "type": "timeseries",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "gridPos": {
+            "h": 6,
+            "w": 8,
+            "x": 8,
+            "y": 38
+          },
+          "description": "`absent` is normal background. A spike in `bad_state` or `google_exchange` is a broken sign-in, usually a redirect URI or a clock.",
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${datasource}"
+              },
+              "expr": "sum by (reason) (increase(daveio_auth_failures_total[1h]))",
+              "legendFormat": "{{reason}}",
+              "refId": "A"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "short",
+              "custom": {
+                "fillOpacity": 8,
+                "lineWidth": 1,
+                "showPoints": "never"
+              }
+            },
+            "overrides": []
+          },
+          "options": {
+            "legend": {
+              "displayMode": "list",
+              "placement": "bottom",
+              "showLegend": true
+            },
+            "tooltip": {
+              "mode": "multi",
+              "sort": "desc"
+            }
+          }
+        },
+        {
+          "id": 19,
+          "title": "Event loop lag p99",
+          "type": "timeseries",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "gridPos": {
+            "h": 6,
+            "w": 8,
+            "x": 16,
+            "y": 38
+          },
+          "description": "The first thing to look at when the API is slow and nothing else explains it.",
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${datasource}"
+              },
+              "expr": "nodejs_eventloop_lag_p99_seconds{service=\"daveio-api\"}",
+              "legendFormat": "p99",
+              "refId": "A"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "s",
+              "custom": {
+                "fillOpacity": 8,
+                "lineWidth": 1,
+                "showPoints": "never"
+              }
+            },
+            "overrides": []
+          },
+          "options": {
+            "legend": {
+              "displayMode": "list",
+              "placement": "bottom",
+              "showLegend": true
+            },
+            "tooltip": {
+              "mode": "multi",
+              "sort": "desc"
+            }
+          }
+        }
+      ]
+    }

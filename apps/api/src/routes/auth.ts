@@ -21,6 +21,7 @@ import { findOrCreateGoogleUser } from "../auth/users.js";
 import { SESSION_COOKIE, cookieOptions, newSession } from "../auth/session.js";
 import { currentSession } from "../auth/hook.js";
 import { defaultTenantId } from "../tenancy/tenant.js";
+import { authFailures } from "../observability/metrics.js";
 
 export function registerAuthRoutes(app: FastifyInstance): void {
   /**
@@ -72,6 +73,7 @@ export function registerAuthRoutes(app: FastifyInstance): void {
       if (!verifyState(req.query.state)) {
         // Either a forged callback or one that sat in a tab for ten minutes.
         // Both mean "start again", and neither should say which.
+        authFailures.inc({ reason: "bad_state" });
         return reply.code(400).send({ error: "Invalid or expired sign-in attempt. Try again." });
       }
 
@@ -91,6 +93,7 @@ export function registerAuthRoutes(app: FastifyInstance): void {
         // invalid_client) and is the difference between ten minutes and an
         // afternoon - so it is logged, and not returned.
         req.log.error({ err }, "google sign-in failed");
+        authFailures.inc({ reason: "google_exchange" });
         return reply.code(502).send({ error: "Sign-in failed. Please try again." });
       }
     },
