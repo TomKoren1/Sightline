@@ -19,6 +19,7 @@ import { assertHostedInvariants, cfg, ENV_FILE, isHosted } from "./config.js";
 import { registerAuth } from "./auth/hook.js";
 import { loggerOptions } from "./observability/logging.js";
 import { registerMetrics } from "./observability/httpMetrics.js";
+import { registerSecurity } from "./security/limits.js";
 import { registerAuthRoutes } from "./routes/auth.js";
 import { defaultTenantId } from "./tenancy/tenant.js";
 import { getLatestScan } from "./db/repository.js";
@@ -68,6 +69,15 @@ export async function buildApp() {
    * read them - plugin order in Fastify is load order.
    */
   await app.register(cookie);
+
+  /**
+   * Headers and rate limits before the auth hook, so a flood of
+   * unauthenticated requests is turned away by the limiter rather than by
+   * session decoding - and so every route registered later is covered.
+   */
+
+  await registerSecurity(app);
+
   registerAuth(app);
 
   await app.register(cors, {

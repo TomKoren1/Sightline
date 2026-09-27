@@ -25,6 +25,7 @@ import {
 import { runScan } from "../scan/runner.js";
 import { tenantOf } from "../tenancy/request.js";
 import { isHosted } from "../config.js";
+import { limitConfig, limits } from "../security/limits.js";
 import { getConnection } from "../tenancy/connections.js";
 import { getTenant } from "../tenancy/tenants.js";
 import {
@@ -92,7 +93,7 @@ export function registerScanRoutes(app: FastifyInstance): void {
   );
 
   /** Run a scan, streaming progress as server-sent events. */
-  app.post("/api/scans", async (req, reply) => {
+  app.post("/api/scans", limitConfig(limits.scan), async (req, reply) => {
     const tenantId = tenantOf(req);
 
     /**

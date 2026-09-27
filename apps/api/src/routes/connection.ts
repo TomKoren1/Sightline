@@ -42,6 +42,7 @@ import {
   upsertConnection,
 } from "../tenancy/connections.js";
 import { generateExternalId } from "../tenancy/secrets.js";
+import { limitConfig, limits } from "../security/limits.js";
 import { getExternalId } from "../tenancy/connections.js";
 import { getTenant, setDemoMode } from "../tenancy/tenants.js";
 import { accountIdFromArn, getSession, resetSession } from "../aws/credentials.js";
@@ -372,6 +373,7 @@ export function registerConnectionRoutes(app: FastifyInstance): void {
    */
   app.post<{ Body: { roleArn?: string; externalId?: string } }>(
     "/api/connection",
+    limitConfig(limits.connectionWrite),
     async (req, reply) => {
       if (!isHosted()) {
         return reply.code(404).send({
@@ -425,7 +427,7 @@ export function registerConnectionRoutes(app: FastifyInstance): void {
    * Read-only by construction: AssumeRole followed by GetCallerIdentity, which
    * together prove the trust policy works without touching anything.
    */
-  app.post("/api/connection/test", async (req, reply) => {
+  app.post("/api/connection/test", limitConfig(limits.connectionTest), async (req, reply) => {
     const tenantId = tenantOf(req);
     const started = Date.now();
 
