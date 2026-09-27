@@ -52,6 +52,27 @@ const log = (msg: string) => console.log(`  ${msg}`);
  */
 export const DRIFT_MARKER_RESOURCES = ["new-unattached-vol"] as const;
 
+/**
+ * The ground-truth checks drift is *expected* to break, and why.
+ *
+ * Declared here, beside the mutations that cause them, because the two only
+ * stay in step if they are edited together. Adding a mutation without adding
+ * its consequence here makes the Trust panel report a real failure as an
+ * unexplained one; removing a mutation without removing its entry makes the
+ * panel excuse a genuine regression.
+ *
+ * This exists because the note alone was a blanket amnesty. "Some of these are
+ * expected to fail" covers an analyser that genuinely broke while the account
+ * happened to be drifted - on the one surface whose job is telling a user how
+ * much to trust the data, that is the wrong direction to fail in.
+ */
+export const DRIFT_EXPECTED_CHECK_FAILURES: Readonly<Record<string, string>> = {
+  "public-buckets":
+    "northwind-logs-archive gains a wildcard policy with no public access block, so it is genuinely public and correctly flagged.",
+  "idle-resources":
+    "new-unattached-vol is created attached to nothing, and prod-web-2 is stopped; both are correctly billable-but-idle.",
+};
+
 export async function drift(): Promise<void> {
   const client = ec2(PROD_REGION);
 

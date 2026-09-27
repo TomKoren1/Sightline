@@ -1879,3 +1879,84 @@ The generalisation: **a measurement pipeline must distinguish "the thing measure
 badly" from "the measurement did not happen."** Collapsing those is how an
 availability problem becomes a quality claim, and the collapse always favours the
 wrong conclusion, because a zero looks like data.
+
+---
+
+## #41 — The drift note was a blanket amnesty
+
+**Symptom.** Two ground-truth checks showing red in the Trust panel:
+
+```
+Only genuinely public S3 buckets are flagged public
+  found: northwind-logs-archive, northwind-public-assets (expected northwind-public-assets)
+
+Billable idle resources are found by structural signal
+  found: ..., new-unattached-vol, ..., prod-web-2 (expected ... without those two)
+```
+
+**They were correct.** `npm run drift` gives `northwind-logs-archive` a wildcard
+policy with no public access block, so it really is public; it creates
+`new-unattached-vol` attached to nothing and stops `prod-web-2`, so both really
+are billable and idle. Every extra name is a resource the checks were _supposed_
+to catch. Reproduced here by drifting and rescanning: the same two checks failed
+with byte-identical detail.
+
+So the checks worked, the drift detection worked — `drifted: true`, note rendered
+— and the panel still read as two defects. Which points at the note.
+
+**The defect.** The note said:
+
+> These checks describe the pristine fixture, so **some are expected to fail** —
+> that is them detecting the drift.
+
+"Some" is a blanket amnesty. It excuses every failure in the panel, including one
+that has nothing to do with drift. An analyser regression landing while the
+account happened to be drifted would be presented to the user as expected
+behaviour, in the one surface whose entire purpose is telling them how much to
+trust the data. And in the other direction it is no use either: a reader looking
+at two red rows and a paragraph saying some failures are fine cannot tell which
+ones, so the honest response is to distrust all of them.
+
+Both readings are wrong, and they are wrong in opposite directions from the same
+sentence.
+
+**Fix.** Drift is deterministic, so the checks it breaks are knowable.
+`DRIFT_EXPECTED_CHECK_FAILURES` in `drift.ts` maps each one to why, declared
+beside the mutation that causes it because the two only stay in step if they are
+edited together. `/api/evals/ground-truth` annotates each failing check with that
+reason or with `null`, and reports `unexplainedFailures`.
+
+The note is now arithmetic rather than a hedge — _"All 2 failing checks are
+accounted for by that change"_, or _"explains 1 of 2 failing checks. 1 is NOT
+explained by the drift and should be investigated: idle-resources."_ The panel
+gains a third state: `◆ expected after drift` in amber with the reason inline,
+distinct from a red `✗`. The summary box only softens to amber when **every**
+failure is attributed; one unexplained failure and it stays red. Previously any
+drift at all softened the whole panel.
+
+**The guards.** Three unit assertions that need no stack — the map may only name
+checks that exist, must not be empty, and every reason must actually read as an
+explanation rather than a label. Then the one that matters, in
+`groundTruth.test.ts`: apply drift, rescan, and assert the set of failing checks
+**equals** the declared set, in both directions with the detail in the message. A
+mutation added without an entry makes a correct detection render as a defect,
+which is this bug; an entry left behind after a mutation is removed makes the
+panel excuse a real regression, which is worse. All four proven by breaking them,
+including the integration one, which named the check and printed its evidence.
+
+It lives in `groundTruth.test.ts` rather than its own file for a reason worth
+recording: vitest parallelises across files, and one suite seeding moto while
+another drifts it would make both flaky. It re-seeds in a `finally`, so a failure
+does not leave the fixture dirty for whatever runs next.
+
+**What to take from it.** **A caveat that covers everything protects nothing.**
+The note was written to prevent a true-positive reading as a bug, and it worked —
+but by excusing the entire panel rather than the two failures it could account
+for, it also silenced the case it was never meant to cover. A disclaimer wide
+enough to be always true is indistinguishable from no information, and on a trust
+surface that is worse than a false alarm, because the reader stops reading it.
+
+The narrower version of the same lesson as #39: the fix there was marking _which_
+value the reader supplies, not stating that some values need supplying. Both bugs
+were a correct general statement standing in for a specific one, and in both cases
+the specific one was mechanically derivable from data the system already had.

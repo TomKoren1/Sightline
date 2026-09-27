@@ -290,6 +290,14 @@ worse?" answerable rather than a matter of opinion. Precision matters as much
 as recall precisely because the mock contains traps: an answer that names every
 bucket achieves perfect recall and is useless.
 
+**A drifted account is not a broken one.** `npm run drift` deliberately breaks
+some tier-1 checks — a bucket really does become public — so each failure is
+attributed to the drift or not, from a map declared beside the mutations that
+cause it. The panel softens only when every failure is accounted for; one
+unexplained failure keeps it red. The previous note said "some are expected to
+fail", which excused the whole panel including a genuine regression (engineering
+log #41).
+
 **An outage is not a regression.** A case that never reached the model is
 recorded as `errored`, not as a failure: it is excluded from `meanF1`, scores are
 stated out of the cases that actually ran, and a run that did not complete is

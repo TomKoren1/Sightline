@@ -16,7 +16,7 @@ import type { FastifyInstance } from "fastify";
 import { cfg, isMock } from "../config.js";
 import { pool } from "../db/postgres.js";
 import { getLatestScan, loadRelationships, loadResources } from "../db/repository.js";
-import { DRIFT_MARKER_RESOURCES } from "@daveio/mock-aws";
+import { DRIFT_EXPECTED_CHECK_FAILURES, DRIFT_MARKER_RESOURCES } from "@daveio/mock-aws";
 
 import { CHECKS, runChecks } from "../evals/checks.js";
 
@@ -72,17 +72,49 @@ export function registerEvalRoutes(app: FastifyInstance): void {
       (DRIFT_MARKER_RESOURCES as readonly string[]).includes(r.name),
     );
 
+    /**
+     * Which failures drift explains, and which it does not.
+     *
+     * The note on its own was a blanket amnesty: "some of these are expected to
+     * fail" excuses an analyser that genuinely broke while the account happened
+     * to be drifted. Since drift is deterministic, the checks it breaks are
+     * known, so each failure can be attributed or not - and an unattributed one
+     * has to stay loud.
+     */
+    const annotated = results.map((r) => ({
+      ...r,
+      expectedAfterDrift:
+        drifted && !r.passed && r.id in DRIFT_EXPECTED_CHECK_FAILURES
+          ? DRIFT_EXPECTED_CHECK_FAILURES[r.id]
+          : null,
+    }));
+
+    const failures = annotated.filter((r) => !r.passed);
+    const unexplained = failures.filter((r) => r.expectedAfterDrift === null);
+
     return reply.send({
       scanId: latest.id,
       scannedAt: latest.startedAt,
       durationMs: Date.now() - started,
       total: results.length,
       passed: results.filter((r) => r.passed).length,
+      /** Failures drift does not account for. Non-zero means investigate. */
+      unexplainedFailures: unexplained.length,
       drifted,
-      driftNote: drifted
-        ? "This account has been changed since it was seeded (npm run drift). These checks describe the pristine fixture, so some are expected to fail - that is them detecting the drift. Re-seed and rescan for a clean baseline."
-        : undefined,
-      results,
+      driftNote: !drifted
+        ? undefined
+        : unexplained.length === 0
+          ? `This account has been changed since it was seeded (npm run drift). All ${failures.length} failing check${
+              failures.length === 1 ? " is" : "s are"
+            } accounted for by that change - they are detecting the drift, which is them working. Re-seed and rescan for a clean baseline.`
+          : `This account has been changed since it was seeded (npm run drift), which explains ${
+              failures.length - unexplained.length
+            } of ${failures.length} failing checks. ${unexplained.length} ${
+              unexplained.length === 1 ? "is" : "are"
+            } NOT explained by the drift and should be investigated: ${unexplained
+              .map((r) => r.id)
+              .join(", ")}.`,
+      results: annotated,
     });
   });
 

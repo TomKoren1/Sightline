@@ -17,6 +17,9 @@
 
 import { describe, expect, it } from "vitest";
 
+import { DRIFT_EXPECTED_CHECK_FAILURES } from "@daveio/mock-aws";
+
+import { CHECKS } from "./checks.js";
 import { summarise, type CaseResult } from "./grade.js";
 import { isTerminalApiError } from "./terminalError.js";
 
@@ -156,5 +159,40 @@ describe("isTerminalApiError", () => {
     // would hide information rather than save it. An overload in particular is
     // the one case where the next question may well succeed.
     expect(isTerminalApiError(message)).toBe(false);
+  });
+});
+
+/**
+ * The drift attribution map has to name checks that exist.
+ *
+ * Cheap counterpart to the integration assertion in `groundTruth.test.ts`: this
+ * one needs no stack, so a renamed check id is caught on every unit run rather
+ * than only where moto is available. A stale id silently stops attributing, and
+ * a correct detection goes back to rendering as a defect.
+ */
+describe("drift attribution map", () => {
+  it("names only checks that exist", () => {
+    const ids = new Set(CHECKS.map((c) => c.id));
+    for (const id of Object.keys(DRIFT_EXPECTED_CHECK_FAILURES)) {
+      expect(ids, `DRIFT_EXPECTED_CHECK_FAILURES names "${id}", which is not a check`).toContain(
+        id,
+      );
+    }
+  });
+
+  it("is not empty, and every entry explains itself", () => {
+    const entries = Object.entries(DRIFT_EXPECTED_CHECK_FAILURES);
+    expect(
+      entries.length,
+      "drift changes the account, so something must be expected to fail",
+    ).toBeGreaterThan(0);
+    for (const [id, why] of entries) {
+      // The reason is rendered to the user in the panel, so it has to read as
+      // an explanation rather than a label.
+      expect(why.length, `the reason for ${id} is too short to explain anything`).toBeGreaterThan(
+        40,
+      );
+      expect(why, `the reason for ${id} should name a resource`).toMatch(/[a-z]+-[a-z0-9-]+/);
+    }
   });
 });

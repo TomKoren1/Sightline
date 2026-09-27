@@ -96,12 +96,15 @@ export function TrustPanel() {
               className={`mb-2 rounded border px-2.5 py-1.5 text-[12px] ${
                 run.passed === run.total
                   ? "border-good/40 bg-good/10 text-good"
-                  : run.drifted
-                    ? // A failure after deliberate drift is the checks working,
-                      // not the analysers breaking, so it must not read as an
-                      // alarm.
+                  : run.drifted && run.unexplainedFailures === 0
+                    ? // Every failure is accounted for by deliberate drift, so
+                      // this is the checks working rather than the analysers
+                      // breaking, and it must not read as an alarm.
                       "border-warn/40 bg-warn/10 text-warn"
-                    : "border-danger/40 bg-danger/10 text-danger"
+                    : // A failure nothing explains stays loud, drifted or not.
+                      // Previously any drift softened the whole panel, which
+                      // meant a genuine regression could hide behind it.
+                      "border-danger/40 bg-danger/10 text-danger"
               }`}
             >
               <strong>
@@ -240,14 +243,35 @@ function CheckRow({
         onClick={onToggle}
         className="flex w-full items-baseline gap-2 px-2 py-1.5 text-left transition hover:bg-ink-800"
       >
-        <span className={result.passed ? "text-good" : "text-danger"}>
-          {result.passed ? "✓" : "✗"}
+        {/*
+          Three states, not two. A check that fails *because* the account was
+          deliberately drifted is the check doing its job, and marking it with
+          the same red ✗ as an unexplained failure is what made two correct
+          detections read as bugs.
+        */}
+        <span
+          className={
+            result.passed ? "text-good" : result.expectedAfterDrift ? "text-warn" : "text-danger"
+          }
+        >
+          {result.passed ? "✓" : result.expectedAfterDrift ? "◆" : "✗"}
         </span>
         <span className="flex-1 text-[11px] text-ink-100">{result.description}</span>
+        {result.expectedAfterDrift && (
+          <span className="shrink-0 rounded border border-warn/40 bg-warn/10 px-1 py-px text-[9px] font-medium text-warn">
+            expected after drift
+          </span>
+        )}
         <span className="shrink-0 text-[10px] text-ink-400">{expanded ? "▾" : "▸"}</span>
       </button>
       {expanded && (
         <div className="space-y-1 border-t border-ink-800 px-2 py-1.5">
+          {result.expectedAfterDrift && (
+            <p className="rounded border border-warn/30 bg-warn/5 px-1.5 py-1 text-[10px] leading-snug text-warn">
+              <span className="font-medium">Caused by the drift, not a defect: </span>
+              {result.expectedAfterDrift}
+            </p>
+          )}
           <p className="text-[10px] leading-snug text-ink-400">
             <span className="text-ink-300">Why: </span>
             {result.rationale}

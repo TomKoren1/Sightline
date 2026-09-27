@@ -47,6 +47,13 @@ export interface CheckResult {
   rationale: string;
   passed: boolean;
   detail: string;
+  /**
+   * Why drift accounts for this failure, or null when it does not.
+   *
+   * Only ever set on a failing check in a drifted account. A failing check with
+   * this null is a failure nothing explains, and must stay loud.
+   */
+  expectedAfterDrift?: string | null;
 }
 
 export interface GroundTruthRun {
@@ -58,6 +65,8 @@ export interface GroundTruthRun {
   /** True when the account has been changed since seeding, so failures are expected. */
   drifted: boolean;
   driftNote?: string;
+  /** Failing checks that drift does not account for. Non-zero means investigate. */
+  unexplainedFailures: number;
   results: CheckResult[];
 }
 

@@ -18,7 +18,7 @@
  */
 
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { seed } from "@daveio/mock-aws";
+import { DRIFT_EXPECTED_CHECK_FAILURES, drift, seed } from "@daveio/mock-aws";
 import type { Relationship, Resource } from "@daveio/shared";
 
 import { isMock } from "../config.js";
@@ -96,4 +96,72 @@ describe.runIf(!process.env["SKIP_INTEGRATION"])("ingest ground truth", () => {
     if (!available) return;
     expect(results).toHaveLength(CHECKS.length);
   });
+});
+
+/**
+ * Drift must break exactly the checks it claims to break.
+ *
+ * The Trust panel attributes a failing check to the deliberate drift when its
+ * id appears in `DRIFT_EXPECTED_CHECK_FAILURES`, and shows everything else as
+ * an unexplained failure to investigate. That attribution is only trustworthy
+ * if the declared set is exactly right, and nothing but this test keeps it so:
+ *
+ *  - a mutation added to `drift()` without a matching entry makes a *correct*
+ *    detection render as a defect, which is the bug that prompted this (two
+ *    checks reading as broken when they had caught the drift perfectly);
+ *  - an entry left behind after a mutation is removed is worse, because the
+ *    panel would then excuse a genuine regression in that check.
+ *
+ * Lives in this file rather than its own so it cannot run concurrently with the
+ * pristine checks above - vitest parallelises across files, and one suite
+ * seeding while another drifts the same moto instance would make both flaky.
+ * It re-seeds afterwards, so the account is left as it was found.
+ */
+describe.runIf(!process.env["SKIP_INTEGRATION"])("drift attribution", () => {
+  it("breaks exactly the checks declared as expected, and no others", async () => {
+    if (!available) return;
+
+    try {
+      await drift();
+      const drifted = await runScan({ scanId: "eval-drift" });
+      const after = runChecks({
+        resources: drifted.resources,
+        relationships: drifted.relationships,
+      });
+
+      const failed = after
+        .filter((r) => !r.passed)
+        .map((r) => r.id)
+        .sort();
+      const declared = Object.keys(DRIFT_EXPECTED_CHECK_FAILURES).sort();
+
+      // Both directions, with the detail in the message: a bare set
+      // comparison tells you it broke, not which way.
+      const undeclared = failed.filter((id) => !declared.includes(id));
+      const missing = declared.filter((id) => !failed.includes(id));
+
+      expect(
+        undeclared,
+        "these checks failed after drift but are not declared as expected, so the Trust " +
+          "panel will report them as unexplained failures. Either drift gained a mutation " +
+          "that needs an entry in DRIFT_EXPECTED_CHECK_FAILURES, or an analyser regressed.\n" +
+          after
+            .filter((r) => undeclared.includes(r.id))
+            .map((r) => `      ${r.id}: ${r.detail}`)
+            .join("\n"),
+      ).toEqual([]);
+
+      expect(
+        missing,
+        "these checks are declared as expected to fail after drift but passed, so the " +
+          "panel would excuse a real regression in them. Remove the entry, or restore the " +
+          "mutation that used to cause it.",
+      ).toEqual([]);
+
+      expect(failed).toEqual(declared);
+    } finally {
+      // Leave the account as it was found, whatever happened above.
+      await seed();
+    }
+  }, 240_000);
 });

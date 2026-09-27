@@ -137,7 +137,7 @@ is one of only two variables where blank is meaningful rather than unset.
 | `npm run drift`                             | Change the mock account, so a second scan has a diff   |
 | `npm run inspect -w @daveio/api`            | Scan and print findings without touching the databases |
 | `npm run query -w @daveio/api`              | Run every curated query against the graph              |
-| `npm test`                                  | 273 unit tests                                         |
+| `npm test`                                  | 276 unit tests                                         |
 | `npm run verify`                            | Everything CI's static job runs — use before pushing   |
 | `npm run evals:ground-truth -w @daveio/api` | Tier-1 evals — no API key needed                       |
 | `npm run evals -w @daveio/api`              | Tier-2 agent evals — needs a key                       |
@@ -317,7 +317,10 @@ Enterprise read-only role or a read replica. Recorded in
 Two eval suites that fail for different reasons ([ADR-008](docs/DECISIONS.md)).
 
 **Tier 1 — ground truth over the data.** Seeds the mock account, runs a real
-scan, and asserts the result against the hand-written answer key. **No model,
+scan, and asserts the result against the hand-written answer key. After
+`npm run drift` the checks that deliberately break are attributed to it
+individually, so a failure nothing explains still shows red — a caveat covering
+every failure would hide the one that mattered. **No model,
 no API key, about two seconds**, and it runs in CI on every commit. Fifteen
 checks, including the ones that matter most: the neutralised bucket is
 _not_ public, the inline-admin role _is_ admin, the private database is

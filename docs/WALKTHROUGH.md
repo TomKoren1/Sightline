@@ -175,11 +175,17 @@ Header → **Trust**.
   "no run recorded", run `npm run evals -w @daveio/api` before recording; it
   needs an API key and a few minutes.
 
-If drift has been applied, the data checks deliberately show **amber, not red**,
-with an explanation: they assert properties of the pristine fixture, so a
-failure after drift is them detecting the drift. Worth pointing out — an
-indicator whose false positives are not handled gets ignored, and then it is
-worse than absent.
+If drift has been applied, two data checks turn **amber with a `◆` and
+"expected after drift"**, not red — `public-buckets` because
+`northwind-logs-archive` genuinely became public, and `idle-resources` because
+`new-unattached-vol` and a stopped `prod-web-2` genuinely are billable and idle.
+Expand one: it names the mutation that caused it. This is the strongest thing to
+say about the panel, because the attribution is **per check, not a blanket
+caveat** — the note reads "all 2 failing checks are accounted for", and if a
+third failed for any other reason the panel stays red and names it. An indicator
+whose false positives are not handled gets ignored; one that excuses every
+failure at once is worse, because it would hide a real regression (engineering
+log #41).
 
 ### Show the onboarding guide
 
