@@ -56,6 +56,15 @@ exactly the three dependencies it always did, so if the containerised path
 misbehaves on a platform I cannot test, the instructions above are unaffected.
 Both paths are covered by CI.
 
+Two details behind it. Every connection default in `config.ts` is `localhost`,
+which is right on a laptop and wrong inside a container, so the container
+hostnames are set in the compose service's `environment:` block — which takes
+precedence over `env_file` — rather than in a second `.env` that would eventually
+disagree with the first. And nginx proxies `/api` with `proxy_buffering off`,
+because scans and agent answers are server-sent event streams and a buffering
+proxy delivers them all at the end, which is the same problem the Vite dev server
+has to solve in development.
+
 ### Tearing it down
 
 ```bash
@@ -73,15 +82,6 @@ removed. That is a Compose behaviour rather than a choice here —
 recorded eval runs. And note that **any** `down` empties the mock AWS account,
 because moto holds it in memory — so after tearing down, `npm run seed` before
 `npm run scan`, or the scan discovers an empty account.
-
-Two details behind it. Every connection default in `config.ts` is `localhost`,
-which is right on a laptop and wrong inside a container, so the container
-hostnames are set in the compose service's `environment:` block — which takes
-precedence over `env_file` — rather than in a second `.env` that would eventually
-disagree with the first. And nginx proxies `/api` with `proxy_buffering off`,
-because scans and agent answers are server-sent event streams and a buffering
-proxy delivers them all at the end, which is the same problem the Vite dev server
-has to solve in development.
 
 `npm run seed` and `npm run scan` are also reachable from the UI: open it with
 an empty database and the empty state offers to run the first scan.
@@ -180,17 +180,20 @@ is one of only two variables where blank is meaningful rather than unset.
 
 ### Useful commands
 
-| Command                                     | What it does                                           |
-| ------------------------------------------- | ------------------------------------------------------ |
-| `npm run seed`                              | Rebuild the mock account from scratch                  |
-| `npm run scan`                              | Scan, persist, project the graph                       |
-| `npm run drift`                             | Change the mock account, so a second scan has a diff   |
-| `npm run inspect -w @daveio/api`            | Scan and print findings without touching the databases |
-| `npm run query -w @daveio/api`              | Run every curated query against the graph              |
-| `npm test`                                  | 288 unit tests                                         |
-| `npm run verify`                            | Everything CI's static job runs — use before pushing   |
-| `npm run evals:ground-truth -w @daveio/api` | Tier-1 evals — no API key needed                       |
-| `npm run evals -w @daveio/api`              | Tier-2 agent evals — needs a key                       |
+| Command                                      | What it does                                           |
+| -------------------------------------------- | ------------------------------------------------------ |
+| `docker compose up -d`                       | Postgres, Neo4j and moto — just the dependencies       |
+| `docker compose --profile app up -d --build` | The whole thing in Docker, served on `:8080`           |
+| `docker compose --profile app down -v`       | Tear it all down, volumes included                     |
+| `npm run seed`                               | Rebuild the mock account from scratch                  |
+| `npm run scan`                               | Scan, persist, project the graph                       |
+| `npm run drift`                              | Change the mock account, so a second scan has a diff   |
+| `npm run inspect -w @daveio/api`             | Scan and print findings without touching the databases |
+| `npm run query -w @daveio/api`               | Run every curated query against the graph              |
+| `npm test`                                   | 288 unit tests                                         |
+| `npm run verify`                             | Everything CI's static job runs — use before pushing   |
+| `npm run evals:ground-truth -w @daveio/api`  | Tier-1 evals — no API key needed                       |
+| `npm run evals -w @daveio/api`               | Tier-2 agent evals — needs a key                       |
 
 ---
 
