@@ -17,10 +17,19 @@ helm upgrade --install dave helm/daveio
 
 ## Secrets
 
-`templates/secrets-sealedsecret.yaml` ships a **placeholder**, so the chart
-renders and the API's checksum annotation has something to hash. Replace it
-with a real SealedSecret before deploying — encrypted with the cluster's public
-key, safe to commit, and the same mechanism the sibling project uses:
+**This chart contains no Secret template at all**, deliberately. It used to
+ship one with `REPLACE-WITH-SEALEDSECRET` placeholders, and within a day
+somebody pasted a real Cloudflare tunnel token into it and it was committed —
+caught by the repository's secret scanner, one commit too late. A file that
+invites pasting a plaintext secret will eventually receive one.
+
+So the two Secrets are created **outside** the chart and committed only in
+their sealed form. Pods stay in `CreateContainerConfigError` until they exist,
+which is the intended failure: starting with default credentials would be
+worse.
+
+Encrypted with the cluster's public key, safe to commit, and the same
+mechanism the sibling project uses:
 
 ```bash
 kubectl create secret generic dave-daveio-secrets \
@@ -35,7 +44,7 @@ kubectl create secret generic dave-daveio-secrets \
   --from-literal=AWS_ACCESS_KEY_ID="$AWS_ACCESS_KEY_ID" \
   --from-literal=AWS_SECRET_ACCESS_KEY="$AWS_SECRET_ACCESS_KEY" \
   | kubeseal --controller-name=sealed-secrets --controller-namespace=kube-system \
-      -o yaml > helm/daveio/templates/secrets-sealedsecret.yaml
+      -o yaml > helm/daveio/sealed/secrets.yaml
 ```
 
 and the tunnel token separately:
@@ -44,12 +53,20 @@ and the tunnel token separately:
 kubectl create secret generic dave-daveio-cloudflared \
   --dry-run=client -o yaml --from-literal=TUNNEL_TOKEN="$TUNNEL_TOKEN" \
   | kubeseal --controller-name=sealed-secrets --controller-namespace=kube-system \
-      -o yaml > helm/daveio/templates/cloudflared-sealedsecret.yaml
+      -o yaml > helm/daveio/sealed/cloudflared.yaml
+```
+
+`sealed/` is outside `templates/`, so Helm never renders it and it cannot be
+confused for a file to edit. Apply them directly:
+
+```bash
+kubectl apply -n daveio -f helm/daveio/sealed/
 ```
 
 A plain `Secret` with real values must never be committed: base64 is not
-encryption, and this repository's gitleaks job would fail the build — which is
-the intended outcome, not an obstacle.
+encryption, and this repository's gitleaks job will fail the build — which is
+the intended outcome, not an obstacle. It has already done so once, for a real
+token.
 
 Where each value comes from is in
 [`docs/HOSTED-SETUP.md`](../../docs/HOSTED-SETUP.md).

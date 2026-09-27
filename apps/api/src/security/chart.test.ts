@@ -99,12 +99,31 @@ describe("the chart", () => {
     expect(worker).toMatch(/type:\s*Recreate/);
   });
 
-  it("ships no real secret values", () => {
-    // The placeholder is deliberate; a real value here would be committed
-    // base64, which gitleaks would fail the build over - correctly.
-    const secrets = readFileSync(`${chartDir}templates/secrets-sealedsecret.yaml`, "utf8");
-    expect(secrets).toContain("REPLACE-WITH-SEALEDSECRET");
-    expect(secrets).not.toMatch(/AKIA[A-Z0-9]{16}/);
-    expect(secrets).not.toMatch(/GOCSPX-/);
+  /**
+   * No Secret template at all.
+   *
+   * There used to be one, with `REPLACE-WITH-SEALEDSECRET` placeholders, and
+   * within a day a real Cloudflare tunnel token was pasted into it and
+   * committed - caught by the repository's own secret scanner, one commit too
+   * late. A file that invites pasting a plaintext secret will eventually
+   * receive one, so the invitation is gone: the Secrets are created outside
+   * the chart and committed only in sealed form.
+   */
+  it("has no template that invites pasting a secret", () => {
+    const withStringData = templates.filter((f) =>
+      /kind:\s*Secret[\s\S]*stringData/.test(readFileSync(`${chartDir}templates/${f}`, "utf8")),
+    );
+    expect(withStringData).toEqual([]);
+  });
+
+  it("ships no credential of any kind", () => {
+    // Shapes rather than a wordlist: an access key, a Google client secret,
+    // and a Cloudflare tunnel token, which is base64 JSON opening with {"a":.
+    for (const file of templates) {
+      const body = readFileSync(`${chartDir}templates/${file}`, "utf8");
+      expect(body, file).not.toMatch(/AKIA[A-Z0-9]{16}/);
+      expect(body, file).not.toMatch(/GOCSPX-/);
+      expect(body, file).not.toMatch(/eyJhIjoi[A-Za-z0-9+/=]{40,}/);
+    }
   });
 });

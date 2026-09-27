@@ -22,10 +22,11 @@ spec:
         prometheus.io/path: "/metrics"
         prometheus.io/port: {{ .Values.api.service.port | quote }}
         {{- end }}
-        # Roll the pods when the secret changes, which `helm upgrade` does not
-        # do on its own: a rotated session secret otherwise takes effect at the
-        # next unrelated deploy, which is a confusing time to be signed out.
-        checksum/secrets: {{ include (print $.Template.BasePath "/secrets-sealedsecret.yaml") . | sha256sum }}
+        # No checksum annotation over the secret: the Secrets are created
+        # outside this chart (see NOTES.txt), so there is nothing here to
+        # hash. Rolling after a secret rotation is therefore a deliberate
+        # `kubectl rollout restart`, which is also when you want to be
+        # watching.
     spec:
       containers:
         - name: api

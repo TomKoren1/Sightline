@@ -1948,3 +1948,62 @@ answer; nothing proved anyone asks it. The pattern to watch for is a pure
 function exported for testability whose only importer is its own test file —
 which is a one-line search, and is now worth running before trusting any
 "refuses to start" sentence in the docs.
+
+---
+
+## #45 — A live Cloudflare tunnel token, committed by me
+
+**What happened.** While I was writing the Helm chart, Tom created the
+Cloudflare tunnel and pasted its token into
+`templates/secrets-sealedsecret.yaml`, replacing the
+`REPLACE-WITH-SEALEDSECRET` placeholder that was sitting there inviting exactly
+that. My next commit ran `git add -A`, swept the file up with eleven of my own,
+and pushed it.
+
+The repository's own gitleaks job caught it on the next CI run — one commit too
+late, and after the token had reached GitHub.
+
+**Two failures, and mine is the worse one.**
+
+`git add -A` in a repository somebody else is editing is a commit of files I
+have not read. Every safeguard in this project is built on the idea that you
+check what you are about to do; staging by wildcard is the opposite of that,
+and it is what turned one person's paste into a pushed credential.
+
+The second is a design failure I had already been warned about. I shipped a
+template containing the string `REPLACE-WITH-SEALEDSECRET` next to a field
+called `TUNNEL_TOKEN`. **A file that invites pasting a plaintext secret will
+eventually receive one**, and "the README says to run kubeseal instead" is not
+a control.
+
+**Fix.** The chart now has **no Secret template at all**. The two Secrets are
+created outside it with `kubeseal` and committed only in sealed form, in a
+`sealed/` directory outside `templates/` so Helm never renders it and nobody
+mistakes it for a file to edit. Pods stay in `CreateContainerConfigError` until
+they exist, which is the correct failure: starting with default credentials
+would be worse.
+
+A test now refuses any template containing a `Secret` with `stringData`, and
+separately scans every template for the _shapes_ of an access key, a Google
+client secret and a tunnel token. Both were verified by pasting the real token
+into a template and watching them go red.
+
+**The token itself** has to be rotated, because it is in pushed history and
+rewriting that needs a force-push over a shared ref. Rotation makes the leaked
+value worthless, which is the actual remedy; scrubbing history is cosmetic
+once a credential has been published.
+
+**What to take from it.** Three things, in order of how much they cost me.
+
+**Stage deliberately.** `git add -A` is convenient exactly in proportion to how
+many files it commits without being read.
+
+**A placeholder is a prompt.** Any field shaped like a secret, with a
+"replace me" value, is a request for a real one. The safe version is not a
+better placeholder — it is no field at all.
+
+**The guard worked, and that is the point.** gitleaks was added after
+engineering log #26, for precisely this, and it did its job on the first
+commit that gave it something to find. A control that catches your own mistake
+is the only kind you can trust; the ones that only ever catch other people's
+are the ones nobody has tested.
