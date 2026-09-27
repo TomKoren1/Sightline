@@ -17,6 +17,18 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const ORIGINAL = { ...process.env };
 
+/**
+ * These need Postgres.
+ *
+ * `resolveConnection` reads the tenant row before it reads the connection -
+ * a tenant looking at the demo account has nothing to connect, and must not
+ * be told to. That makes this an integration test, and it passed locally
+ * while failing in CI precisely because this machine has a database running.
+ * The same mistake as engineering log #37's postscript: **a test that passes
+ * only in the author's environment is not a test, it is a coincidence.**
+ */
+const HAS_INFRA = !process.env["SKIP_INTEGRATION"];
+
 beforeEach(() => {
   vi.resetModules();
 });
@@ -45,7 +57,7 @@ async function hosted() {
 
 const TENANT_WITH_NO_CONNECTION = "cccccccc-0000-4000-8000-00000000000c" as never;
 
-describe("a hosted tenant that has not connected an account", () => {
+describe.runIf(HAS_INFRA)("a hosted tenant that has not connected an account", () => {
   it("is refused, not quietly given the operator's account", async () => {
     const { resolveConnection, NoConnectionError } = await hosted();
     await expect(resolveConnection(TENANT_WITH_NO_CONNECTION)).rejects.toBeInstanceOf(
@@ -78,6 +90,7 @@ describe("a hosted tenant that has not connected an account", () => {
  * The half that keeps the graded project working: self-hosted has one tenant
  * and reads its connection from configuration, exactly as it always has.
  */
+/** Needs nothing: self-hosted resolves from configuration. */
 describe("self-hosted", () => {
   it("still resolves the configured connection", async () => {
     vi.resetModules();

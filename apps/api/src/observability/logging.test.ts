@@ -31,14 +31,26 @@ function captureLogs(fn: (log: pino.Logger) => void): string {
   return chunks.join("");
 }
 
-/** Values that must never appear, each distinctive enough to grep for. */
+/**
+ * Values that must never appear in the output.
+ *
+ * Words rather than random-looking strings, deliberately. The first version
+ * used high-entropy canaries, and this repository's own secret scanner
+ * correctly flagged them as generic API keys - a value that *looks* like a
+ * credential assigned to a field called `apiKey` is exactly what it hunts.
+ * Allowlisting test files was the alternative, and a scanner trained to skip
+ * tests is one that misses the day a real key is pasted into a fixture.
+ *
+ * Each is still distinctive enough to grep the output for, which is all the
+ * test needs.
+ */
 const SECRETS = {
-  externalId: "daveio-EXTERNALIDCANARY0000000000",
-  apiKey: "ANTHROPICKEYCANARY0000",
-  sessionSecret: "SESSIONSECRETCANARY000",
-  awsSecret: "AWSSECRETACCESSKEYCANARY",
-  cookie: "COOKIECANARY0000",
-  idToken: "IDTOKENCANARY000",
+  externalId: "canary-external-id-must-not-be-logged",
+  apiKey: "canary-anthropic-key-must-not-be-logged",
+  sessionSecret: "canary-session-secret-must-not-be-logged",
+  awsSecret: "canary-aws-secret-must-not-be-logged",
+  cookie: "canary-cookie-must-not-be-logged",
+  idToken: "canary-id-token-must-not-be-logged",
 };
 
 describe("secrets in log payloads", () => {

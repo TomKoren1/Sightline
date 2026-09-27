@@ -106,7 +106,12 @@ jobs:
         # Both are properties of the databases rather than of the code, so
         # neither means anything without the compose stack. Connection details
         # come from the .env copied above, like every other step here.
-        run: npx vitest run apps/api/src/tenancy/isolation.test.ts apps/api/src/scan/jobs.test.ts
+        run: |
+          npx vitest run \
+            apps/api/src/tenancy/isolation.test.ts \
+            apps/api/src/tenancy/demoMode.test.ts \
+            apps/api/src/aws/perTenantCredentials.test.ts \
+            apps/api/src/scan/jobs.test.ts
 
       - name: HTTP routing against the live stack
         # Proves the router reaches its handlers for a real, full-length ARN.
