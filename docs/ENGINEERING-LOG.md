@@ -2038,3 +2038,89 @@ at all**, right up until the day something depends on it. The same shape as #44'
 labels falling through to a working default — but more dangerous, because the two
 earlier cases degraded to something visibly wrong, and this one degraded to
 silence in an audit trail a customer was told to rely on.
+
+---
+
+## #43 — A healthcheck that could never pass on a server that worked
+
+**Context.** Added a second way to run the project: `docker compose --profile app
+up -d` brings up the API and an nginx container serving the built frontend, so a
+reviewer needs no Node on the host. Opt-in on purpose — the default
+`docker compose up -d` still starts exactly the three dependencies it always
+did, because a new path misbehaving on a platform I cannot test must not break
+the documented one.
+
+**Symptom.** `dependency failed to start: container daveio-api is unhealthy` —
+and `web` therefore refused to start at all. Meanwhile the API's own log said:
+
+```
+Server listening at http://127.0.0.1:3000
+Server listening at http://172.19.0.5:3000
+AWS mode: mock
+```
+
+The process was alive, `ps` showed it running, and it had bound two addresses.
+Docker had marked it unhealthy anyway, with an empty healthcheck output and exit
+code 1 — the least informative failure available.
+
+**Cause.** The healthcheck probed `http://localhost:3000`. Inside that image:
+
+```
+# getent hosts localhost
+::1               localhost  localhost
+```
+
+`localhost` resolves to IPv6 loopback, and Fastify bound to `0.0.0.0` listens on
+**IPv4 only** — both addresses in the log are v4. So `wget` connected to `[::1]`
+and got a connection refused, forever, against a server that was serving
+perfectly. Probing `127.0.0.1` from the same shell returned the health JSON
+immediately.
+
+**Fix.** `127.0.0.1` in the healthcheck, with the reason in a comment beside it,
+since the next person to write a healthcheck in this file will reach for
+`localhost` exactly as I did.
+
+Worth noting what did _not_ need changing: the Neo4j and moto healthchecks both
+use `localhost` and have always passed. Their images resolve it differently, or
+their servers bind dual-stack. So the bug is not "never use localhost in a
+healthcheck" — it is that the resolution and the bind have to agree, and nothing
+in either image tells you whether they do.
+
+**Two other things this path needed, both the same shape.** Every connection
+default in `config.ts` is `localhost` — correct on a laptop, wrong inside a
+container. Rather than a second env file that would eventually disagree with the
+first, the container hostnames are set in the compose service's `environment:`
+block, which takes precedence over `env_file`, so `.env` stays the single source
+of truth. And nginx needs `proxy_buffering off` on `/api`, because scans and
+agent answers are server-sent event streams: a buffering proxy delivers the whole
+stream at the end, which removes the live progress without erroring. The Vite dev
+server solves the identical problem in `vite.config.ts`, which is where I went to
+find out what nginx would need.
+
+Seeding is a one-shot service with
+`depends_on: { seed: { condition: service_completed_successfully } }` rather than
+an API entrypoint step, because `seed()` calls `resetMoto()` first: running it on
+every API boot would wipe the account whenever the container restarted, and the
+next scan diff would report every resource as new.
+
+**Verified, not assumed.** The CI job drives the product through nginx rather
+than the API directly: the SPA is served, a deep link falls back to it, the
+seeder exited zero, a scan **streams** — asserted by requiring `unit.finished`
+events in the response, not merely `scan.finished` — and the graph and findings
+come back through the proxy. Locally I also confirmed events arrive a second
+before the run completes rather than all at once.
+
+**What to take from it.** **A healthcheck is a claim about a system, and it can
+be wrong in the direction that says "broken" as easily as the direction that says
+"fine".** Most of this log is the second kind — a plausible default hiding a gap
+(#17, #28, #31, #36, #38, #39, #42). This is the first kind, and it is much
+cheaper: it fails loudly, immediately, and blocks startup. A healthcheck that
+wrongly reported _healthy_ would have let `web` start against a dead API and
+produced a blank page with no explanation.
+
+The reason it still cost time is that the failure pointed at the wrong layer.
+"Container unhealthy" reads as "the application is broken", so I went looking at
+the application — which was fine. The empty healthcheck output is what makes this
+expensive: Docker reports that the probe failed without reporting what the probe
+saw. Running the probe by hand inside the container was the step that took ten
+seconds and should have been first.

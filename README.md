@@ -18,6 +18,11 @@ AWS (real or mock) ──▶ scanner ──▶ Postgres ──▶ Neo4j ──�
 
 ## Running it
 
+Two ways. The first is what I develop against and what CI exercises; the second
+is one command if you would rather not install anything.
+
+### Locally
+
 You need Docker and Node 20+. Nothing else — no AWS account, no credentials.
 
 ```bash
@@ -32,6 +37,33 @@ npm run scan                  # discover it, persist it, build the graph
 npm run dev:api               # http://localhost:3000
 npm run dev:web               # http://localhost:5173   ← open this
 ```
+
+### Entirely in Docker
+
+```bash
+cp .env.example .env
+docker compose --profile app up -d --build    # everything
+                                              # http://localhost:8080  ← open this
+```
+
+This adds three services — the API, nginx serving the built frontend, and a
+one-shot seeder — and needs no Node on the host. The mock account is seeded
+automatically; the first scan is left for you to run from the empty state, which
+is worth seeing.
+
+The profile is **opt-in and additive**: plain `docker compose up -d` still starts
+exactly the three dependencies it always did, so if the containerised path
+misbehaves on a platform I cannot test, the instructions above are unaffected.
+Both paths are covered by CI.
+
+Two details behind it. Every connection default in `config.ts` is `localhost`,
+which is right on a laptop and wrong inside a container, so the container
+hostnames are set in the compose service's `environment:` block — which takes
+precedence over `env_file` — rather than in a second `.env` that would eventually
+disagree with the first. And nginx proxies `/api` with `proxy_buffering off`,
+because scans and agent answers are server-sent event streams and a buffering
+proxy delivers them all at the end, which is the same problem the Vite dev server
+has to solve in development.
 
 `npm run seed` and `npm run scan` are also reachable from the UI: open it with
 an empty database and the empty state offers to run the first scan.
@@ -502,6 +534,8 @@ apps/web            React frontend: graph, chat, findings, UX states
 packages/shared     domain model shared by every package
 packages/mock-aws   the seeded customer account and its answer key
 infra/              the replacement read-only role, and the original
+deploy/             nginx config for the containerised frontend
+Dockerfile          API and frontend images, used only by the `app` profile
 docs/               decisions, engineering log, commit log, walkthrough
 ```
 
