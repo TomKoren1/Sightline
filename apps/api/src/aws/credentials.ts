@@ -15,7 +15,7 @@
 
 import { STSClient, AssumeRoleCommand } from "@aws-sdk/client-sts";
 import type { AwsCredentialIdentity } from "@aws-sdk/types";
-import { activeConnection, cfg, isMock, sourceCredentials } from "../config.js";
+import { activeConnection, cfg, isMock, sourceCredentials, sourceIdentity } from "../config.js";
 
 /**
  * Renew this long before expiry. A scan unit can run for a while, and a
@@ -67,6 +67,20 @@ async function assume(): Promise<AssumedSession> {
       // Surfaces in the customer's own CloudTrail, so they can see exactly
       // which dave.io process touched their account and when.
       RoleSessionName: "daveio-inventory-scanner",
+      /**
+       * Who triggered this scan, as opposed to which role ran it.
+       *
+       * `RoleSessionName` is chosen per-assume by the caller and is replaced at
+       * every hop of a role chain, so it attributes nothing the customer can
+       * rely on. `SourceIdentity` cannot be changed for the life of the session
+       * and persists across chained roles, and the trust policy both requires it
+       * and constrains its prefix - so this is the value the customer's own
+       * CloudTrail records, whether or not dave.io wants it there.
+       *
+       * The trust policy's `Null` condition makes this mandatory, so omitting it
+       * fails every scan loudly rather than silently losing attribution.
+       */
+      SourceIdentity: sourceIdentity(),
       ExternalId: connection.externalId,
       DurationSeconds: 3600,
     }),

@@ -1960,3 +1960,81 @@ The narrower version of the same lesson as #39: the fix there was marking _which
 value the reader supplies, not stating that some values need supplying. Both bugs
 were a correct general statement standing in for a specific one, and in both cases
 the specific one was mechanically derivable from data the system already had.
+
+---
+
+## #42 — A trust policy condition that no legal value could satisfy
+
+**Symptom.** None. Nothing failed, no test went red, and the feature had been
+described in an ADR, in the CloudFormation template's own comments, and in the
+onboarding UI. It surfaced only because I was asked to explain in plain language
+what `sts:SourceIdentity` does, and went to read what the code actually sent.
+
+**What was wrong.** Three things, each hiding the next.
+
+1. **Nothing sent a SourceIdentity.** `aws/credentials.ts` set `RoleSessionName`
+   and stopped. So the claim "the customer's CloudTrail records which dave.io
+   operator triggered a scan" was true of the template and false of the product.
+
+2. **The trust policy permitted it without requiring it.** The `AssumeRole`
+   statement was conditioned only on `sts:ExternalId`; a separate statement
+   allowed `sts:SetSourceIdentity` and constrained its shape. A caller that
+   simply omitted SourceIdentity was still allowed to assume. Permitting a
+   control is not applying it.
+
+3. **The constraint was unsatisfiable.** The condition was
+   `StringLike: sts:SourceIdentity: "daveio:*"`. AWS restricts SourceIdentity to
+   "upper- and lower-case alphanumeric characters with no spaces… underscores or
+   any of the following characters: `+=,.@-`" — verified in the AWS SDK's own
+   bundled API documentation, `@aws-sdk/client-sts` `models_0.d.ts`. **A colon is
+   not in that set.** So no value AWS would accept could ever match the pattern.
+
+Stack those and you get the worst version: had the attribution ever been wired up
+as written, every `AssumeRole` would have been rejected — and because (1) meant it
+was never wired up, (3) could not be discovered by running anything. A control
+documented in three places, enforced nowhere, and impossible as specified.
+
+**Fix.** `SourceIdentity` is now sent on every `AssumeRole`, built by
+`toSourceIdentity()` from a new `SCAN_OPERATOR` variable: sanitised to AWS's
+charset rather than validated-and-rejected, because an operator name with a space
+in it should not fail every scan, truncated to the 64-character limit, and never
+empty. The template's pattern is `daveio-*`, and the `AssumeRole` statement gains
+`Null: { sts:SourceIdentity: "false" }`, which makes attribution mandatory —
+omitting it now fails loudly rather than silently losing the audit trail.
+
+**The guard.** `aws/sourceIdentity.test.ts` is a cross-artefact test, because the
+bug lived in the gap between two artefacts that were each internally consistent.
+It asserts that the value the code sends matches AWS's documented charset and
+length, that it matches the prefix the deployed trust policy will enforce, that
+**the prefix is itself legal for AWS** — the assertion that catches the original
+directly, since `daveio:` satisfies a naive "does the code match the template"
+check while being impossible to send — and that the template makes the key
+mandatory rather than optional. Seven sanitising cases cover a space, a colon,
+slashes, whitespace only, illegal characters only, an already-legal email, and an
+over-long name. All four invariants proven by restoring each original defect.
+
+**Two mistakes in the test itself,** both worth recording because they are the
+same mistake twice. The prefix extractor took the _first_ `sts:SourceIdentity`
+match in the template — which, after adding the `Null` condition, is the literal
+string `"false"`, so it compared the code's prefix against a requirement flag. And
+the sanitising cases tried to re-import the config module with a query string to
+pick up a changed environment variable, which vitest cannot statically resolve.
+The fix for the second was the better design anyway: extract a pure
+`toSourceIdentity(operator)` and test that, leaving `sourceIdentity()` as the
+thin wrapper that reads frozen config. **Testability decided the shape of the
+code, again** — same as `isTerminalApiError` in #40.
+
+**What to take from it.** **Documentation is not enforcement, and this is the
+sharpest example in the log.** The ADR was right, the template comment was right,
+the onboarding copy was right, and the mechanism did not exist. Worse, the one
+place that _looked_ like enforcement — a `StringLike` condition in a trust policy —
+was itself impossible to satisfy, so even a reviewer checking the template would
+have read it as working. Nothing short of sending a real value could have
+falsified it.
+
+Second: **a condition that can never match is indistinguishable from no condition
+at all**, right up until the day something depends on it. The same shape as #44's
+`secretsConfigProblem()` called by nothing but its own tests, and #38's tool
+labels falling through to a working default — but more dangerous, because the two
+earlier cases degraded to something visibly wrong, and this one degraded to
+silence in an audit trail a customer was told to rely on.

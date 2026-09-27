@@ -197,6 +197,13 @@ Resources:
                 # Mitigates the confused-deputy pattern: knowing this role's
                 # ARN is not sufficient to assume it.
                 sts:ExternalId: !Ref ExternalId
+              "Null":
+                # Makes attribution mandatory rather than optional. Permitting
+                # SetSourceIdentity below allows a caller to send one; without
+                # this, a caller that simply omits it is still allowed, and the
+                # customer silently loses the attribution the policy appears to
+                # guarantee.
+                sts:SourceIdentity: "false"
 
           - Sid: AllowDaveIoScannerToSetSourceIdentity
             Effect: Allow
@@ -209,7 +216,13 @@ Resources:
               StringLike:
                 # Attributes every session to a named dave.io operator or
                 # system, immutably, in this account's own CloudTrail.
-                sts:SourceIdentity: "daveio:*"
+                #
+                # Hyphen, not colon. AWS restricts SourceIdentity to
+                # alphanumerics, underscore and +=,.@- so a colon is rejected
+                # outright: `daveio:*` was a pattern no legal value could ever
+                # match, and nothing caught it because nothing was sending a
+                # SourceIdentity at all (engineering log #42).
+                sts:SourceIdentity: "daveio-*"
 
       ManagedPolicyArns:
         # SecurityAudit grants the configuration and policy reads that security

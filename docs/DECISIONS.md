@@ -236,9 +236,19 @@ customer accounts.
 **3. `sts:SourceIdentity` for attribution.**
 
 Lets the customer's own CloudTrail record which dave.io operator or system
-triggered a scan, immutably for the session's life. A customer granting a
-third party standing read access into their account should not have to take
-our word for who did what.
+triggered a scan, immutably for the session's life and across chained roles. A
+customer granting a third party standing read access into their account should
+not have to take our word for who did what.
+
+`RoleSessionName` does not achieve this: the caller picks it per-assume and it is
+replaced at every hop of a role chain, so it attributes nothing the customer can
+rely on. The trust policy therefore _requires_ SourceIdentity via a `Null`
+condition rather than merely permitting it — permitting it alone lets a caller
+omit it and quietly lose the attribution the policy appears to guarantee — and
+constrains the prefix to `daveio-`. Hyphen, not colon: AWS restricts
+SourceIdentity to alphanumerics, underscore and `+=,.@-`, so the `daveio:*` this
+originally specified was a pattern no legal value could satisfy (engineering log
+#42).
 
 **Cost.** `SecurityAudit` + `ViewOnlyAccess` do not cover quite everything:
 `s3:GetBucketPolicyStatus`, the Resource Explorer calls, and the Cost Explorer

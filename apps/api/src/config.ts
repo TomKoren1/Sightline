@@ -68,6 +68,19 @@ const schema = z.object({
   ),
   AWS_EXTERNAL_ID: blankAsUnset(z.string().default("local-dev-external-id-0000")),
   AWS_REGION: blankAsUnset(z.string().default("us-east-1")),
+
+  /**
+   * Who or what triggered this scan, for `sts:SourceIdentity`.
+   *
+   * Sent on every AssumeRole so the *customer's* CloudTrail attributes activity
+   * to an operator or system rather than only to the shared scanner role, and
+   * cannot be changed for the life of the session. See ADR-007 and the trust
+   * policy in `infra/readonly-role.yaml`.
+   *
+   * Prefixed and sanitised in `sourceIdentity()` below rather than here, so an
+   * operator name that AWS would reject cannot reach the API call.
+   */
+  SCAN_OPERATOR: blankAsUnset(z.string().default("system")),
   AWS_ACCESS_KEY_ID: blankAsUnset(z.string().optional()),
   AWS_SECRET_ACCESS_KEY: blankAsUnset(z.string().optional()),
 
@@ -365,4 +378,40 @@ export function faultInjections(): ReadonlySet<string> {
       .map((s) => s.trim())
       .filter(Boolean),
   );
+}
+
+/**
+ * The prefix the role template's trust policy requires.
+ *
+ * Hyphen, not colon. AWS restricts `SourceIdentity` to alphanumerics,
+ * underscore and `+=,.@-` - a colon is rejected outright. The trust policy
+ * originally matched `daveio:*`, a pattern no legal value can satisfy, and
+ * nothing caught it because no SourceIdentity was being sent at all. A
+ * condition that can never match is indistinguishable from no condition until
+ * the day you rely on it (engineering log #42).
+ */
+export const SOURCE_IDENTITY_PREFIX = "daveio-";
+
+/** Characters AWS permits in SourceIdentity, per the AssumeRole API reference. */
+const SOURCE_IDENTITY_ALLOWED = /[^A-Za-z0-9_+=,.@-]/g;
+
+/**
+ * Build a legal `sts:SourceIdentity` from an operator name.
+ *
+ * Sanitised rather than validated-and-rejected: an operator name with a space in
+ * it should not be able to fail every scan. Truncated to AWS's 64-character
+ * limit, and never empty, because the trust policy requires the key present.
+ *
+ * Pure, and exported separately from `sourceIdentity()` so the sanitising can be
+ * tested across a range of inputs without reloading the config module - which is
+ * frozen at import and cannot be re-read per test.
+ */
+export function toSourceIdentity(operator: string): string {
+  const cleaned = operator.replace(SOURCE_IDENTITY_ALLOWED, "-").replace(/^-+|-+$/g, "");
+  return `${SOURCE_IDENTITY_PREFIX}${cleaned || "system"}`.slice(0, 64);
+}
+
+/** The value sent as `sts:SourceIdentity` on every AssumeRole. */
+export function sourceIdentity(): string {
+  return toSourceIdentity(cfg.SCAN_OPERATOR);
 }
