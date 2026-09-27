@@ -18,42 +18,31 @@ import type {
 } from "@daveio/shared";
 
 import { fingerprint, pool } from "./postgres.js";
-import type { TenantId } from "../tenancy/tenant.js";
 
 /** Rows per INSERT. Postgres caps parameters at 65535; this stays well under. */
 const BATCH_SIZE = 500;
 
 const GLOBAL = "global";
 
-export async function createScanRun(
-  tenantId: TenantId,
-  accountId: string,
-  regions: string[],
-): Promise<string> {
+export async function createScanRun(accountId: string, regions: string[]): Promise<string> {
   const id = randomUUID();
   await pool.query(
-    `INSERT INTO scan_runs (id, tenant_id, account_id, status, started_at, regions)
-     VALUES ($1, $2, $3, 'running', now(), $4)`,
-    [id, tenantId, accountId, regions],
+    `INSERT INTO scan_runs (id, account_id, status, started_at, regions)
+     VALUES ($1, $2, 'running', now(), $3)`,
+    [id, accountId, regions],
   );
   return id;
 }
 
-export async function failScanRun(
-  tenantId: TenantId,
-  scanId: string,
-  error: string,
-): Promise<void> {
+export async function failScanRun(scanId: string, error: string): Promise<void> {
   await pool.query(
-    `UPDATE scan_runs SET status = 'failed', finished_at = now(), error = $3
-     WHERE id = $1 AND tenant_id = $2`,
-    [scanId, tenantId, error],
+    `UPDATE scan_runs SET status = 'failed', finished_at = now(), error = $2 WHERE id = $1`,
+    [scanId, error],
   );
 }
 
 /** Persist a completed scan: units, resources and relationships, atomically. */
 export async function saveScanResult(
-  tenantId: TenantId,
   scanId: string,
   params: {
     status: ScanStatus;
@@ -70,14 +59,13 @@ export async function saveScanResult(
     for (const unit of params.units) {
       await client.query(
         `INSERT INTO scan_units
-           (tenant_id, scan_id, service, region, status, resource_count, api_calls, duration_ms, error, error_code, started_at, finished_at)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)
+           (scan_id, service, region, status, resource_count, api_calls, duration_ms, error, error_code, started_at, finished_at)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
          ON CONFLICT (scan_id, service, region) DO UPDATE SET
            status = EXCLUDED.status, resource_count = EXCLUDED.resource_count,
            api_calls = EXCLUDED.api_calls, duration_ms = EXCLUDED.duration_ms,
            error = EXCLUDED.error, error_code = EXCLUDED.error_code`,
         [
-          tenantId,
           scanId,
           unit.service,
           unit.region ?? GLOBAL,
@@ -97,9 +85,8 @@ export async function saveScanResult(
       const batch = params.resources.slice(i, i + BATCH_SIZE);
       const values: unknown[] = [];
       const tuples = batch.map((r, n) => {
-        const b = n * 11;
+        const b = n * 10;
         values.push(
-          tenantId,
           scanId,
           r.arn,
           r.kind,
@@ -111,11 +98,11 @@ export async function saveScanResult(
           JSON.stringify(r.derived),
           fingerprint(r),
         );
-        return `($${b + 1},$${b + 2},$${b + 3},$${b + 4},$${b + 5},$${b + 6},$${b + 7},$${b + 8},$${b + 9},$${b + 10},$${b + 11})`;
+        return `($${b + 1},$${b + 2},$${b + 3},$${b + 4},$${b + 5},$${b + 6},$${b + 7},$${b + 8},$${b + 9},$${b + 10})`;
       });
       await client.query(
         `INSERT INTO resource_snapshots
-           (tenant_id, scan_id, arn, kind, name, region, account_id, tags, properties, derived, fingerprint)
+           (scan_id, arn, kind, name, region, account_id, tags, properties, derived, fingerprint)
          VALUES ${tuples.join(",")}
          ON CONFLICT (scan_id, arn) DO NOTHING`,
         values,
@@ -126,19 +113,12 @@ export async function saveScanResult(
       const batch = params.relationships.slice(i, i + BATCH_SIZE);
       const values: unknown[] = [];
       const tuples = batch.map((rel, n) => {
-        const b = n * 6;
-        values.push(
-          tenantId,
-          scanId,
-          rel.from,
-          rel.to,
-          rel.type,
-          JSON.stringify(rel.properties ?? {}),
-        );
-        return `($${b + 1},$${b + 2},$${b + 3},$${b + 4},$${b + 5},$${b + 6})`;
+        const b = n * 5;
+        values.push(scanId, rel.from, rel.to, rel.type, JSON.stringify(rel.properties ?? {}));
+        return `($${b + 1},$${b + 2},$${b + 3},$${b + 4},$${b + 5})`;
       });
       await client.query(
-        `INSERT INTO relationship_snapshots (tenant_id, scan_id, from_arn, to_arn, rel_type, properties)
+        `INSERT INTO relationship_snapshots (scan_id, from_arn, to_arn, rel_type, properties)
          VALUES ${tuples.join(",")}`,
         values,
       );
@@ -219,20 +199,17 @@ async function unitsFor(scanIds: string[]): Promise<Map<string, ScanUnit[]>> {
   return map;
 }
 
-export async function listScans(tenantId: TenantId, limit = 20): Promise<ScanRun[]> {
+export async function listScans(limit = 20): Promise<ScanRun[]> {
   const { rows } = await pool.query<ScanRow>(
-    `SELECT * FROM scan_runs WHERE tenant_id = $1 ORDER BY started_at DESC LIMIT $2`,
-    [tenantId, limit],
+    `SELECT * FROM scan_runs ORDER BY started_at DESC LIMIT $1`,
+    [limit],
   );
   const units = await unitsFor(rows.map((r) => r.id));
   return rows.map((row) => toScanRun(row, units.get(row.id) ?? []));
 }
 
-export async function getScan(tenantId: TenantId, scanId: string): Promise<ScanRun | null> {
-  const { rows } = await pool.query<ScanRow>(
-    `SELECT * FROM scan_runs WHERE id = $1 AND tenant_id = $2`,
-    [scanId, tenantId],
-  );
+export async function getScan(scanId: string): Promise<ScanRun | null> {
+  const { rows } = await pool.query<ScanRow>(`SELECT * FROM scan_runs WHERE id = $1`, [scanId]);
   const row = rows[0];
   if (!row) return null;
   const units = await unitsFor([row.id]);
@@ -240,12 +217,11 @@ export async function getScan(tenantId: TenantId, scanId: string): Promise<ScanR
 }
 
 /** The most recent scan that produced usable data. */
-export async function getLatestScan(tenantId: TenantId): Promise<ScanRun | null> {
+export async function getLatestScan(): Promise<ScanRun | null> {
   const { rows } = await pool.query<ScanRow>(
     `SELECT * FROM scan_runs
-      WHERE tenant_id = $1 AND status IN ('succeeded','partial')
+      WHERE status IN ('succeeded','partial')
       ORDER BY started_at DESC LIMIT 1`,
-    [tenantId],
   );
   const row = rows[0];
   if (!row) return null;
@@ -253,11 +229,11 @@ export async function getLatestScan(tenantId: TenantId): Promise<ScanRun | null>
   return toScanRun(row, units.get(row.id) ?? []);
 }
 
-export async function loadResources(tenantId: TenantId, scanId: string): Promise<Resource[]> {
+export async function loadResources(scanId: string): Promise<Resource[]> {
   const { rows } = await pool.query(
     `SELECT arn, kind, name, region, account_id, tags, properties, derived
-       FROM resource_snapshots WHERE scan_id = $1 AND tenant_id = $2`,
-    [scanId, tenantId],
+       FROM resource_snapshots WHERE scan_id = $1`,
+    [scanId],
   );
   return rows.map((r) => ({
     arn: r.arn,
@@ -271,14 +247,10 @@ export async function loadResources(tenantId: TenantId, scanId: string): Promise
   }));
 }
 
-export async function loadRelationships(
-  tenantId: TenantId,
-  scanId: string,
-): Promise<Relationship[]> {
+export async function loadRelationships(scanId: string): Promise<Relationship[]> {
   const { rows } = await pool.query(
-    `SELECT from_arn, to_arn, rel_type, properties
-       FROM relationship_snapshots WHERE scan_id = $1 AND tenant_id = $2`,
-    [scanId, tenantId],
+    `SELECT from_arn, to_arn, rel_type, properties FROM relationship_snapshots WHERE scan_id = $1`,
+    [scanId],
   );
   return rows.map((r) => ({
     from: r.from_arn,
@@ -296,21 +268,8 @@ export async function loadRelationships(
  * so the expensive comparison runs on the handful of rows that actually
  * differ rather than on the whole inventory.
  */
-export async function diffScans(
-  tenantId: TenantId,
-  fromScanId: string,
-  toScanId: string,
-): Promise<ScanDiff> {
-  /**
-   * Both scans are fetched tenant-scoped **before** any comparison runs, so a
-   * scan id belonging to another tenant fails here as "does not exist" rather
-   * than being diffed against one of ours. That is the whole defence: the
-   * queries below take scan ids, and an id is not evidence of ownership.
-   */
-  const [fromRun, toRun] = await Promise.all([
-    getScan(tenantId, fromScanId),
-    getScan(tenantId, toScanId),
-  ]);
+export async function diffScans(fromScanId: string, toScanId: string): Promise<ScanDiff> {
+  const [fromRun, toRun] = await Promise.all([getScan(fromScanId), getScan(toScanId)]);
   if (!fromRun || !toRun) throw new Error("One or both scans do not exist");
 
   const { rows: added } = await pool.query(

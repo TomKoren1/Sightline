@@ -24,7 +24,6 @@ import { listResources } from "../db/queries.js";
 import { closeDriver } from "../db/neo4j.js";
 import { closePool, pool } from "../db/postgres.js";
 import { getLatestScan } from "../db/repository.js";
-import { LOCAL_TENANT } from "../tenancy/tenant.js";
 
 const bold = (s: string) => `\x1b[1m${s}\x1b[0m`;
 const dim = (s: string) => `\x1b[2m${s}\x1b[0m`;
@@ -59,14 +58,14 @@ try {
     process.exit(1);
   }
 
-  const latest = await getLatestScan(LOCAL_TENANT);
+  const latest = await getLatestScan();
   if (!latest) {
     console.error("No scan found. Run `npm run scan` first.");
     process.exit(1);
   }
 
   // Names are resolved once, so grading does not hit the database per case.
-  const all = await listResources(LOCAL_TENANT, { limit: 500 });
+  const all = await listResources({ limit: 500 });
   const arnByName = new Map(all.map((r) => [r.name, r.arn]));
   const resolve = (name: string) => arnByName.get(name) ?? null;
 
@@ -82,7 +81,7 @@ try {
     process.stdout.write(`  ${testCase.id.padEnd(26)}`);
     const started = Date.now();
     try {
-      const message = await ask({ tenantId: LOCAL_TENANT, question: testCase.question });
+      const message = await ask({ question: testCase.question });
       const result = gradeCase(testCase, message, resolve, Date.now() - started);
       results.push(result);
       console.log(

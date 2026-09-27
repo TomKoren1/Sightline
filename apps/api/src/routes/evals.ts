@@ -19,7 +19,6 @@ import { getLatestScan, loadRelationships, loadResources } from "../db/repositor
 import { DRIFT_MARKER_RESOURCES } from "@daveio/mock-aws";
 
 import { CHECKS, runChecks } from "../evals/checks.js";
-import { tenantOf } from "../tenancy/request.js";
 
 export function registerEvalRoutes(app: FastifyInstance): void {
   /** What the checks cover, without running them. */
@@ -33,9 +32,8 @@ export function registerEvalRoutes(app: FastifyInstance): void {
    * Reads from Postgres rather than rescanning: it is the data the UI is
    * showing that we want to validate, and it makes the call free and instant.
    */
-  app.post("/api/evals/ground-truth", async (req, reply) => {
-    const tenantId = tenantOf(req);
-    const latest = await getLatestScan(tenantId);
+  app.post("/api/evals/ground-truth", async (_req, reply) => {
+    const latest = await getLatestScan();
     if (!latest) {
       return reply.code(409).send({
         error: "No scan has completed yet, so there is nothing to check.",
@@ -56,8 +54,8 @@ export function registerEvalRoutes(app: FastifyInstance): void {
 
     const started = Date.now();
     const [resources, relationships] = await Promise.all([
-      loadResources(tenantId, latest.id),
-      loadRelationships(tenantId, latest.id),
+      loadResources(latest.id),
+      loadRelationships(latest.id),
     ]);
     const results = runChecks({ resources, relationships });
 

@@ -20,8 +20,6 @@ import { remediationsFor } from "../remediation/remediation.js";
 import { readQuery } from "../db/neo4j.js";
 import { diffScans, getLatestScan, listScans } from "../db/repository.js";
 import { assertReadOnlyCypher } from "./cypherGuard.js";
-import { isHosted } from "../config.js";
-import type { TenantId } from "../tenancy/tenant.js";
 
 export interface ToolResult {
   rows: unknown[];
@@ -263,35 +261,6 @@ export const TOOL_DEFINITIONS: Anthropic.Tool[] = [
   },
 ];
 
-/**
- * The one tool that is not available to a hosted tenant.
- *
- * `cypherGuard.ts` and the Neo4j read transaction both defend against
- * *writes*. Neither knows *whose* data a read touches, and with one tenant
- * that gap does not exist, because there is only one account in the graph.
- *
- * In the hosted service the graph is shared, so an unfiltered
- * `MATCH (r:Resource)` is a cross-tenant read - and it is not a write, so both
- * existing layers pass it. The alternative was a rewriter injecting a tenant
- * predicate into arbitrary Cypher; its failure mode is silent and
- * cross-customer, which is the worst kind. The capability is removed instead,
- * which is what this project already does about mutation: the agent cannot
- * change anything because no tool *expresses* a change (ADR-015, ADR-016).
- */
-const HOSTED_UNAVAILABLE_TOOLS = new Set(["graph_query"]);
-
-/**
- * The tools this process actually offers.
- *
- * A function rather than the exported constant, because what is available
- * depends on where this is running - and because handing the model a list it
- * cannot use produces a failed turn rather than an answer.
- */
-export function toolDefinitions(): Anthropic.Tool[] {
-  if (!isHosted()) return TOOL_DEFINITIONS;
-  return TOOL_DEFINITIONS.filter((tool) => !HOSTED_UNAVAILABLE_TOOLS.has(tool.name));
-}
-
 type ToolInput = Record<string, never> & Record<string, unknown>;
 
 /**
@@ -301,25 +270,21 @@ type ToolInput = Record<string, never> & Record<string, unknown>;
  * recover by calling a different tool, and an exception here would end the
  * turn with nothing to show the user.
  */
-export async function runTool(
-  name: string,
-  input: ToolInput,
-  tenantId: TenantId,
-): Promise<ToolResult> {
+export async function runTool(name: string, input: ToolInput): Promise<ToolResult> {
   switch (name) {
     case "summarise_account":
-      return wrap([await q.summariseAccount(tenantId)]);
+      return wrap([await q.summariseAccount()]);
 
     case "list_resources":
-      return wrap(await q.listResources(tenantId, input));
+      return wrap(await q.listResources(input));
 
     case "get_resource": {
-      const row = await q.getResource(tenantId, String(input["arnOrName"] ?? ""));
+      const row = await q.getResource(String(input["arnOrName"] ?? ""));
       return wrap(row ? [row] : [], row ? {} : { note: "No resource matched that ARN or name." });
     }
 
     case "suggest_remediation": {
-      const row = await q.getResource(tenantId, String(input["arnOrName"] ?? ""));
+      const row = await q.getResource(String(input["arnOrName"] ?? ""));
       if (!row) return wrap([], { note: "No resource matched that ARN or name." });
       const remediations = remediationsFor(remediationInputFromGraph(row as never));
       return wrap(remediations.length > 0 ? [{ arn: row.arn, remediations }] : [], {
@@ -331,13 +296,13 @@ export async function runTool(
     }
 
     case "find_public_resources":
-      return wrap(await q.findPublicResources(tenantId, input));
+      return wrap(await q.findPublicResources(input));
 
     case "find_admin_principals":
-      return wrap(await q.findAdminPrincipals(tenantId, input));
+      return wrap(await q.findAdminPrincipals(input));
 
     case "find_network_paths": {
-      const rows = await q.findNetworkPaths(tenantId, {
+      const rows = await q.findNetworkPaths({
         target: String(input["target"] ?? ""),
         source: input["source"] ? String(input["source"]) : undefined,
         maxHops: input["maxHops"] ? Number(input["maxHops"]) : undefined,
@@ -352,35 +317,35 @@ export async function runTool(
 
     case "find_reachable_from":
       return wrap(
-        await q.findReachableFrom(tenantId, {
+        await q.findReachableFrom({
           source: String(input["source"] ?? ""),
           maxHops: input["maxHops"] ? Number(input["maxHops"]) : undefined,
         }),
       );
 
     case "find_instances_in_public_subnets":
-      return wrap(await q.findInstancesInPublicSubnets(tenantId, input));
+      return wrap(await q.findInstancesInPublicSubnets(input));
 
     case "find_idle_resources":
-      return wrap(await q.findIdleResources(tenantId, input));
+      return wrap(await q.findIdleResources(input));
 
     case "find_unprotected_buckets":
-      return wrap(await q.findUnprotectedBuckets(tenantId, input));
+      return wrap(await q.findUnprotectedBuckets(input));
 
     case "find_open_security_groups":
-      return wrap(await q.findOpenSecurityGroups(tenantId, input));
+      return wrap(await q.findOpenSecurityGroups(input));
 
     case "search_resources":
-      return wrap(await q.searchResources(tenantId, { text: String(input["text"] ?? "") }));
+      return wrap(await q.searchResources({ text: String(input["text"] ?? "") }));
 
     case "list_scans":
-      return wrap(await listScans(tenantId, Number(input["limit"] ?? 10)));
+      return wrap(await listScans(Number(input["limit"] ?? 10)));
 
     case "diff_scans": {
       let from = input["fromScanId"] ? String(input["fromScanId"]) : null;
       let to = input["toScanId"] ? String(input["toScanId"]) : null;
       if (!from || !to) {
-        const scans = await listScans(tenantId, 2);
+        const scans = await listScans(2);
         if (scans.length < 2) {
           return wrap([], {
             note: "Only one scan exists, so there is nothing to compare it against yet.",
@@ -389,21 +354,10 @@ export async function runTool(
         to = to ?? scans[0]!.id;
         from = from ?? scans[1]!.id;
       }
-      return wrap([await diffScans(tenantId, from, to)]);
+      return wrap([await diffScans(from, to)]);
     }
 
     case "graph_query": {
-      // Also refused here, not only filtered from the list above. A model can
-      // call a tool it was never offered - from a replayed conversation, or
-      // because a name appears in the prompt - and the list is a suggestion
-      // while this is the gate.
-      if (isHosted()) {
-        return {
-          rows: [],
-          arns: [],
-          note: "Raw graph queries are disabled on the hosted service. Use the curated tools.",
-        };
-      }
       const cypher = String(input["cypher"] ?? "");
       const guard = assertReadOnlyCypher(cypher);
       if (!guard.ok) {

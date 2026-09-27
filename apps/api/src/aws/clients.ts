@@ -14,7 +14,7 @@ import { RDSClient } from "@aws-sdk/client-rds";
 import { LambdaClient } from "@aws-sdk/client-lambda";
 import { ResourceExplorer2Client } from "@aws-sdk/client-resource-explorer-2";
 
-import { effectiveEndpoint, isMock } from "../config.js";
+import { activeConnection, isMock } from "../config.js";
 import { credentialProvider } from "./credentials.js";
 
 /**
@@ -58,12 +58,7 @@ function baseConfig(region: string) {
     maxAttempts: 5,
     // Explicit, never via AWS_ENDPOINT_URL: that variable is stripped from the
     // environment at startup so a mode switch cannot leave one behind.
-    //
-    // `effectiveEndpoint()` rather than `activeConnection().endpoint`, because
-    // in hosted mode there must be no override at all: it would redirect
-    // *signed* AWS calls, and this process signs them with credentials it
-    // assumed inside a customer account (ADR-015).
-    ...(effectiveEndpoint() ? { endpoint: effectiveEndpoint()! } : {}),
+    ...(activeConnection().endpoint ? { endpoint: activeConnection().endpoint! } : {}),
   };
 }
 

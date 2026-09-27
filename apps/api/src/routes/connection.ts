@@ -27,13 +27,11 @@ import {
   configuredMode,
   configuredRegions,
   currentMode,
-  isHosted,
   isMock,
   setMode,
   targetRoleProblem,
 } from "../config.js";
 import { assumablePrincipalArn } from "../aws/principal.js";
-import { tenantOf } from "../tenancy/request.js";
 import { accountIdFromArn, getSession, resetSession } from "../aws/credentials.js";
 import { getLatestScan } from "../db/repository.js";
 
@@ -119,8 +117,8 @@ function diagnose(
 
 export function registerConnectionRoutes(app: FastifyInstance): void {
   /** Current connection state, with nothing secret in the response. */
-  app.get("/api/connection", async (req) => {
-    const latest = await getLatestScan(tenantOf(req)).catch(() => null);
+  app.get("/api/connection", async () => {
+    const latest = await getLatestScan().catch(() => null);
     const connection = activeConnection();
     const accountId = accountIdFromArn(connection.roleArn);
 
@@ -206,16 +204,6 @@ export function registerConnectionRoutes(app: FastifyInstance): void {
    * rather than reusing credentials for the account we just left.
    */
   app.post<{ Body: { mode?: string } }>("/api/connection/mode", async (req, reply) => {
-    /**
-     * Not registered at all in hosted mode would be cleaner, but this route is
-     * registered alongside five others that *are* wanted there. So it answers
-     * 404 instead: an endpoint that does not exist, which is the truth, rather
-     * than 403, which would imply it exists and is forbidden to this caller.
-     */
-    if (isHosted()) {
-      return reply.code(404).send({ error: "Not found" });
-    }
-
     const mode = req.body?.mode;
     if (mode !== "mock" && mode !== "real") {
       return reply.code(400).send({ error: 'mode must be "mock" or "real"' });

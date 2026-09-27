@@ -94,13 +94,6 @@ jobs:
         # regression that matters most: an analyser becoming quietly wrong.
         run: npx vitest run apps/api/src/evals/groundTruth.test.ts
 
-      - name: Tenant isolation and the scan queue
-        # Two tenants in one Neo4j, and the queue's concurrency guarantees.
-        # Both are properties of the databases rather than of the code, so
-        # neither means anything without the compose stack. Connection details
-        # come from the .env copied above, like every other step here.
-        run: npx vitest run apps/api/src/tenancy/isolation.test.ts apps/api/src/scan/jobs.test.ts
-
       - name: HTTP routing against the live stack
         # Proves the router reaches its handlers for a real, full-length ARN.
         # Needs the databases, so it cannot run in the unit job.
