@@ -132,6 +132,25 @@ export async function claimNextJob(worker: string): Promise<ScanJob | null> {
   return rows[0] ? toJob(rows[0]) : null;
 }
 
+/**
+ * Claim one specific job, if it is still waiting.
+ *
+ * The streaming scan route runs the scan itself - that is what lets it report
+ * progress as it happens - so it has to take the job out of the queue, or the
+ * worker would claim the same row and the account would be scanned twice at
+ * once. Returns false when somebody else got there first, which the caller
+ * should treat as "already running" rather than as an error.
+ */
+export async function claimJob(jobId: string, worker: string): Promise<boolean> {
+  const { rowCount } = await pool.query(
+    `UPDATE scan_jobs
+        SET status = 'running', started_at = now(), attempts = attempts + 1, claimed_by = $2
+      WHERE id = $1 AND status = 'queued'`,
+    [jobId, worker],
+  );
+  return (rowCount ?? 0) > 0;
+}
+
 export async function completeJob(jobId: string, scanId: string): Promise<void> {
   await pool.query(
     `UPDATE scan_jobs SET status = 'succeeded', scan_id = $2, finished_at = now() WHERE id = $1`,

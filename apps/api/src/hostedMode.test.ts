@@ -94,10 +94,28 @@ describe("hosted mode refuses configuration that is only safe with one tenant", 
     expect(problems[0]).toContain("signed");
   });
 
-  it("refuses static AWS keys in the environment", () => {
-    const problems = hostedInvariantViolations({ ...CLEAN, AWS_ACCESS_KEY_ID: "AKIAEXAMPLE" });
+  /**
+   * A placeholder key, not any key.
+   *
+   * A bare cluster has no IRSA and no instance role, so the platform identity
+   * *is* a static key - refusing all of them made hosted mode undeployable on
+   * the cluster this was written for. The failure worth preventing is a mock
+   * placeholder shadowing the real identity in the SDK's credential chain.
+   */
+  it("refuses a placeholder AWS key, which would shadow the real identity", () => {
+    const problems = hostedInvariantViolations({ ...CLEAN, AWS_ACCESS_KEY_ID: "mock" });
     expect(problems).toHaveLength(1);
     expect(problems[0]).toContain("AWS_ACCESS_KEY_ID");
+    expect(problems[0]).toContain("shadows");
+  });
+
+  it("accepts the platform identity's real key", () => {
+    // The pod's own IAM user: AssumeRole on the scanner role name, and KMS on
+    // the one key. Nothing per-tenant - those credentials live encrypted in
+    // Postgres.
+    expect(
+      hostedInvariantViolations({ ...CLEAN, AWS_ACCESS_KEY_ID: "AKIAIOSFODNN7EXAMPLE" }),
+    ).toEqual([]);
   });
 
   /** One restart per problem is a bad way to learn about three problems. */
@@ -106,7 +124,7 @@ describe("hosted mode refuses configuration that is only safe with one tenant", 
       DEPLOYMENT_MODE: "hosted",
       AWS_MODE: "mock",
       AWS_ENDPOINT_URL: "http://localhost:5000",
-      AWS_ACCESS_KEY_ID: "AKIAEXAMPLE",
+      AWS_ACCESS_KEY_ID: "mock",
     });
     expect(problems).toHaveLength(3);
   });
@@ -121,7 +139,7 @@ describe("hosted mode refuses configuration that is only safe with one tenant", 
         DEPLOYMENT_MODE: "self-hosted",
         AWS_MODE: "mock",
         AWS_ENDPOINT_URL: "http://localhost:5000",
-        AWS_ACCESS_KEY_ID: "AKIAEXAMPLE",
+        AWS_ACCESS_KEY_ID: "mock",
       }),
     ).toEqual([]);
   });

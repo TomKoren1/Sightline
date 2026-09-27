@@ -35,7 +35,7 @@ import {
   scansFinished,
   scansStarted,
 } from "../observability/metrics.js";
-import { completeJob, enqueueScan, failJob, activeJob } from "../scan/jobs.js";
+import { activeJob, claimJob, completeJob, enqueueScan, failJob } from "../scan/jobs.js";
 
 /**
  * Whether a scan is in flight - now a row, not a boolean.
@@ -129,6 +129,18 @@ export function registerScanRoutes(app: FastifyInstance): void {
     }
 
     const { job, created } = await enqueueScan(tenantId);
+
+    /**
+     * Take the job out of the queue before streaming it.
+     *
+     * This route runs the scan itself, which is what lets it report progress
+     * as it happens - so the worker must not also pick it up. Losing the race
+     * means another process already started this tenant's scan.
+     */
+    if (created && !(await claimJob(job.id, `api-${process.pid}`))) {
+      return reply.code(409).send({ error: "A scan is already running", jobId: job.id });
+    }
+
     if (!created) {
       return reply
         .code(409)

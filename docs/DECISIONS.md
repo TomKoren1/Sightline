@@ -573,13 +573,23 @@ dangerous under the new ones:
 - the **endpoint override** exists so the scanner can talk to moto, and it
   redirects _signed_ AWS calls — in a service that assumes roles into customer
   accounts, an attacker-supplied endpoint is an attacker-supplied AWS;
-- **static AWS keys in the environment** are how a developer points the scanner
-  at their own account; the hosted platform identity comes from the pod.
+- **a mock placeholder AWS key** sits first in the SDK's credential chain and
+  silently shadows whatever identity the platform actually has (engineering log
+  #17, #28).
 
 **Decision.** A `DEPLOYMENT_MODE` of `self-hosted` (the default, and what the
 graded project is) or `hosted`. In hosted mode these capabilities do not exist:
 the process refuses to start if any of them is configured, and the code paths
 that would use them are gated independently.
+
+**Revised once, by writing the deployment.** The original rule refused
+`AWS_ACCESS_KEY_ID` outright, reasoning that a platform identity should come
+from the pod — IRSA on EKS, an instance role on EC2. A bare k3s cluster has
+neither, so the identity _is_ a static key, and the invariant made hosted mode
+undeployable on the cluster it was written for. The rule is now about what the
+key is rather than whether one exists: a placeholder is refused, a real one is
+the platform identity. Found by writing the Helm chart and noticing it
+contradicted the check.
 
 **Why refuse at startup rather than warn.** Each of these is a configuration
 mistake that produces a working system with a silently wrong security property.

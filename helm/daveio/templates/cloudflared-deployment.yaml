@@ -1,0 +1,38 @@
+{{- if .Values.cloudflared.enabled }}
+{{/*
+The tunnel.
+
+Outbound-only: the connector dials Cloudflare, so no inbound port is ever
+opened on the home network. Same shape as the sibling project's, including
+--no-autoupdate - an image that updates itself inside a container is a
+deployment nobody performed, and upgrades belong in the same GitOps flow as
+everything else.
+*/}}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "daveio.fullname" . }}-cloudflared
+  labels: {{- include "daveio.labels" . | nindent 4 }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels: { app: daveio-cloudflared }
+  template:
+    metadata:
+      labels: { app: daveio-cloudflared }
+    spec:
+      containers:
+        - name: cloudflared
+          image: "{{ .Values.cloudflared.image.repository }}:{{ .Values.cloudflared.image.tag }}"
+          args: ["tunnel", "--no-autoupdate", "run"]
+          # TUNNEL_TOKEN is read from the environment by `cloudflared tunnel
+          # run`. Passing it as --token would put it in the pod's visible
+          # command line, where `kubectl get pod -o yaml` shows it to anyone
+          # with read access.
+          envFrom:
+            - secretRef:
+                name: {{ include "daveio.fullname" . }}-cloudflared
+          resources:
+            requests: { cpu: 10m, memory: 32Mi }
+            limits: { cpu: 200m, memory: 128Mi }
+{{- end }}

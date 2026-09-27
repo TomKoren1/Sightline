@@ -256,10 +256,28 @@ export function hostedInvariantViolations(
         "explicitly switched to the demo (ADR-020)",
     );
   }
-  if (env.AWS_ACCESS_KEY_ID) {
+  /**
+   * A **placeholder** key, not any key.
+   *
+   * The first version of this refused `AWS_ACCESS_KEY_ID` outright, on the
+   * reasoning that a hosted platform identity should come from the pod - IRSA
+   * on EKS, an instance role on EC2. A bare k3s cluster has neither, so the
+   * only way to give the process an identity is a static key, and that
+   * invariant made hosted mode **undeployable** on the cluster it was written
+   * for. Found by writing the Helm chart and noticing the two contradict each
+   * other.
+   *
+   * The failure actually worth preventing is narrower and real: a mock
+   * placeholder left in the environment sits first in the SDK's credential
+   * chain and silently shadows the platform identity, which is engineering
+   * log #17 and #28. So the rule is about *what the key is*, not whether one
+   * exists.
+   */
+  if (env.AWS_ACCESS_KEY_ID && !looksLikeRealAccessKey(env.AWS_ACCESS_KEY_ID)) {
     problems.push(
-      "AWS_ACCESS_KEY_ID is set: the hosted platform identity comes from the pod's " +
-        "own credentials, not from per-account keys in the environment",
+      `AWS_ACCESS_KEY_ID does not look like a real AWS key ("${env.AWS_ACCESS_KEY_ID.slice(0, 4)}…"): ` +
+        "a mock placeholder here sits first in the SDK's credential chain and silently " +
+        "shadows the platform identity. Unset it, or set the real one",
     );
   }
   return problems;
