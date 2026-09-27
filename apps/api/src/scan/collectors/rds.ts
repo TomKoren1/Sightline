@@ -18,7 +18,7 @@ import type { CollectorContext, CollectorOutput } from "./types.js";
 
 export async function collectRds(ctx: CollectorContext): Promise<CollectorOutput> {
   const region = ctx.region!;
-  const client = rdsClient(region);
+  const client = rdsClient(region, ctx.tenantId, ctx.endpoint);
   const resources: Resource[] = [];
   const relationships: Relationship[] = [];
   const inRegion = (arn: string): Relationship => ({

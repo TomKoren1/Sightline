@@ -752,3 +752,88 @@ is dropped silently, which presents as "signing in does nothing". Tying the
 flag to `PUBLIC_BASE_URL` starting with `https://` means a developer testing
 the hosted path over `http://<tailnet-ip>` — which, unlike `localhost`, is not
 a secure context — gets a working login instead of an invisible failure.
+
+---
+
+## ADR-019 — A tenant's AWS connection is data, not configuration
+
+**Context.** Every version of this project until now read the AWS connection
+from the environment: `AWS_TARGET_ROLE_ARN`, `AWS_EXTERNAL_ID`, and a single
+cached STS session in a module-level variable. For one operator scanning one
+account that is not just adequate, it is the right design — the connection
+genuinely is a property of the deployment.
+
+In a hosted service it is a property of the **tenant**, and the difference is
+not cosmetic: the first real sign-in showed a brand-new tenant the operator's
+own AWS account (engineering log #41).
+
+**Decision.** In hosted mode the connection comes from the tenant's
+`connections` row and **never** falls back to configuration. A tenant with no
+connection gets an explicit `NO_CONNECTION` refusal, not a default. Credentials
+are cached per tenant in a map, with the stampede protection that used to be
+global kept per tenant.
+
+**Why a refusal rather than a fallback.** A fallback is indistinguishable from
+working. Whoever configured the environment would see their own account and
+conclude the product was fine; the failure would surface as a customer reading
+somebody else's inventory.
+
+**Why the tenant is a parameter everywhere.** `ec2Client(region, tenantId)`,
+`iamClient(tenantId)`, `runScan({ tenantId, ... })`, `CollectorContext.tenantId`.
+A client cannot be constructed without naming whose account it will talk to.
+This is the same argument as the branded `TenantId` in ADR-017, applied one
+layer down: the alternative is ambient state, and ambient state is a value that
+is correct when there is one of something and silently wrong when there are
+many. Making it a parameter turns "did anyone forget?" into a build error, and
+adding it produced exactly the list of places that had been reaching for an
+account without saying which.
+
+**The endpoint moved too.** It is carried on the assumed session rather than
+read from configuration when a client is built, so one process can serve a
+tenant on the demo fixture and a tenant on real AWS simultaneously (ADR-020).
+
+**The account is pinned.** On first successful verification the account id the
+role actually reaches is stored, and a later mismatch refuses the scan rather
+than recording one account's inventory under another's name — engineering log
+#31's failure, arriving through a multi-tenant door.
+
+---
+
+## ADR-020 — The demo account is a tenant's choice, and a different thing from an endpoint override
+
+**Context.** ADR-015 removed the mock account from hosted mode, on the grounds
+that a development fixture has no meaning for a tenant and that
+`AWS_ENDPOINT_URL` redirects signed AWS calls. Both arguments still hold. But a
+hosted product has a use the self-hosted one does not: somebody who has just
+signed up wants to see what the thing does **before** deploying a
+CloudFormation stack into their own AWS account, and telling them to connect
+production first is a bad trade for both sides.
+
+**Decision.** A tenant may switch to the demo account at any time. Two things
+make that safe, and they are the whole ADR:
+
+**It is a column on the tenant, not a flag in the process.** `tenants.demo_mode`.
+The single-tenant toggle was a module-level variable, which is honest for one
+operator and would be a shared surprise for many: one person clicking "Demo"
+would change what every other tenant on that process was looking at, and which
+AWS account their next scan read.
+
+**The endpoint comes from `DEMO_AWS_ENDPOINT_URL`, not `AWS_ENDPOINT_URL`.**
+The banned variable is an SDK-wide override: it redirects every signed call the
+process makes, including calls made with credentials assumed inside a
+customer's account. The demo variable names a fixture the operator deployed,
+applies only to tenants who explicitly asked for the demo, and cannot be
+influenced by any tenant. Unset, nobody can switch to a demo at all. Hosted
+mode still refuses to start when `AWS_ENDPOINT_URL` is set, unchanged.
+
+**Consequences for the credential layer.** The endpoint stopped being a global
+and became a property of an assumed session, carried on `AssumedSession`
+alongside the credentials — so one process can serve a tenant on the demo
+fixture and a tenant on real AWS at the same moment. Client factories take it
+explicitly rather than reading it, for the same reason they take a tenant: an
+endpoint that arrives later cannot express "no override", because the SDK stops
+resolving regional endpoints itself the moment the option is set.
+
+**What this does not change.** A demo tenant's graph is still their own: the
+projection is tenant-scoped, so two tenants both exploring the demo have
+separate inventories of the same fixture, and neither can see the other's.

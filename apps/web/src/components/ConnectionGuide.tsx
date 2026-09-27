@@ -18,7 +18,8 @@
  * constrained.
  */
 
-import { useMutation, useQuery } from "@tanstack/react-query";
+import { useState } from "react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { api, type Connection, type ConnectionTest } from "../api.js";
 import { Copyable } from "./Copyable.js";
@@ -52,6 +53,7 @@ function Step({
 }
 
 export function ConnectionGuide() {
+  const queryClient = useQueryClient();
   const connection = useQuery({ queryKey: ["connection"], queryFn: api.connection });
   const externalId = useQuery({
     queryKey: ["externalId"],
@@ -62,6 +64,21 @@ export function ConnectionGuide() {
     gcTime: Infinity,
   });
   const test = useMutation<ConnectionTest, Error>({ mutationFn: api.testConnection });
+
+  /**
+   * Hosted deployments store the connection per tenant, so step 4 is a form
+   * rather than instructions for editing a file the customer cannot reach.
+   */
+  const me = useQuery({ queryKey: ["me"], queryFn: api.me });
+  const hosted = me.data?.mode === "hosted";
+  const [roleArnInput, setRoleArnInput] = useState("");
+  const save = useMutation({
+    mutationFn: (arn: string) => api.saveConnection(arn),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["connection"] });
+      void queryClient.invalidateQueries({ queryKey: ["externalId"] });
+    },
+  });
 
   if (connection.isLoading) return <div className="h-40 animate-pulse rounded bg-ink-850" />;
   if (!connection.data)
@@ -239,30 +256,79 @@ export function ConnectionGuide() {
           </p>
         </Step>
 
-        <Step n={4} title="Point this deployment at the role">
-          <p className="text-[11px] leading-relaxed text-ink-400">
-            Add these to <code className="text-ink-300">.env</code> and{" "}
-            <strong className="text-ink-300">restart the API</strong> — configuration is read once
-            at startup, so an edit with no restart changes nothing.
-          </p>
-          <Copyable value={envSnippet} />
-          <p className="text-[10px] leading-relaxed text-warn">
-            Also remove <code>AWS_ENDPOINT_URL</code>, <code>AWS_ACCESS_KEY_ID</code> and{" "}
-            <code>AWS_SECRET_ACCESS_KEY</code> if they are still set to the mock's values. The AWS
-            SDK reads those from the environment itself, so leaving them sends every request to the
-            mock and shadows your real credentials. The API removes them and warns on startup, but
-            deleting them is cleaner.
-          </p>
-          <div className="rounded border border-ink-700 bg-ink-850 px-2 py-1.5">
-            <p className="text-[10px] leading-relaxed text-ink-400">
-              <strong className="text-ink-300">Why there is no form here.</strong> This API has no
-              authentication. A page that accepted a role ARN and an ExternalId would be an open
-              endpoint that assumes a role into an AWS account and stores a credential — so
-              configuring the connection stays a deliberate act by someone with access to the host.
-              A multi-tenant version would put authentication, per-tenant isolation and encrypted
-              secret storage in place first, and only then offer the form.
-            </p>
-          </div>
+        <Step
+          n={4}
+          title={hosted ? "Connect the role to your account" : "Point this deployment at the role"}
+        >
+          {hosted ? (
+            <>
+              <p className="text-[11px] leading-relaxed text-ink-400">
+                Paste the <code className="text-ink-300">RoleArn</code> the stack printed. It is
+                stored against your account only, with the ExternalId encrypted — nobody else who
+                signs in here can see or use it.
+              </p>
+              <div className="flex gap-1.5">
+                <input
+                  value={roleArnInput}
+                  onChange={(e) => setRoleArnInput(e.target.value)}
+                  placeholder="arn:aws:iam::123456789012:role/DaveIoReadOnlyRole"
+                  spellCheck={false}
+                  className="min-w-0 flex-1 rounded border border-ink-700 bg-ink-850 px-2 py-1 font-mono text-[10px] text-ink-100 placeholder:text-ink-500 focus:border-accent focus:outline-none"
+                />
+                <button
+                  onClick={() => save.mutate(roleArnInput.trim())}
+                  disabled={save.isPending || roleArnInput.trim().length === 0}
+                  className="shrink-0 rounded bg-accent px-2.5 py-1 text-[11px] font-medium text-ink-950 transition hover:brightness-110 disabled:opacity-40"
+                >
+                  {save.isPending ? "Saving…" : "Save"}
+                </button>
+              </div>
+
+              {save.error && (
+                <p className="text-[10px] leading-relaxed text-danger">{save.error.message}</p>
+              )}
+              {save.data && (
+                <p className="text-[10px] leading-relaxed text-good">
+                  Saved. Deploy the stack with the ExternalId above if you have not already, then
+                  test below.
+                </p>
+              )}
+              {c.roleArn && (
+                <p className="font-mono text-[10px] text-ink-400">current: {c.roleArn}</p>
+              )}
+              <p className="text-[10px] leading-relaxed text-ink-500">
+                Nothing here can change anything in your account: the role you are granting is
+                read-only by construction, and this service never calls anything but Describe, List
+                and Get.
+              </p>
+            </>
+          ) : (
+            <>
+              <p className="text-[11px] leading-relaxed text-ink-400">
+                Add these to <code className="text-ink-300">.env</code> and{" "}
+                <strong className="text-ink-300">restart the API</strong> — configuration is read
+                once at startup, so an edit with no restart changes nothing.
+              </p>
+              <Copyable value={envSnippet} />
+              <p className="text-[10px] leading-relaxed text-warn">
+                Also remove <code>AWS_ENDPOINT_URL</code>, <code>AWS_ACCESS_KEY_ID</code> and{" "}
+                <code>AWS_SECRET_ACCESS_KEY</code> if they are still set to the mock's values. The
+                AWS SDK reads those from the environment itself, so leaving them sends every request
+                to the mock and shadows your real credentials. The API removes them and warns on
+                startup, but deleting them is cleaner.
+              </p>
+              <div className="rounded border border-ink-700 bg-ink-850 px-2 py-1.5">
+                <p className="text-[10px] leading-relaxed text-ink-400">
+                  <strong className="text-ink-300">Why there is no form here.</strong> This
+                  deployment has no authentication. A page that accepted a role ARN and an
+                  ExternalId would be an open endpoint that assumes a role into an AWS account and
+                  stores a credential — so configuring the connection stays a deliberate act by
+                  someone with access to the host. The hosted service has authentication, per-tenant
+                  isolation and encrypted secret storage, and offers the form instead.
+                </p>
+              </div>
+            </>
+          )}
         </Step>
 
         <Step n={5} title="Verify it works" done={test.data?.ok === true}>

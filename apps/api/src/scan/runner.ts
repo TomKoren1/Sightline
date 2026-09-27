@@ -35,6 +35,7 @@ import { collectIam } from "./collectors/iam.js";
 import { collectRds } from "./collectors/rds.js";
 import { collectLambda } from "./collectors/lambda.js";
 import { annotate } from "./pipeline.js";
+import type { TenantId } from "../tenancy/tenant.js";
 
 const COLLECTORS: Record<ScannableService, Collector> = {
   ec2: collectEc2,
@@ -46,6 +47,8 @@ const COLLECTORS: Record<ScannableService, Collector> = {
 };
 
 export interface ScanOptions {
+  /** Whose AWS account to scan. Every client built below is bound to it. */
+  tenantId: TenantId;
   /** Called as units start and finish, so the UI can show live progress. */
   onEvent?: (event: ScanEvent) => void;
   scanId: string;
@@ -94,13 +97,13 @@ function explainFailure(service: string, region: string | null, err: unknown): s
 }
 
 export async function runScan(options: ScanOptions): Promise<ScanResult & { units: ScanUnit[] }> {
-  const { scanId, onEvent } = options;
+  const { tenantId, scanId, onEvent } = options;
   const emit = (event: ScanEvent) => onEvent?.(event);
 
   // Without credentials there is no scan to report on - this is the one
   // genuinely fatal failure.
-  const session = await getSession();
-  const { regions: candidateRegions } = await resolveRegions();
+  const session = await getSession(tenantId);
+  const { regions: candidateRegions } = await resolveRegions(tenantId, session.endpoint);
 
   /**
    * Optional fast path. One Resource Explorer query can tell us which regions
@@ -109,7 +112,7 @@ export async function runScan(options: ScanOptions): Promise<ScanResult & { unit
    * index - which a read-only role cannot create - so this always degrades to
    * scanning every candidate region.
    */
-  const fastPath = await discoverActiveRegions();
+  const fastPath = await discoverActiveRegions(tenantId, session.endpoint);
   const { regions, skipped } = narrowRegions(candidateRegions, fastPath, cfg.AWS_REGION);
   if (fastPath.available && skipped.length > 0) {
     console.log(
@@ -175,6 +178,8 @@ export async function runScan(options: ScanOptions): Promise<ScanResult & { unit
       const output = await COLLECTORS[unit.service]({
         region: unit.region,
         accountId: session.accountId,
+        tenantId,
+        endpoint: session.endpoint,
       });
       outputs.push(output);
       unit.status = "succeeded";

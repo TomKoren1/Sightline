@@ -24,6 +24,9 @@ import {
 } from "../db/repository.js";
 import { runScan } from "../scan/runner.js";
 import { tenantOf } from "../tenancy/request.js";
+import { isHosted } from "../config.js";
+import { getConnection } from "../tenancy/connections.js";
+import { getTenant } from "../tenancy/tenants.js";
 import { completeJob, enqueueScan, failJob, activeJob } from "../scan/jobs.js";
 
 /**
@@ -95,6 +98,28 @@ export function registerScanRoutes(app: FastifyInstance): void {
      * scan already in flight would need the worker's event bus, which is
      * `docs/HOSTED-PLAN.md` Phase 3's remaining work.
      */
+    /**
+     * Refuse before claiming a job slot.
+     *
+     * A hosted tenant who has not connected an account has nothing to scan,
+     * and the failure must be this explicit sentence rather than an
+     * AssumeRole error thirty seconds later - or, worse, a scan of whatever
+     * account the process happened to be configured with.
+     */
+    if (isHosted()) {
+      // A tenant on the demo account has nothing to connect, and telling them
+      // to connect one would be advice that does not apply to what they are
+      // looking at.
+      const tenant = await getTenant(tenantId);
+      const connection = tenant?.demoMode ? null : await getConnection(tenantId);
+      if (!tenant?.demoMode && (!connection || connection.status === "disconnected")) {
+        return reply.code(409).send({
+          error: "Connect an AWS account before scanning.",
+          code: "NO_CONNECTION",
+        });
+      }
+    }
+
     const { job, created } = await enqueueScan(tenantId);
     if (!created) {
       return reply
@@ -121,7 +146,7 @@ export function registerScanRoutes(app: FastifyInstance): void {
     let scanId: string | null = null;
 
     try {
-      const result = await runScan({ scanId: streamId, onEvent: send });
+      const result = await runScan({ tenantId: tenantId, scanId: streamId, onEvent: send });
 
       scanId = await createScanRun(tenantId, result.accountId, result.regions);
       const status = rollUpStatus(result.units);

@@ -67,6 +67,23 @@ describe("hosted mode refuses configuration that is only safe with one tenant", 
    * redirects *signed* AWS calls, and this process signs them with credentials
    * it assumed inside a customer's account.
    */
+  /**
+   * The demo fixture is a different thing from the banned override, and the
+   * distinction is who chooses it: `AWS_ENDPOINT_URL` redirects every signed
+   * call this process makes, while `DEMO_AWS_ENDPOINT_URL` applies only to a
+   * tenant who explicitly asked for the demo and names a fixture the operator
+   * deployed (ADR-020).
+   */
+  it("allows a demo endpoint, which is not an SDK-wide override", async () => {
+    const { hostedInvariantViolations } = await import("./config.js");
+    expect(hostedInvariantViolations({ ...CLEAN })).toEqual([]);
+    // The demo variable is deliberately absent from the invariant's inputs:
+    // it cannot make a hosted process refuse to start.
+    expect(
+      hostedInvariantViolations({ ...CLEAN } as Parameters<typeof hostedInvariantViolations>[0]),
+    ).toEqual([]);
+  });
+
   it("refuses an endpoint override", () => {
     const problems = hostedInvariantViolations({
       ...CLEAN,

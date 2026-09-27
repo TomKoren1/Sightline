@@ -61,7 +61,7 @@ export function decodePolicyDocument(doc: string | undefined): PolicyDocument | 
 }
 
 export async function collectIam(ctx: CollectorContext): Promise<CollectorOutput> {
-  const client = iamClient();
+  const client = iamClient(ctx.tenantId, ctx.endpoint);
   const resources: Resource[] = [];
   const relationships: Relationship[] = [];
 

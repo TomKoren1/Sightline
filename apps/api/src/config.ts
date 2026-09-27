@@ -148,6 +148,18 @@ const schema = z.object({
    */
   PUBLIC_BASE_URL: blankAsUnset(z.string().optional()),
 
+  /**
+   * The demo account a hosted tenant can switch to.
+   *
+   * Deliberately **not** `AWS_ENDPOINT_URL`, which hosted mode still refuses.
+   * The difference is who chooses it: the banned variable is an SDK-wide
+   * override that would redirect every signed call this process makes, while
+   * this one names a specific fixture the operator deployed and no tenant can
+   * influence. Unset means no tenant can switch to the demo at all (ADR-020).
+   */
+  DEMO_AWS_ENDPOINT_URL: blankAsUnset(z.string().optional()),
+  DEMO_AWS_ACCOUNT_ID: blankAsUnset(z.string().default("123456789012")),
+
   DEPLOYMENT_MODE: blankAsUnset(z.enum(["self-hosted", "hosted"]).default("self-hosted")),
 
   BACKEND_PORT: blankAsUnset(z.coerce.number().int().positive().default(3000)),
@@ -237,8 +249,11 @@ export function hostedInvariantViolations(
   }
   if (env.AWS_ENDPOINT_URL) {
     problems.push(
-      "AWS_ENDPOINT_URL is set: an endpoint override redirects signed AWS calls, " +
-        "so it must be unset in a service that assumes roles into customer accounts",
+      "AWS_ENDPOINT_URL is set: an SDK-wide endpoint override redirects every signed " +
+        "AWS call this process makes, so it must be unset in a service that assumes " +
+        "roles into customer accounts. To offer a demo account, set " +
+        "DEMO_AWS_ENDPOINT_URL instead - it applies only to tenants who have " +
+        "explicitly switched to the demo (ADR-020)",
     );
   }
   if (env.AWS_ACCESS_KEY_ID) {

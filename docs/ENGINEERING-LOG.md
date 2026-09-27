@@ -1776,3 +1776,53 @@ always cheap — remove the thing under test and confirm the test notices. It ha
 now caught: a fixture that shared the code's blind spot, a check on a guard that
 silently matched nothing, a read-side guard that could not see a write-side
 defect, and now an application path that impersonates a database constraint.
+
+---
+
+## #41 — Every tenant was shown the operator's AWS account
+
+**Problem.** Reported within a minute of the first real Google sign-in: a
+brand-new tenant, with nothing connected, was looking at the operator's own AWS
+account.
+
+**Cause.** Two pieces of ambient state, the same mistake one layer apart.
+
+`activeConnection()` reads `AWS_TARGET_ROLE_ARN` from the environment. That is
+correct for a single-tenant deployment — it is how the whole project has
+worked — and in a process serving many tenants it means _everyone_ gets the
+operator's account.
+
+Worse, and not yet observed because nobody had scanned: `credentials.ts` held
+**one module-level cached STS session**. The first tenant to scan would
+populate it, and every tenant after that would be handed credentials for that
+tenant's AWS account until it expired. Tenant isolation in the database is
+irrelevant if the credentials are shared.
+
+**Fix.** `resolveConnection(tenantId)` reads the tenant's own row and never
+falls back to configuration — a missing connection is a refusal, not a default.
+The session cache became a `Map` keyed by tenant, with the stampede protection
+kept per tenant. Every AWS client factory now takes a `TenantId`, so a client
+cannot be constructed without naming whose account it will talk to, and the
+endpoint moved onto the assumed session for the same reason.
+
+**What made it findable.** Signing in. Every test passed before and after the
+bug existed, because they exercise functions rather than a running process with
+two tenants in it. The tenant-isolation work had been careful about _queries_ —
+three guards, one of which found a genuine cross-tenant edge — and completely
+silent about _credentials_, which is the layer where "whose account" is
+actually decided.
+
+**What to take from it.** Two things.
+
+**Isolation has layers, and guarding one proves nothing about the others.**
+#39 was isolation in writes rather than reads. This is isolation in
+credentials rather than in data. Each time, the guards that existed were
+correct and aimed somewhere else.
+
+**Ambient state is the shape of the bug.** A module-level cache, a module-level
+flag, an environment variable read deep in a call stack — all three are the
+same defect: a value that is right when there is one of something, and silently
+wrong when there are many. The fix is the same each time, and the compiler can
+enforce it: make the thing a parameter, and let every call site that forgot it
+fail to build. Adding `TenantId` to the client factories produced a list of
+exactly the places that had been reaching for an account without saying which.

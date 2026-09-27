@@ -250,3 +250,10 @@ UPDATE eval_runs SET tenant_id = '00000000-0000-0000-0000-000000000001' WHERE te
 ALTER TABLE eval_runs ALTER COLUMN tenant_id SET NOT NULL;
 ALTER TABLE eval_runs ALTER COLUMN tenant_id DROP DEFAULT;
 CREATE INDEX IF NOT EXISTS eval_runs_tenant ON eval_runs (tenant_id);
+
+-- A tenant can point at the demo account instead of their own.
+--
+-- Per tenant, not per process: the single-tenant toggle it replaces was a
+-- module-level flag, which with several tenants on one process means one
+-- person's click changes what everybody else is looking at (ADR-020).
+ALTER TABLE tenants ADD COLUMN IF NOT EXISTS demo_mode BOOLEAN NOT NULL DEFAULT false;

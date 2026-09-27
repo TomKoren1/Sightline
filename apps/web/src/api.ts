@@ -97,12 +97,16 @@ export interface Connection {
   scannerPrincipalNote: string | null;
   /** Set when AWS_TARGET_ROLE_ARN cannot be assumed at all. */
   roleArnProblem: string | null;
-  mode: "mock" | "real";
+  /** Self-hosted: "mock" | "real". Hosted: "demo" | "real", per tenant. */
+  mode: "mock" | "demo" | "real";
   /** What .env says, so the UI can show when the toggle has diverged. */
   configuredMode: "mock" | "real";
   realAccountConfigured: boolean;
   roleArn: string;
   accountId: string | null;
+  /** Hosted only: whether this deployment offers a demo account at all. */
+  demoAvailable?: boolean;
+  connectionStatus?: string | null;
   externalIdMasked: string;
   externalIdIsPlaceholder: boolean;
   homeRegion: string;
@@ -193,7 +197,7 @@ export const api = {
   },
 
   connection: () => get<Connection>("/api/connection"),
-  setMode: async (mode: "mock" | "real") => {
+  setMode: async (mode: "mock" | "demo" | "real") => {
     const res = await fetch("/api/connection/mode", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -203,7 +207,27 @@ export const api = {
     if (!res.ok) throw new Error(body.error ?? `${res.status} ${res.statusText}`);
     return body;
   },
-  newExternalId: () => get<{ externalId: string; note: string }>("/api/connection/external-id"),
+  newExternalId: () =>
+    get<{ externalId: string; note: string; stored?: boolean }>("/api/connection/external-id"),
+
+  /** Hosted only: register this tenant's own AWS account. */
+  saveConnection: async (roleArn: string) => {
+    const res = await fetch("/api/connection", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      credentials: "same-origin",
+      body: JSON.stringify({ roleArn }),
+    });
+    const body = (await res.json()) as {
+      roleArn?: string;
+      externalId?: string;
+      status?: string;
+      note?: string;
+      error?: string;
+    };
+    if (!res.ok) throw new Error(body.error ?? `${res.status} ${res.statusText}`);
+    return body;
+  },
   testConnection: async (): Promise<ConnectionTest> => {
     const res = await fetch("/api/connection/test", { method: "POST" });
     return res.json() as Promise<ConnectionTest>;

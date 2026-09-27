@@ -30,6 +30,7 @@ import { ListIndexesCommand, paginateSearch } from "@aws-sdk/client-resource-exp
 
 import { cfg } from "../config.js";
 import { resourceExplorerClient } from "./clients.js";
+import type { TenantId } from "../tenancy/tenant.js";
 
 export interface FastPathResult {
   /** Whether an aggregator index was found and searched successfully. */
@@ -46,8 +47,11 @@ export interface FastPathResult {
  * The aggregator index is the only one that can answer a cross-region query.
  * A local index only sees its own region, so finding one is not enough.
  */
-async function findAggregatorRegion(): Promise<string | null> {
-  const client = resourceExplorerClient(cfg.AWS_REGION);
+async function findAggregatorRegion(
+  tenantId: TenantId,
+  endpoint: string | null,
+): Promise<string | null> {
+  const client = resourceExplorerClient(cfg.AWS_REGION, tenantId, endpoint);
   const res = await client.send(new ListIndexesCommand({ Type: "AGGREGATOR" }));
   const index = (res.Indexes ?? []).find((i) => i.Type === "AGGREGATOR" && i.Region);
   return index?.Region ?? null;
@@ -61,7 +65,11 @@ async function findAggregatorRegion(): Promise<string | null> {
  * paging the whole index is slow, the region set has almost certainly converged
  * long before the end.
  */
-export async function discoverActiveRegions(maxPages = 20): Promise<FastPathResult> {
+export async function discoverActiveRegions(
+  tenantId: TenantId,
+  endpoint: string | null = null,
+  maxPages = 20,
+): Promise<FastPathResult> {
   const unavailable = (reason: string): FastPathResult => ({
     available: false,
     activeRegions: new Set(),
@@ -70,12 +78,12 @@ export async function discoverActiveRegions(maxPages = 20): Promise<FastPathResu
   });
 
   try {
-    const aggregatorRegion = await findAggregatorRegion();
+    const aggregatorRegion = await findAggregatorRegion(tenantId, endpoint);
     if (!aggregatorRegion) {
       return unavailable("no aggregator index in this account, using per-service enumeration");
     }
 
-    const client = resourceExplorerClient(aggregatorRegion);
+    const client = resourceExplorerClient(aggregatorRegion, tenantId, endpoint);
     const activeRegions = new Set<string>();
     let resourceCount = 0;
     let pages = 0;

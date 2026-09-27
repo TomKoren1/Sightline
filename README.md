@@ -495,15 +495,16 @@ docs/               decisions, engineering log, commit log, walkthrough
 
 ## Documentation
 
-- **[docs/DECISIONS.md](docs/DECISIONS.md)** — eighteen ADRs: the stack, the
+- **[docs/DECISIONS.md](docs/DECISIONS.md)** — twenty ADRs: the stack, the
   mock, the two-database split, deterministic analysis, the tool boundary,
   citation validation, the IAM role, the eval strategy, the read-only refusal in
   code, guided onboarding, evals shown in the product, public vs unprotected,
-  the runtime account toggle, remediation that is never applied, and four for the
+  the runtime account toggle, remediation that is never applied, and six for the
   hosted service — capabilities removed rather than guarded, why the agent's
   raw-Cypher escape hatch cannot survive a shared graph, and tenancy as
-  something with no unscoped path through it, and Google-only sign-in with no
-  auth library.
+  something with no unscoped path through it, Google-only sign-in with no auth
+  library, a tenant's AWS connection as data rather than configuration, and a
+  demo account each tenant can switch to on their own.
 - **[docs/HOSTED-SETUP.md](docs/HOSTED-SETUP.md)** — every credential the
   hosted deployment needs, where to get it, and what it goes in.
 - **[docs/HOSTED-PLAN.md](docs/HOSTED-PLAN.md)** — the plan for running this as
