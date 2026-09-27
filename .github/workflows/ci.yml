@@ -94,6 +94,13 @@ jobs:
         # regression that matters most: an analyser becoming quietly wrong.
         run: npx vitest run apps/api/src/evals/groundTruth.test.ts
 
+      - name: A tenant's journey, end to end
+        # Sign in, connect, scan, and confirm a second tenant sees none of it.
+        # Needs the compose stack: it drives the real app against real
+        # databases, which is the only way to catch a defect that lives
+        # between two correct layers (engineering log #43).
+        run: npx vitest run apps/api/src/auth/tenantJourney.test.ts
+
       - name: Tenant isolation and the scan queue
         # Two tenants in one Neo4j, and the queue's concurrency guarantees.
         # Both are properties of the databases rather than of the code, so
