@@ -6,16 +6,40 @@ discussing this project.
 
 ---
 
+## 0. Before recording
+
+Two settings decide whether any of this works, and both are easy to get wrong
+because they are invisible on screen.
+
+**`.env` must point at the mock account.** If it holds a real
+`AWS_TARGET_ROLE_ARN` and `AWS_MODE=real`, the API starts against that account
+and every step below describes something you are not looking at. Either set
+`AWS_MODE=mock`, or leave it and press **Demo** in the header before starting —
+the toggle is a legitimate thing to show, and it switches without a restart.
+
+**`SCAN_FAULT_INJECTION` must be empty**, or the partial-failure banner appears
+in every shot rather than the one where it is the point.
+
+A dry run of the whole script before recording is worth the eight minutes: it
+also leaves a recorded eval run for the Trust panel to display.
+
+---
+
 ## 1. The demo, in order
 
-Seven minutes, arranged so each step sets up the next.
+About eight minutes, arranged so each step sets up the next.
 
 ### Start from empty
 
 ```bash
 docker compose down -v && docker compose up -d
+npm run seed                    # moto is in-memory: a fresh container is an empty account
 npm run dev:api & npm run dev:web
 ```
+
+`npm run seed` is not optional here. `down -v` discards moto's volume along
+with the databases, and a scan of an unseeded account finds nothing — which
+looks exactly like a broken product on camera.
 
 Open http://localhost:5173. The empty state explains what a scan does and
 offers to run one. **Point out that this is a real state, not a placeholder** —
@@ -29,7 +53,9 @@ Click **Run the first scan**. Watch the banner:
   to scan — and fills in as units complete. It does not grow a list as work
   finishes; the user can see the whole shape of the job from the first second.
 - Progress is per service and region, not a percentage guess.
-- It takes about four seconds against the mock and makes ~87 AWS API calls.
+- It takes two to three seconds against the mock and makes 101 AWS API calls,
+  across fourteen units: six services over three regions, with IAM and S3
+  scanned once because their resources are global.
 
 ### The graph
 
@@ -54,8 +80,11 @@ paths"_ — rather than showing a spinner. When the answer arrives:
 - Expand **tool calls** to see exactly which tools ran, with row counts and
   timings.
 
-The answer should name **both** routes: the three-hop path through the web and
-app tiers, and the shorter one through the bastion.
+The answer names **five** distinct chains, not two: one two-hop path through
+the SSH bastion, and four three-hop paths through the web tier into either the
+app instance or the order-processor Lambda. Each is justified by named security
+group rules rather than asserted. Checked against a pristine fixture while
+writing this, so it is what you should expect to see.
 
 ### Then ask the trap
 
@@ -65,6 +94,48 @@ app tiers, and the shorter one through the bastion.
 The correct answer is no — its security group opens no ports. This is the
 clearest demonstration that the agent is reading computed facts rather than
 paraphrasing an AWS field.
+
+### Show the finding that a role-only scanner misses
+
+Findings sidebar → **Admin**. Five principals hold effective `*:*`, and the
+list deliberately mixes **roles and users**:
+
+- `NorthwindAdminRole` — the obvious one, via the managed `AdministratorAccess`
+- `LegacyDeployRole` — via an **inline** policy called `legacy-deploy-inline`,
+  so the name says nothing about what it grants
+- `UnusedAdminRole` — privileged and used by nothing
+- `northwind-backup-agent` — an IAM **user**, admin via an inline policy called
+  `BackupHelper`
+- `northwind-ci-deploy` — an IAM user with `AdministratorAccess` attached
+
+The two users are the point. Admin detection originally read roles only, and
+against a real AWS account administered through IAM users it reported that
+nobody had administrator access — 157 tests passed, because the fixture had no
+users either. A fixture that shares the code's blind spot proves nothing
+(engineering log #29).
+
+Worth adding, if asked why users matter more: a role is assumed and issues
+credentials that expire; a user has access keys that do not.
+
+### Show that it will not fix it for you
+
+Click `LegacyDeployRole` → **How to fix**.
+
+- The commands are **computed from the same evidence as the verdict**, not
+  written by the model. This role's admin comes from an inline policy, so the
+  suggestion is `get-role-policy` into `backup.json`, then `put-role-policy`
+  with a scoped replacement. The obvious
+  `detach-role-policy --policy-arn …/AdministratorAccess` would exit zero and
+  fix nothing, and that is exactly what a model would have produced.
+- The **caution is rendered above the commands**, and it names what breaks:
+  _"legacy-image-resizer currently uses this role, and will lose every
+  permission it grants the moment this is applied."_ That sentence is generated
+  from the graph edges into the role.
+- There is a copy button and **no apply button**, anywhere in the product.
+
+The absence is the feature: a Fix button would undo the read-only position in
+one click, and the person who knows whether a public bucket is a mistake or a
+deliberate CDN origin is at the keyboard, not in the scanner (ADR-014).
 
 ### Show change detection
 
@@ -77,13 +148,19 @@ the two scans and every ARN changed. Run `npm run seed && npm run scan` once,
 then `npm run drift && npm run scan`, with nothing in between — the
 ground-truth test suite re-seeds moto, so it counts as something in between.
 
-Open the **Changes** tab. Five things changed; three are grouped as _worth
-looking at_ and the rest as routine.
+Open the **Changes** tab. Six things changed — one added, five modified — and
+they are grouped rather than listed: **three worth looking at**, two routine,
+and the new volume. The grouping is computed from which _fields_ changed, so a
+security verdict flipping and an instance gaining a tag are not shown as equals.
+
+The three notable ones are a bucket that became public, a stopped instance that
+became idle, and a security group whose ingress rules changed.
 
 The one to dwell on: `northwind-logs-archive` and `northwind-terraform-state`
-both received the **same** permissive bucket policy, and only the first shows
-`derived.isPublic: false → true`. The second's public access block neutralised
-it. A diff that flagged them identically would be reading the policy instead of
+both received the **same** permissive bucket policy. Only the first shows
+`derived.isPublic: false → true` and is grouped as notable; the second shows
+only `policy` and `publicReason` changing and sits under routine, because its
+public access block neutralised the policy. A diff that flagged them identically would be reading the policy instead of
 evaluating it — this is the deterministic-analysis argument (ADR-004) visible in
 one screen.
 
@@ -91,10 +168,12 @@ one screen.
 
 Header → **Trust**.
 
-- **Data checks** run on demand: twelve checks, no model, no API key, about
-  10ms. Expand one to see what it guards against and what it found.
-- **Agent answer quality** shows the last recorded eval run — 16/16, mean F1
-  1.0, no unsupported citations — with the model that produced it.
+- **Data checks** run on demand: fifteen checks, no model, no API key, about
+  ten milliseconds. Expand one to see what it guards against and what it found.
+- **Agent answer quality** shows the last recorded eval run — 21/21, mean F1
+  1.0, no unsupported citations — with the model that produced it. If it says
+  "no run recorded", run `npm run evals -w @daveio/api` before recording; it
+  needs an API key and a few minutes.
 
 If drift has been applied, the data checks deliberately show **amber, not red**,
 with an explanation: they assert properties of the pristine fixture, so a
@@ -150,7 +229,7 @@ Postgres ─── system of record: immutable snapshots, scan units, agent trac
 Neo4j ────── derived projection, rebuilt in one transaction
     │
     ▼
-tools ────── 13 curated parameterised queries + a guarded Cypher escape hatch
+tools ────── 16 tools over 13 curated queries, + a guarded Cypher escape hatch
     │
     ▼
 agent ────── tool-calling loop, citations validated against tool results
@@ -307,13 +386,18 @@ Being direct about this is worth more than pretending otherwise.
 - **Incremental graph updates.** The rebuild is wholesale. It is the first
   thing that breaks at ~50k resources, and the Postgres snapshots were designed
   so the fix is a diff rather than a rewrite.
-- **Change detection is built but not surfaced.** Scan diffing works and the
-  agent can query it; the UI does not show it. _"What changed since yesterday,
-  and does any of it matter?"_ is the question that would make this a product
-  someone opens daily.
+- **Scans are triggered by a person.** Diffing works, the agent can query it
+  and the Changes tab shows it — but nothing runs on a schedule, so _"what
+  changed overnight?"_ is only answerable if somebody remembered to scan last
+  night. A scheduled scan plus a digest of what materially changed is what
+  would make this a product someone opens daily.
 - **Idle detection is structural.** CloudWatch metrics would turn "this volume
   is unattached" into "this instance has been under 2% CPU for thirty days".
   The replacement role already grants the permission.
 - **Multi-tenancy is gestured at, not built.** Every resource carries an
-  `accountId`; scan orchestration uses a module-level flag and would need a job
-  queue.
+  `accountId`, but the AWS connection is process configuration and scan
+  orchestration tracks "is a scan running" in a module-level boolean — both
+  correct for one operator and wrong the moment there are two. Real tenancy
+  means a tenant on every row, credentials resolved per tenant rather than
+  cached globally, and a job queue. Worth saying plainly if asked: the honest
+  version of this is a week of work, not a flag.
