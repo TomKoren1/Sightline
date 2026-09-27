@@ -18,16 +18,32 @@ AWS (real or mock) ──▶ scanner ──▶ Postgres ──▶ Neo4j ──�
 
 ## Running it
 
-Two ways. The first is what I develop against and what CI exercises; the second
-is one command if you would rather not install anything.
-
-### Locally
-
-You need Docker and Node 20+. Nothing else — no AWS account, no credentials.
+Everything runs against a mock AWS account, so there is no AWS involvement of any
+kind — no account, no credentials, no cost.
 
 ```bash
 git clone <this repo> && cd dave.io_home-assignment
 cp .env.example .env
+```
+
+### One command
+
+```bash
+docker compose --profile app up -d --build
+# → http://localhost:8080
+```
+
+Needs Docker and nothing else. Builds the API and the frontend, starts Postgres,
+Neo4j and the mock AWS control plane, and seeds the fictional customer account.
+The first scan is deliberately left for you to run from the UI's empty state.
+
+### Or on the host, to work on the code
+
+Docker for the three dependencies, Node 20+ for the rest — hot reload, and the
+CLIs to hand. This is what I develop against and what the rest of this README
+assumes.
+
+```bash
 docker compose up -d          # Postgres, Neo4j, and moto (mock AWS)
 npm install
 
@@ -38,32 +54,7 @@ npm run dev:api               # http://localhost:3000
 npm run dev:web               # http://localhost:5173   ← open this
 ```
 
-### Entirely in Docker
-
-```bash
-cp .env.example .env
-docker compose --profile app up -d --build    # everything
-                                              # http://localhost:8080  ← open this
-```
-
-This adds three services — the API, nginx serving the built frontend, and a
-one-shot seeder — and needs no Node on the host. The mock account is seeded
-automatically; the first scan is left for you to run from the empty state, which
-is worth seeing.
-
-The profile is **opt-in and additive**: plain `docker compose up -d` still starts
-exactly the three dependencies it always did, so if the containerised path
-misbehaves on a platform I cannot test, the instructions above are unaffected.
 Both paths are covered by CI.
-
-Two details behind it. Every connection default in `config.ts` is `localhost`,
-which is right on a laptop and wrong inside a container, so the container
-hostnames are set in the compose service's `environment:` block — which takes
-precedence over `env_file` — rather than in a second `.env` that would eventually
-disagree with the first. And nginx proxies `/api` with `proxy_buffering off`,
-because scans and agent answers are server-sent event streams and a buffering
-proxy delivers them all at the end, which is the same problem the Vite dev server
-has to solve in development.
 
 ### Tearing it down
 
@@ -82,6 +73,15 @@ removed. That is a Compose behaviour rather than a choice here —
 recorded eval runs. And note that **any** `down` empties the mock AWS account,
 because moto holds it in memory — so after tearing down, `npm run seed` before
 `npm run scan`, or the scan discovers an empty account.
+
+Two things to know if you edit the compose file. Every connection default in
+`config.ts` is `localhost`, which is right on a laptop and wrong inside a
+container, so the container hostnames are set in the compose service's
+`environment:` block — which takes precedence over `env_file` — rather than in a
+second `.env` that would eventually disagree with the first. And nginx proxies
+`/api` with `proxy_buffering off`, because scans and agent answers are
+server-sent event streams: a buffering proxy delivers them all at the end, which
+is the same problem the Vite dev server solves in development.
 
 `npm run seed` and `npm run scan` are also reachable from the UI: open it with
 an empty database and the empty state offers to run the first scan.
