@@ -183,7 +183,18 @@ worse than absent.
 
 ### Show the onboarding guide
 
-Header → **Connection**. Five steps, and step 4 is the one to talk about: there
+Header → **Connection**. Start at **Before you start**: it names the two
+identities people conflate — _your_ admin credentials, used once to create the
+role and never stored, versus _this backend's_ principal, which is what the
+trust policy names and is already filled in for you. `aws sts get-caller-identity`
+is there because deploying into the wrong account is the easy mistake, and it
+only surfaces two steps later as a confusing `NoSuchEntity`.
+
+Then point at any command block: every one carries a legend marking each value
+**filled in** or **you replace**. Exactly one value on the whole page is the
+reader's — `AWS_TARGET_ROLE_ARN` — and it is the only thing tagged in amber.
+
+Five steps, and step 4 is the one to talk about: there
 is deliberately **no form** for pasting a role ARN, because this API has no
 authentication and that form would be an open endpoint assuming a role into
 someone's AWS account while storing a credential. The screen says so.

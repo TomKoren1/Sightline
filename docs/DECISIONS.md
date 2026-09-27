@@ -268,7 +268,7 @@ It checks that the bucket with a neutralised policy is _not_ public, that the
 inline-admin role _is_ admin, that the private database is reachable by both
 expected chains, and that the publicly-flagged database is reachable by none.
 
-**Tier 2 — answer quality** (`npm run evals`). Fifteen cases run against the
+**Tier 2 — answer quality** (`npm run evals`). Twenty-one cases run against the
 live agent, scored on the ARNs the answer cites, with precision and recall.
 Each case asserts what must be cited, what must **not** be (the traps), and
 which tools should have been chosen. Any unsupported citation fails the case

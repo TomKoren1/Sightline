@@ -16,12 +16,32 @@
  * reasoning is shown to the user too, in step 4 — a customer granting a third
  * party standing access into their account deserves to see how that access is
  * constrained.
+ *
+ * **Every command block declares which values are pre-filled and which the
+ * reader has to supply**, via `<Fields>`. Handing someone a command to paste
+ * without saying which parts are theirs is how they end up deploying a role
+ * into the wrong account, and the failure surfaces much later as an
+ * `AccessDenied` that looks like a bug in this product.
  */
 
 import { useMutation, useQuery } from "@tanstack/react-query";
 
 import { api, type Connection, type ConnectionTest } from "../api.js";
 import { Copyable } from "./Copyable.js";
+
+/**
+ * Stand-in used while the generated ExternalId is still in flight.
+ *
+ * Never a human-readable status word. This previously interpolated
+ * `"generating…"` directly into both command blocks, so a reader who copied
+ * fast enough deployed a stack whose ExternalId was literally `generating…`
+ * and put the same string in `.env` - a connection that tests green against
+ * the wrong secret. A token shaped like this cannot be mistaken for a value.
+ */
+const EXTERNAL_ID_PENDING = "PASTE_EXTERNAL_ID_FROM_STEP_2";
+
+/** The one value in step 4 the reader must replace, shaped like a real ARN. */
+const ROLE_ARN_TEMPLATE = "arn:aws:iam::<your-12-digit-account-id>:role/DaveIoReadOnlyRole";
 
 function Step({
   n,
@@ -51,6 +71,42 @@ function Step({
   );
 }
 
+/**
+ * Which parts of the command above are already correct, and which are yours.
+ *
+ * `replace` is styled loudest on purpose: in both blocks on this page it is
+ * the minority case, and a reader who skims will otherwise assume - correctly
+ * for every other line - that the value is filled in.
+ */
+function Fields({
+  rows,
+}: {
+  rows: { name: string; kind: "filled" | "replace" | "optional"; note: string }[];
+}) {
+  const tag = {
+    filled: { text: "filled in", cls: "border-good/40 bg-good/10 text-good" },
+    replace: { text: "you replace", cls: "border-warn/50 bg-warn/15 text-warn" },
+    optional: { text: "optional", cls: "border-ink-600 bg-ink-800 text-ink-400" },
+  };
+  return (
+    <ul className="space-y-1">
+      {rows.map((r) => (
+        <li key={r.name} className="flex items-baseline gap-1.5 text-[10px] leading-relaxed">
+          <span
+            className={`mt-px shrink-0 rounded border px-1 py-px text-[9px] font-medium ${tag[r.kind].cls}`}
+          >
+            {tag[r.kind].text}
+          </span>
+          <span className="min-w-0">
+            <code className="break-all text-ink-300">{r.name}</code>{" "}
+            <span className="text-ink-400">— {r.note}</span>
+          </span>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
 export function ConnectionGuide() {
   const connection = useQuery({ queryKey: ["connection"], queryFn: api.connection });
   const externalId = useQuery({
@@ -69,7 +125,14 @@ export function ConnectionGuide() {
 
   const c: Connection = connection.data;
   const isReal = c.mode === "real";
-  const suggestedId = externalId.data?.externalId ?? "generating…";
+
+  /**
+   * Whether the generated id is actually here. Kept separate from its value so
+   * a pending or failed fetch degrades to a loud token rather than to prose
+   * that reads like a value (see EXTERNAL_ID_PENDING).
+   */
+  const externalIdReady = typeof externalId.data?.externalId === "string";
+  const suggestedId = externalId.data?.externalId ?? EXTERNAL_ID_PENDING;
 
   /**
    * The principal to trust, already converted from the session ARN.
@@ -85,10 +148,16 @@ export function ConnectionGuide() {
   const scannerPrincipal = c.scannerPrincipal ?? "arn:aws:iam::<account>:role/DaveIoScanner";
   const principalUnresolved = c.scannerPrincipal === null;
 
+  /** Proves which account and identity the next command will actually act as. */
+  const whoamiCommand = "aws sts get-caller-identity";
+
   const deployCommand = [
     "aws cloudformation deploy \\",
     "  --template-file infra/readonly-role.yaml \\",
     "  --stack-name daveio-readonly \\",
+    // Without an explicit region this fails outright on a CLI that has no
+    // default configured, with an error that says nothing about this page.
+    `  --region ${c.homeRegion} \\`,
     "  --capabilities CAPABILITY_NAMED_IAM \\",
     "  --parameter-overrides \\",
     `      DaveIoScannerRoleArn=${scannerPrincipal} \\`,
@@ -97,9 +166,9 @@ export function ConnectionGuide() {
 
   const envSnippet = [
     "AWS_MODE=real",
-    "AWS_TARGET_ROLE_ARN=<the RoleArn output from step 3, NOT the scanner principal>",
+    `AWS_TARGET_ROLE_ARN=${ROLE_ARN_TEMPLATE}`,
     `AWS_EXTERNAL_ID=${suggestedId}`,
-    "AWS_SCAN_REGIONS=          # empty discovers every enabled region",
+    "AWS_SCAN_REGIONS=",
   ].join("\n");
 
   return (
@@ -118,7 +187,10 @@ export function ConnectionGuide() {
         </div>
         <dl className="mt-1 space-y-0.5 text-[10px]">
           <Row label="Role" value={c.roleArn} mono />
-          <Row label="Account" value={c.accountId ?? "unknown"} mono />
+          {/* Labelled "Target account" because it is the account that would be
+              scanned, derived from the role ARN - not the account this backend
+              runs in, which is the other identity in play throughout. */}
+          <Row label="Target account" value={c.accountId ?? "unknown"} mono />
           <Row
             label="ExternalId"
             value={
@@ -146,10 +218,63 @@ export function ConnectionGuide() {
       )}
 
       <p className="text-[12px] leading-relaxed text-ink-300">
-        Connecting a real account takes four steps and about five minutes. dave.io never receives
+        Connecting a real account takes five steps and about five minutes. dave.io never receives
         your AWS keys — it assumes a role that you create, in your account, which you can inspect
         before deploying and delete at any time.
       </p>
+
+      {/* ---- What the reader has to bring, and the identity confusion ---- */}
+      <div className="space-y-2 rounded border border-ink-700 bg-ink-850 px-2.5 py-2">
+        <p className="text-[11px] font-semibold text-ink-100">Before you start</p>
+        <p className="text-[10px] leading-relaxed text-ink-400">
+          You need two things: the <strong className="text-ink-300">12-digit id</strong> of the AWS
+          account you want scanned, and AWS CLI credentials{" "}
+          <strong className="text-ink-300">in that account</strong> allowed to create an IAM role (
+          <code>cloudformation:*</code> on the stack, plus <code>iam:CreateRole</code> and{" "}
+          <code>iam:PutRolePolicy</code>). Confirm both before running anything:
+        </p>
+        <Copyable value={whoamiCommand} label="confirm which account you are about to change" />
+        <div className="rounded border border-ink-700 bg-ink-950 px-2 py-1.5 font-mono text-[10px] leading-relaxed text-ink-400">
+          {"{"}
+          <br />
+          {'  "Account": "111122223333",'}{" "}
+          <span className="text-ink-500">← the stack is created here</span>
+          <br />
+          {'  "Arn": "arn:aws:iam::111122223333:user/you"'}{" "}
+          <span className="text-ink-500">← as this identity</span>
+          <br />
+          {"}"}
+        </div>
+        <p className="text-[10px] leading-relaxed text-ink-400">
+          If <code>Account</code> is not the account you meant, switch profile and re-run —{" "}
+          <code>export AWS_PROFILE=name</code>, or add <code>--profile name</code> to the command in
+          step 3. Getting this wrong creates the role in the wrong account, and the mistake only
+          surfaces in step 5 as a confusing <code>NoSuchEntity</code>.
+        </p>
+
+        {/*
+          The page already explained the two *roles*. The two *identities* are a
+          separate and more common confusion, and nothing said so.
+        */}
+        <div className="border-t border-ink-700 pt-1.5">
+          <p className="text-[10px] font-semibold text-ink-300">
+            Two identities are involved. They are not the same thing.
+          </p>
+          <ul className="mt-1 space-y-1 text-[10px] leading-relaxed text-ink-400">
+            <li>
+              <strong className="text-ink-300">Yours</strong>, above — an admin in the target
+              account. Used once, to create the role. dave.io never sees it and it is not stored
+              anywhere.
+            </li>
+            <li>
+              <strong className="text-ink-300">This backend&apos;s</strong> —{" "}
+              <code className="break-all">{scannerPrincipal}</code>. Named in the new role&apos;s
+              trust policy so it can assume the role later. This is the value already filled into
+              step 3, and it is <em>not</em> something you replace.
+            </li>
+          </ul>
+        </div>
+      </div>
 
       <div className="space-y-3.5 border-t border-ink-800 pt-3.5">
         <Step n={1} title="Review what access you are granting">
@@ -176,22 +301,52 @@ export function ConnectionGuide() {
 
         <Step n={2} title="Take your ExternalId">
           <p className="text-[11px] leading-relaxed text-ink-400">
-            A secret unique to you. The role's trust policy requires it, so knowing the role's ARN
-            is not enough to assume it — this is what prevents a third party from tricking dave.io
-            into using its access against your account.
+            A secret unique to you. The role&apos;s trust policy requires it, so knowing the
+            role&apos;s ARN is not enough to assume it — this is what prevents a third party from
+            tricking dave.io into using its access against your account.
           </p>
           <Copyable value={suggestedId} />
-          <p className="text-[10px] text-ink-400">
-            Generated for you and <strong>not stored anywhere</strong>. Treat it like a password:
-            you will paste it into the stack in step 3 and into configuration in step 4.
-          </p>
+          {externalIdReady ? (
+            <p className="text-[10px] text-ink-400">
+              Generated for you and <strong>not stored anywhere</strong>. Treat it like a password:
+              the same value goes into the stack in step 3 and into configuration in step 4, and
+              they must match byte for byte.
+            </p>
+          ) : (
+            <p className="rounded border border-warn/40 bg-warn/10 px-2 py-1.5 text-[10px] leading-relaxed text-warn">
+              {externalId.isError
+                ? "Could not generate an ExternalId. Use any long random string of your own — it only has to be identical in step 3 and step 4."
+                : "Still generating. The commands below carry a placeholder until it arrives; wait for it rather than pasting them now."}
+            </p>
+          )}
         </Step>
 
         <Step n={3} title="Create the role in your account">
           <p className="text-[11px] leading-relaxed text-ink-400">
-            Run this against the account you want scanned. It creates one IAM role and nothing else.
+            Run this against the account you confirmed above. It creates one IAM role and nothing
+            else.
           </p>
           <Copyable value={deployCommand} />
+          <Fields
+            rows={[
+              {
+                name: "DaveIoScannerRoleArn",
+                kind: "filled",
+                note: "the identity this backend runs as, converted to a form a trust policy accepts",
+              },
+              { name: "ExternalId", kind: "filled", note: "the value from step 2" },
+              {
+                name: "--region",
+                kind: "filled",
+                note: `${c.homeRegion}, from AWS_REGION. The role itself is global; this is where the stack lives.`,
+              },
+              {
+                name: "--profile",
+                kind: "optional",
+                note: "add it if your default profile is not the target account",
+              },
+            ]}
+          />
           {principalUnresolved && (
             <p className="rounded border border-warn/40 bg-warn/10 px-2 py-1.5 text-[10px] leading-relaxed text-warn">
               The command above contains a placeholder.{" "}
@@ -200,8 +355,8 @@ export function ConnectionGuide() {
           )}
           {!principalUnresolved && c.callerIdentityIsMock && (
             <p className="rounded border border-warn/40 bg-warn/10 px-2 py-1.5 text-[10px] leading-relaxed text-warn">
-              You are on the demo account, so the principal above is the mock's own identity, not
-              yours. Fine for reading through these steps; before deploying for real, switch to{" "}
+              You are on the demo account, so the principal above is the mock&apos;s own identity,
+              not yours. Fine for reading through these steps; before deploying for real, switch to{" "}
               <strong>My AWS</strong> or run <code>aws sts get-caller-identity</code> yourself and
               use that identity instead.
             </p>
@@ -222,8 +377,8 @@ export function ConnectionGuide() {
                 <code>get-caller-identity</code> reports the <em>session</em> you are using, so it
                 returns <code className="break-all">{c.callerIdentity}</code> — an <code>sts</code>{" "}
                 ARN. A trust policy needs the <code>iam</code> identity behind that session, which
-                is what the command uses. Pasting the <code>sts</code> form fails the template's own
-                parameter pattern.
+                is what the command uses. Pasting the <code>sts</code> form fails the
+                template&apos;s own parameter pattern.
               </p>
             )}
             <p className="mt-1 text-[10px] leading-relaxed text-ink-400">
@@ -241,17 +396,33 @@ export function ConnectionGuide() {
 
         <Step n={4} title="Point this deployment at the role">
           <p className="text-[11px] leading-relaxed text-ink-400">
-            Add these to <code className="text-ink-300">.env</code> and{" "}
+            Add these to <code className="text-ink-300">.env</code> in the repository root, then{" "}
             <strong className="text-ink-300">restart the API</strong> — configuration is read once
             at startup, so an edit with no restart changes nothing.
           </p>
           <Copyable value={envSnippet} />
+          <Fields
+            rows={[
+              {
+                name: "AWS_TARGET_ROLE_ARN",
+                kind: "replace",
+                note: 'the only value here that is yours. Paste the stack\'s RoleArn output whole, or swap <your-12-digit-account-id> for the Account from "Before you start". The role name is already right unless you overrode RoleName.',
+              },
+              { name: "AWS_MODE", kind: "filled", note: "real, so AWS is called instead of moto" },
+              { name: "AWS_EXTERNAL_ID", kind: "filled", note: "same value you deployed with" },
+              {
+                name: "AWS_SCAN_REGIONS",
+                kind: "optional",
+                note: "leave empty to discover every enabled region; set a comma-separated list to narrow it",
+              },
+            ]}
+          />
           <p className="text-[10px] leading-relaxed text-warn">
             Also remove <code>AWS_ENDPOINT_URL</code>, <code>AWS_ACCESS_KEY_ID</code> and{" "}
-            <code>AWS_SECRET_ACCESS_KEY</code> if they are still set to the mock's values. The AWS
-            SDK reads those from the environment itself, so leaving them sends every request to the
-            mock and shadows your real credentials. The API removes them and warns on startup, but
-            deleting them is cleaner.
+            <code>AWS_SECRET_ACCESS_KEY</code> if they are still set to the mock&apos;s values. The
+            AWS SDK reads those from the environment itself, so leaving them sends every request to
+            the mock and shadows your real credentials. The API removes them and warns on startup,
+            but deleting them is cleaner.
           </p>
           <div className="rounded border border-ink-700 bg-ink-850 px-2 py-1.5">
             <p className="text-[10px] leading-relaxed text-ink-400">

@@ -1683,3 +1683,98 @@ claims is a test suite you run by hand.** "Names the running tool in plain
 language" is falsifiable, so checking it found a defect. Prose that had said
 "clear progress indication" would have checked nothing, because nothing could
 have contradicted it.
+
+---
+
+## #39 — The onboarding page never said which values were the reader's
+
+**Symptom.** Reported, not found by a test: the connection guide "isn't clear
+enough on what the user needs to change." Every command on the page is
+copy-pasteable and looks finished, so a reader has no way to tell a value that
+was computed for them from a value that is a placeholder waiting for theirs.
+
+**What the page got right, and why that made it worse.** It already explained the
+two _roles_ — `DaveIoScannerRoleArn` is an input, the stack _creates_ a different
+role, and the created one is what `.env` wants — under a heading calling that the
+usual mistake. Being right about the subtle confusion while silent on the plain
+one is the worst arrangement: the reader trusts the page and still gets it wrong.
+
+**Causes.** Five, found by reading the rendered output rather than the code.
+
+1. **The two _identities_ were never mentioned.** Deploying the stack needs
+   _your_ admin credentials in the target account, used once and stored nowhere.
+   The trust policy names _this backend's_ principal, permanently. Both are
+   "the ARN" in conversation, they differ, and the page explained neither — while
+   carefully distinguishing the two roles, which is a strictly smaller problem.
+
+2. **Nothing identified the target account.** Step 3 said "run this against the
+   account you want scanned" without saying how to control or confirm which
+   account that is. `aws cloudformation deploy` uses the ambient profile, so a
+   wrong default creates the role in the wrong account, and the mistake surfaces
+   two steps later as `NoSuchEntity` — which reads like a bug in this product.
+
+3. **The one value the reader had to supply was a sentence inside a config
+   file:** `AWS_TARGET_ROLE_ARN=<the RoleArn output from step 3, NOT the scanner
+principal>`. Correct as prose, useless as a value, and indistinguishable at a
+   glance from the three pre-filled lines around it.
+
+4. **`ExternalId=` interpolated a loading string.** `suggestedId` fell back to
+   `"generating…"`, so a reader who copied before the fetch resolved deployed a
+   stack whose shared secret was the literal text `generating…`, and put the same
+   text in `.env`. **That connection then tests green** — both sides agree on a
+   secret neither party meant, which is worse than a failure. If the request
+   errored it never resolved at all.
+
+5. **No `--region`,** so the command failed outright for anyone whose CLI had no
+   default region — with an error mentioning nothing on this page. The server was
+   already reporting `homeRegion` and the guide ignored it.
+
+Separately, the intro promised "four steps" while rendering five, and
+`codebase-tour.html` had copied the wrong number.
+
+**Fix.** A `Fields` legend under every command block, tagging each value **filled
+in**, **you replace**, or **optional** — amber for the reader's, and exactly one
+value on the page carries it. A `Before you start` block above the numbered steps
+names what you need, runs `aws sts get-caller-identity` with the two fields
+annotated (`Account` — the stack is created here; `Arn` — as this identity), and
+sets the two identities against each other explicitly. The placeholder is now
+shaped like a real ARN, `arn:aws:iam::<your-12-digit-account-id>:role/DaveIoReadOnlyRole`,
+so the reader can see that only the account id is theirs. `EXTERNAL_ID_PENDING`
+replaces the loading word, and `--region ${c.homeRegion}` is pinned.
+
+Kept _above_ the numbered steps deliberately rather than added as a step zero:
+`WALKTHROUGH.md` says "step 4 is the one to talk about" and two PDFs cite step
+numbers. New information should not renumber a reference someone is about to read
+aloud.
+
+**The guard.** `infra/connectionGuide.test.ts`, six assertions, each broken on
+purpose and observed to fail: a renamed CloudFormation parameter, the placeholder
+role name drifting from the template's `RoleName` default, the step count
+disagreeing with the rendered `<Step>` elements, no value marked as the reader's,
+a status word back in a command block, and the region unpinned.
+
+Two of those assertions were wrong before they were right, both for the same
+reason — **a check broad enough to catch the bug also caught the fix.** Scanning
+the whole file for status words flagged `c.accountId ?? "unknown"` in the status
+panel, which is legitimate. Scoping it to the command region then flagged
+`EXTERNAL_ID_PENDING` itself, because "pending" is a substring of the constant
+that exists to solve the problem. It now strips upper-snake identifiers first and
+looks only for lowercase status words and the Unicode ellipsis; the ASCII `...`
+is not checked, because doc comments elide real ARNs with it. A guard that fails
+on the correct state gets deleted, so its false-positive behaviour is part of the
+design, not an afterthought — same lesson as the two failed attempts in the
+`admin-users-risk` eval case.
+
+**What to take from it.** Two things.
+
+**Explaining the hard version of a confusion is not evidence you explained the
+easy one.** The page spent a bordered callout on scanner-role-versus-created-role
+and never said "this command runs in whatever account your CLI points at." The
+subtle problem is the interesting one to write about, which is exactly why it
+gets written about first.
+
+**A placeholder that renders as plausible text is the same defect as a default
+that produces plausible output** — #17, #28, #31, #36, #38, and now this. Here it
+is at its worst, because `generating…` on both sides of the trust relationship
+does not fail: it succeeds, against the wrong secret. The rule that keeps coming
+back is that the broken state has to _look_ broken.
