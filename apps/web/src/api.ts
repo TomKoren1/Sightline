@@ -97,12 +97,16 @@ export interface Connection {
   scannerPrincipalNote: string | null;
   /** Set when AWS_TARGET_ROLE_ARN cannot be assumed at all. */
   roleArnProblem: string | null;
-  mode: "mock" | "real";
+  /** Self-hosted: "mock" | "real". Hosted: "demo" | "real", per tenant. */
+  mode: "mock" | "demo" | "real";
   /** What .env says, so the UI can show when the toggle has diverged. */
   configuredMode: "mock" | "real";
   realAccountConfigured: boolean;
   roleArn: string;
   accountId: string | null;
+  /** Hosted only: whether this deployment offers a demo account at all. */
+  demoAvailable?: boolean;
+  connectionStatus?: string | null;
   externalIdMasked: string;
   externalIdIsPlaceholder: boolean;
   homeRegion: string;
@@ -132,8 +136,31 @@ export interface Health {
   lastScan: { id: string; at: string; status: string } | null;
 }
 
+/** Who is signed in, and whether this deployment asks anyone to. */
+export interface Me {
+  mode: "hosted" | "self-hosted";
+  user: { id: string } | null;
+  tenantId: string | null;
+  signInUrl?: string;
+  note?: string;
+}
+
+/** Thrown when the API says to sign in, so the UI can render that rather than an error. */
+export class NotSignedIn extends Error {
+  constructor(readonly signInUrl: string) {
+    super("Not signed in");
+    this.name = "NotSignedIn";
+  }
+}
+
 async function get<T>(path: string): Promise<T> {
-  const res = await fetch(path);
+  // `same-origin` is the default, but stated because every request now
+  // depends on the session cookie travelling with it.
+  const res = await fetch(path, { credentials: "same-origin" });
+  if (res.status === 401) {
+    const body = (await res.json().catch(() => ({}))) as { signInUrl?: string };
+    throw new NotSignedIn(body.signInUrl ?? "/auth/google");
+  }
   if (!res.ok) {
     const body = await res.text();
     throw new Error(`${res.status} ${res.statusText}: ${body.slice(0, 200)}`);
@@ -142,6 +169,7 @@ async function get<T>(path: string): Promise<T> {
 }
 
 export const api = {
+  me: () => get<Me>("/api/me"),
   health: () => get<Health>("/api/health"),
   latestScan: () => get<{ scan: ScanRun | null; scanning: boolean }>("/api/scans/latest"),
   scans: () => get<{ scans: ScanRun[] }>("/api/scans"),
@@ -169,7 +197,7 @@ export const api = {
   },
 
   connection: () => get<Connection>("/api/connection"),
-  setMode: async (mode: "mock" | "real") => {
+  setMode: async (mode: "mock" | "demo" | "real") => {
     const res = await fetch("/api/connection/mode", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -179,7 +207,27 @@ export const api = {
     if (!res.ok) throw new Error(body.error ?? `${res.status} ${res.statusText}`);
     return body;
   },
-  newExternalId: () => get<{ externalId: string; note: string }>("/api/connection/external-id"),
+  newExternalId: () =>
+    get<{ externalId: string; note: string; stored?: boolean }>("/api/connection/external-id"),
+
+  /** Hosted only: register this tenant's own AWS account. */
+  saveConnection: async (roleArn: string) => {
+    const res = await fetch("/api/connection", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      credentials: "same-origin",
+      body: JSON.stringify({ roleArn }),
+    });
+    const body = (await res.json()) as {
+      roleArn?: string;
+      externalId?: string;
+      status?: string;
+      note?: string;
+      error?: string;
+    };
+    if (!res.ok) throw new Error(body.error ?? `${res.status} ${res.statusText}`);
+    return body;
+  },
   testConnection: async (): Promise<ConnectionTest> => {
     const res = await fetch("/api/connection/test", { method: "POST" });
     return res.json() as Promise<ConnectionTest>;
@@ -203,6 +251,7 @@ async function streamPost<E>(
   const res = await fetch(path, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
+    credentials: "same-origin",
     body: JSON.stringify(body),
     ...(signal ? { signal } : {}),
   });

@@ -62,7 +62,16 @@ const schema = z.object({
    * Nothing else about the scanner changes between the two.
    */
   AWS_MODE: blankAsUnset(z.enum(["mock", "real"]).default("mock")),
-  AWS_ENDPOINT_URL: blankAsUnset(z.string().default("http://localhost:5000")),
+  /**
+   * Endpoint override, for talking to moto instead of AWS.
+   *
+   * **No default**, deliberately. It used to default to the moto URL, which
+   * made "unset" unrepresentable - and hosted mode, which refuses to start
+   * when an override is configured, could therefore never start at all. The
+   * mock supplies the fallback at the point of use, where it is a mock
+   * concern rather than a global one.
+   */
+  AWS_ENDPOINT_URL: blankAsUnset(z.string().optional()),
   AWS_TARGET_ROLE_ARN: blankAsUnset(
     z.string().default("arn:aws:iam::123456789012:role/DaveIoReadOnlyRole"),
   ),
@@ -114,6 +123,56 @@ const schema = z.object({
    * 256-bit key - so the operator's instruction is "a long random string".
    */
   SECRETS_LOCAL_KEY: blankAsUnset(z.string().optional()),
+
+  /**
+   * Acknowledge that a hosted process is encrypting tenant secrets with a key
+   * from its own environment.
+   *
+   * Hosted mode requires KMS: a key sitting in an environment variable is
+   * readable by anything that can read the process, and these are other
+   * people's credentials. The escape hatch exists because running the hosted
+   * code path locally - which is how the sign-in flow gets tested - has no
+   * KMS and no tenants to endanger.
+   *
+   * Named so it cannot be set by accident or mistaken for a default.
+   */
+  SECRETS_ALLOW_LOCAL_KEY: blankAsUnset(z.coerce.boolean().default(false)),
+
+  /**
+   * Google OAuth. The only identity provider: no passwords are stored here,
+   * ever, and one provider is one fewer consent screen to keep correct.
+   */
+  GOOGLE_CLIENT_ID: blankAsUnset(z.string().optional()),
+  GOOGLE_CLIENT_SECRET: blankAsUnset(z.string().optional()),
+
+  /**
+   * Signing key for session cookies. Sessions are a signed cookie rather than
+   * a server-side store, so several API replicas need no shared session
+   * database - but they do need the same secret, which is why it is
+   * configuration rather than something generated at boot.
+   */
+  SESSION_SECRET: blankAsUnset(z.string().optional()),
+
+  /**
+   * The public origin this service is reached at, e.g. https://dave.example.
+   *
+   * Used to build the OAuth redirect URI, which must match what is registered
+   * with Google **exactly**. Deriving it from the request Host header instead
+   * would let a forged header redirect an authorisation code somewhere else.
+   */
+  PUBLIC_BASE_URL: blankAsUnset(z.string().optional()),
+
+  /**
+   * The demo account a hosted tenant can switch to.
+   *
+   * Deliberately **not** `AWS_ENDPOINT_URL`, which hosted mode still refuses.
+   * The difference is who chooses it: the banned variable is an SDK-wide
+   * override that would redirect every signed call this process makes, while
+   * this one names a specific fixture the operator deployed and no tenant can
+   * influence. Unset means no tenant can switch to the demo at all (ADR-020).
+   */
+  DEMO_AWS_ENDPOINT_URL: blankAsUnset(z.string().optional()),
+  DEMO_AWS_ACCOUNT_ID: blankAsUnset(z.string().default("123456789012")),
 
   DEPLOYMENT_MODE: blankAsUnset(z.enum(["self-hosted", "hosted"]).default("self-hosted")),
 
@@ -171,6 +230,9 @@ export function setMode(mode: "mock" | "real"): void {
  * is: a module-level boolean is invisible in a stack trace and impossible to
  * vary in a test. Unlike the AWS mode, nothing can change this while running.
  */
+/** Where moto listens, when nothing says otherwise. */
+const MOCK_ENDPOINT = "http://localhost:5000";
+
 export const isHosted = (): boolean => cfg.DEPLOYMENT_MODE === "hosted";
 
 /**
@@ -189,6 +251,8 @@ export const isHosted = (): boolean => cfg.DEPLOYMENT_MODE === "hosted";
 export function hostedInvariantViolations(
   env: Pick<typeof cfg, "DEPLOYMENT_MODE" | "AWS_MODE" | "AWS_ENDPOINT_URL"> & {
     AWS_ACCESS_KEY_ID?: string | undefined;
+    AWS_KMS_KEY_ID?: string | undefined;
+    SECRETS_ALLOW_LOCAL_KEY?: boolean | undefined;
   },
 ): string[] {
   if (env.DEPLOYMENT_MODE !== "hosted") return [];
@@ -201,14 +265,53 @@ export function hostedInvariantViolations(
   }
   if (env.AWS_ENDPOINT_URL) {
     problems.push(
-      "AWS_ENDPOINT_URL is set: an endpoint override redirects signed AWS calls, " +
-        "so it must be unset in a service that assumes roles into customer accounts",
+      "AWS_ENDPOINT_URL is set: an SDK-wide endpoint override redirects every signed " +
+        "AWS call this process makes, so it must be unset in a service that assumes " +
+        "roles into customer accounts. To offer a demo account, set " +
+        "DEMO_AWS_ENDPOINT_URL instead - it applies only to tenants who have " +
+        "explicitly switched to the demo (ADR-020)",
     );
   }
-  if (env.AWS_ACCESS_KEY_ID) {
+  /**
+   * A **placeholder** key, not any key.
+   *
+   * The first version of this refused `AWS_ACCESS_KEY_ID` outright, on the
+   * reasoning that a hosted platform identity should come from the pod - IRSA
+   * on EKS, an instance role on EC2. A bare k3s cluster has neither, so the
+   * only way to give the process an identity is a static key, and that
+   * invariant made hosted mode **undeployable** on the cluster it was written
+   * for. Found by writing the Helm chart and noticing the two contradict each
+   * other.
+   *
+   * The failure actually worth preventing is narrower and real: a mock
+   * placeholder left in the environment sits first in the SDK's credential
+   * chain and silently shadows the platform identity, which is engineering
+   * log #17 and #28. So the rule is about *what the key is*, not whether one
+   * exists.
+   */
+  /**
+   * Tenant secrets must be encrypted with KMS, not with a key from the
+   * environment.
+   *
+   * This check lived in `secrets.ts` and was called by nothing but its own
+   * tests, so hosted mode documented a requirement it did not enforce - which
+   * is worse than not having it, because the documentation is what people
+   * believe. Found by asking where the KMS key was supposed to go.
+   */
+  if (!env.AWS_KMS_KEY_ID && !env.SECRETS_ALLOW_LOCAL_KEY) {
     problems.push(
-      "AWS_ACCESS_KEY_ID is set: the hosted platform identity comes from the pod's " +
-        "own credentials, not from per-account keys in the environment",
+      "AWS_KMS_KEY_ID is not set: tenant secrets - an Anthropic key and an AWS external id - " +
+        "would be encrypted with a key from this process's environment, which is readable by " +
+        "anything that can read the process. Set it, or set SECRETS_ALLOW_LOCAL_KEY=true to " +
+        "acknowledge the compromise (intended for running the hosted path locally)",
+    );
+  }
+
+  if (env.AWS_ACCESS_KEY_ID && !looksLikeRealAccessKey(env.AWS_ACCESS_KEY_ID)) {
+    problems.push(
+      `AWS_ACCESS_KEY_ID does not look like a real AWS key ("${env.AWS_ACCESS_KEY_ID.slice(0, 4)}…"): ` +
+        "a mock placeholder here sits first in the SDK's credential chain and silently " +
+        "shadows the platform identity. Unset it, or set the real one",
     );
   }
   return problems;
@@ -298,7 +401,7 @@ export function activeConnection(): {
       return {
         roleArn: cfg.AWS_TARGET_ROLE_ARN,
         externalId: cfg.AWS_EXTERNAL_ID,
-        endpoint: cfg.AWS_ENDPOINT_URL,
+        endpoint: cfg.AWS_ENDPOINT_URL ?? MOCK_ENDPOINT,
       };
     }
 
@@ -313,7 +416,7 @@ export function activeConnection(): {
     return {
       roleArn: `arn:aws:iam::${account}:role/DaveIoReadOnlyRole`,
       externalId: "local-dev-external-id-0000",
-      endpoint: cfg.AWS_ENDPOINT_URL,
+      endpoint: cfg.AWS_ENDPOINT_URL ?? MOCK_ENDPOINT,
     };
   }
   return { roleArn: cfg.AWS_TARGET_ROLE_ARN, externalId: cfg.AWS_EXTERNAL_ID, endpoint: null };

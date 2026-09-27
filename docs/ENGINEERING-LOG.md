@@ -1776,3 +1776,234 @@ always cheap — remove the thing under test and confirm the test notices. It ha
 now caught: a fixture that shared the code's blind spot, a check on a guard that
 silently matched nothing, a read-side guard that could not see a write-side
 defect, and now an application path that impersonates a database constraint.
+
+---
+
+## #41 — Every tenant was shown the operator's AWS account
+
+**Problem.** Reported within a minute of the first real Google sign-in: a
+brand-new tenant, with nothing connected, was looking at the operator's own AWS
+account.
+
+**Cause.** Two pieces of ambient state, the same mistake one layer apart.
+
+`activeConnection()` reads `AWS_TARGET_ROLE_ARN` from the environment. That is
+correct for a single-tenant deployment — it is how the whole project has
+worked — and in a process serving many tenants it means _everyone_ gets the
+operator's account.
+
+Worse, and not yet observed because nobody had scanned: `credentials.ts` held
+**one module-level cached STS session**. The first tenant to scan would
+populate it, and every tenant after that would be handed credentials for that
+tenant's AWS account until it expired. Tenant isolation in the database is
+irrelevant if the credentials are shared.
+
+**Fix.** `resolveConnection(tenantId)` reads the tenant's own row and never
+falls back to configuration — a missing connection is a refusal, not a default.
+The session cache became a `Map` keyed by tenant, with the stampede protection
+kept per tenant. Every AWS client factory now takes a `TenantId`, so a client
+cannot be constructed without naming whose account it will talk to, and the
+endpoint moved onto the assumed session for the same reason.
+
+**What made it findable.** Signing in. Every test passed before and after the
+bug existed, because they exercise functions rather than a running process with
+two tenants in it. The tenant-isolation work had been careful about _queries_ —
+three guards, one of which found a genuine cross-tenant edge — and completely
+silent about _credentials_, which is the layer where "whose account" is
+actually decided.
+
+**What to take from it.** Two things.
+
+**Isolation has layers, and guarding one proves nothing about the others.**
+#39 was isolation in writes rather than reads. This is isolation in
+credentials rather than in data. Each time, the guards that existed were
+correct and aimed somewhere else.
+
+**Ambient state is the shape of the bug.** A module-level cache, a module-level
+flag, an environment variable read deep in a call stack — all three are the
+same defect: a value that is right when there is one of something, and silently
+wrong when there are many. The fix is the same each time, and the compiler can
+enforce it: make the thing a parameter, and let every call site that forgot it
+fail to build. Adding `TenantId` to the client factories produced a list of
+exactly the places that had been reaching for an account without saying which.
+
+---
+
+## #42 — A metrics guard that inspected nothing
+
+**Problem.** The rule for metric labels is simple and absolute: no tenant id,
+no ARN, no URL — unbounded label values are both a customer-data leak and an
+unbounded series count. So the test read every metric out of the registry and
+asserted none of them declared a forbidden label.
+
+Then I added a `tenant_id` label on purpose to watch it fail. **It passed.**
+
+**Cause.** `registry.getMetricsAsJSON()` returns `help`, `name`, `type`,
+`values` and `aggregator`. It does **not** return `labelNames`. The test read
+`(metric as { labelNames?: string[] }).labelNames ?? []` — `undefined`, every
+time, for every metric — and then found no forbidden labels in an empty list.
+
+The optional chaining is what made it silent. `?? []` is a perfectly ordinary
+defensive idiom, and here it turned "this property does not exist" into "this
+metric has no labels", which reads identically to a pass.
+
+**Fix.** Read the declared names off the metric objects themselves, where
+prom-client does expose `labelNames`, and add a test asserting the inspection
+found labelled metrics at all — so the suite cannot pass by examining nothing.
+Both guards were then re-checked by breaking each on purpose: a `tenant_id`
+label, and a metric shadowing the registry's default `service` label.
+
+**A real bug found on the way.** The failed-unit counter was labelled
+`service`, which is also the registry's default label naming the application.
+The metric's own value wins, so a scan failure in RDS would have produced a
+series claiming the application was called `rds`. Renamed to `aws_service`,
+with a test that refuses any metric declaring `service`.
+
+**What to take from it.** Fifth entry on this theme (#29, #30, #37, #39, #40),
+and the first where the vacuum came from a **defensive default rather than a
+missing case**. `?? []`, `?? {}`, `|| ""` are how a test stops testing without
+looking any different — and the only reliable detector is the same one every
+time: break the thing on purpose, and require the test to notice.
+
+The companion habit, now also a test: **any assertion over a collection needs a
+sibling assertion that the collection is not empty.**
+
+---
+
+## #43 — The external id shown was not the external id stored
+
+**Problem.** Found by writing a test for the journey rather than for a layer:
+sign in, open the Connection panel, save a role, check what happened. Two
+consecutive reads of `/api/connection/external-id` returned **different
+values**.
+
+**Why that is serious.** The external id is the string the customer pastes
+into their CloudFormation stack, and the string this service presents when it
+assumes their role. They have to be identical. The panel generated one for
+display, the customer deployed a stack containing it, and saving the
+connection generated _another_ one to store. The result is `AccessDenied` on a
+connection that looks correct from both ends, with nothing in the message
+suggesting the two ids disagree — the single most confusing failure this
+product could produce, because the customer's stack is right, the role ARN is
+right, and the only wrong thing is invisible to them.
+
+**Cause, and the fix.** The id lived on `connections`, so it could not exist
+until a role ARN did — but the customer needs it _before_ the role, because it
+goes in the stack that creates the role. The display path papered over that by
+generating a throwaway.
+
+It now lives on the **tenant**, issued the first time it is asked for and
+reused for ever. That is also the right model: an external id identifies this
+customer to AWS and does not depend on which role they point at, which is what
+AWS's own guidance says. Rotation exists and is deliberate — never a side
+effect of editing a role ARN, because a customer whose stack already has the
+old one would start failing with no reason to suspect us.
+
+**What made it findable.** Nothing else would have. Every layer was correct on
+its own: the generator produces unguessable ids, the store encrypts them, the
+route returns one. The defect was that two correct code paths produced
+different values for something that had to be one value, which only a test
+that _uses the product in order_ can see. The suite had thirty tests around
+this feature and not one of them opened the panel twice.
+
+**What to take from it.** **Test the journey, not only the layers.** Layer
+tests find defects inside a boundary; this class of bug lives between two
+boundaries that are each behaving correctly. The journey test is now eleven
+steps — sign in, look, be refused, take an id, paste a bad ARN, save a good
+one, check the neighbour cannot see it, explore the demo, and confirm both
+tenants still see empty accounts — and it took an afternoon to write and found
+a bug in its first run.
+
+---
+
+## #44 — A requirement that was documented but not enforced
+
+**Problem.** Asked where the KMS key should go, I went to check what happens
+without one — and found that hosted mode starts perfectly happily. The check
+existed (`secretsConfigProblem()`), was correct, was tested, and was called by
+**nothing but its own tests**.
+
+Both the ADR and the setup guide say hosted mode refuses to start without KMS.
+It did not. Tenant secrets — an Anthropic key and the external id that
+authorises an AssumeRole into a customer's account — would have been encrypted
+with whatever was in `SECRETS_LOCAL_KEY`, silently, in production.
+
+**Why it is worse than having no check.** A test suite passing over a function
+nobody calls reads exactly like a working guard, and the documentation is what
+people believe. Nobody would have looked again.
+
+**Fix.** Folded into `hostedInvariantViolations`, which is called at startup
+and already refuses the other four. It needs either `AWS_KMS_KEY_ID` or
+`SECRETS_ALLOW_LOCAL_KEY=true` — an escape hatch named so it cannot be set by
+accident or mistaken for a default, because running the hosted path locally
+has no KMS and no tenant to endanger.
+
+Adding it immediately failed nineteen tests, every one of which builds a
+hosted app. That is the check working: each now says out loud that it is
+using a local key.
+
+**What to take from it.** A guard has two halves, and the tests only ever
+cover one of them. `secrets.test.ts` proved the function returns the right
+answer; nothing proved anyone asks it. The pattern to watch for is a pure
+function exported for testability whose only importer is its own test file —
+which is a one-line search, and is now worth running before trusting any
+"refuses to start" sentence in the docs.
+
+---
+
+## #45 — A live Cloudflare tunnel token, committed by me
+
+**What happened.** While I was writing the Helm chart, Tom created the
+Cloudflare tunnel and pasted its token into
+`templates/secrets-sealedsecret.yaml`, replacing the
+`REPLACE-WITH-SEALEDSECRET` placeholder that was sitting there inviting exactly
+that. My next commit ran `git add -A`, swept the file up with eleven of my own,
+and pushed it.
+
+The repository's own gitleaks job caught it on the next CI run — one commit too
+late, and after the token had reached GitHub.
+
+**Two failures, and mine is the worse one.**
+
+`git add -A` in a repository somebody else is editing is a commit of files I
+have not read. Every safeguard in this project is built on the idea that you
+check what you are about to do; staging by wildcard is the opposite of that,
+and it is what turned one person's paste into a pushed credential.
+
+The second is a design failure I had already been warned about. I shipped a
+template containing the string `REPLACE-WITH-SEALEDSECRET` next to a field
+called `TUNNEL_TOKEN`. **A file that invites pasting a plaintext secret will
+eventually receive one**, and "the README says to run kubeseal instead" is not
+a control.
+
+**Fix.** The chart now has **no Secret template at all**. The two Secrets are
+created outside it with `kubeseal` and committed only in sealed form, in a
+`sealed/` directory outside `templates/` so Helm never renders it and nobody
+mistakes it for a file to edit. Pods stay in `CreateContainerConfigError` until
+they exist, which is the correct failure: starting with default credentials
+would be worse.
+
+A test now refuses any template containing a `Secret` with `stringData`, and
+separately scans every template for the _shapes_ of an access key, a Google
+client secret and a tunnel token. Both were verified by pasting the real token
+into a template and watching them go red.
+
+**The token itself** has to be rotated, because it is in pushed history and
+rewriting that needs a force-push over a shared ref. Rotation makes the leaked
+value worthless, which is the actual remedy; scrubbing history is cosmetic
+once a credential has been published.
+
+**What to take from it.** Three things, in order of how much they cost me.
+
+**Stage deliberately.** `git add -A` is convenient exactly in proportion to how
+many files it commits without being read.
+
+**A placeholder is a prompt.** Any field shaped like a secret, with a
+"replace me" value, is a request for a real one. The safe version is not a
+better placeholder — it is no field at all.
+
+**The guard worked, and that is the point.** gitleaks was added after
+engineering log #26, for precisely this, and it did its job on the first
+commit that gave it something to find. A control that catches your own mistake
+is the only kind you can trust; the ones that only ever catch other people's
+are the ones nobody has tested.

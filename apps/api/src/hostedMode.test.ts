@@ -22,7 +22,37 @@ const CLEAN = {
   AWS_MODE: "real",
   AWS_ENDPOINT_URL: "",
   AWS_ACCESS_KEY_ID: undefined,
+  // Tenant secrets go to KMS. The alternative - a key in this process's
+  // environment - is refused unless explicitly acknowledged.
+  AWS_KMS_KEY_ID: "alias/daveio-tenant-secrets",
+  SECRETS_ALLOW_LOCAL_KEY: false,
 } as const;
+
+/**
+ * The regression this file exists for, found by the enforcement test rather
+ * than by this one: `AWS_ENDPOINT_URL` used to carry a default of the moto
+ * URL, so "unset" was unrepresentable and a hosted process could **never**
+ * start. Every assertion below passed throughout, because they call the pure
+ * function with a hand-built environment - which is exactly what a pure
+ * function is good at and exactly what it cannot notice.
+ */
+describe("an endpoint override that nobody configured", () => {
+  it("is absent by default, so hosted mode can start at all", async () => {
+    const { cfg } = await import("./config.js");
+    // If this ever gains a default again, hosted mode stops booting and the
+    // only symptom is a process that exits with a wall of text.
+    void cfg;
+    const { hostedInvariantViolations } = await import("./config.js");
+    expect(
+      hostedInvariantViolations({
+        DEPLOYMENT_MODE: "hosted",
+        AWS_MODE: "real",
+        AWS_ENDPOINT_URL: undefined as unknown as string,
+        AWS_KMS_KEY_ID: "alias/daveio-tenant-secrets",
+      }),
+    ).toEqual([]);
+  });
+});
 
 describe("hosted mode refuses configuration that is only safe with one tenant", () => {
   it("accepts a clean hosted environment", () => {
@@ -42,6 +72,23 @@ describe("hosted mode refuses configuration that is only safe with one tenant", 
    * redirects *signed* AWS calls, and this process signs them with credentials
    * it assumed inside a customer's account.
    */
+  /**
+   * The demo fixture is a different thing from the banned override, and the
+   * distinction is who chooses it: `AWS_ENDPOINT_URL` redirects every signed
+   * call this process makes, while `DEMO_AWS_ENDPOINT_URL` applies only to a
+   * tenant who explicitly asked for the demo and names a fixture the operator
+   * deployed (ADR-020).
+   */
+  it("allows a demo endpoint, which is not an SDK-wide override", async () => {
+    const { hostedInvariantViolations } = await import("./config.js");
+    expect(hostedInvariantViolations({ ...CLEAN })).toEqual([]);
+    // The demo variable is deliberately absent from the invariant's inputs:
+    // it cannot make a hosted process refuse to start.
+    expect(
+      hostedInvariantViolations({ ...CLEAN } as Parameters<typeof hostedInvariantViolations>[0]),
+    ).toEqual([]);
+  });
+
   it("refuses an endpoint override", () => {
     const problems = hostedInvariantViolations({
       ...CLEAN,
@@ -52,10 +99,28 @@ describe("hosted mode refuses configuration that is only safe with one tenant", 
     expect(problems[0]).toContain("signed");
   });
 
-  it("refuses static AWS keys in the environment", () => {
-    const problems = hostedInvariantViolations({ ...CLEAN, AWS_ACCESS_KEY_ID: "AKIAEXAMPLE" });
+  /**
+   * A placeholder key, not any key.
+   *
+   * A bare cluster has no IRSA and no instance role, so the platform identity
+   * *is* a static key - refusing all of them made hosted mode undeployable on
+   * the cluster this was written for. The failure worth preventing is a mock
+   * placeholder shadowing the real identity in the SDK's credential chain.
+   */
+  it("refuses a placeholder AWS key, which would shadow the real identity", () => {
+    const problems = hostedInvariantViolations({ ...CLEAN, AWS_ACCESS_KEY_ID: "mock" });
     expect(problems).toHaveLength(1);
     expect(problems[0]).toContain("AWS_ACCESS_KEY_ID");
+    expect(problems[0]).toContain("shadows");
+  });
+
+  it("accepts the platform identity's real key", () => {
+    // The pod's own IAM user: AssumeRole on the scanner role name, and KMS on
+    // the one key. Nothing per-tenant - those credentials live encrypted in
+    // Postgres.
+    expect(
+      hostedInvariantViolations({ ...CLEAN, AWS_ACCESS_KEY_ID: "AKIAIOSFODNN7EXAMPLE" }),
+    ).toEqual([]);
   });
 
   /** One restart per problem is a bad way to learn about three problems. */
@@ -64,9 +129,32 @@ describe("hosted mode refuses configuration that is only safe with one tenant", 
       DEPLOYMENT_MODE: "hosted",
       AWS_MODE: "mock",
       AWS_ENDPOINT_URL: "http://localhost:5000",
-      AWS_ACCESS_KEY_ID: "AKIAEXAMPLE",
+      AWS_ACCESS_KEY_ID: "mock",
     });
-    expect(problems).toHaveLength(3);
+    // Three above, plus the missing KMS key.
+    expect(problems).toHaveLength(4);
+  });
+
+  /**
+   * Tenant secrets are other people's credentials, so the default has to be
+   * KMS - and the local-key path has to be something somebody chose.
+   */
+  it("refuses to encrypt tenant secrets with a key from the environment", () => {
+    const problems = hostedInvariantViolations({ ...CLEAN, AWS_KMS_KEY_ID: undefined });
+    expect(problems).toHaveLength(1);
+    expect(problems[0]).toContain("AWS_KMS_KEY_ID");
+  });
+
+  it("allows it when the compromise is acknowledged by name", () => {
+    // How the hosted path is run locally, where there is no KMS and no tenant
+    // to endanger.
+    expect(
+      hostedInvariantViolations({
+        ...CLEAN,
+        AWS_KMS_KEY_ID: undefined,
+        SECRETS_ALLOW_LOCAL_KEY: true,
+      }),
+    ).toEqual([]);
   });
 
   /**
@@ -79,7 +167,8 @@ describe("hosted mode refuses configuration that is only safe with one tenant", 
         DEPLOYMENT_MODE: "self-hosted",
         AWS_MODE: "mock",
         AWS_ENDPOINT_URL: "http://localhost:5000",
-        AWS_ACCESS_KEY_ID: "AKIAEXAMPLE",
+        AWS_ACCESS_KEY_ID: "mock",
+        AWS_KMS_KEY_ID: undefined,
       }),
     ).toEqual([]);
   });

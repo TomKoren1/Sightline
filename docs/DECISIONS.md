@@ -573,13 +573,23 @@ dangerous under the new ones:
 - the **endpoint override** exists so the scanner can talk to moto, and it
   redirects _signed_ AWS calls — in a service that assumes roles into customer
   accounts, an attacker-supplied endpoint is an attacker-supplied AWS;
-- **static AWS keys in the environment** are how a developer points the scanner
-  at their own account; the hosted platform identity comes from the pod.
+- **a mock placeholder AWS key** sits first in the SDK's credential chain and
+  silently shadows whatever identity the platform actually has (engineering log
+  #17, #28).
 
 **Decision.** A `DEPLOYMENT_MODE` of `self-hosted` (the default, and what the
 graded project is) or `hosted`. In hosted mode these capabilities do not exist:
 the process refuses to start if any of them is configured, and the code paths
 that would use them are gated independently.
+
+**Revised once, by writing the deployment.** The original rule refused
+`AWS_ACCESS_KEY_ID` outright, reasoning that a platform identity should come
+from the pod — IRSA on EKS, an instance role on EC2. A bare k3s cluster has
+neither, so the identity _is_ a static key, and the invariant made hosted mode
+undeployable on the cluster it was written for. The rule is now about what the
+key is rather than whether one exists: a placeholder is refused, a real one is
+the platform identity. Found by writing the Helm chart and noticing it
+contradicted the check.
 
 **Why refuse at startup rather than warn.** Each of these is a configuration
 mistake that produces a working system with a silently wrong security property.
@@ -693,3 +703,194 @@ every curated query runs as one of them, and nothing belonging to the other may
 come back. Only the third can catch a query that binds the parameter and still
 leaks. Each was verified by breaking the thing it guards and watching the right
 test go red.
+
+---
+
+## ADR-018 — Google only, sessions as signed cookies, no auth library
+
+**Context.** The hosted service needs to know who is asking. The options were a
+hosted identity provider (Auth0, Clerk), an auth framework, or the protocol.
+
+**Decision.** Google OAuth 2.0 authorization code flow, written against the
+protocol. One provider. Sessions are HMAC-signed cookies with no server-side
+store.
+
+**Why one provider.** Each additional provider is another consent screen to
+keep correct, another set of claims to map, and another way for the same person
+to end up with two accounts. Google covers the intended users. GitHub is a
+`users.provider` value away if that turns out to be wrong — the schema already
+allows it.
+
+**Why no library.** The flow is three URLs and two checks. The checks are the
+part worth getting right, and a library performs them somewhere I would have to
+go and read anyway to know what it actually verifies. The same reasoning as
+ADR-005: the decisions that matter are the ones a dependency would hide.
+
+**Why signed cookies rather than a session store.** Several API replicas behind
+one ingress would otherwise need a shared store. The cookie carries two
+identifiers and two timestamps — no tokens, no email, nothing of the tenant's —
+so there is nothing in it worth stealing beyond the session itself, and that
+expires in eight hours. The format is a JWT's shape without a JWT library,
+because the parts of JWT that earn a library (algorithm negotiation, key
+rotation, third-party verification) are the parts not wanted here. `alg: none`
+is impossible when there is no algorithm field.
+
+**What is deliberately not verified.** The id token's RSA signature against
+Google's JWKS. The token is not accepted from the browser: it is fetched by
+this server, over TLS, directly from `oauth2.googleapis.com`, in exchange for a
+code and this service's client secret. Google's documentation says verification
+is unnecessary for exactly this case. The claims that still matter are checked —
+and `aud` is the one that does: a token minted for a **different** Google
+application is genuinely from Google and genuinely signed, and accepting it
+would let anyone with their own Google app sign in as anybody here.
+
+**Matching is on the provider subject, never on email.** Google subjects are
+stable; email addresses are renamed, reassigned inside a Workspace, and — when
+unverified — not evidence of anything. Matching on email is how one person ends
+up inside somebody else's account.
+
+**One hook, not per-route middleware.** Authentication is a single
+`preHandler`, so a route added later cannot forget it. Routes opt _out_, and
+the exemption list is three entries long and readable at a glance: `/auth/*`,
+`/api/me`, `/api/health`. The test that matters drives the real app and asserts
+every tenant-data route returns 401 without a session — because the question is
+not whether `decodeSession` works but whether someone can read an inventory
+without signing in.
+
+**`Secure` follows the scheme, not the mode.** A Secure cookie over plain http
+is dropped silently, which presents as "signing in does nothing". Tying the
+flag to `PUBLIC_BASE_URL` starting with `https://` means a developer testing
+the hosted path over `http://<tailnet-ip>` — which, unlike `localhost`, is not
+a secure context — gets a working login instead of an invisible failure.
+
+---
+
+## ADR-019 — A tenant's AWS connection is data, not configuration
+
+**Context.** Every version of this project until now read the AWS connection
+from the environment: `AWS_TARGET_ROLE_ARN`, `AWS_EXTERNAL_ID`, and a single
+cached STS session in a module-level variable. For one operator scanning one
+account that is not just adequate, it is the right design — the connection
+genuinely is a property of the deployment.
+
+In a hosted service it is a property of the **tenant**, and the difference is
+not cosmetic: the first real sign-in showed a brand-new tenant the operator's
+own AWS account (engineering log #41).
+
+**Decision.** In hosted mode the connection comes from the tenant's
+`connections` row and **never** falls back to configuration. A tenant with no
+connection gets an explicit `NO_CONNECTION` refusal, not a default. Credentials
+are cached per tenant in a map, with the stampede protection that used to be
+global kept per tenant.
+
+**Why a refusal rather than a fallback.** A fallback is indistinguishable from
+working. Whoever configured the environment would see their own account and
+conclude the product was fine; the failure would surface as a customer reading
+somebody else's inventory.
+
+**Why the tenant is a parameter everywhere.** `ec2Client(region, tenantId)`,
+`iamClient(tenantId)`, `runScan({ tenantId, ... })`, `CollectorContext.tenantId`.
+A client cannot be constructed without naming whose account it will talk to.
+This is the same argument as the branded `TenantId` in ADR-017, applied one
+layer down: the alternative is ambient state, and ambient state is a value that
+is correct when there is one of something and silently wrong when there are
+many. Making it a parameter turns "did anyone forget?" into a build error, and
+adding it produced exactly the list of places that had been reaching for an
+account without saying which.
+
+**The endpoint moved too.** It is carried on the assumed session rather than
+read from configuration when a client is built, so one process can serve a
+tenant on the demo fixture and a tenant on real AWS simultaneously (ADR-020).
+
+**The account is pinned.** On first successful verification the account id the
+role actually reaches is stored, and a later mismatch refuses the scan rather
+than recording one account's inventory under another's name — engineering log
+#31's failure, arriving through a multi-tenant door.
+
+---
+
+## ADR-020 — The demo account is a tenant's choice, and a different thing from an endpoint override
+
+**Context.** ADR-015 removed the mock account from hosted mode, on the grounds
+that a development fixture has no meaning for a tenant and that
+`AWS_ENDPOINT_URL` redirects signed AWS calls. Both arguments still hold. But a
+hosted product has a use the self-hosted one does not: somebody who has just
+signed up wants to see what the thing does **before** deploying a
+CloudFormation stack into their own AWS account, and telling them to connect
+production first is a bad trade for both sides.
+
+**Decision.** A tenant may switch to the demo account at any time. Two things
+make that safe, and they are the whole ADR:
+
+**It is a column on the tenant, not a flag in the process.** `tenants.demo_mode`.
+The single-tenant toggle was a module-level variable, which is honest for one
+operator and would be a shared surprise for many: one person clicking "Demo"
+would change what every other tenant on that process was looking at, and which
+AWS account their next scan read.
+
+**The endpoint comes from `DEMO_AWS_ENDPOINT_URL`, not `AWS_ENDPOINT_URL`.**
+The banned variable is an SDK-wide override: it redirects every signed call the
+process makes, including calls made with credentials assumed inside a
+customer's account. The demo variable names a fixture the operator deployed,
+applies only to tenants who explicitly asked for the demo, and cannot be
+influenced by any tenant. Unset, nobody can switch to a demo at all. Hosted
+mode still refuses to start when `AWS_ENDPOINT_URL` is set, unchanged.
+
+**Consequences for the credential layer.** The endpoint stopped being a global
+and became a property of an assumed session, carried on `AssumedSession`
+alongside the credentials — so one process can serve a tenant on the demo
+fixture and a tenant on real AWS at the same moment. Client factories take it
+explicitly rather than reading it, for the same reason they take a tenant: an
+endpoint that arrives later cannot express "no override", because the SDK stops
+resolving regional endpoints itself the moment the option is set.
+
+**What this does not change.** A demo tenant's graph is still their own: the
+projection is tenant-scoped, so two tenants both exploring the demo have
+separate inventories of the same fixture, and neither can see the other's.
+
+---
+
+## ADR-021 — Metrics carry no tenant, logs do
+
+**Context.** The cluster already runs Prometheus, Grafana and Loki. Connecting
+this service to them raises one question that is easy to get wrong and hard to
+undo: what may appear in a metric label.
+
+**Decision.** `/metrics` is served unauthenticated and carries **no tenant id,
+no ARN, no URL and no error message**. Route labels are Fastify's _pattern_
+(`/api/resources/:arn`), status is bucketed to a class, and error labels are
+codes (`ThrottlingException`) rather than messages. Per-tenant attribution goes
+in the logs instead, which are queryable and access-controlled.
+
+**Why.** Two reasons that point the same way. Prometheus keeps a time series
+per label combination, so a tenant id or an ARN does not merely leak — it grows
+the series count without bound until the scrape _is_ the outage. And a metrics
+endpoint is retained for months and scraped by something that has no session
+and cannot be given one: Prometheus. Keeping it free of customer data is what
+makes serving it without authentication defensible rather than an oversight.
+
+**What is measured.** Three questions: is it serving (rate, errors, latency),
+is the product doing its job (scans, outcomes, duration, queue depth, AWS call
+rate), and is anything quietly wrong. The third is the one that needed thought,
+because those failures all return 200:
+
+- `partial` is a first-class scan outcome beside `succeeded` and `failed` — a
+  scan that lost a region looks perfectly healthy in request metrics;
+- failed `(service, region)` units, by AWS service and error code;
+- **`daveio_agent_unsupported_citations_total`** — ARNs an answer cited that no
+  tool returned. An answer carrying one is a 200 with a fluent paragraph in it,
+  so without this counter a regression in grounding is invisible until somebody
+  acts on a resource that does not exist (ADR-006).
+
+**Redaction is configuration, not discipline.** Discipline is a property of
+whoever writes the next log statement. Pino's `redact` covers the paths these
+values travel in, and the test runs pino for real and greps the bytes it
+produced — checking the path list against itself would pass for a path that is
+spelled wrong or nested one level deeper than expected, which is most of the
+ways a redaction list is actually wrong.
+
+**The dashboard is tested.** A Grafana JSON file is something nobody runs, so
+it rots the way the README did (engineering log #35): a metric is renamed,
+every test still passes, and a panel shows "No data" at the moment someone
+needs it. A test asserts that every metric the dashboard queries exists in the
+registry, and that the ConfigMap and the file on disk are the same dashboard.

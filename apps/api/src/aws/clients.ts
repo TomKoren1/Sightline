@@ -14,8 +14,9 @@ import { RDSClient } from "@aws-sdk/client-rds";
 import { LambdaClient } from "@aws-sdk/client-lambda";
 import { ResourceExplorer2Client } from "@aws-sdk/client-resource-explorer-2";
 
-import { effectiveEndpoint, isMock } from "../config.js";
-import { credentialProvider } from "./credentials.js";
+import { isMock } from "../config.js";
+import { credentialProviderFor } from "./credentials.js";
+import type { TenantId } from "../tenancy/tenant.js";
 
 /**
  * Counts AWS API calls per scan, so a scan can report what it cost.
@@ -44,10 +45,28 @@ export class CallCounter {
 
 export const callCounter = new CallCounter();
 
-function baseConfig(region: string) {
+/**
+ * Client configuration for one tenant.
+ *
+ * The tenant is a parameter rather than ambient state, so a client cannot be
+ * built without saying whose account it will talk to. That used to be a
+ * module-level credential provider, which in a multi-tenant process means
+ * every client shares whichever tenant assumed a role first (ADR-019).
+ */
+function baseConfig(region: string, tenantId: TenantId, endpoint: string | null) {
   return {
     region,
-    credentials: credentialProvider,
+    credentials: credentialProviderFor(tenantId),
+    /**
+     * Passed in rather than read from configuration.
+     *
+     * "No override" has to mean *not setting the option*, because the SDK
+     * stops resolving regional endpoints itself once it is set - so this
+     * cannot be a value that arrives later. It comes from the tenant's own
+     * assumed session, which is what lets one process serve a tenant on the
+     * demo fixture and a tenant on real AWS at the same moment (ADR-020).
+     */
+    ...(endpoint ? { endpoint } : {}),
     /**
      * `adaptive` adds a client-side rate limiter that backs off when AWS
      * starts returning throttling errors, on top of the standard exponential
@@ -56,14 +75,9 @@ function baseConfig(region: string) {
      */
     retryMode: "adaptive" as const,
     maxAttempts: 5,
-    // Explicit, never via AWS_ENDPOINT_URL: that variable is stripped from the
-    // environment at startup so a mode switch cannot leave one behind.
-    //
-    // `effectiveEndpoint()` rather than `activeConnection().endpoint`, because
-    // in hosted mode there must be no override at all: it would redirect
-    // *signed* AWS calls, and this process signs them with credentials it
-    // assumed inside a customer account (ADR-015).
-    ...(effectiveEndpoint() ? { endpoint: effectiveEndpoint()! } : {}),
+    // Never via AWS_ENDPOINT_URL: that variable is stripped from the
+    // environment at startup so it cannot leak across a switch, and hosted
+    // mode refuses to start when it is set at all (ADR-015).
   };
 }
 
@@ -100,24 +114,35 @@ function instrument<T extends object>(client: T, key: string): T {
   return client;
 }
 
-export const ec2Client = (region: string) =>
-  instrument(new EC2Client(baseConfig(region)), `ec2:${region}`);
+export const ec2Client = (region: string, tenantId: TenantId, endpoint: string | null = null) =>
+  instrument(new EC2Client(baseConfig(region, tenantId, endpoint)), `ec2:${region}`);
 
-export const rdsClient = (region: string) =>
-  instrument(new RDSClient(baseConfig(region)), `rds:${region}`);
+export const rdsClient = (region: string, tenantId: TenantId, endpoint: string | null = null) =>
+  instrument(new RDSClient(baseConfig(region, tenantId, endpoint)), `rds:${region}`);
 
-export const lambdaClient = (region: string) =>
-  instrument(new LambdaClient(baseConfig(region)), `lambda:${region}`);
+export const lambdaClient = (region: string, tenantId: TenantId, endpoint: string | null = null) =>
+  instrument(new LambdaClient(baseConfig(region, tenantId, endpoint)), `lambda:${region}`);
 
-export const resourceExplorerClient = (region: string) =>
-  instrument(new ResourceExplorer2Client(baseConfig(region)), `resource-explorer:${region}`);
+export const resourceExplorerClient = (
+  region: string,
+  tenantId: TenantId,
+  endpoint: string | null = null,
+) =>
+  instrument(
+    new ResourceExplorer2Client(baseConfig(region, tenantId, endpoint)),
+    `resource-explorer:${region}`,
+  );
 
 /** moto serves S3 from a single host, so path-style addressing is required. */
-export const s3Client = (region: string) =>
+export const s3Client = (region: string, tenantId: TenantId, endpoint: string | null = null) =>
   instrument(
-    new S3Client({ ...baseConfig(region), ...(isMock() ? { forcePathStyle: true } : {}) }),
+    new S3Client({
+      ...baseConfig(region, tenantId, endpoint),
+      ...(isMock() ? { forcePathStyle: true } : {}),
+    }),
     `s3:${region}`,
   );
 
 /** IAM is global. Its endpoint lives in us-east-1 regardless of where we scan. */
-export const iamClient = () => instrument(new IAMClient(baseConfig("us-east-1")), "iam:global");
+export const iamClient = (tenantId: TenantId, endpoint: string | null = null) =>
+  instrument(new IAMClient(baseConfig("us-east-1", tenantId, endpoint)), "iam:global");

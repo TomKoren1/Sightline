@@ -37,7 +37,7 @@ function absentIfBlank(value: string | undefined | null): string | null {
 
 export async function collectEc2(ctx: CollectorContext): Promise<CollectorOutput> {
   const region = ctx.region!;
-  const client = ec2Client(region);
+  const client = ec2Client(region, ctx.tenantId, ctx.endpoint);
   const resources: Resource[] = [];
   const relationships: Relationship[] = [];
   const inRegion = (arn: string): Relationship => ({

@@ -1,0 +1,50 @@
+# Bootstrapped once with `kubectl apply -f argocd/application.yaml`. After
+# that ArgoCD is the only thing that applies changes to this release, and this
+# file living in git is what makes that reproducible — the same arrangement as
+# the sibling project.
+#
+# The repository is private, so ArgoCD needs credentials for it before this
+# will sync. That is a one-time `argocd repo add` (or a repository Secret in
+# the argocd namespace), not something this file can carry.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: daveio
+  namespace: argocd
+  annotations:
+    # The same Slack notifier the sibling project configured. A failed sync
+    # that nobody is told about is a deployment that silently did not happen.
+    notifications.argoproj.io/subscribe.on-sync-failed.slack: ""
+    notifications.argoproj.io/subscribe.on-health-degraded.slack: ""
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/TomKoren1/dave.io_home-assignment.git
+    targetRevision: main
+    path: helm/daveio
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: daveio
+  syncPolicy:
+    automated:
+      # Revert anything changed by hand in the cluster: the point of GitOps is
+      # that the repository is the answer to "why is it like this".
+      selfHeal: true
+      # Deliberately **not** `prune: true`. Pruning here would delete the
+      # PersistentVolumeClaims holding Postgres and Neo4j the moment a template
+      # was renamed or removed — which is the one mistake in this chart that
+      # loses customer data rather than causing downtime. Removals are done by
+      # hand, with the volumes checked first.
+      prune: false
+    syncOptions:
+      - CreateNamespace=true
+      # The secrets are SealedSecrets; the controller decrypts them into real
+      # Secrets, which ArgoCD would otherwise report as out-of-sync for ever.
+      - RespectIgnoreDifferences=true
+  ignoreDifferences:
+    # StatefulSet volume claim templates are immutable after creation, and
+    # Kubernetes rewrites parts of them — a permanent diff that means nothing.
+    - group: apps
+      kind: StatefulSet
+      jsonPointers:
+        - /spec/volumeClaimTemplates

@@ -1,0 +1,81 @@
+# helm/daveio/values.yaml
+#
+# Secrets are deliberately absent from this file. Everything sensitive comes
+# from SealedSecrets (templates/*-sealedsecret.yaml), which are encrypted with
+# the cluster's public key and safe to commit. See helm/daveio/README.md for
+# how to regenerate them.
+
+api:
+  replicaCount: 1
+  image:
+    repository: ghcr.io/tomkoren1/daveio-api
+    tag: "" # set by CI - do not edit by hand
+    pullPolicy: IfNotPresent
+  service:
+    port: 3000
+  resources:
+    requests: { cpu: 100m, memory: 256Mi }
+    # A scan holds the whole estate in memory before persisting it, so the
+    # ceiling is about inventory size rather than request concurrency.
+    limits: { cpu: "1", memory: 1Gi }
+
+web:
+  replicaCount: 1
+  image:
+    repository: ghcr.io/tomkoren1/daveio-web
+    tag: "" # set by CI - do not edit by hand
+    pullPolicy: IfNotPresent
+  service:
+    port: 80
+  resources:
+    requests: { cpu: 10m, memory: 32Mi }
+    limits: { cpu: 200m, memory: 128Mi }
+
+postgres:
+  enabled: true
+  image: postgres:16-alpine
+  storage: 5Gi
+  database: dave
+  user: dave
+
+neo4j:
+  enabled: true
+  image: neo4j:5-community
+  storage: 5Gi
+  # Community edition has one database, so tenants share it and isolation is
+  # the `tenantId` predicate enforced in db/neo4j.ts (ADR-017). Heap is sized
+  # for a few thousand nodes per tenant, not for a large estate.
+  heap: 512m
+
+demo:
+  # The mock AWS account tenants can switch to (ADR-020). Disabled means the
+  # toggle is unavailable rather than broken: the API reports demoAvailable
+  # false and the button says why.
+  enabled: true
+  image: motoserver/moto:latest
+  accountId: "123456789012"
+
+config:
+  deploymentMode: hosted
+  # Must match the redirect URI registered with Google, exactly.
+  publicBaseUrl: https://dave.resume-4u.com
+  awsRegion: us-east-1
+  scanRegions: "" # empty means discover them
+  logLevel: info
+
+ingress:
+  enabled: true
+  className: ""
+  host: dave.resume-4u.com
+
+cloudflared:
+  enabled: true
+  image:
+    repository: cloudflare/cloudflared
+    tag: "2024.8.3"
+  # TUNNEL_TOKEN comes from templates/cloudflared-sealedsecret.yaml.
+
+monitoring:
+  # Annotation-based discovery, which is how this cluster's Prometheus already
+  # finds the sibling project's pods.
+  scrape: true

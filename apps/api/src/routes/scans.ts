@@ -24,7 +24,18 @@ import {
 } from "../db/repository.js";
 import { runScan } from "../scan/runner.js";
 import { tenantOf } from "../tenancy/request.js";
-import { completeJob, enqueueScan, failJob, activeJob } from "../scan/jobs.js";
+import { isHosted } from "../config.js";
+import { limitConfig, limits } from "../security/limits.js";
+import { getConnection } from "../tenancy/connections.js";
+import { getTenant } from "../tenancy/tenants.js";
+import {
+  awsApiCalls,
+  scanDuration,
+  scanUnitsFailed,
+  scansFinished,
+  scansStarted,
+} from "../observability/metrics.js";
+import { activeJob, claimJob, completeJob, enqueueScan, failJob } from "../scan/jobs.js";
 
 /**
  * Whether a scan is in flight - now a row, not a boolean.
@@ -82,7 +93,7 @@ export function registerScanRoutes(app: FastifyInstance): void {
   );
 
   /** Run a scan, streaming progress as server-sent events. */
-  app.post("/api/scans", async (req, reply) => {
+  app.post("/api/scans", limitConfig(limits.scan), async (req, reply) => {
     const tenantId = tenantOf(req);
 
     /**
@@ -95,7 +106,41 @@ export function registerScanRoutes(app: FastifyInstance): void {
      * scan already in flight would need the worker's event bus, which is
      * `docs/HOSTED-PLAN.md` Phase 3's remaining work.
      */
+    /**
+     * Refuse before claiming a job slot.
+     *
+     * A hosted tenant who has not connected an account has nothing to scan,
+     * and the failure must be this explicit sentence rather than an
+     * AssumeRole error thirty seconds later - or, worse, a scan of whatever
+     * account the process happened to be configured with.
+     */
+    if (isHosted()) {
+      // A tenant on the demo account has nothing to connect, and telling them
+      // to connect one would be advice that does not apply to what they are
+      // looking at.
+      const tenant = await getTenant(tenantId);
+      const connection = tenant?.demoMode ? null : await getConnection(tenantId);
+      if (!tenant?.demoMode && (!connection || connection.status === "disconnected")) {
+        return reply.code(409).send({
+          error: "Connect an AWS account before scanning.",
+          code: "NO_CONNECTION",
+        });
+      }
+    }
+
     const { job, created } = await enqueueScan(tenantId);
+
+    /**
+     * Take the job out of the queue before streaming it.
+     *
+     * This route runs the scan itself, which is what lets it report progress
+     * as it happens - so the worker must not also pick it up. Losing the race
+     * means another process already started this tenant's scan.
+     */
+    if (created && !(await claimJob(job.id, `api-${process.pid}`))) {
+      return reply.code(409).send({ error: "A scan is already running", jobId: job.id });
+    }
+
     if (!created) {
       return reply
         .code(409)
@@ -119,9 +164,11 @@ export function registerScanRoutes(app: FastifyInstance): void {
     // it to correlate, and the final event carries the persisted run.
     const streamId = randomUUID();
     let scanId: string | null = null;
+    const startedAt = Date.now();
+    scansStarted.inc();
 
     try {
-      const result = await runScan({ scanId: streamId, onEvent: send });
+      const result = await runScan({ tenantId: tenantId, scanId: streamId, onEvent: send });
 
       scanId = await createScanRun(tenantId, result.accountId, result.regions);
       const status = rollUpStatus(result.units);
@@ -137,6 +184,21 @@ export function registerScanRoutes(app: FastifyInstance): void {
 
       await completeJob(job.id, scanId);
 
+      /**
+       * `partial` is counted separately from `succeeded` on purpose: a scan
+       * that lost a region still returns 200 and looks healthy in request
+       * metrics, which is exactly the state this product exists to be honest
+       * about.
+       */
+      scansFinished.inc({ status });
+      scanDuration.observe((Date.now() - startedAt) / 1000);
+      awsApiCalls.inc(callCounter.total());
+      for (const unit of result.units) {
+        if (unit.status === "failed") {
+          scanUnitsFailed.inc({ aws_service: unit.service, code: unit.errorCode ?? "unknown" });
+        }
+      }
+
       const run = await getScan(tenantId, scanId);
       if (run) send({ type: "scan.finished", scanId, run });
     } catch (err) {
@@ -144,6 +206,8 @@ export function registerScanRoutes(app: FastifyInstance): void {
       req.log.error({ err }, "scan failed");
       if (scanId) await failScanRun(tenantId, scanId, message);
       await failJob(job.id, message);
+      scansFinished.inc({ status: "failed" });
+      scanDuration.observe((Date.now() - startedAt) / 1000);
       send({ type: "scan.failed", scanId: scanId ?? streamId, error: message });
     } finally {
       // The job row is already terminal by here. Nothing to release: a scan

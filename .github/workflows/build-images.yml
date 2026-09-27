@@ -1,0 +1,106 @@
+name: Build images
+
+# Builds and pushes whichever image changed, then bumps its tag in
+# helm/daveio/values.yaml. ArgoCD picks the change up and syncs it — this
+# workflow never touches the cluster, which is what keeps the cluster's state
+# a function of the repository rather than of whoever ran a pipeline last.
+#
+# The bump commit only writes values.yaml, which matches none of the paths
+# below, so it cannot retrigger this workflow. `[skip ci]` is a second,
+# independent guard — the same belt-and-braces the sibling project needed
+# after a bump loop.
+#
+# Only on main: the branch this work lives on is not deployed, and building
+# an image per push to it would be a registry full of things nobody runs.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "apps/**"
+      - "packages/**"
+      - "package-lock.json"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  packages: write
+
+env:
+  API_IMAGE: ghcr.io/tomkoren1/daveio-api
+  WEB_IMAGE: ghcr.io/tomkoren1/daveio-web
+
+jobs:
+  build:
+    name: Build and push
+    runs-on: ubuntu-latest
+    outputs:
+      tag: ${{ steps.meta.outputs.tag }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - id: meta
+        # The commit sha, not `latest`: a tag that moves makes "which build is
+        # running?" unanswerable, and rolling back means finding the previous
+        # digest by hand.
+        run: echo "tag=sha-$(git rev-parse --short HEAD)" >> "$GITHUB_OUTPUT"
+
+      - uses: docker/setup-buildx-action@v3
+
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: API image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: apps/api/Dockerfile
+          push: true
+          tags: ${{ env.API_IMAGE }}:${{ steps.meta.outputs.tag }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Frontend image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: apps/web/Dockerfile
+          push: true
+          tags: ${{ env.WEB_IMAGE }}:${{ steps.meta.outputs.tag }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  bump:
+    name: Point the chart at the new images
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Bump image tags
+        env:
+          TAG: ${{ needs.build.outputs.tag }}
+        run: |
+          set -eu
+          # Both images are built from the same commit, so they carry the same
+          # tag: a deploy where the API and the frontend are from different
+          # commits is a class of bug not worth allowing.
+          sed -i "s|^\( *tag:\).*# set by CI.*|\1 \"$TAG\" # set by CI - do not edit by hand|" helm/daveio/values.yaml
+          grep -n 'tag:' helm/daveio/values.yaml
+
+      - name: Commit if anything changed
+        run: |
+          set -eu
+          if git diff --quiet; then
+            echo "chart already points at this tag"
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git commit -am "chore: deploy ${{ needs.build.outputs.tag }} [skip ci]"
+          git push

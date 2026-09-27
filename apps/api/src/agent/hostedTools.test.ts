@@ -27,6 +27,7 @@ afterEach(() => {
 async function toolsIn(mode: "hosted" | "self-hosted") {
   vi.resetModules();
   process.env["DEPLOYMENT_MODE"] = mode;
+  process.env["SECRETS_ALLOW_LOCAL_KEY"] = "true";
   if (mode === "hosted") {
     // Otherwise the hosted invariants would refuse this configuration anyway.
     process.env["AWS_MODE"] = "real";

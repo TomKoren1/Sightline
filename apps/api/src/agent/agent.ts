@@ -36,6 +36,12 @@ import { CitationTracker, validateCitations } from "./citations.js";
 import { buildSystemPrompt } from "./prompt.js";
 import { runTool, toolDefinitions } from "./tools.js";
 import type { TenantId } from "../tenancy/tenant.js";
+import {
+  agentDuration,
+  agentQuestions,
+  agentToolCalls,
+  agentUnsupportedCitations,
+} from "../observability/metrics.js";
 import { enforceReadOnlyNotice } from "./readOnlyGuard.js";
 
 /**
@@ -92,6 +98,8 @@ export async function ask(options: AskOptions): Promise<AgentMessage> {
   const messageId = randomUUID();
 
   emit({ type: "agent.started", messageId });
+  const askedAt = Date.now();
+  agentQuestions.inc({ outcome: "started" });
 
   // Freshness and partial-failure context go into the system prompt, so the
   // model can warn about stale or missing data without being asked.
@@ -161,6 +169,7 @@ export async function ask(options: AskOptions): Promise<AgentMessage> {
     for (const use of toolUses) {
       const input = (use.input ?? {}) as Record<string, never>;
       emit({ type: "agent.tool_call", name: use.name, input });
+      agentToolCalls.inc({ tool: use.name });
 
       const startedAt = Date.now();
       let trace: ToolCallTrace;
@@ -254,6 +263,16 @@ export async function ask(options: AskOptions): Promise<AgentMessage> {
     citations,
     ...(warnings.length > 0 ? { warnings } : {}),
   };
+
+  /**
+   * An unsupported citation is an answer that reads perfectly and names a
+   * resource no tool returned. It is a 200 with a fluent paragraph in it, so
+   * without this counter a regression in grounding is invisible until someone
+   * acts on a resource that does not exist (ADR-006).
+   */
+  if (warnings.length > 0) agentUnsupportedCitations.inc(warnings.length);
+  agentQuestions.inc({ outcome: warnings.length > 0 ? "ungrounded" : "answered" });
+  agentDuration.observe((Date.now() - askedAt) / 1000);
 
   emit({ type: "agent.finished", message });
   return message;

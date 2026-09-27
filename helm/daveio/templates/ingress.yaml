@@ -1,0 +1,45 @@
+{{- if .Values.ingress.enabled }}
+{{/*
+One hostname, split by path: the API under /api and /auth, everything else the
+frontend.
+
+/auth is not under /api because Google redirects a *browser* to
+/auth/google/callback, and that exact path is registered with Google - moving
+it would mean re-registering the redirect URI (ADR-018).
+
+/metrics is deliberately **not** routed here. Prometheus scrapes it on the pod
+network; exposing it through the tunnel would publish it to the internet, and
+while it carries no customer data (ADR-021) there is no reason to.
+*/}}
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: {{ include "daveio.fullname" . }}
+  labels: {{- include "daveio.labels" . | nindent 4 }}
+spec:
+  {{- with .Values.ingress.className }}
+  ingressClassName: {{ . }}
+  {{- end }}
+  rules:
+    - host: {{ .Values.ingress.host }}
+      http:
+        paths:
+          - path: /api
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ include "daveio.fullname" . }}-api
+                port: { number: {{ .Values.api.service.port }} }
+          - path: /auth
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ include "daveio.fullname" . }}-api
+                port: { number: {{ .Values.api.service.port }} }
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ include "daveio.fullname" . }}-web
+                port: { number: {{ .Values.web.service.port }} }
+{{- end }}

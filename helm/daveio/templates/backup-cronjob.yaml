@@ -1,0 +1,65 @@
+{{- if .Values.postgres.enabled }}
+{{/*
+A nightly Postgres dump.
+
+Postgres is the system of record: the graph is a projection and can be rebuilt
+from it, so this is the only thing that has to survive the node. It writes to
+the PVC rather than to object storage, which is honest about what it is - a
+defence against a dropped table, not against losing the disk.
+
+**An untested backup is a belief.** Restore it once, on purpose, before
+relying on it:
+
+  kubectl exec -it <postgres-pod> -- \
+    psql -U dave -d dave -f /var/lib/postgresql/data/backups/dave-YYYY-MM-DD.sql
+*/}}
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: {{ include "daveio.fullname" . }}-backup
+  labels: {{- include "daveio.labels" . | nindent 4 }}
+spec:
+  schedule: "17 3 * * *"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          restartPolicy: OnFailure
+          containers:
+            - name: dump
+              image: {{ .Values.postgres.image }}
+              env:
+                - name: PGPASSWORD
+                  valueFrom: { secretKeyRef: { name: {{ include "daveio.fullname" . }}-secrets, key: POSTGRES_PASSWORD } }
+              command:
+                - /bin/sh
+                - -c
+                - |
+                  set -eu
+                  mkdir -p /backups
+                  out="/backups/{{ .Values.postgres.database }}-$(date +%F).sql"
+                  pg_dump -h {{ include "daveio.fullname" . }}-postgres \
+                    -U {{ .Values.postgres.user }} -d {{ .Values.postgres.database }} > "$out"
+                  # Keep a fortnight. Long enough to notice something went
+                  # wrong last week, short enough not to fill the volume the
+                  # database itself is using.
+                  find /backups -name '*.sql' -mtime +14 -delete
+                  ls -la "$out"
+              volumeMounts:
+                - { name: backups, mountPath: /backups }
+          volumes:
+            - name: backups
+              persistentVolumeClaim:
+                claimName: {{ include "daveio.fullname" . }}-backups
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ include "daveio.fullname" . }}-backups
+spec:
+  accessModes: ["ReadWriteOnce"]
+  resources: { requests: { storage: {{ .Values.postgres.storage }} } }
+{{- end }}

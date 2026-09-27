@@ -1,0 +1,14 @@
+{{ include "daveio.fullname" . }} deployed.
+
+Secrets are NOT part of this chart. Two Secrets must already exist in the
+namespace, created with kubeseal and committed as SealedSecret manifests:
+
+  {{ include "daveio.fullname" . }}-secrets
+  {{ include "daveio.fullname" . }}-cloudflared
+
+The commands are in helm/daveio/README.md. Pods will stay in
+CreateContainerConfigError until they exist, which is the intended failure:
+starting with default credentials would be worse.
+
+Check with:
+  kubectl -n {{ .Release.Namespace }} get secret {{ include "daveio.fullname" . }}-secrets

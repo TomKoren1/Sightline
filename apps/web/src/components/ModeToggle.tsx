@@ -30,8 +30,19 @@ export function ModeToggle({ onSwitched }: { onSwitched: (note: string) => void 
   const c = connection.data;
   if (!c) return null;
 
-  const isMock = c.mode === "mock";
+  /**
+   * Hosted and self-hosted mean different things by the left-hand option.
+   *
+   * Self-hosted: "mock", a process-wide switch the operator owns. Hosted:
+   * "demo", a column on the tenant, so one person switching changes only
+   * their own view (ADR-020). The labels are the same because the user's
+   * question is the same - am I looking at the demo, or at my account?
+   */
+  const hosted = c.mode === "demo" || c.mode === "real" ? c.demoAvailable !== undefined : false;
+  const demoValue = hosted ? "demo" : "mock";
+  const onDemo = c.mode === demoValue;
   const canSwitchToReal = c.realAccountConfigured && !c.roleArnProblem;
+  const canSwitchToDemo = c.demoAvailable !== false;
 
   /**
    * Why "My AWS" cannot be selected, in words, next to the button.
@@ -45,16 +56,21 @@ export function ModeToggle({ onSwitched }: { onSwitched: (note: string) => void 
    */
   const blockedReason = c.roleArnProblem
     ? "AWS_TARGET_ROLE_ARN cannot be assumed — open Connect for the fix"
-    : !c.realAccountConfigured
-      ? "no real account in .env — set AWS_TARGET_ROLE_ARN, then restart the API"
-      : null;
+    : c.realAccountConfigured
+      ? null
+      : hosted
+        ? "no AWS account connected yet — open Connection to add one"
+        : "no real account in .env — set AWS_TARGET_ROLE_ARN, then restart the API";
 
   return (
     <div className="flex items-center gap-1.5">
       <div className="flex overflow-hidden rounded border border-ink-700">
-        {(["mock", "real"] as const).map((mode) => {
+        {([demoValue, "real"] as const).map((mode) => {
           const active = c.mode === mode;
-          const disabled = switchMode.isPending || (mode === "real" && !canSwitchToReal);
+          const disabled =
+            switchMode.isPending ||
+            (mode === "real" && !canSwitchToReal) ||
+            (mode !== "real" && !canSwitchToDemo);
           return (
             <button
               key={mode}
@@ -63,8 +79,10 @@ export function ModeToggle({ onSwitched }: { onSwitched: (note: string) => void 
               title={
                 mode === "real" && blockedReason
                   ? `${blockedReason}. Configuration is read once at startup, so an edit to .env with no restart changes nothing.`
-                  : mode === "mock"
-                    ? "The seeded demo account"
+                  : mode !== "real"
+                    ? canSwitchToDemo
+                      ? "The seeded demo account — explore without connecting anything"
+                      : "This deployment has no demo account configured"
                     : `Your AWS account ${c.accountId ?? ""}`
               }
               className={`px-2 py-1 text-[11px] transition ${
@@ -75,7 +93,7 @@ export function ModeToggle({ onSwitched }: { onSwitched: (note: string) => void 
                   : "bg-ink-850 text-ink-400 hover:text-ink-100 disabled:cursor-not-allowed disabled:opacity-40"
               }`}
             >
-              {mode === "mock" ? "Demo" : "My AWS"}
+              {mode === "real" ? "My AWS" : "Demo"}
             </button>
           );
         })}
@@ -83,7 +101,10 @@ export function ModeToggle({ onSwitched }: { onSwitched: (note: string) => void 
       {switchMode.isPending && <span className="pulse h-1.5 w-1.5 rounded-full bg-accent" />}
       {/* The toggle diverging from .env is worth showing: it explains why a
           restart would change what you are looking at. */}
-      {!switchMode.isPending && c.mode !== c.configuredMode && (
+      {/* Only meaningful for the process-wide switch; a hosted tenant's
+          choice is their own and persists, so there is nothing to diverge
+          from. */}
+      {!hosted && !switchMode.isPending && c.mode !== c.configuredMode && (
         <span
           className="text-[10px] text-warn"
           title={`.env says ${c.configuredMode}; a restart will return to it`}
@@ -103,7 +124,7 @@ export function ModeToggle({ onSwitched }: { onSwitched: (note: string) => void 
         </span>
       )}
       <span className="text-[10px] text-ink-400" title={c.roleArn}>
-        {isMock ? "mock account" : c.accountId}
+        {onDemo ? "demo account" : (c.accountId ?? "not connected")}
       </span>
     </div>
   );

@@ -1,0 +1,8 @@
+# cp terraform.tfvars.example terraform.tfvars, then edit if the defaults are
+# wrong for you. The defaults reuse the sibling project's KMS key and the role
+# name infra/readonly-role.yaml creates, so most deployments need no changes.
+
+# aws_region        = "us-east-1"
+# kms_alias         = "alias/resume-builder-api-keys"
+# scanner_role_name = "DaveIoReadOnlyRole"
+# user_name         = "daveio-platform"

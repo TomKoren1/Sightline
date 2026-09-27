@@ -24,6 +24,7 @@ import type { Relationship, Resource } from "@daveio/shared";
 import { isMock } from "../config.js";
 import { runScan } from "../scan/runner.js";
 import { CHECKS, runChecks, type CheckResult } from "./checks.js";
+import { LOCAL_TENANT } from "../tenancy/tenant.js";
 
 let resources: Resource[] = [];
 let relationships: Relationship[] = [];
@@ -59,7 +60,7 @@ beforeAll(async () => {
     }
 
     await seed();
-    const scan = await runScan({ scanId: "eval" });
+    const scan = await runScan({ tenantId: LOCAL_TENANT, scanId: "eval" });
     resources = scan.resources;
     relationships = scan.relationships;
     results = runChecks({ resources, relationships });

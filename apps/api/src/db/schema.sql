@@ -250,3 +250,31 @@ UPDATE eval_runs SET tenant_id = '00000000-0000-0000-0000-000000000001' WHERE te
 ALTER TABLE eval_runs ALTER COLUMN tenant_id SET NOT NULL;
 ALTER TABLE eval_runs ALTER COLUMN tenant_id DROP DEFAULT;
 CREATE INDEX IF NOT EXISTS eval_runs_tenant ON eval_runs (tenant_id);
+
+-- A tenant can point at the demo account instead of their own.
+--
+-- Per tenant, not per process: the single-tenant toggle it replaces was a
+-- module-level flag, which with several tenants on one process means one
+-- person's click changes what everybody else is looking at (ADR-020).
+ALTER TABLE tenants ADD COLUMN IF NOT EXISTS demo_mode BOOLEAN NOT NULL DEFAULT false;
+
+-- The external id belongs to the tenant, not to the connection.
+--
+-- It was a column on `connections`, which meant it could not exist until a
+-- role ARN did - so the Connection panel generated a fresh one on every page
+-- load to show the customer. They would paste that into their CloudFormation
+-- stack, save the role, and the server would generate a *different* one to
+-- store: AccessDenied, with nothing in the message to suggest why.
+--
+-- It is also the right model. An external id identifies this customer to AWS;
+-- it does not depend on which role they happen to point at, and AWS's own
+-- guidance is one per customer.
+ALTER TABLE tenants ADD COLUMN IF NOT EXISTS external_id_encrypted BYTEA;
+
+-- Carry over anything already issued, then stop using the old column.
+UPDATE tenants t
+   SET external_id_encrypted = c.external_id_encrypted
+  FROM connections c
+ WHERE c.tenant_id = t.id AND t.external_id_encrypted IS NULL;
+
+ALTER TABLE connections ALTER COLUMN external_id_encrypted DROP NOT NULL;

@@ -31,7 +31,7 @@ import type { CollectorContext, CollectorOutput } from "./types.js";
 
 export async function collectVpc(ctx: CollectorContext): Promise<CollectorOutput> {
   const region = ctx.region!;
-  const client = ec2Client(region);
+  const client = ec2Client(region, ctx.tenantId, ctx.endpoint);
   const resources: Resource[] = [];
   const relationships: Relationship[] = [];
   const inRegion = (arn: string): Relationship => ({

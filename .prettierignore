@@ -13,3 +13,14 @@ package-lock.json
 # intrinsics (!Ref, !Sub, !GetAtt) that are not portable YAML tags. Neither is
 # worth reformatting; both are worth not corrupting.
 infra/*.yaml
+
+# Helm templates are Go templating inside YAML: `{{ include ... }}` where a
+# key or a value should be. Prettier parses them as YAML and fails, which is
+# correct of it. `helm lint` and `helm template` check these instead, and
+# apps/api/src/security/chart.test.ts guards the invariants that matter.
+helm/*/templates/
+helm/*/values.schema.json
+
+# Generated from apps/api/src/observability/metrics.ts and embedded in the
+# ConfigMap beside it; dashboard.test.ts keeps the two in step.
+deploy/grafana-dashboard-configmap.yaml

@@ -14,6 +14,7 @@ import type { AgentEvent } from "@daveio/shared";
 
 import { ask } from "../agent/agent.js";
 import { tenantOf } from "../tenancy/request.js";
+import { limitConfig, limits } from "../security/limits.js";
 import { pool } from "../db/postgres.js";
 import { getLatestScan } from "../db/repository.js";
 
@@ -27,7 +28,7 @@ const askSchema = z.object({
 });
 
 export function registerChatRoutes(app: FastifyInstance): void {
-  app.post("/api/chat", async (req, reply) => {
+  app.post("/api/chat", limitConfig(limits.chat), async (req, reply) => {
     const parsed = askSchema.safeParse(req.body);
     if (!parsed.success) {
       return reply.code(400).send({ error: "Invalid request", details: parsed.error.flatten() });

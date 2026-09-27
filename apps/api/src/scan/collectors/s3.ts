@@ -50,7 +50,7 @@ async function optional<T>(fn: () => Promise<T>, expectedErrors: string[]): Prom
 }
 
 export async function collectS3(ctx: CollectorContext): Promise<CollectorOutput> {
-  const home = s3Client(cfg.AWS_REGION);
+  const home = s3Client(cfg.AWS_REGION, ctx.tenantId, ctx.endpoint);
   const resources: Resource[] = [];
   const relationships: Relationship[] = [];
 
@@ -67,7 +67,7 @@ export async function collectS3(ctx: CollectorContext): Promise<CollectorOutput>
     );
     // us-east-1 is represented as an absent constraint, for historical reasons.
     const region = location?.LocationConstraint ?? "us-east-1";
-    const client = s3Client(region);
+    const client = s3Client(region, ctx.tenantId, ctx.endpoint);
 
     const [policy, policyStatus, publicAccessBlock, acl, tagging] = await Promise.all([
       optional(

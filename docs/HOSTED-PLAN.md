@@ -1,19 +1,38 @@
 # Hosting plan — from single-tenant demo to a real multi-tenant site
 
-Status: **Phases 0-3 built**, except authentication. Branch: `feat/hosted`;
-`main` stays exactly as submitted. Nothing here has been deployed, and no AWS
-resource has been created - the KMS key, the IAM user and the cluster are
-Tom's to provision.
+Status: **Phases 0-5 substantially built.** Branch: `feat/hosted-clean`;
+`main` stays exactly as submitted. **Nothing has been deployed and no AWS
+resource has been created** — the KMS key, the platform IAM user, the tunnel
+and the cluster are Tom's to provision (see
+[HOSTED-SETUP.md](HOSTED-SETUP.md)).
 
-| Phase                                  | State                                                    |
-| -------------------------------------- | -------------------------------------------------------- |
-| 0 — hosted mode, capabilities removed  | **done** (ADR-015, ADR-016)                              |
-| 1 — tenancy in the data layer          | **done** (ADR-017)                                       |
-| 2 — per-tenant secrets and connections | **done**, except the UI                                  |
-| 3 — isolation guards and the job queue | **done**; the worker process is not written yet          |
-| 3 — OAuth, sessions, `users` rows      | **not started** — `tenantOf()` is the seam it plugs into |
-| 4 — Kubernetes and Cloudflare          | not started                                              |
-| 5 — hardening                          | not started                                              |
+| Phase                                   | State                                                             |
+| --------------------------------------- | ----------------------------------------------------------------- |
+| 0 — hosted mode, capabilities removed   | **done** (ADR-015, since revised; ADR-016)                        |
+| 1 — tenancy in the data layer           | **done** (ADR-017)                                                |
+| 2 — per-tenant secrets and connections  | **done**, including the connection form (ADR-019)                 |
+| 3 — isolation guards, job queue, worker | **done**                                                          |
+| 3 — OAuth, sessions, `users` rows       | **done** (ADR-018)                                                |
+| 4 — Kubernetes and Cloudflare           | **chart, worker, images and ArgoCD app written; nothing applied** |
+| 5 — hardening                           | rate limits, headers, log redaction and backups **done**          |
+
+Beyond the original plan: a demo account each tenant can switch to (ADR-020),
+and observability wired into the cluster's existing Prometheus, Grafana and
+Loki (ADR-021).
+
+### What is still missing
+
+- **Scan progress from the worker.** The streaming route reports progress
+  because it runs the scan itself; a scan the worker picks up reports only when
+  it finishes. Live progress needs an event bus between them.
+- **Disconnect and purge.** A tenant can change their connection but not erase
+  themselves. The `ON DELETE CASCADE`s are in place; the flow, and the "only
+  you can delete your CloudFormation stack — here is the command" message, are
+  not.
+- **Turnstile on the connect form**, and Cloudflare Access in front of any
+  admin surface.
+- **Scheduled scans**, which is what makes change detection answer "what
+  changed overnight?" without somebody remembering to press the button.
 
 The target: a public site where someone signs in, connects their own AWS
 account through the read-only role, supplies their own Anthropic key, and gets

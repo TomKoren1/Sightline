@@ -25,6 +25,7 @@ try {
   await migrate();
 
   const result = await runScan({
+    tenantId: LOCAL_TENANT,
     scanId: "pending",
     onEvent: (event) => {
       if (event.type === "unit.finished") {

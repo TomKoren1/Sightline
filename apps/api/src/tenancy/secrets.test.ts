@@ -146,6 +146,9 @@ describe("configuration", () => {
   /** A key in the environment is not good enough for other people's secrets. */
   it("refuses a local key in hosted mode", async () => {
     process.env["DEPLOYMENT_MODE"] = "hosted";
+    // No KMS in a test run, and no tenant to endanger: the hosted invariant
+    // requires this to be said out loud rather than assumed.
+    process.env["SECRETS_ALLOW_LOCAL_KEY"] = "true";
     process.env["AWS_MODE"] = "real";
     process.env["AWS_ENDPOINT_URL"] = "";
     vi.resetModules();

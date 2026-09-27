@@ -13,7 +13,14 @@ import { existsSync } from "node:fs";
 import Fastify from "fastify";
 import cors from "@fastify/cors";
 
+import cookie from "@fastify/cookie";
+
 import { assertHostedInvariants, cfg, ENV_FILE, isHosted } from "./config.js";
+import { registerAuth } from "./auth/hook.js";
+import { loggerOptions } from "./observability/logging.js";
+import { registerMetrics } from "./observability/httpMetrics.js";
+import { registerSecurity } from "./security/limits.js";
+import { registerAuthRoutes } from "./routes/auth.js";
 import { defaultTenantId } from "./tenancy/tenant.js";
 import { getLatestScan } from "./db/repository.js";
 import { registerScanRoutes } from "./routes/scans.js";
@@ -24,7 +31,7 @@ import { registerConnectionRoutes } from "./routes/connection.js";
 
 export async function buildApp() {
   const app = Fastify({
-    logger: { level: process.env["LOG_LEVEL"] ?? "info" },
+    logger: loggerOptions,
     // SSE responses are written directly to the raw socket and can outlive the
     // default timeout on a slow scan.
     connectionTimeout: 0,
@@ -57,7 +64,31 @@ export async function buildApp() {
     maxParamLength: 2048,
   });
 
-  await app.register(cors, { origin: true });
+  /**
+   * Cookies, for the session. Registered before the auth hook so the hook can
+   * read them - plugin order in Fastify is load order.
+   */
+  await app.register(cookie);
+
+  /**
+   * Headers and rate limits before the auth hook, so a flood of
+   * unauthenticated requests is turned away by the limiter rather than by
+   * session decoding - and so every route registered later is covered.
+   */
+
+  await registerSecurity(app);
+
+  registerAuth(app);
+
+  await app.register(cors, {
+    /**
+     * Credentials cross-origin require an explicit origin, never `true`: the
+     * browser refuses `Access-Control-Allow-Origin: *` with cookies, and
+     * echoing the request's origin back would allow every site.
+     */
+    origin: isHosted() ? (cfg.PUBLIC_BASE_URL ?? false) : true,
+    credentials: true,
+  });
 
   /**
    * Health, with enough detail to be useful.
@@ -133,6 +164,14 @@ export async function buildApp() {
    */
   assertHostedInvariants();
 
+  /**
+   * Metrics and request timing, registered before the routes so every one of
+   * them is counted - including the ones added later, which is the failure
+   * mode of instrumenting handlers individually.
+   */
+  registerMetrics(app);
+
+  registerAuthRoutes(app);
   registerScanRoutes(app);
   registerGraphRoutes(app);
   registerChatRoutes(app);

@@ -13,6 +13,7 @@ import { ReactFlowProvider } from "@xyflow/react";
 import type { ScanEvent, ScanUnit } from "@daveio/shared";
 
 import { api, startScan } from "./api.js";
+import { AccountMenu, SignInGate } from "./components/SignIn.js";
 import { DEFAULT_VISIBLE_KINDS, KIND_STYLES, styleFor } from "./kinds.js";
 import { Chat } from "./components/Chat.js";
 import { ConnectionGuide } from "./components/ConnectionGuide.js";
@@ -38,14 +39,42 @@ export function App() {
   const [modal, setModal] = useState<"trust" | "connection" | null>(null);
   const [modeNote, setModeNote] = useState<string | null>(null);
 
-  const latest = useQuery({ queryKey: ["latestScan"], queryFn: api.latestScan });
+  /**
+   * Who is signed in, asked before anything else.
+   *
+   * Self-hosted answers "single tenant, no sign-in needed" and everything
+   * below proceeds exactly as it always has. Hosted answers with a user or
+   * with null, and null means the gate renders instead of the app - not
+   * instead of each panel, because a gate per panel is a gate somebody
+   * forgets to add.
+   */
+  const me = useQuery({ queryKey: ["me"], queryFn: api.me, retry: false });
+  const signedIn = me.data ? me.data.mode === "self-hosted" || me.data.user !== null : false;
+
+  const latest = useQuery({
+    queryKey: ["latestScan"],
+    queryFn: api.latestScan,
+    enabled: signedIn,
+  });
   const hasScan = Boolean(latest.data?.scan);
 
   // The graph and findings are meaningless before a scan, so they are not
   // fetched until there is one - which also keeps the empty state clean.
-  const graph = useQuery({ queryKey: ["graph"], queryFn: () => api.graph(), enabled: hasScan });
-  const summary = useQuery({ queryKey: ["summary"], queryFn: api.summary, enabled: hasScan });
-  const findings = useQuery({ queryKey: ["findings"], queryFn: api.findings, enabled: hasScan });
+  const graph = useQuery({
+    queryKey: ["graph"],
+    queryFn: () => api.graph(),
+    enabled: hasScan && signedIn,
+  });
+  const summary = useQuery({
+    queryKey: ["summary"],
+    queryFn: api.summary,
+    enabled: hasScan && signedIn,
+  });
+  const findings = useQuery({
+    queryKey: ["findings"],
+    queryFn: api.findings,
+    enabled: hasScan && signedIn,
+  });
 
   const runScan = useCallback(async () => {
     setScanning(true);
@@ -99,9 +128,15 @@ export function App() {
   const edges = graph.data?.edges ?? [];
   const presentKinds = [...new Set(nodes.map((n) => n.kind))].sort();
 
+  // Nothing is known yet: render nothing rather than flashing the sign-in
+  // screen at somebody who is already signed in.
+  if (me.isLoading) return <div className="h-screen bg-ink-950" />;
+  if (me.data && !signedIn) return <SignInGate me={me.data} />;
+
   return (
     <div className="flex h-screen flex-col">
       <ScanBanner
+        accountMenu={me.data ? <AccountMenu me={me.data} /> : null}
         scan={latest.data?.scan ?? null}
         scanning={scanning}
         progress={progress}

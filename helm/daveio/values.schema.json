@@ -1,0 +1,47 @@
+{
+  "$schema": "https://json-schema.org/draft-07/schema#",
+  "title": "daveio chart values",
+  "description": "Enough schema to catch the mistakes that would deploy successfully and be wrong: a missing public URL, a self-hosted deployment mode, an empty image repository.",
+  "type": "object",
+  "required": ["api", "web", "config"],
+  "properties": {
+    "config": {
+      "type": "object",
+      "required": ["deploymentMode", "publicBaseUrl"],
+      "properties": {
+        "deploymentMode": {
+          "type": "string",
+          "enum": ["hosted"],
+          "description": "This chart only deploys the multi-tenant service. A self-hosted deployment is docker compose on one machine."
+        },
+        "publicBaseUrl": {
+          "type": "string",
+          "pattern": "^https://[^/]+$",
+          "description": "Must be https and must not end in a slash: it is concatenated with /auth/google/callback and matched by Google character for character."
+        }
+      }
+    },
+    "api": {
+      "type": "object",
+      "required": ["image"],
+      "properties": {
+        "image": {
+          "type": "object",
+          "required": ["repository"],
+          "properties": { "repository": { "type": "string", "minLength": 1 } }
+        }
+      }
+    },
+    "web": {
+      "type": "object",
+      "required": ["image"],
+      "properties": {
+        "image": {
+          "type": "object",
+          "required": ["repository"],
+          "properties": { "repository": { "type": "string", "minLength": 1 } }
+        }
+      }
+    }
+  }
+}

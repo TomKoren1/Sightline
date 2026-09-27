@@ -21,7 +21,7 @@ const red = (s: string) => `\x1b[31m${s}\x1b[0m`;
 const green = (s: string) => `\x1b[32m${s}\x1b[0m`;
 const yellow = (s: string) => `\x1b[33m${s}\x1b[0m`;
 
-const result = await runScan({ scanId: "inspect" });
+const result = await runScan({ tenantId: LOCAL_TENANT, scanId: "inspect" });
 
 console.log(
   `\n${bold("Account")} ${result.accountId}  ${dim(`regions: ${result.regions.join(", ")}`)}`,

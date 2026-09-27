@@ -32,8 +32,18 @@ import {
   setMode,
   targetRoleProblem,
 } from "../config.js";
-import { assumablePrincipalArn } from "../aws/principal.js";
+import { assumablePrincipalArn, validateAssumeRoleTarget } from "../aws/principal.js";
 import { tenantOf } from "../tenancy/request.js";
+import {
+  accountMismatch,
+  getConnection,
+  markFailed,
+  markVerified,
+  upsertConnection,
+} from "../tenancy/connections.js";
+import { limitConfig, limits } from "../security/limits.js";
+import { getExternalId, getOrIssueExternalId } from "../tenancy/connections.js";
+import { getTenant, setDemoMode } from "../tenancy/tenants.js";
 import { accountIdFromArn, getSession, resetSession } from "../aws/credentials.js";
 import { getLatestScan } from "../db/repository.js";
 
@@ -78,7 +88,9 @@ function diagnose(
       problem: "The role exists but refused to be assumed.",
       fix:
         "Usually one of two things: the trust policy does not name this principal, or the ExternalId does not match. " +
-        "Check that AWS_EXTERNAL_ID here is byte-identical to the value used when the stack was deployed." +
+        (isHosted()
+          ? "Check that the ExternalId in your stack is byte-identical to the one shown in the Connection panel."
+          : "Check that AWS_EXTERNAL_ID here is byte-identical to the value used when the stack was deployed.") +
         identity,
     };
   }
@@ -86,7 +98,9 @@ function diagnose(
     return {
       code: name,
       problem: "The ExternalId was rejected.",
-      fix: "Redeploy the stack with the ExternalId shown below, or correct AWS_EXTERNAL_ID to match the deployed value.",
+      fix: isHosted()
+        ? "Redeploy the stack with the ExternalId shown in the Connection panel — it is generated for your account and cannot be changed to match an older one."
+        : "Redeploy the stack with the ExternalId shown below, or correct AWS_EXTERNAL_ID to match the deployed value.",
     };
   }
   if (name === "NoSuchEntity" || message.includes("cannot be found")) {
@@ -120,9 +134,30 @@ function diagnose(
 export function registerConnectionRoutes(app: FastifyInstance): void {
   /** Current connection state, with nothing secret in the response. */
   app.get("/api/connection", async (req) => {
-    const latest = await getLatestScan(tenantOf(req)).catch(() => null);
-    const connection = activeConnection();
-    const accountId = accountIdFromArn(connection.roleArn);
+    const tenantId = tenantOf(req);
+    const latest = await getLatestScan(tenantId).catch(() => null);
+
+    /**
+     * Hosted reports **this tenant's** connection, never the process's.
+     *
+     * The first hosted sign-in showed a brand-new tenant the operator's own
+     * AWS account, because this read `activeConnection()` - which is
+     * environment configuration and therefore the same for everybody on the
+     * process. A tenant with no connection gets nulls and the guide, which is
+     * the correct first-run state (ADR-019).
+     */
+    const tenant = isHosted() ? await getTenant(tenantId) : null;
+    const stored = isHosted() ? await getConnection(tenantId) : null;
+    const connection = isHosted()
+      ? {
+          roleArn: stored?.roleArn ?? "",
+          externalId: "",
+          endpoint: null as string | null,
+        }
+      : activeConnection();
+    const accountId = isHosted()
+      ? (stored?.accountId ?? null)
+      : accountIdFromArn(connection.roleArn);
 
     /**
      * The identity this backend runs as, before assuming anything.
@@ -175,13 +210,23 @@ export function registerConnectionRoutes(app: FastifyInstance): void {
        * instead of letting a scan fail with AccessDenied later.
        */
       roleArnProblem: targetRoleProblem(),
-      mode: currentMode(),
+      /**
+       * Hosted reports the tenant's own view: "demo" when they have switched
+       * to the demo account, "real" when they are looking at their own.
+       * Self-hosted keeps the process-wide mock/real vocabulary, which is
+       * what its toggle actually means.
+       */
+      mode: isHosted() ? (tenant?.demoMode ? "demo" : "real") : currentMode(),
       // What .env says, so the UI can show when the toggle has diverged from it.
       configuredMode,
-      /** Whether a real account is configured at all; the toggle needs it. */
-      realAccountConfigured:
-        cfg.AWS_TARGET_ROLE_ARN !== "arn:aws:iam::123456789012:role/DaveIoReadOnlyRole" &&
-        !cfg.AWS_TARGET_ROLE_ARN.includes("000000000000"),
+      /** Whether the toggle has somewhere to go. */
+      realAccountConfigured: isHosted()
+        ? stored !== null && stored.status !== "disconnected"
+        : cfg.AWS_TARGET_ROLE_ARN !== "arn:aws:iam::123456789012:role/DaveIoReadOnlyRole" &&
+          !cfg.AWS_TARGET_ROLE_ARN.includes("000000000000"),
+      /** Whether this deployment offers a demo account at all. */
+      demoAvailable: isHosted() ? Boolean(cfg.DEMO_AWS_ENDPOINT_URL) : true,
+      connectionStatus: stored?.status ?? null,
       roleArn: connection.roleArn,
       accountId,
       externalIdMasked: mask(connection.externalId),
@@ -207,13 +252,46 @@ export function registerConnectionRoutes(app: FastifyInstance): void {
    */
   app.post<{ Body: { mode?: string } }>("/api/connection/mode", async (req, reply) => {
     /**
-     * Not registered at all in hosted mode would be cleaner, but this route is
-     * registered alongside five others that *are* wanted there. So it answers
-     * 404 instead: an endpoint that does not exist, which is the truth, rather
-     * than 403, which would imply it exists and is forbidden to this caller.
+     * Hosted: the switch is a column on the tenant, so one person moving
+     * between the demo and their own account changes only what *they* see.
+     * The single-tenant version below is a process-wide flag, which is honest
+     * for one operator and would be a shared surprise for many (ADR-020).
      */
     if (isHosted()) {
-      return reply.code(404).send({ error: "Not found" });
+      const tenantId = tenantOf(req);
+      const mode = req.body?.mode;
+      if (mode !== "demo" && mode !== "real") {
+        return reply.code(400).send({ error: 'mode must be "demo" or "real"' });
+      }
+
+      if (mode === "demo" && !cfg.DEMO_AWS_ENDPOINT_URL) {
+        return reply.code(409).send({
+          error: "This deployment has no demo account configured.",
+          code: "DEMO_UNAVAILABLE",
+        });
+      }
+
+      if (mode === "real") {
+        const connection = await getConnection(tenantId);
+        if (!connection || connection.status === "disconnected") {
+          return reply.code(409).send({
+            error: "Connect an AWS account first, then switch to it.",
+            code: "NO_CONNECTION",
+          });
+        }
+      }
+
+      await setDemoMode(tenantId, mode === "demo");
+      // The cached session belongs to the account they just left.
+      resetSession(tenantId);
+
+      return reply.send({
+        mode,
+        note:
+          mode === "demo"
+            ? "Switched to the demo account. The graph still shows your previous scan — run a scan to load it."
+            : "Switched to your account. The graph still shows the demo — run a scan to load yours.",
+      });
     }
 
     const mode = req.body?.mode;
@@ -252,10 +330,101 @@ export function registerConnectionRoutes(app: FastifyInstance): void {
    * are acts an operator performs. An endpoint that persisted it would be
    * storing a credential behind no authentication.
    */
-  app.get("/api/connection/external-id", async () => ({
-    externalId: `daveio-${randomBytes(18).toString("base64url")}`,
-    note: "Generated for you to use. It is not stored — put it in the CloudFormation stack and in AWS_EXTERNAL_ID.",
-  }));
+  /**
+   * An external id to paste into a CloudFormation stack.
+   *
+   * Self-hosted generates one and does not store it: there is no tenant to
+   * store it against, and the operator puts it in `.env` themselves.
+   *
+   * Hosted returns **this tenant's** - the one already stored, or a new one -
+   * because the value the customer puts in their trust policy and the value
+   * this service presents when assuming the role have to be the same string,
+   * and a freshly generated one on every page load would guarantee they are
+   * not.
+   */
+  app.get("/api/connection/external-id", async (req) => {
+    if (!isHosted()) {
+      return {
+        externalId: `daveio-${randomBytes(18).toString("base64url")}`,
+        note: "Generated for you to use. It is not stored — put it in the CloudFormation stack and in AWS_EXTERNAL_ID.",
+      };
+    }
+
+    /**
+     * Issued here, not at save time.
+     *
+     * This value is shown so the customer can paste it into their
+     * CloudFormation stack, and it has to be the same string this service
+     * later presents when assuming the role. Generating one for display and
+     * another on save produced a stack and a service that disagreed, which
+     * surfaces as AccessDenied with nothing to suggest why.
+     */
+    const tenantId = tenantOf(req);
+    return {
+      externalId: await getOrIssueExternalId(tenantId),
+      stored: true,
+      note: "This is your account's external id. It must match the one in your CloudFormation stack.",
+    };
+  });
+
+  /**
+   * Connect an AWS account to **this tenant**.
+   *
+   * The role ARN is the only thing the customer supplies. The external id is
+   * generated here and never chosen by them: its whole purpose is to be
+   * unguessable by anyone who might otherwise persuade this service to assume
+   * a role on their behalf, and a value the caller picks is a value the caller
+   * can reuse somewhere else.
+   */
+  app.post<{ Body: { roleArn?: string; externalId?: string } }>(
+    "/api/connection",
+    limitConfig(limits.connectionWrite),
+    async (req, reply) => {
+      if (!isHosted()) {
+        return reply.code(404).send({
+          error: "Self-hosted deployments configure the connection in .env, not over HTTP.",
+        });
+      }
+
+      const tenantId = tenantOf(req);
+      const roleArn = (req.body?.roleArn ?? "").trim();
+
+      // The same validation the single-tenant guide does, for the same reason:
+      // sts:AssumeRole cannot assume a *user*, and a user ARN here is the most
+      // likely paste (see aws/principal.ts).
+      const check = validateAssumeRoleTarget(roleArn);
+      if (!check.ok) {
+        // The validator's message names AWS_TARGET_ROLE_ARN, which is a
+        // variable a hosted customer has never heard of. Same diagnosis, in
+        // their vocabulary.
+        return reply.code(400).send({
+          error: check.reason
+            .replace(/AWS_TARGET_ROLE_ARN/g, "The role ARN")
+            .split("\n")[0]!
+            .trim(),
+        });
+      }
+
+      /**
+       * The external id is not touched here.
+       *
+       * It belongs to the tenant and was issued when they first opened the
+       * guide; the customer's stack already contains it. Rotating it as a side
+       * effect of editing a role ARN would silently break them, with
+       * AccessDenied and no reason to suspect us.
+       */
+      const externalId = await getOrIssueExternalId(tenantId);
+      await upsertConnection(tenantId, { roleArn });
+      resetSession(tenantId);
+
+      return reply.send({
+        roleArn,
+        externalId,
+        status: "pending",
+        note: "Saved. Deploy the stack with this external id, then test the connection.",
+      });
+    },
+  );
 
   /**
    * Test the configured connection.
@@ -263,7 +432,8 @@ export function registerConnectionRoutes(app: FastifyInstance): void {
    * Read-only by construction: AssumeRole followed by GetCallerIdentity, which
    * together prove the trust policy works without touching anything.
    */
-  app.post("/api/connection/test", async (_req, reply) => {
+  app.post("/api/connection/test", limitConfig(limits.connectionTest), async (req, reply) => {
+    const tenantId = tenantOf(req);
     const started = Date.now();
 
     /**
@@ -282,8 +452,20 @@ export function registerConnectionRoutes(app: FastifyInstance): void {
     }
 
     try {
-      resetSession(); // Test the real thing, not a cached session.
-      const session = await getSession();
+      resetSession(tenantId); // Test the real thing, not a cached session.
+      const session = await getSession(tenantId);
+
+      // Pin the account on first success, and refuse a role that has since
+      // been pointed somewhere else - see connections.accountMismatch.
+      if (isHosted()) {
+        const stored = await getConnection(tenantId);
+        const mismatch = accountMismatch(stored?.accountId ?? null, session.accountId);
+        if (mismatch) {
+          await markFailed(tenantId, mismatch);
+          return reply.code(409).send({ ok: false, error: mismatch });
+        }
+        await markVerified(tenantId, session.accountId);
+      }
 
       const sts = new STSClient({
         region: cfg.AWS_REGION,

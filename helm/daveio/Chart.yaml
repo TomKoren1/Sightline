@@ -1,0 +1,11 @@
+apiVersion: v2
+name: daveio
+description: AWS inventory, graph and agent — multi-tenant deployment
+type: application
+version: 0.1.0
+appVersion: "0.1.0"
+
+# No dependencies on purpose. The cluster already runs Prometheus, Grafana and
+# Loki (the sibling project brought them), so this chart connects to them
+# rather than installing a second copy: two Prometheus instances scraping the
+# same pods is a bill and a confusion, not redundancy.

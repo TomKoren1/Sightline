@@ -16,7 +16,7 @@ import type { CollectorContext, CollectorOutput } from "./types.js";
 
 export async function collectLambda(ctx: CollectorContext): Promise<CollectorOutput> {
   const region = ctx.region!;
-  const client = lambdaClient(region);
+  const client = lambdaClient(region, ctx.tenantId, ctx.endpoint);
   const resources: Resource[] = [];
   const relationships: Relationship[] = [];
 
