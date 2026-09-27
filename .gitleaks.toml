@@ -46,8 +46,23 @@ keywords = ["aws_external_id"]
 # after this scanner correctly objected to the originals; these survive only
 # in branch history, and rewriting that would mean a force-push over a shared
 # ref for no security benefit.
+# One commit, allowlisted by SHA rather than by value.
+#
+# 0de7693 contains a Cloudflare tunnel token that was pasted into a Secret
+# template and committed by `git add -A` (engineering log #45). **The token was
+# rotated on 2026-09-27**, so the string in that commit no longer authorises
+# anything, and rewriting shared history for a dead credential would be a
+# bigger hammer than the problem.
+#
+# By SHA, not by the value: writing the token into this file would put it back
+# in the current tree, and allowlisting its *shape* would blind the scanner to
+# the next one. This entry silences exactly one reviewed commit and nothing
+# else - a token committed tomorrow still fails the build.
 [allowlist]
-description = "Placeholders in the committed example, the patterns this file quotes, and reviewed canaries in history"
+description = "Placeholders in the committed example, the patterns this file quotes, reviewed canaries, and one rotated token"
+commits = [
+  "0de769350f9859a8ff16bb7d82eadb41e1c0c042",
+]
 paths = ['''\.env\.example$''', '''\.gitleaks\.toml$''']
 regexes = [
   "ANTHROPICKEYCANARY0000",
