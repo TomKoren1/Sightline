@@ -29,6 +29,7 @@ import {
   currentMode,
   isMock,
   setMode,
+  sourceIdentity,
   targetRoleProblem,
 } from "../config.js";
 import { assumablePrincipalArn } from "../aws/principal.js";
@@ -71,13 +72,32 @@ function diagnose(
         `DaveIoScannerRoleArn=${callerIdentity}, or give this host credentials for the principal it does name. ` +
         "Check with: aws iam get-role --role-name DaveIoReadOnlyRole --query 'Role.AssumeRolePolicyDocument'"
       : "";
+
+    /**
+     * A third cause, and now the most likely one for an existing deployment.
+     *
+     * Every AssumeRole sets `sts:SourceIdentity` (ADR-007). A stack deployed
+     * before that became mandatory carries `StringLike sts:SourceIdentity:
+     * "daveio:*"` - a pattern no legal value can match, because AWS forbids a
+     * colon in SourceIdentity - so `sts:SetSourceIdentity` is denied and the
+     * whole AssumeRole fails. The denial says nothing about SourceIdentity, and
+     * the obvious reading is that the ExternalId or the principal is wrong, so
+     * naming it here saves an hour of looking in the wrong place (log #44).
+     */
+    const sourceIdentityHint =
+      "\n  If this role was deployed before SourceIdentity became mandatory, its trust policy still matches " +
+      `"daveio:*" while the scanner now sends "${sourceIdentity()}" - a colon is not legal in a SourceIdentity, ` +
+      "so that condition can never match and the assume is refused. Redeploy the stack from the current " +
+      "infra/readonly-role.yaml to fix it; the Connection screen shows the exact command.";
     return {
       code: name,
       problem: "The role exists but refused to be assumed.",
       fix:
-        "Usually one of two things: the trust policy does not name this principal, or the ExternalId does not match. " +
+        "Usually one of three things: the trust policy does not name this principal, the ExternalId does not match, " +
+        "or the stack predates SourceIdentity being required. " +
         "Check that AWS_EXTERNAL_ID here is byte-identical to the value used when the stack was deployed." +
-        identity,
+        identity +
+        sourceIdentityHint,
     };
   }
   if (message.includes("ExternalId") || message.includes("external id")) {

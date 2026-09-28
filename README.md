@@ -56,6 +56,36 @@ npm run dev:web               # http://localhost:5173   ← open this
 
 Both paths are covered by CI.
 
+### Changing configuration, and pointing it at a real account
+
+`.env` is read once when the API starts, so an edit needs the process replaced.
+In Docker that is:
+
+```bash
+docker compose --profile app up -d api     # recreates it with the new values
+```
+
+`docker compose restart api` is the command you would reach for and it does
+**not** work — it reuses the environment resolved when the container was created,
+so the edit is silently ignored. (Switching between the mock and a real account
+needs no restart at all: the **Demo / My AWS** toggle in the header does it at
+runtime.)
+
+For `AWS_MODE=real` inside a container there is one more thing. The scanner uses
+the standard AWS credential chain, which on a host reaches `~/.aws` — a container
+has no such directory unless it is given one, so a profile that works locally
+fails with _"No source credentials were found"_. Mount it read-only:
+
+```bash
+docker compose -f docker-compose.yml -f deploy/compose.aws-profile.yml \
+  --profile app up -d
+```
+
+That is a separate file rather than a mount in `docker-compose.yml` because the
+path has to come from `${HOME}`, which is not set on every platform Compose runs
+on — and an unset variable there would break the whole file, including the mock
+path that has nothing to do with real AWS.
+
 ### Tearing it down
 
 ```bash
@@ -190,7 +220,7 @@ is one of only two variables where blank is meaningful rather than unset.
 | `npm run drift`                              | Change the mock account, so a second scan has a diff   |
 | `npm run inspect -w @daveio/api`             | Scan and print findings without touching the databases |
 | `npm run query -w @daveio/api`               | Run every curated query against the graph              |
-| `npm test`                                   | 288 unit tests                                         |
+| `npm test`                                   | 290 unit tests                                         |
 | `npm run verify`                             | Everything CI's static job runs — use before pushing   |
 | `npm run evals:ground-truth -w @daveio/api`  | Tier-1 evals — no API key needed                       |
 | `npm run evals -w @daveio/api`               | Tier-2 agent evals — needs a key                       |

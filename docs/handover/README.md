@@ -4,7 +4,7 @@ Two print documents, written to be read on their own by someone who has not seen
 the codebase. They answer different questions and are deliberately not merged.
 
 **`dave-io-assignment-handover.pdf`** — the project: what was asked and built,
-the architecture, the fourteen decisions, all forty-three logged problems with
+the architecture, the fourteen decisions, all forty-four logged problems with
 their lessons, the recurring failure patterns, the known limits, and likely
 interview questions with answers grounded in the code.
 

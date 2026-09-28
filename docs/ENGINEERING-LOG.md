@@ -2145,3 +2145,89 @@ the application — which was fine. The empty healthcheck output is what makes t
 expensive: Docker reports that the probe failed without reporting what the probe
 saw. Running the probe by hand inside the container was the step that took ten
 seconds and should have been first.
+
+---
+
+## #44 — Requiring SourceIdentity broke an account that was already connected
+
+**Symptom.** Asked whether the real-AWS connection still worked under the new
+containerised setup. It did not — but not for the reason the question implied.
+
+**First cause, and the expected one.** In the container, `Test connection`
+returned _"No source credentials were found."_ `.env` carries
+`AWS_ACCESS_KEY_ID=mock`, the placeholder, and real mode works **on the host**
+through a two-step fallback nobody had written down: `config.ts` strips the
+`"mock"` placeholder from `process.env` — it would otherwise shadow real
+credentials, which is why that stripping exists — and the SDK's credential chain
+then falls through to `~/.aws/credentials`. A container has no `~/.aws`, so the
+second step lands on nothing.
+
+Fixed with an opt-in override, `deploy/compose.aws-profile.yml`, that mounts the
+host's `~/.aws` read-only. Deliberately a separate file: the path must come from
+`${HOME}`, which is not set on every platform Compose runs on, and an unset
+variable in a volume spec breaks the **entire** compose file — including the mock
+path, which has nothing to do with real AWS. Opt-in costs one flag and cannot
+break anyone who does not use it. The alternative, real long-lived keys in `.env`,
+is worse in a project whose argument is scoped temporary credentials.
+
+**Second cause, which I had caused two commits earlier.** With the profile
+mounted, the assume got further and was refused: _"The role exists but refused to
+be assumed."_ Reading the deployed trust policy explained it:
+
+```json
+"Sid": "AllowDaveIoScannerToSetSourceIdentity",
+"Condition": { "StringLike": { "sts:SourceIdentity": "daveio:*" } }
+```
+
+That role was deployed from the template **before** #42. Every `AssumeRole` now
+sends `SourceIdentity: daveio-system`, `sts:SetSourceIdentity` is a separately
+authorised action, and `daveio-system` does not match `daveio:*` — so the action
+is denied and the whole assume fails.
+
+Which is also the cleanest possible proof that #42 was a real bug rather than a
+tidy-up: **that deployed policy can never accept a request that sets a
+SourceIdentity**, because AWS forbids a colon in the value. It sat there looking
+like a working control for as long as nothing exercised it, and the moment
+something did, it refused every call.
+
+**The cost is the one ADR-007 already named.** Scoping a trust policy precisely
+means the customer has to redeploy when the contract changes. I wrote that as an
+accepted trade-off in an ADR and then experienced it as a broken connection two
+days later, which is a fair summary of what accepted trade-offs feel like in
+practice.
+
+**What I changed, and what I deliberately did not.** `diagnose()` now names this
+as a third cause of `AccessDenied`, quoting the value the scanner sends and the
+pattern an older stack matches, because the denial itself says nothing about
+SourceIdentity and the obvious readings — wrong principal, wrong ExternalId —
+are both wrong here.
+
+What I did **not** do is make the scanner retry without a SourceIdentity on
+`AccessDenied`. It would have fixed this instantly and quietly made attribution
+optional again, which is the whole thing #42 existed to prevent. A fallback that
+silently drops a security property is worse than the error it removes.
+
+**A third thing, found while testing the first two.** `docker compose restart api`
+does not pick up an edited `.env`: it restarts the existing container, whose
+environment was resolved when the container was created. `docker compose
+--profile app up -d api` recreates it and does. Verified both ways by flipping
+`AWS_MODE` and reading `/api/health`: after `restart` it still reported `real`,
+after `up -d` it reported `mock`.
+
+That matters because the Connection screen's step 4 says _"restart the API"_, and
+`restart` is exactly the command a reader would reach for — one that appears to
+succeed and changes nothing. Both the screen and the README now name `up -d api`
+and say why `restart` fails.
+
+**What to take from it.** **A control nothing exercises is not a control, and
+making it real is a breaking change.** #42 found a condition that could never
+match; fixing it turned a decorative clause into an enforced one, and every
+already-deployed stack was relying on it being decorative. The lesson is not
+"don't fix it" — it is that enabling a dormant guarantee is a migration, and
+should be planned like one rather than discovered by the next person who tries to
+connect.
+
+The narrower one, for the third finding: **"restart" meaning "reuse the old
+configuration" is a trap that only exists because the word is borrowed.** Nothing
+in the name suggests the environment is frozen at create time, and the command
+exits zero.
