@@ -407,6 +407,31 @@ export function ConnectionGuide() {
             the command you would reach for and it does <em>not</em> work: it reuses the environment
             resolved when the container was created, so the edit is silently ignored.
           </p>
+          {/*
+            The credential chain is the step that actually blocks people, and the
+            error it produces - "No source credentials were found" - reads like a
+            broken connection rather than a missing mount.
+          */}
+          <div className="rounded border border-warn/40 bg-warn/10 px-2 py-1.5">
+            <p className="text-[10px] leading-relaxed text-warn">
+              <strong>In Docker, the credentials have to reach the container.</strong> A real
+              account uses the standard AWS credential chain, which on your machine reaches{" "}
+              <code>~/.aws</code> — a container has no such directory unless it is given one, so a
+              profile that works locally fails here with{" "}
+              <em>&ldquo;No source credentials were found&rdquo;</em>. Either start it with the
+              supplied override, which mounts your profile read-only:
+            </p>
+            <p className="mt-1 break-all font-mono text-[9px] leading-relaxed text-warn/90">
+              docker compose -f docker-compose.yml -f deploy/compose.aws-profile.yml --profile app
+              up -d
+            </p>
+            <p className="mt-1 text-[10px] leading-relaxed text-warn">
+              or put real values in <code>AWS_ACCESS_KEY_ID</code> and{" "}
+              <code>AWS_SECRET_ACCESS_KEY</code>. The mount is preferable: it keeps long-lived keys
+              out of a file sitting next to the code, and it carries an SSO token cache, so{" "}
+              <code>aws sso login</code> on the host works in here too.
+            </p>
+          </div>
           <Copyable value={envSnippet} />
           <Fields
             rows={[

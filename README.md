@@ -28,14 +28,34 @@ cp .env.example .env
 
 ### One command
 
+Needs Docker with Compose v2 (`docker compose`, not `docker-compose`) and nothing
+else — no Node, no AWS account.
+
 ```bash
 docker compose --profile app up -d --build
 # → http://localhost:8080
 ```
 
-Needs Docker and nothing else. Builds the API and the frontend, starts Postgres,
-Neo4j and the mock AWS control plane, and seeds the fictional customer account.
-The first scan is deliberately left for you to run from the UI's empty state.
+The first run builds two images and takes a couple of minutes; after that it is
+seconds. It starts Postgres, Neo4j and the mock AWS control plane, seeds the
+fictional customer account, then serves the app.
+
+**What you should see:** an empty graph and a prompt to run the first scan. That
+is deliberate — pressing it shows the scan streaming service by service, which is
+more informative than arriving at a finished graph. Chat needs an Anthropic key
+([below](#the-llm-key)); everything else does not.
+
+Check on it with `docker compose --profile app ps` — all five services should
+report `healthy` or `running`. If something is wrong,
+`docker compose --profile app logs api` is where it will say so.
+
+**Ports it binds:** `8080` (the app), and `5432`, `7474`, `7687`, `5000` for
+Postgres, Neo4j and moto. If one is already taken the container will fail to
+start; every one is configurable in `.env` as `APP_PORT`, `POSTGRES_PORT`,
+`NEO4J_HTTP_PORT`, `NEO4J_BOLT_PORT` and `MOCK_AWS_PORT`.
+
+**If this path gives you trouble at all, use the one below instead** — it is what
+I develop against, and nothing about the product differs between them.
 
 ### Or on the host, to work on the code
 
@@ -71,10 +91,11 @@ so the edit is silently ignored. (Switching between the mock and a real account
 needs no restart at all: the **Demo / My AWS** toggle in the header does it at
 runtime.)
 
-For `AWS_MODE=real` inside a container there is one more thing. The scanner uses
-the standard AWS credential chain, which on a host reaches `~/.aws` — a container
-has no such directory unless it is given one, so a profile that works locally
-fails with _"No source credentials were found"_. Mount it read-only:
+For `AWS_MODE=real` inside a container there is one more thing, and it is the
+step most likely to catch you out. The scanner uses the standard AWS credential
+chain. On a host that reaches `~/.aws`; a container has no such directory unless
+it is given one, so **a profile that works locally fails inside the container**
+with _"No source credentials were found"_. Mount it read-only:
 
 ```bash
 docker compose -f docker-compose.yml -f deploy/compose.aws-profile.yml \
@@ -85,6 +106,13 @@ That is a separate file rather than a mount in `docker-compose.yml` because the
 path has to come from `${HOME}`, which is not set on every platform Compose runs
 on — and an unset variable there would break the whole file, including the mock
 path that has nothing to do with real AWS.
+
+One more thing worth knowing if you connect a real account: every `AssumeRole`
+sends `sts:SourceIdentity`, and the trust policy requires it. A role deployed from
+an **older** copy of `infra/readonly-role.yaml` matches `daveio:*`, which no legal
+value can satisfy, so the assume is refused with `AccessDenied`. Redeploy the
+stack from the current template; the Connection screen's own connection test names
+this as one of the three causes it checks for.
 
 ### Tearing it down
 
