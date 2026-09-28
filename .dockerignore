@@ -1,0 +1,15 @@
+# Keep the build context small and deterministic. node_modules in particular
+# must never be copied: the image installs its own from the lockfile, and a
+# host tree built for a different platform would shadow it.
+node_modules
+**/node_modules
+.git
+.github
+dist
+**/dist
+docs/handover/*.pdf
+evals/results
+.env
+.env.*
+!.env.example
+*.log

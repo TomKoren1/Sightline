@@ -18,11 +18,32 @@ AWS (real or mock) ──▶ scanner ──▶ Postgres ──▶ Neo4j ──�
 
 ## Running it
 
-You need Docker and Node 20+. Nothing else — no AWS account, no credentials.
+Everything runs against a mock AWS account, so there is no AWS involvement of any
+kind — no account, no credentials, no cost.
 
 ```bash
 git clone <this repo> && cd dave.io_home-assignment
 cp .env.example .env
+```
+
+### One command
+
+```bash
+docker compose --profile app up -d --build
+# → http://localhost:8080
+```
+
+Needs Docker and nothing else. Builds the API and the frontend, starts Postgres,
+Neo4j and the mock AWS control plane, and seeds the fictional customer account.
+The first scan is deliberately left for you to run from the UI's empty state.
+
+### Or on the host, to work on the code
+
+Docker for the three dependencies, Node 20+ for the rest — hot reload, and the
+CLIs to hand. This is what I develop against and what the rest of this README
+assumes.
+
+```bash
 docker compose up -d          # Postgres, Neo4j, and moto (mock AWS)
 npm install
 
@@ -32,6 +53,65 @@ npm run scan                  # discover it, persist it, build the graph
 npm run dev:api               # http://localhost:3000
 npm run dev:web               # http://localhost:5173   ← open this
 ```
+
+Both paths are covered by CI.
+
+### Changing configuration, and pointing it at a real account
+
+`.env` is read once when the API starts, so an edit needs the process replaced.
+In Docker that is:
+
+```bash
+docker compose --profile app up -d api     # recreates it with the new values
+```
+
+`docker compose restart api` is the command you would reach for and it does
+**not** work — it reuses the environment resolved when the container was created,
+so the edit is silently ignored. (Switching between the mock and a real account
+needs no restart at all: the **Demo / My AWS** toggle in the header does it at
+runtime.)
+
+For `AWS_MODE=real` inside a container there is one more thing. The scanner uses
+the standard AWS credential chain, which on a host reaches `~/.aws` — a container
+has no such directory unless it is given one, so a profile that works locally
+fails with _"No source credentials were found"_. Mount it read-only:
+
+```bash
+docker compose -f docker-compose.yml -f deploy/compose.aws-profile.yml \
+  --profile app up -d
+```
+
+That is a separate file rather than a mount in `docker-compose.yml` because the
+path has to come from `${HOME}`, which is not set on every platform Compose runs
+on — and an unset variable there would break the whole file, including the mock
+path that has nothing to do with real AWS.
+
+### Tearing it down
+
+```bash
+docker compose --profile app down -v     # use this one, whichever way you started it
+```
+
+The `--profile app` flag is **required to clean up if you ever started that
+profile**, and harmless if you did not. Without it, Compose only removes the
+services in the default configuration, so the API and nginx containers are left
+running against databases that no longer exist, and the network cannot be
+removed. That is a Compose behaviour rather than a choice here —
+`--remove-orphans` does not cover profiled services either.
+
+`-v` deletes the volumes, which means every scan, the graph, agent traces and
+recorded eval runs. And note that **any** `down` empties the mock AWS account,
+because moto holds it in memory — so after tearing down, `npm run seed` before
+`npm run scan`, or the scan discovers an empty account.
+
+Two things to know if you edit the compose file. Every connection default in
+`config.ts` is `localhost`, which is right on a laptop and wrong inside a
+container, so the container hostnames are set in the compose service's
+`environment:` block — which takes precedence over `env_file` — rather than in a
+second `.env` that would eventually disagree with the first. And nginx proxies
+`/api` with `proxy_buffering off`, because scans and agent answers are
+server-sent event streams: a buffering proxy delivers them all at the end, which
+is the same problem the Vite dev server solves in development.
 
 `npm run seed` and `npm run scan` are also reachable from the UI: open it with
 an empty database and the empty state offers to run the first scan.
@@ -130,17 +210,20 @@ is one of only two variables where blank is meaningful rather than unset.
 
 ### Useful commands
 
-| Command                                     | What it does                                           |
-| ------------------------------------------- | ------------------------------------------------------ |
-| `npm run seed`                              | Rebuild the mock account from scratch                  |
-| `npm run scan`                              | Scan, persist, project the graph                       |
-| `npm run drift`                             | Change the mock account, so a second scan has a diff   |
-| `npm run inspect -w @daveio/api`            | Scan and print findings without touching the databases |
-| `npm run query -w @daveio/api`              | Run every curated query against the graph              |
-| `npm test`                                  | 288 unit tests                                         |
-| `npm run verify`                            | Everything CI's static job runs — use before pushing   |
-| `npm run evals:ground-truth -w @daveio/api` | Tier-1 evals — no API key needed                       |
-| `npm run evals -w @daveio/api`              | Tier-2 agent evals — needs a key                       |
+| Command                                      | What it does                                           |
+| -------------------------------------------- | ------------------------------------------------------ |
+| `docker compose up -d`                       | Postgres, Neo4j and moto — just the dependencies       |
+| `docker compose --profile app up -d --build` | The whole thing in Docker, served on `:8080`           |
+| `docker compose --profile app down -v`       | Tear it all down, volumes included                     |
+| `npm run seed`                               | Rebuild the mock account from scratch                  |
+| `npm run scan`                               | Scan, persist, project the graph                       |
+| `npm run drift`                              | Change the mock account, so a second scan has a diff   |
+| `npm run inspect -w @daveio/api`             | Scan and print findings without touching the databases |
+| `npm run query -w @daveio/api`               | Run every curated query against the graph              |
+| `npm test`                                   | 290 unit tests                                         |
+| `npm run verify`                             | Everything CI's static job runs — use before pushing   |
+| `npm run evals:ground-truth -w @daveio/api`  | Tier-1 evals — no API key needed                       |
+| `npm run evals -w @daveio/api`               | Tier-2 agent evals — needs a key                       |
 
 ---
 
@@ -502,6 +585,8 @@ apps/web            React frontend: graph, chat, findings, UX states
 packages/shared     domain model shared by every package
 packages/mock-aws   the seeded customer account and its answer key
 infra/              the replacement read-only role, and the original
+deploy/             nginx config for the containerised frontend
+Dockerfile          API and frontend images, used only by the `app` profile
 docs/               decisions, engineering log, commit log, walkthrough
 ```
 

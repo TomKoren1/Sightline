@@ -1,6 +1,17 @@
 # Local development stack for the dave.io engineering assignment.
 #
-#   docker compose up -d
+#   docker compose up -d                  dependencies only (the documented path)
+#   docker compose --profile app up -d    the whole thing, including the app
+#   docker compose --profile app down -v  tear down, whichever way you started
+#
+# The flag is needed on `down` too: without it Compose only removes the services
+# in the default configuration, leaving the api and web containers running
+# against databases that no longer exist. It is harmless if the profile was never
+# started, so it is the one teardown command to remember.
+#
+# The `app` profile is additive and opt-in. Without it this file behaves exactly
+# as it always has, so the instructions in the README cannot be broken by the
+# containerised path misbehaving on a platform I cannot test.
 #
 # Three services:
 #   postgres  - system of record: scan runs, resource snapshots, agent traces
@@ -78,6 +89,90 @@ services:
       interval: 5s
       timeout: 5s
       retries: 20
+
+  # ---------------------------------------------------------------------------
+  # Optional `app` profile: the API and the built frontend.
+  # ---------------------------------------------------------------------------
+  #
+  # Every connection default in apps/api/src/config.ts is `localhost`, which is
+  # correct on a laptop and wrong inside a container. The overrides below are set
+  # in `environment:`, which takes precedence over `env_file`, so the container
+  # gets container hostnames while `.env` stays the single source of truth for
+  # local development. Duplicating those values into a second env file would
+  # guarantee they eventually disagree.
+
+  # One-shot seeder, so the mock account is populated before the API starts.
+  #
+  # A separate service rather than an API entrypoint step because `seed()` calls
+  # `resetMoto()` first: running it on every API boot would wipe the account
+  # whenever the container restarted, and the next scan diff would report every
+  # resource as new. `service_completed_successfully` gives exactly-once per
+  # `up` instead.
+  seed:
+    profiles: ["app"]
+    build:
+      context: .
+      target: api
+    container_name: daveio-seed
+    restart: "no"
+    env_file: [.env]
+    environment:
+      AWS_ENDPOINT_URL: http://moto:5000
+      AWS_ACCESS_KEY_ID: mock
+      AWS_SECRET_ACCESS_KEY: mock
+    depends_on:
+      moto:
+        condition: service_healthy
+    command: ["npm", "run", "seed"]
+
+  api:
+    profiles: ["app"]
+    build:
+      context: .
+      target: api
+    container_name: daveio-api
+    restart: unless-stopped
+    env_file: [.env]
+    environment:
+      DATABASE_URL: postgres://${POSTGRES_USER:-dave}:${POSTGRES_PASSWORD:-dave}@postgres:5432/${POSTGRES_DB:-dave}
+      NEO4J_URI: bolt://neo4j:7687
+      AWS_ENDPOINT_URL: http://moto:5000
+      # Loopback would accept nothing from the nginx container.
+      BACKEND_HOST: "0.0.0.0"
+      BACKEND_PORT: "3000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      neo4j:
+        condition: service_healthy
+      moto:
+        condition: service_healthy
+      seed:
+        condition: service_completed_successfully
+    healthcheck:
+      # 127.0.0.1, not localhost. In this image `localhost` resolves to ::1,
+      # and Fastify bound to 0.0.0.0 listens on IPv4 only - so a `localhost`
+      # probe is refused while the server is working perfectly, leaving the
+      # container permanently unhealthy and `web` refusing to start behind it.
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:3000/api/health >/dev/null 2>&1 || exit 1"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      # tsx compiles on boot, and the server applies the schema before listening.
+      start_period: 30s
+
+  web:
+    profiles: ["app"]
+    build:
+      context: .
+      target: web
+    container_name: daveio-web
+    restart: unless-stopped
+    ports:
+      - "${APP_PORT:-8080}:80"
+    depends_on:
+      api:
+        condition: service_healthy
 
 volumes:
   postgres-data:

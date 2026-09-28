@@ -400,6 +400,13 @@ export function ConnectionGuide() {
             <strong className="text-ink-300">restart the API</strong> — configuration is read once
             at startup, so an edit with no restart changes nothing.
           </p>
+          <p className="text-[10px] leading-relaxed text-ink-400">
+            Running in Docker, that is{" "}
+            <code className="text-ink-300">docker compose --profile app up -d api</code>, which
+            recreates the container with the new values. <code>docker compose restart api</code> is
+            the command you would reach for and it does <em>not</em> work: it reuses the environment
+            resolved when the container was created, so the edit is silently ignored.
+          </p>
           <Copyable value={envSnippet} />
           <Fields
             rows={[
