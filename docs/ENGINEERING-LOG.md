@@ -2667,11 +2667,12 @@ than minutes later in CI. It reads the patterns **from** the config rather than
 restating them, translating Go's inline `(?i)` which JS rejects, and honours each
 rule's own allowlist so documented placeholders are not flagged.
 
-It immediately found a second one: `.github/workflows/ci.yml` itself contained
-`AWS_EXTERNAL_ID=(?!replace-me|local-dev)` — the CI step that checks `.env.example`
-for a real ExternalId matched the rule for real ExternalIds. A file describing the
-check tripping the check. Rewritten as two greps, verified still to catch a planted
-secret and still to permit the placeholder.
+It immediately found a second one, in `.github/workflows/ci.yml`: the step that
+checks `.env.example` for a real ExternalId used an `AWS_EXTERNAL_ID=` prefix
+followed by a negative lookahead for the two placeholders — which matches the rule
+for real ExternalIds. A file describing the check tripping the check. Rewritten as
+two greps, verified still to catch a planted secret and still to permit the
+placeholder.
 
 **Then the third, which is the interesting one.** gitleaks flagged
 `fixtures.test.ts`. Its **positive controls** are credential-shaped strings, by
@@ -2706,6 +2707,12 @@ correctly; the bug each time was mine, in the fixture. That is the good case —
 it cost three CI runs because the fix and the thing being fixed kept overlapping,
 and each round the overlap moved: the value, then the file describing the value,
 then the test describing the file.
+
+**A fourth instance, in this entry.** The paragraph above originally quoted that CI
+pattern verbatim, so committing the write-up failed the guard — a log describing the
+bug reproducing the bug. It is now described rather than quoted. Worth recording
+because it is the cheapest possible demonstration of the shape: anything that
+_discusses_ a credential pattern is itself a file the scanners read.
 
 The narrow, reusable lessons: **a test's fixtures are part of the codebase the
 scanners read**, so a synthetic secret is a real liability with none of the danger;
