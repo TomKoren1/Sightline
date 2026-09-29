@@ -2798,6 +2798,25 @@ remove the guard from one script. Then the real thing, end to end — a fresh
 which installed and then printed its plan, and a second run that was silent
 because there was nothing to do.
 
+**And then it broke the container, which is the part I did not see coming.** The
+fix made every root script depend on a _file_, and the API image does not copy the
+whole repository — it copies `packages/`, `apps/api/` and two configs, by design,
+so that a code change does not reinvalidate the `npm ci` layer. `scripts/` was not
+in that list. The compose `seed` service runs `npm run seed`, so it died with
+`Cannot find module /app/scripts/deps.mjs`, and because the API waits on
+`service_completed_successfully` the whole `app` profile came down with it — the
+one-command path in the README, broken by the fix to the other command in the
+README. Caught by CI, three minutes after the commit that caused it.
+
+One `COPY` fixes it. The guard is a no-op inside the image, since `npm ci` there
+installs devDependencies deliberately. `infra/dockerfileScripts.test.ts` is the
+part worth keeping: it resolves each stage's `FROM` chain, finds every compose
+service and `CMD` that runs a _root_ script — workspace-scoped `-w` invocations
+resolve elsewhere and are excluded — and asserts the stage copies `scripts/`.
+One of its three assertions exists only to prove the other two are looking at
+something, because a parser that silently matches nothing passes every test built
+on it. All three were verified by breaking them.
+
 **What to take from it.** **A prerequisite you have satisfied is invisible.**
 Every command in this repository worked on my machine for the same reason: I ran
 `npm install` in week one and never thought about it again. The README was not
@@ -2805,3 +2824,9 @@ written carelessly — it was written from a directory where the claim was true.
 The general form is that the first five minutes of a project can only be tested
 from a clean machine, and "it works here" is the one piece of evidence that
 cannot establish it.
+
+That has a second half here. The container had satisfied it too — `npm ci` runs in
+the image — so the only thing missing was the file, and nothing in either the
+`package.json` or the `Dockerfile` hints that the other exists. **A guard that adds
+a dependency is a change to every environment that runs the guarded thing**, and
+the environments that are not your laptop are the ones that find out.

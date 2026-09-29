@@ -35,6 +35,12 @@ RUN npm ci
 FROM deps AS api
 WORKDIR /app
 COPY tsconfig.base.json vitest.config.ts ./
+# Root `package.json` scripts run `scripts/deps.mjs` first, so an image that runs
+# one - the compose `seed` service runs `npm run seed` - needs the directory. Its
+# absence failed the whole `app` profile at the seeding step, before the API was
+# ever reached (engineering log #51). Here the guard is a no-op: `npm ci` above
+# installed devDependencies deliberately, so it finds tsx and exits immediately.
+COPY scripts/ scripts/
 COPY packages/ packages/
 COPY apps/api/ apps/api/
 # Fastify must accept connections from the nginx container, not just loopback.
