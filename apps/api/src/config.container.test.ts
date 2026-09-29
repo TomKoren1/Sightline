@@ -51,37 +51,25 @@ describe("the guide renders one restart instruction, matched to the runtime", ()
     expect(guide).toContain("npm run dev:api");
   });
 
-  it("shows the credentials mount only in a container", () => {
+  it("puts the credentials mount in the .env snippet, only in a container", () => {
     /**
-     * Asserted by call site, not by scanning backwards for the nearest guard -
-     * which is how this passed while the guard had been removed: an unrelated
-     * `{c.containerised && (` earlier in the file satisfied the search. The
-     * content now lives in a named component with exactly one call site, and
-     * that call site has to be guarded.
+     * Both lines, in the snippet the reader already pastes in step 3. As a
+     * separate note under step 4 it was read after the restart it had to
+     * precede, and it carried COMPOSE_FILE without the separator line Windows
+     * Compose needs to split it.
      *
-     * On a host the credential chain finds ~/.aws by itself, so showing it there
-     * is noise, and noise in a security flow is how the parts that matter stop
-     * being read.
+     * On a host the credential chain finds ~/.aws by itself, so the lines are
+     * spread in only behind `c.containerised`.
      */
-    expect(guide, "the mount instruction is gone").toContain("COMPOSE_FILE=docker-compose.yml");
+    const mount = /const CONTAINER_PROFILE_MOUNT = \[([\s\S]*?)\];/.exec(guide);
+    expect(mount, "CONTAINER_PROFILE_MOUNT was renamed or removed").toBeTruthy();
+    expect(mount![1]).toContain("COMPOSE_PATH_SEPARATOR=:");
+    expect(mount![1]).toContain("COMPOSE_FILE=docker-compose.yml:deploy/compose.aws-profile.yml");
 
-    const definition = guide.indexOf("function ContainerCredentialsNote()");
-    expect(definition, "ContainerCredentialsNote was renamed or inlined").toBeGreaterThan(-1);
-    const body = guide.slice(definition, guide.indexOf("\n}", definition));
-    expect(body, "the mount instruction moved out of the container-only component").toContain(
-      "COMPOSE_FILE=docker-compose.yml",
+    const snippet = /const envSnippet = \[([\s\S]*?)\]\.join/.exec(guide);
+    expect(snippet, "envSnippet was renamed or restructured").toBeTruthy();
+    expect(snippet![1], "the mount is not in the .env snippet, or is not container-only").toContain(
+      "c.containerised ? CONTAINER_PROFILE_MOUNT : []",
     );
-
-    const callSites = [...guide.matchAll(/<ContainerCredentialsNote\s*\/>/g)];
-    expect(callSites, "expected exactly one call site").toHaveLength(1);
-    const before = guide.slice(Math.max(0, callSites[0]!.index! - 60), callSites[0]!.index!);
-    expect(before, "the call site is not guarded by c.containerised").toContain(
-      "c.containerised &&",
-    );
-  });
-
-  it("warns Windows readers about HOME, where the mount fails silently", () => {
-    expect(guide).toContain("AWS_PROFILE_DIR");
-    expect(guide).toMatch(/PowerShell/);
   });
 });

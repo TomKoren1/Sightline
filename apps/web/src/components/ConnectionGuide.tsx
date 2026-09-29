@@ -122,39 +122,19 @@ function Fields({
 }
 
 /**
- * The extra step a container needs, and only a container.
+ * The two `.env` lines that give a containerised API the host's ~/.aws.
  *
- * Its own component so a test can assert two things unambiguously: that this
- * content exists, and that its single call site is guarded by `c.containerised`.
- * Inline, the guard was checked by looking backwards for the nearest
- * `{c.containerised && (` - which found an *unrelated* one earlier in the file
- * and passed while the real guard had been removed.
- *
- * On a host the credential chain finds ~/.aws by itself, so showing this there
- * is noise, and noise in a security flow is how the parts that matter stop being
- * read.
+ * Part of the step 3 snippet rather than a note of their own. They used to sit
+ * in a warning box under step 4's restart command - read after the restart it
+ * needed to precede - and carried only `COMPOSE_FILE`, which Windows Compose
+ * splits on `;` and so reads as one missing filename without the separator line
+ * (engineering log #45). On a host the chain finds ~/.aws by itself, so these
+ * are shown only in a container.
  */
-function ContainerCredentialsNote() {
-  return (
-    <div className="rounded border border-warn/40 bg-warn/10 px-2 py-1.5">
-      <p className="text-[10px] leading-relaxed text-warn">
-        <strong>Your credentials also have to reach the container.</strong> The AWS credential chain
-        finds <code>~/.aws</code> on your machine; a container has no such directory, so a working
-        host profile fails in here with <em>&ldquo;No source credentials were found&rdquo;</em>.
-        Uncomment this in <code>.env</code> and bring the stack up again — or set{" "}
-        <code>AWS_ACCESS_KEY_ID</code> / <code>AWS_SECRET_ACCESS_KEY</code> instead.
-      </p>
-      <p className="mt-1 break-all font-mono text-[10px] text-warn">
-        COMPOSE_FILE=docker-compose.yml:deploy/compose.aws-profile.yml
-      </p>
-      <p className="mt-1 text-[10px] leading-relaxed text-warn">
-        On Windows also set <code>AWS_PROFILE_DIR</code> to your <code>.aws</code> folder:
-        PowerShell does not set <code>HOME</code>, and Compose treats an unset variable as an empty
-        string with only a warning, so the mount would silently contain nothing.
-      </p>
-    </div>
-  );
-}
+const CONTAINER_PROFILE_MOUNT = [
+  "COMPOSE_PATH_SEPARATOR=:",
+  "COMPOSE_FILE=docker-compose.yml:deploy/compose.aws-profile.yml",
+];
 
 export function ConnectionGuide() {
   const connection = useQuery({ queryKey: ["connection"], queryFn: api.connection });
@@ -207,6 +187,7 @@ export function ConnectionGuide() {
     `AWS_TARGET_ROLE_ARN=${ROLE_ARN_TEMPLATE}`,
     `AWS_EXTERNAL_ID=${suggestedId}`,
     "AWS_SCAN_REGIONS=",
+    ...(c.containerised ? CONTAINER_PROFILE_MOUNT : []),
   ].join("\n");
 
   const restartCommand = c.containerised
@@ -293,7 +274,7 @@ export function ConnectionGuide() {
               CloudFormation fails with <code>Invalid principal in policy</code> without saying
               which part was wrong. {c.scannerPrincipalNote ?? ""}
               {c.containerised && (
-                <> Running in a container, credentials also have to reach it — see step 4.</>
+                <> Running in a container, credentials also have to reach it — see step 3.</>
               )}
             </p>
           )}
@@ -414,6 +395,15 @@ export function ConnectionGuide() {
                 kind: "optional",
                 note: "empty discovers every enabled region; a comma-separated list narrows it",
               },
+              ...(c.containerised
+                ? [
+                    {
+                      name: "COMPOSE_PATH_SEPARATOR, COMPOSE_FILE",
+                      kind: "filled" as const,
+                      note: "give this container your ~/.aws profile. Paste them as they are.",
+                    },
+                  ]
+                : []),
             ]}
           />
           <p className="text-[10px] leading-relaxed text-warn">
@@ -449,7 +439,6 @@ export function ConnectionGuide() {
               instead — recreated, not restarted.
             </p>
           )}
-          {c.containerised && <ContainerCredentialsNote />}
         </Step>
 
         {/* ---- 5. verify ----------------------------------------------- */}

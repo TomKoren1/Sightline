@@ -169,9 +169,9 @@ function diagnose(
 
     const fix = src.containerised
       ? "This API is running in a container, so the host's credentials do not reach it by default. " +
-        "Either set real values for AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY in .env, or mount your " +
-        "profile by uncommenting COMPOSE_FILE=docker-compose.yml:deploy/compose.aws-profile.yml in .env " +
-        "(on Windows also set AWS_PROFILE_DIR to your .aws folder, because PowerShell does not set HOME). " +
+        "Mount your ~/.aws profile by adding these two lines to .env: " +
+        "COMPOSE_PATH_SEPARATOR=: and COMPOSE_FILE=docker-compose.yml:deploy/compose.aws-profile.yml " +
+        "(or set real values for AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY instead). " +
         "Then recreate it with `docker compose --profile app up -d api` - `restart` reuses the old environment."
       : "In AWS_MODE=real the standard AWS credential chain is used. Set AWS_ACCESS_KEY_ID and " +
         "AWS_SECRET_ACCESS_KEY, configure a CLI profile, or run somewhere with an instance or task role.";
