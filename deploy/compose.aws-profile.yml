@@ -25,4 +25,12 @@
 services:
   api:
     volumes:
-      - ${HOME}/.aws:/root/.aws:ro
+      # AWS_PROFILE_DIR wins, ${HOME}/.aws is the fallback.
+      #
+      # The fallback alone is not portable. Compose treats an unset variable as an
+      # empty string with a *warning*, not an error, so on a shell where HOME is
+      # not set - PowerShell, where the equivalent is USERPROFILE - this silently
+      # becomes `/.aws`, mounts nothing, and produces the same "No source
+      # credentials were found" the mount exists to prevent. Set AWS_PROFILE_DIR
+      # in .env there; see .env.example.
+      - ${AWS_PROFILE_DIR:-${HOME}/.aws}:/root/.aws:ro

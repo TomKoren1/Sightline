@@ -59,9 +59,16 @@ describe("the real-AWS override for the containerised app", () => {
   });
 
   it("mounts the host profile read-only, at the path the SDK reads", () => {
-    // ro matters: a scanner arguing for least privilege has no business being
-    // able to write the credentials it was lent.
-    expect(override).toMatch(/\$\{HOME\}\/\.aws:\/root\/\.aws:ro/);
+    /**
+     * Asserted as target + mode rather than as the whole literal spec, which is
+     * what this checked first and why it broke when the source side gained an
+     * override variable. The invariant is "whatever the source, it lands at
+     * /root/.aws and cannot be written" - the source path is covered separately.
+     *
+     * `ro` matters: a scanner arguing for least privilege has no business being
+     * able to write the credentials it was lent.
+     */
+    expect(override).toMatch(/:\/root\/\.aws:ro/);
   });
 
   it("only touches the api service", () => {
@@ -69,6 +76,26 @@ describe("the real-AWS override for the containerised app", () => {
     // writes to whatever account its credentials resolve to.
     const services = [...override.matchAll(/^ {2}([a-z][a-z0-9-]*):$/gm)].map((m) => m[1]);
     expect(services).toEqual(["api"]);
+  });
+
+  it("resolves a path on a shell with no HOME, which Windows PowerShell is", () => {
+    /**
+     * The fallback alone is not portable, and it fails *quietly*: Compose treats
+     * an unset variable as an empty string with a warning, so `${HOME}/.aws`
+     * becomes `/.aws`, mounts nothing, and produces the same missing-credentials
+     * error the mount exists to prevent. Verified by running `docker compose
+     * config` with HOME stripped: source became `/.aws` and the only complaint
+     * was a warning (engineering log #45).
+     */
+    expect(override, "the mount must accept an explicit override path").toMatch(
+      /\$\{AWS_PROFILE_DIR:-\$\{HOME\}\/\.aws\}/,
+    );
+    expect(envExample, "AWS_PROFILE_DIR must be documented for shells without HOME").toMatch(
+      /^#\s*AWS_PROFILE_DIR=/m,
+    );
+    // Commented out, like COMPOSE_FILE: on a shell that does set HOME, an
+    // explicit path is one more thing to get wrong.
+    expect(/^AWS_PROFILE_DIR=/m.test(envExample)).toBe(false);
   });
 
   it("is referenced by the documentation that tells people to use it", () => {
@@ -86,6 +113,11 @@ describe("the real-AWS override for the containerised app", () => {
     );
     expect(flowed, "the README should say what goes wrong with -f flags").toMatch(
       /drops the mount without saying so/,
+    );
+    // Windows is the platform this was never tested on, so the guidance for it
+    // must not quietly disappear.
+    expect(flowed, "the README should tell Windows users to set AWS_PROFILE_DIR").toMatch(
+      /On Windows, set `AWS_PROFILE_DIR`/,
     );
   });
 });

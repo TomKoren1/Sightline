@@ -115,6 +115,17 @@ as `-f` flags on the command line — it applies to **every** subsequent
 an edited `.env` drops the mount without saying so, and the next connection test
 reports missing credentials for a setup that was working a moment earlier.
 
+**On Windows, set `AWS_PROFILE_DIR` as well:**
+
+```bash
+AWS_PROFILE_DIR=C:/Users/you/.aws
+```
+
+PowerShell does not set `HOME` (its equivalent is `$env:USERPROFILE`), and Compose
+treats an unset variable as an empty string with only a _warning_ — so the mount
+would resolve to `/.aws`, contain nothing, and produce the very error it exists to
+prevent. Git Bash and WSL set `HOME`, so there the fallback is enough.
+
 The mount is preferable to putting real keys in `AWS_ACCESS_KEY_ID` /
 `AWS_SECRET_ACCESS_KEY`: it keeps long-lived credentials out of a file sitting
 next to the code, and it carries the SSO token cache, so `aws sso login` on the
@@ -270,7 +281,7 @@ is one of only two variables where blank is meaningful rather than unset.
 | `npm run drift`                              | Change the mock account, so a second scan has a diff   |
 | `npm run inspect -w @daveio/api`             | Scan and print findings without touching the databases |
 | `npm run query -w @daveio/api`               | Run every curated query against the graph              |
-| `npm test`                                   | 296 unit tests                                         |
+| `npm test`                                   | 303 unit tests                                         |
 | `npm run verify`                             | Everything CI's static job runs — use before pushing   |
 | `npm run evals:ground-truth -w @daveio/api`  | Tier-1 evals — no API key needed                       |
 | `npm run evals -w @daveio/api`               | Tier-2 agent evals — needs a key                       |

@@ -3,6 +3,7 @@
 import { fileURLToPath } from "node:url";
 
 import { config as loadDotenv } from "dotenv";
+import { existsSync } from "node:fs";
 import { z } from "zod";
 
 import { validateAssumeRoleTarget } from "./aws/principal.js";
@@ -409,6 +410,24 @@ const SOURCE_IDENTITY_ALLOWED = /[^A-Za-z0-9_+=,.@-]/g;
 export function toSourceIdentity(operator: string): string {
   const cleaned = operator.replace(SOURCE_IDENTITY_ALLOWED, "-").replace(/^-+|-+$/g, "");
   return `${SOURCE_IDENTITY_PREFIX}${cleaned || "system"}`.slice(0, 64);
+}
+
+/**
+ * Whether this process is running inside a container.
+ *
+ * Used by the onboarding guide to show the restart command that applies here
+ * rather than both and a rule for choosing. The two differ in a way that
+ * matters: on a host the API is restarted, in a container it has to be
+ * *recreated*, because `docker compose restart` reuses the environment resolved
+ * when the container was created and so ignores an edited `.env` entirely
+ * (engineering log #44).
+ *
+ * `/.dockerenv` is written by the Docker daemon into every container it starts.
+ * It is a heuristic - a different runtime may not create it - so it is only ever
+ * used to pick which instructions to show, never to decide anything about AWS.
+ */
+export function inContainer(): boolean {
+  return existsSync("/.dockerenv");
 }
 
 /** The value sent as `sts:SourceIdentity` on every AssumeRole. */

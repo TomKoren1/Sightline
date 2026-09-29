@@ -396,47 +396,8 @@ export function ConnectionGuide() {
 
         <Step n={4} title="Point this deployment at the role">
           <p className="text-[11px] leading-relaxed text-ink-400">
-            Add these to <code className="text-ink-300">.env</code> in the repository root, then{" "}
-            <strong className="text-ink-300">restart the API</strong> — configuration is read once
-            at startup, so an edit with no restart changes nothing.
+            Add these to <code className="text-ink-300">.env</code> in the repository root.
           </p>
-          <p className="text-[10px] leading-relaxed text-ink-400">
-            Running in Docker, that is{" "}
-            <code className="text-ink-300">docker compose --profile app up -d api</code>, which
-            recreates the container with the new values. <code>docker compose restart api</code> is
-            the command you would reach for and it does <em>not</em> work: it reuses the environment
-            resolved when the container was created, so the edit is silently ignored.
-          </p>
-          {/*
-            The credential chain is the step that actually blocks people, and the
-            error it produces - "No source credentials were found" - reads like a
-            broken connection rather than a missing mount.
-          */}
-          <div className="rounded border border-warn/40 bg-warn/10 px-2 py-1.5">
-            <p className="text-[10px] leading-relaxed text-warn">
-              <strong>In Docker, the credentials have to reach the container.</strong> A real
-              account uses the standard AWS credential chain, which on your machine reaches{" "}
-              <code>~/.aws</code> — a container has no such directory unless it is given one, so a
-              profile that works locally fails here with{" "}
-              <em>&ldquo;No source credentials were found&rdquo;</em>. Uncomment this line in{" "}
-              <code>.env</code>, which mounts your profile read-only:
-            </p>
-            <p className="mt-1 break-all font-mono text-[9px] leading-relaxed text-warn/90">
-              COMPOSE_FILE=docker-compose.yml:deploy/compose.aws-profile.yml
-            </p>
-            <p className="mt-1 text-[10px] leading-relaxed text-warn">
-              In <code>.env</code> rather than as <code>-f</code> flags on purpose: it then applies
-              to every <code>docker compose</code> command, so recreating this container to pick up
-              an edited <code>.env</code> cannot drop the mount and leave you with missing
-              credentials for a setup that worked a moment earlier.
-            </p>
-            <p className="mt-1 text-[10px] leading-relaxed text-warn">
-              Real values in <code>AWS_ACCESS_KEY_ID</code> and <code>AWS_SECRET_ACCESS_KEY</code>{" "}
-              also work, but the mount is preferable: it keeps long-lived keys out of a file sitting
-              next to the code, and it carries an SSO token cache, so <code>aws sso login</code> on
-              the host works in here too.
-            </p>
-          </div>
           <Copyable value={envSnippet} />
           <Fields
             rows={[
@@ -455,12 +416,91 @@ export function ConnectionGuide() {
             ]}
           />
           <p className="text-[10px] leading-relaxed text-warn">
-            Also remove <code>AWS_ENDPOINT_URL</code>, <code>AWS_ACCESS_KEY_ID</code> and{" "}
-            <code>AWS_SECRET_ACCESS_KEY</code> if they are still set to the mock&apos;s values. The
-            AWS SDK reads those from the environment itself, so leaving them sends every request to
-            the mock and shadows your real credentials. The API removes them and warns on startup,
-            but deleting them is cleaner.
+            While you are in there, delete <code>AWS_ENDPOINT_URL</code>,{" "}
+            <code>AWS_ACCESS_KEY_ID</code> and <code>AWS_SECRET_ACCESS_KEY</code> if they still hold
+            the mock&apos;s values. The AWS SDK reads those from the environment itself, so leaving
+            them sends every request to the mock and shadows your real credentials. The API removes
+            them and warns on startup, but deleting them is cleaner.
           </p>
+
+          {/*
+            One restart instruction, not two and a rule for choosing.
+
+            The server reports whether it is containerised, because the two cases
+            differ in a way that silently wastes time: `docker compose restart`
+            reuses the environment resolved when the container was created, so it
+            exits zero and ignores the edit entirely (engineering log #44).
+          */}
+          <div className="rounded border border-accent/30 bg-accent/5 px-2 py-1.5">
+            {c.containerised ? (
+              <>
+                <p className="text-[10px] leading-relaxed text-ink-300">
+                  <strong>Then recreate the API.</strong> This one is running in a container, so:
+                </p>
+                <p className="mt-1 break-all font-mono text-[10px] text-accent">
+                  docker compose --profile app up -d api
+                </p>
+                <p className="mt-1 text-[10px] leading-relaxed text-ink-400">
+                  Not <code>docker compose restart api</code> — that reuses the environment resolved
+                  when the container was created, so it exits successfully and ignores the edit.
+                  Configuration is read once at startup, so the process has to be replaced rather
+                  than restarted.
+                </p>
+              </>
+            ) : (
+              <>
+                <p className="text-[10px] leading-relaxed text-ink-300">
+                  <strong>Then restart the API</strong> — configuration is read once at startup, so
+                  an edit with no restart changes nothing. This one is running on the host, so stop{" "}
+                  <code>npm run dev:api</code> and start it again.
+                </p>
+                <p className="mt-1 text-[10px] leading-relaxed text-ink-400">
+                  In the containerised setup it is{" "}
+                  <code>docker compose --profile app up -d api</code> instead — recreated, not
+                  restarted.
+                </p>
+              </>
+            )}
+          </div>
+
+          {/*
+            Shown only in a container, where it is the step that actually blocks
+            people. On a host the credential chain finds ~/.aws by itself and this
+            would be noise.
+          */}
+          {c.containerised && (
+            <div className="rounded border border-warn/40 bg-warn/10 px-2 py-1.5">
+              <p className="text-[10px] leading-relaxed text-warn">
+                <strong>Your credentials also have to reach the container.</strong> A real account
+                uses the standard AWS credential chain, which on your machine finds{" "}
+                <code>~/.aws</code>. A container has no such directory unless it is given one, so a
+                profile that works on the host fails in here with{" "}
+                <em>&ldquo;No source credentials were found&rdquo;</em>. Uncomment this in{" "}
+                <code>.env</code> and bring the stack up again:
+              </p>
+              <p className="mt-1 break-all font-mono text-[10px] text-warn">
+                COMPOSE_FILE=docker-compose.yml:deploy/compose.aws-profile.yml
+              </p>
+              <p className="mt-1 text-[10px] leading-relaxed text-warn">
+                On Windows, also set <code>AWS_PROFILE_DIR</code> to the full path of your{" "}
+                <code>.aws</code> folder — PowerShell does not set <code>HOME</code>, and Compose
+                treats an unset variable as an empty string with only a warning, so the mount would
+                silently contain nothing.
+              </p>
+              <p className="mt-1 text-[10px] leading-relaxed text-warn">
+                It goes in <code>.env</code> rather than as <code>-f</code> flags on purpose: it
+                then applies to every <code>docker compose</code> command, so recreating this
+                container to pick up an edited <code>.env</code> cannot quietly drop the mount.
+              </p>
+              <p className="mt-1 text-[10px] leading-relaxed text-warn">
+                Real keys in <code>AWS_ACCESS_KEY_ID</code> and <code>AWS_SECRET_ACCESS_KEY</code>{" "}
+                work too, but the mount is better: it keeps long-lived credentials out of a file
+                next to the code, and it carries the SSO token cache, so <code>aws sso login</code>{" "}
+                on the host works in here as well.
+              </p>
+            </div>
+          )}
+
           <div className="rounded border border-ink-700 bg-ink-850 px-2 py-1.5">
             <p className="text-[10px] leading-relaxed text-ink-400">
               <strong className="text-ink-300">Why there is no form here.</strong> This API has no

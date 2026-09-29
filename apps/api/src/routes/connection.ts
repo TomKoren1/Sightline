@@ -27,6 +27,7 @@ import {
   configuredMode,
   configuredRegions,
   currentMode,
+  inContainer,
   isMock,
   setMode,
   sourceIdentity,
@@ -193,6 +194,11 @@ export function registerConnectionRoutes(app: FastifyInstance): void {
        * instead of letting a scan fail with AccessDenied later.
        */
       roleArnProblem: targetRoleProblem(),
+      /**
+       * Whether the API is containerised, so the guide can show the restart
+       * command that applies rather than both and a rule for choosing.
+       */
+      containerised: inContainer(),
       mode: currentMode(),
       // What .env says, so the UI can show when the toggle has diverged from it.
       configuredMode,
