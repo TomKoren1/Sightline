@@ -2231,3 +2231,89 @@ The narrower one, for the third finding: **"restart" meaning "reuse the old
 configuration" is a trap that only exists because the word is borrowed.** Nothing
 in the name suggests the environment is frozen at create time, and the command
 exits zero.
+
+---
+
+## #45 — The documented restart command dropped the credentials it needed
+
+**Symptom.** Asked, before merging, what the sequence actually is: bring the
+containerised app up, then restart the API to pick up a real-account `.env`. Two
+answers, and the second was a defect I had written into the README the day before.
+
+**First, a misconception worth correcting because the docs invited it.**
+`docker compose up -d` does **not** start the app. It starts the three
+dependencies, exactly as it always has — the whole point of making the profile
+opt-in. The app needs `docker compose --profile app up -d`. The README said so in
+one place and then discussed "the containerised path" elsewhere as if `up -d` were
+enough, which is the kind of gap that only shows up when somebody follows it.
+
+**The real defect.** The documented way to give the container real credentials was
+a pair of `-f` flags:
+
+```bash
+docker compose -f docker-compose.yml -f deploy/compose.aws-profile.yml \
+  --profile app up -d
+```
+
+That works. Then the next thing the README told the reader to do — recreate the
+API to pick up an edited `.env` — was:
+
+```bash
+docker compose --profile app up -d api
+```
+
+No flags. So Compose recreated the container from the base file alone, **silently
+dropping the `~/.aws` mount**, and the connection test reported _"No source
+credentials were found"_ for a setup that had worked sixty seconds earlier.
+Verified exactly that way: mount present, edit `.env`, run the documented restart,
+mount gone, credentials gone.
+
+The two instructions were each correct and the pair was not. A reader following
+them in order breaks their own working setup, and the error blames credentials
+rather than the command that removed them.
+
+**Fix.** `COMPOSE_FILE` in `.env`, commented out by default:
+
+```bash
+COMPOSE_FILE=docker-compose.yml:deploy/compose.aws-profile.yml
+```
+
+Compose applies it to **every** invocation, so there is no longer a command that
+can forget the override. Confirmed: with it set, the same
+`--profile app up -d api` that previously dropped the mount now keeps it, and the
+connection gets far enough to fail on the deployed role's stale SourceIdentity
+pattern instead (#44) — a different, honest error.
+
+Left commented because uncommenting it makes every compose command mount
+`${HOME}/.aws`, including the mock path for someone who never touches real AWS, on
+platforms where `HOME` may not be set at all.
+
+**The guard.** `infra/composeAwsProfile.test.ts` ties together three artefacts
+that previously had nothing in common: the `COMPOSE_FILE` line in `.env.example`,
+the override file it names, and the README passage telling people to use it. It
+asserts the setting is documented as `COMPOSE_FILE` rather than as flags, that
+every file it names exists, that it stays commented out, that the mount is
+read-only and touches only the `api` service — the seeder in particular must never
+get real credentials, since it writes — and that the README still explains _why_,
+not merely what to type. All five proven by breaking them.
+
+One assertion was wrong first, in a way worth recording: it matched a README
+phrase with a regex that assumed the words sat on one line. Prettier wraps prose,
+so the phrase spanned a line break and the test failed on formatting rather than
+on meaning. It now collapses whitespace before matching. **Third time a
+cross-artefact test has been defeated by the shape of the file rather than its
+content** (#39, #42), and the lesson is the same each time: when a test reads a
+document, normalise the document first.
+
+**What to take from it.** **Two correct commands can compose into a broken
+procedure, and documentation is where that happens.** Nothing was wrong with
+either instruction in isolation; the defect lived in the transition between them,
+which is precisely the part no test covered and no reviewer reads as a unit. The
+fix was not better wording — it was removing the state the reader had to carry
+between commands. A setting in a file cannot be forgotten on the next invocation;
+a flag can.
+
+Second, smaller: **"restart" and "recreate" are different operations and only one
+of them reads configuration.** `docker compose restart api` exits zero and
+silently reuses the environment frozen at create time (#44). Both failures in this
+pair come from a command that succeeds while doing less than its name suggests.

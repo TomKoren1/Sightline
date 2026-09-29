@@ -418,18 +418,23 @@ export function ConnectionGuide() {
               account uses the standard AWS credential chain, which on your machine reaches{" "}
               <code>~/.aws</code> — a container has no such directory unless it is given one, so a
               profile that works locally fails here with{" "}
-              <em>&ldquo;No source credentials were found&rdquo;</em>. Either start it with the
-              supplied override, which mounts your profile read-only:
+              <em>&ldquo;No source credentials were found&rdquo;</em>. Uncomment this line in{" "}
+              <code>.env</code>, which mounts your profile read-only:
             </p>
             <p className="mt-1 break-all font-mono text-[9px] leading-relaxed text-warn/90">
-              docker compose -f docker-compose.yml -f deploy/compose.aws-profile.yml --profile app
-              up -d
+              COMPOSE_FILE=docker-compose.yml:deploy/compose.aws-profile.yml
             </p>
             <p className="mt-1 text-[10px] leading-relaxed text-warn">
-              or put real values in <code>AWS_ACCESS_KEY_ID</code> and{" "}
-              <code>AWS_SECRET_ACCESS_KEY</code>. The mount is preferable: it keeps long-lived keys
-              out of a file sitting next to the code, and it carries an SSO token cache, so{" "}
-              <code>aws sso login</code> on the host works in here too.
+              In <code>.env</code> rather than as <code>-f</code> flags on purpose: it then applies
+              to every <code>docker compose</code> command, so recreating this container to pick up
+              an edited <code>.env</code> cannot drop the mount and leave you with missing
+              credentials for a setup that worked a moment earlier.
+            </p>
+            <p className="mt-1 text-[10px] leading-relaxed text-warn">
+              Real values in <code>AWS_ACCESS_KEY_ID</code> and <code>AWS_SECRET_ACCESS_KEY</code>{" "}
+              also work, but the mount is preferable: it keeps long-lived keys out of a file sitting
+              next to the code, and it carries an SSO token cache, so <code>aws sso login</code> on
+              the host works in here too.
             </p>
           </div>
           <Copyable value={envSnippet} />

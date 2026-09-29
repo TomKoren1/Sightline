@@ -76,43 +76,65 @@ npm run dev:web               # http://localhost:5173   ← open this
 
 Both paths are covered by CI.
 
-### Changing configuration, and pointing it at a real account
+### Changing configuration
 
-`.env` is read once when the API starts, so an edit needs the process replaced.
-In Docker that is:
+`.env` is read once when the API starts, so an edit needs the process **replaced**,
+not restarted:
 
 ```bash
 docker compose --profile app up -d api     # recreates it with the new values
 ```
 
 `docker compose restart api` is the command you would reach for and it does
-**not** work — it reuses the environment resolved when the container was created,
-so the edit is silently ignored. (Switching between the mock and a real account
-needs no restart at all: the **Demo / My AWS** toggle in the header does it at
-runtime.)
+**not** work. It restarts the existing container, whose environment was resolved
+when the container was created, so the edit is silently ignored and the command
+exits zero.
 
-For `AWS_MODE=real` inside a container there is one more thing, and it is the
-step most likely to catch you out. The scanner uses the standard AWS credential
-chain. On a host that reaches `~/.aws`; a container has no such directory unless
-it is given one, so **a profile that works locally fails inside the container**
-with _"No source credentials were found"_. Mount it read-only:
+Switching between the mock account and a real one needs no restart at all — the
+**Demo / My AWS** toggle in the header does it at runtime, provided a real account
+is configured.
+
+### Pointing it at a real AWS account
+
+Two things beyond the usual `AWS_MODE=real`, `AWS_TARGET_ROLE_ARN` and
+`AWS_EXTERNAL_ID`.
+
+**1. The credentials have to reach the container.** The scanner uses the standard
+AWS credential chain. On a host that reaches `~/.aws`; a container has no such
+directory unless it is given one, so a profile that works locally fails inside the
+container with _"No source credentials were found"_. Uncomment this line in
+`.env`:
 
 ```bash
-docker compose -f docker-compose.yml -f deploy/compose.aws-profile.yml \
-  --profile app up -d
+COMPOSE_FILE=docker-compose.yml:deploy/compose.aws-profile.yml
 ```
 
-That is a separate file rather than a mount in `docker-compose.yml` because the
-path has to come from `${HOME}`, which is not set on every platform Compose runs
-on — and an unset variable there would break the whole file, including the mock
-path that has nothing to do with real AWS.
+That mounts `~/.aws` read-only, and — the reason it belongs in `.env` rather than
+as `-f` flags on the command line — it applies to **every** subsequent
+`docker compose` command automatically. With flags, recreating the API to pick up
+an edited `.env` drops the mount without saying so, and the next connection test
+reports missing credentials for a setup that was working a moment earlier.
 
-One more thing worth knowing if you connect a real account: every `AssumeRole`
-sends `sts:SourceIdentity`, and the trust policy requires it. A role deployed from
+The mount is preferable to putting real keys in `AWS_ACCESS_KEY_ID` /
+`AWS_SECRET_ACCESS_KEY`: it keeps long-lived credentials out of a file sitting
+next to the code, and it carries the SSO token cache, so `aws sso login` on the
+host works inside the container too.
+
+It is a separate compose file rather than a volume in `docker-compose.yml` because
+the path must come from `${HOME}`, which is not set on every platform Compose runs
+on — and an unset variable in a volume spec breaks the whole file, including the
+mock path that has nothing to do with real AWS.
+
+**2. The role must be deployed from the current template.** Every `AssumeRole`
+sends `sts:SourceIdentity` and the trust policy requires it. A role deployed from
 an **older** copy of `infra/readonly-role.yaml` matches `daveio:*`, which no legal
-value can satisfy, so the assume is refused with `AccessDenied`. Redeploy the
-stack from the current template; the Connection screen's own connection test names
-this as one of the three causes it checks for.
+value can satisfy — AWS forbids a colon in a SourceIdentity — so the assume is
+refused with `AccessDenied`. Redeploy from the current template; the Connection
+screen's own test names this as one of the three causes it checks.
+
+Then press **Test connection** on the Connection screen. It runs `AssumeRole` plus
+`GetCallerIdentity` — two read-only calls — and names the specific thing to fix
+rather than echoing an SDK error.
 
 ### Tearing it down
 
@@ -248,7 +270,7 @@ is one of only two variables where blank is meaningful rather than unset.
 | `npm run drift`                              | Change the mock account, so a second scan has a diff   |
 | `npm run inspect -w @daveio/api`             | Scan and print findings without touching the databases |
 | `npm run query -w @daveio/api`               | Run every curated query against the graph              |
-| `npm test`                                   | 290 unit tests                                         |
+| `npm test`                                   | 296 unit tests                                         |
 | `npm run verify`                             | Everything CI's static job runs — use before pushing   |
 | `npm run evals:ground-truth -w @daveio/api`  | Tier-1 evals — no API key needed                       |
 | `npm run evals -w @daveio/api`               | Tier-2 agent evals — needs a key                       |
