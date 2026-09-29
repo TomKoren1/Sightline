@@ -104,10 +104,24 @@ export async function buildApp() {
 
     const latest = await getLatestScan().catch(() => null);
 
+    /**
+     * `degraded` means something that should work does not — not that an optional
+     * feature is switched off.
+     *
+     * The LLM key is documented as optional: the scan, the graph, the findings and
+     * the whole tier-1 eval suite run without it. Folding it into the overall
+     * status meant a fresh clone reported `degraded` with both databases healthy,
+     * which reads as a fault on the first thing a new reader looks at, and
+     * contradicts the README telling them the key is optional.
+     *
+     * `checks.agent` still says exactly what is missing and where it looked, so a
+     * caller that needs chat can require it; what changed is that the *service*
+     * only claims to be degraded when a dependency it cannot work without is
+     * actually failing.
+     */
+    const required = ["postgres", "neo4j"] as const;
     return {
-      status: Object.values(checks).every((v) => v === "ok" || v.startsWith("configured"))
-        ? "ok"
-        : "degraded",
+      status: required.every((key) => checks[key] === "ok") ? "ok" : "degraded",
       checks,
       awsMode: cfg.AWS_MODE,
       lastScan: latest ? { id: latest.id, at: latest.startedAt, status: latest.status } : null,

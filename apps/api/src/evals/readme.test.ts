@@ -12,8 +12,11 @@
  * written failed. And separately the counts drifted — eight ADRs claimed where
  * there were thirteen, fourteen assertions where there were fifteen.
  *
- * So the cheapest possible check: every command the README tells you to run
- * must exist, and the numbers it quotes must match what is actually there.
+ * So the cheapest possible check: every command the documentation tells you to run
+ * must exist, and the numbers it quotes must match what is actually there. "The
+ * documentation" is the README plus `docs/SETUP.md` and `docs/ASSIGNMENT.md`,
+ * since the detail was moved there and a guard reading one file could be defeated
+ * by moving a line.
  * These would look eccentric in most repositories. Here they are cheaper than
  * the two audits it took to find these by hand.
  */
@@ -25,7 +28,18 @@ const root = new URL("../../../../", import.meta.url);
 const read = (path: string) => readFileSync(new URL(path, root), "utf8");
 const readJson = (path: string) => JSON.parse(read(path)) as { scripts?: Record<string, string> };
 
-const readme = read("README.md");
+/**
+ * "The README" now means the README **and** `docs/SETUP.md`.
+ *
+ * The README was deliberately shortened to read like a product page: the
+ * configuration detail, the command table and the troubleshooting moved into
+ * `docs/SETUP.md`, and the engineering write-up into `docs/ASSIGNMENT.md`. These
+ * guards exist to stop documented commands and quoted numbers from rotting, and
+ * which of the three files a given fact sits in does not change that — so all
+ * three are checked, and moving a line between them is not a way to escape the
+ * check.
+ */
+const readme = ["README.md", "docs/SETUP.md", "docs/ASSIGNMENT.md"].map(read).join("\n\n");
 
 const scripts = {
   root: readJson("package.json").scripts ?? {},
