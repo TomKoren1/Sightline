@@ -23,7 +23,15 @@ const SECRET_KEYS = new Set<string>(["AWS_EXTERNAL_ID", "ANTHROPIC_API_KEY"]);
 export function maskForDisplay(key: string, value: string): string {
   if (!SECRET_KEYS.has(key) || value === "") return value;
   if (value.length <= 8) return "•".repeat(value.length);
-  return `${value.slice(0, 4)}${"•".repeat(Math.max(4, value.length - 8))}${value.slice(-4)}`;
+  /**
+   * A fixed number of dots, not one per hidden character.
+   *
+   * Proportional masking printed eighty dots for a real Anthropic key, which is
+   * both unreadable in a diff and a free measurement of the secret's length. Four
+   * characters at each end is enough to tell two values apart, which is all this
+   * needs to do.
+   */
+  return `${value.slice(0, 4)}${"•".repeat(8)}${value.slice(-4)}`;
 }
 
 /** The ExternalId `.env.example` ships, which is documentation rather than a value. */

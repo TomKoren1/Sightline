@@ -81,6 +81,31 @@ describe("every command the README documents exists", () => {
 /**
  * Counts the README quotes as facts. Each has been wrong at least once.
  */
+describe("the documentation does not send anyone down a dead end", () => {
+  /**
+   * "Try it" asks the reader to chat with the agent, which needs a key. The list
+   * originally offered that as step 2 and mentioned the key only afterwards, with
+   * no way to set one — so the reader's second action failed. And the sentence that
+   * followed claimed "everything above works without one", which was false of two
+   * of the five items.
+   */
+  it("tells the reader how to supply an LLM key before asking them to chat", () => {
+    const flowed = readme.replace(/\s+/g, " ");
+    const keyAt = flowed.indexOf("--anthropic-key");
+    expect(keyAt, "no way to supply an Anthropic key is documented").toBeGreaterThan(-1);
+
+    // The chat prompts must come after it, or the reader hits a wall.
+    const chatAt = flowed.indexOf("What can reach the production database");
+    expect(chatAt, "the reachability question is no longer in the docs").toBeGreaterThan(-1);
+    expect(keyAt, "the key instruction must come before the chat steps").toBeLessThan(chatAt);
+  });
+
+  it("does not claim the chat steps work without a key", () => {
+    const flowed = readme.replace(/\s+/g, " ");
+    expect(flowed).not.toContain("everything above works without one");
+  });
+});
+
 describe("the numbers the README quotes are true", () => {
   const words: Record<string, number> = {
     eight: 8,

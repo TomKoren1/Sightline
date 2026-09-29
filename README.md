@@ -32,21 +32,31 @@ databases and a mock AWS account, seeds a fictional customer, and serves the app
 You arrive at an empty graph with a prompt to run the first scan — press it, and
 watch the scan stream service by service.
 
-**Five things worth doing, in order:**
+**Three things worth doing straight away**, none of which need anything else:
 
 1. **Run the first scan.** 101 resources across three regions in about two seconds.
-2. **Ask** _"What can reach the production database?"_ — it is private and not
+2. **Change the account and rescan** — `npm run drift && npm run scan` — then open
+   **Changes**. Two buckets get the same permissive policy and only one becomes
+   public, because the other's access block neutralises it. Verdicts are computed,
+   not read off a field.
+3. **Open Trust.** What is checked, when it last ran, and the last agent eval.
+
+**Then add an Anthropic key to talk to it:**
+
+```bash
+npm run setup -- --anthropic-key sk-ant-...
+```
+
+That writes it and restarts the API. If you would rather not install Node for it,
+[`docs/SETUP.md`](docs/SETUP.md) has the other way.
+
+4. **Ask** _"What can reach the production database?"_ — it is private and not
    publicly accessible, and five distinct chains reach it. Every answer cites the
    resources it used, and each citation is checked against what the tools returned.
-3. **Ask a trick question:** _"analytics-db has PubliclyAccessible set to true — is
+5. **Ask a trick question:** _"analytics-db has PubliclyAccessible set to true — is
    it actually exposed?"_ The answer is no, because its security group opens no
    ports. A tool that read the flag would get this wrong.
-4. **Change the account and rescan** — `npm run drift && npm run scan` — then open
-   **Changes**. Two buckets get the same permissive policy and only one becomes
-   public, because the other's access block neutralises it.
-5. **Open Trust.** What is checked, when it last ran, and the last agent eval.
 
-Chat needs an Anthropic API key; everything above works without one.
 [`docs/WALKTHROUGH.md`](docs/WALKTHROUGH.md) is the guided tour.
 
 ## Point it at your own AWS account

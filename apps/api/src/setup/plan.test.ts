@@ -52,6 +52,21 @@ describe("maskForDisplay", () => {
     expect(masked).toContain("•");
   });
 
+  it("masks to a fixed width, so the secret's length is not published", () => {
+    /**
+     * Proportional masking printed eighty dots for a real Anthropic key: unreadable
+     * in a diff, and a free measurement of the secret. Two values of very different
+     * lengths must mask to the same width.
+     */
+    const short = maskForDisplay("ANTHROPIC_API_KEY", "abcd" + "x".repeat(20) + "wxyz");
+    const long = maskForDisplay("ANTHROPIC_API_KEY", "abcd" + "x".repeat(200) + "wxyz");
+    expect(short).toBe(long);
+    expect(short.length).toBeLessThan(20);
+    // And it still shows enough to tell two values apart.
+    expect(short.startsWith("abcd")).toBe(true);
+    expect(short.endsWith("wxyz")).toBe(true);
+  });
+
   it("never leaks the middle of a short secret", () => {
     // A short value gets no window at all rather than a mostly-visible one.
     expect(maskForDisplay("AWS_EXTERNAL_ID", "abcd1234")).toBe("••••••••");

@@ -631,6 +631,19 @@ try {
     await runDisconnect(current, opts);
   } else if (opts.mock) {
     await runMock(current, opts, extra);
+  } else if (opts.anthropicKey && extra.length > 0) {
+    /**
+     * `--anthropic-key` on its own does only that.
+     *
+     * Without this branch it fell through to "Which AWS account?", so a reader
+     * who asked to set an API key was asked about IAM roles - a command doing
+     * more than it says. The README documents this exact invocation for adding
+     * the key, so the script has to honour it literally.
+     */
+    console.log(`\n${bold("Agent key")}`);
+    if (await writeEnv(current, extra, opts)) {
+      await restartApi(await apiContainerRunning(), opts);
+    }
   } else {
     console.log(`\n${bold("Which AWS account?")}`);
     console.log(`  ${bold("1")}  the seeded demo account ${dim("(no AWS, nothing to configure)")}`);

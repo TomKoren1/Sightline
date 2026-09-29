@@ -210,7 +210,7 @@ the Vite dev server solves in development.
 | `npm run drift`                              | Change the mock account, so a second scan has a diff   |
 | `npm run inspect -w @daveio/api`             | Scan and print findings without touching the databases |
 | `npm run query -w @daveio/api`               | Run every curated query against the graph              |
-| `npm test`                                   | 393 unit tests                                         |
+| `npm test`                                   | 401 unit tests                                         |
 | `npm run verify`                             | Everything CI's static job runs — use before pushing   |
 | `npm run evals:ground-truth -w @daveio/api`  | Tier-1 evals — no API key needed                       |
 | `npm run evals -w @daveio/api`               | Tier-2 agent evals — needs a key                       |
