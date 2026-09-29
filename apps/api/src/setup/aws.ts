@@ -96,7 +96,55 @@ export async function deployStack(
  * you to go and look, which is one more step than necessary when the script can
  * look itself. Both failures seen on a real account are explained in the caller.
  */
-export async function stackFailureReasons(region: string, profile?: string): Promise<string[]> {
+/** A failed stack event, as `describe-stack-events` reports it. */
+export type FailureEvent = [timestamp: string, reason: string | null];
+
+/**
+ * Failure reasons from **this** attempt, not from the stack's history.
+ *
+ * Pure, so the filtering is testable without AWS. Extracted because getting it
+ * wrong is silent: a stack that failed once keeps those events for ever, so an
+ * unfiltered query attributes every future failure to the oldest one it finds.
+ *
+ * Observed doing exactly that. A deploy that failed before CloudFormation was
+ * even reached - the template file was missing - was reported as
+ * `Invalid principal in policy`, an unrelated failure from twelve hours earlier,
+ * with the real error suppressed. A confident wrong diagnosis is worse than none.
+ *
+ * A small grace period is allowed because the CLI's clock and CloudFormation's
+ * need not agree to the millisecond, and an event from the attempt that has just
+ * failed is the one thing we must not drop.
+ */
+export function failureReasonsSince(
+  events: FailureEvent[],
+  since: Date,
+  graceMs = 5_000,
+): string[] {
+  const floor = since.getTime() - graceMs;
+  const reasons = events
+    .filter(([timestamp]) => {
+      const at = Date.parse(timestamp);
+      // An unparseable timestamp is not evidence of recency, so it is dropped
+      // rather than assumed current.
+      return Number.isFinite(at) && at >= floor;
+    })
+    .map(([, reason]) => reason)
+    .filter((r): r is string => Boolean(r));
+  // Deduplicated: a rollback repeats the same reason on several resources.
+  return [...new Set(reasons)];
+}
+
+/**
+ * Why this deploy failed, according to CloudFormation.
+ *
+ * `since` is when the deploy was started. Events older than that belong to a
+ * previous attempt and must never be reported as the cause of this one.
+ */
+export async function stackFailureReasons(
+  region: string,
+  since: Date,
+  profile?: string,
+): Promise<string[]> {
   const args = [
     "cloudformation",
     "describe-stack-events",
@@ -105,17 +153,17 @@ export async function stackFailureReasons(region: string, profile?: string): Pro
     "--region",
     region,
     "--query",
-    "StackEvents[?ResourceStatus=='CREATE_FAILED'||ResourceStatus=='UPDATE_FAILED'].ResourceStatusReason",
+    "StackEvents[?ResourceStatus=='CREATE_FAILED'||ResourceStatus=='UPDATE_FAILED'].[Timestamp,ResourceStatusReason]",
     "--output",
     "json",
   ];
   if (profile) args.push("--profile", profile);
   const res = await aws(args, 60_000);
+  // A stack that does not exist yet reports an error here, which is not a
+  // failure to explain - the caller falls back to the CLI's own message.
   if (!res.ok) return [];
   try {
-    const reasons = JSON.parse(res.stdout) as (string | null)[];
-    // Deduplicated: a rollback repeats the same reason on several resources.
-    return [...new Set(reasons.filter((r): r is string => Boolean(r)))];
+    return failureReasonsSince(JSON.parse(res.stdout) as FailureEvent[], since);
   } catch {
     return [];
   }

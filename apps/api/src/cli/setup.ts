@@ -518,6 +518,10 @@ async function runReal(current: string, opts: Options, extra: EnvEdit[]): Promis
 
   // --- deploy --------------------------------------------------------------
   console.log(`\n  ${dim("deploying…")}`);
+  // Recorded before the attempt, so a failure can be attributed to *this* one.
+  // A stack keeps its failed events for ever, and an unbounded query reports the
+  // oldest of them as the cause of the newest problem.
+  const deployStartedAt = new Date();
   const deployed = await deployStack({
     scannerPrincipalArn: principal,
     externalId,
@@ -526,10 +530,27 @@ async function runReal(current: string, opts: Options, extra: EnvEdit[]): Promis
   });
   if (!deployed.ok) {
     console.log(`  ${red("✗")} the stack did not deploy.`);
-    const reasons = await stackFailureReasons(region, profile);
+    const reasons = await stackFailureReasons(region, deployStartedAt, profile);
     for (const line of explainStackFailure(reasons)) console.log(`    ${line}`);
-    if (reasons.length === 0 && deployed.output) {
-      console.log(dim(`    ${deployed.output.split("\n").slice(-6).join("\n    ")}`));
+    /**
+     * The CLI's own message is shown whenever CloudFormation reported nothing new.
+     *
+     * It used to be shown only when the reason list was empty, which sounds
+     * equivalent and is not: with a stale reason present the list was never empty,
+     * so the real error was suppressed behind an unrelated one. If CloudFormation
+     * has nothing to say about this attempt, the CLI's stderr is the only evidence
+     * there is.
+     */
+    if (reasons.length === 0) {
+      if (deployed.output) {
+        console.log(dim(`    ${deployed.output.split("\n").slice(-6).join("\n    ")}`));
+      }
+      console.log(
+        dim(
+          "    CloudFormation reported no new failed events, so this failed before the stack\n" +
+            "    was touched - a missing template, bad credentials, or an unusable region.",
+        ),
+      );
     }
     console.log(
       dim("\n    Nothing was written to .env, so the deployment is unchanged. Fix and re-run."),
