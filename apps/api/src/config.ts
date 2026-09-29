@@ -272,6 +272,13 @@ export function targetRoleProblem(): string | null {
  * Real ones carry a documented prefix and a fixed shape. The placeholder value
  * shipped in `.env.example` for talking to the mock does not.
  */
+/**
+ * The placeholder `.env.example` ships, so "you have not replaced it yet" can be
+ * distinguished from "your value is wrong". Those need different actions and the
+ * old message covered both with one sentence.
+ */
+export const MOCK_ACCESS_KEY_PLACEHOLDER = "mock";
+
 export function looksLikeRealAccessKey(value: string | undefined): boolean {
   return Boolean(value && /^(AKIA|ASIA|ABIA|ACCA|A3T)[A-Z0-9]{12,}$/.test(value));
 }
@@ -390,6 +397,14 @@ export function credentialSources(): {
   containerised: boolean;
   envKeySet: boolean;
   envKeyLooksReal: boolean;
+  /** The value is still the placeholder `.env.example` ships for the mock. */
+  envKeyIsMockPlaceholder: boolean;
+  /**
+   * Length only, so a truncated or half-pasted key is visible without printing
+   * one. An access key id is an identifier rather than a secret, and even so
+   * there is no reason to echo it.
+   */
+  envKeyLength: number;
   /** The directory exists, whether or not it holds anything. */
   profileDirExists: boolean;
   profileFiles: string[];
@@ -405,6 +420,8 @@ export function credentialSources(): {
     containerised: inContainer(),
     envKeySet: Boolean(cfg.AWS_ACCESS_KEY_ID),
     envKeyLooksReal: looksLikeRealAccessKey(cfg.AWS_ACCESS_KEY_ID),
+    envKeyIsMockPlaceholder: cfg.AWS_ACCESS_KEY_ID === MOCK_ACCESS_KEY_PLACEHOLDER,
+    envKeyLength: cfg.AWS_ACCESS_KEY_ID?.length ?? 0,
     /**
      * Existence is reported separately from contents, because the two point at
      * different fixes. An empty directory means the mount landed on the wrong

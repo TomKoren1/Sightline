@@ -15,12 +15,29 @@
  * apart by inspection (engineering log #48).
  */
 
-import { existsSync, mkdirSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from "node:fs";
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  readdirSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 
-import { awsProfileDir, credentialSources, looksLikeRealAccessKey } from "../config.js";
+import { fileURLToPath } from "node:url";
+
+import {
+  awsProfileDir,
+  credentialSources,
+  looksLikeRealAccessKey,
+  MOCK_ACCESS_KEY_PLACEHOLDER,
+} from "../config.js";
+
+const root = fileURLToPath(new URL("../../../../", import.meta.url));
 
 describe("credentialSources", () => {
   it("reports presence and shape, never a value", () => {
@@ -29,6 +46,8 @@ describe("credentialSources", () => {
     // the shape of the result is part of the contract.
     expect(Object.keys(src).sort()).toEqual([
       "containerised",
+      "envKeyIsMockPlaceholder",
+      "envKeyLength",
       "envKeyLooksReal",
       "envKeySet",
       "profileDirExists",
@@ -85,6 +104,37 @@ describe("credentialSources", () => {
   });
 });
 
+describe("the placeholder is distinguished from a wrong value", () => {
+  /**
+   * "Not shaped like a real key" covered two situations needing different
+   * actions, and the reader who hit this had the first one: the placeholder
+   * `.env.example` ships was still in place. Telling them the *shape* was wrong
+   * describes a value they never chose.
+   */
+  it("knows the shipped placeholder by value", () => {
+    expect(MOCK_ACCESS_KEY_PLACEHOLDER).toBe("mock");
+    // And it must not pass the shape check, or the stripping would never happen.
+    expect(looksLikeRealAccessKey(MOCK_ACCESS_KEY_PLACEHOLDER)).toBe(false);
+  });
+
+  it("is the value .env.example actually ships, not a guess", () => {
+    // If the example file changes its placeholder, this message starts naming a
+    // string the reader has never seen.
+    const example = readFileSync(`${root}.env.example`, "utf8");
+    const m = /^AWS_ACCESS_KEY_ID=(.*)$/m.exec(example);
+    expect(m, ".env.example no longer sets AWS_ACCESS_KEY_ID").toBeTruthy();
+    expect(m![1]!.trim()).toBe(MOCK_ACCESS_KEY_PLACEHOLDER);
+  });
+
+  it("reports a length but never the value", () => {
+    const src = credentialSources();
+    expect(typeof src.envKeyLength).toBe("number");
+    // An access key id is an identifier rather than a secret, and there is still
+    // no reason to echo one into a UI.
+    expect(Object.values(src)).not.toContain(process.env["AWS_ACCESS_KEY_ID"] ?? "\u0000");
+  });
+});
+
 describe("looksLikeRealAccessKey", () => {
   /**
    * A pure function, tested with a table, because the branch that matters cannot
@@ -96,7 +146,7 @@ describe("looksLikeRealAccessKey", () => {
   it.each([
     ["an IAM user key", "AKIAIOSFODNN7EXAMPLE", true],
     ["a temporary session key", "ASIAIOSFODNN7EXAMPLE", true],
-    ["the mock's placeholder", "mock", false],
+    ["the mock's placeholder", MOCK_ACCESS_KEY_PLACEHOLDER, false],
     ["empty", "", false],
     ["undefined", undefined, false],
     ["a plausible-looking fake", "not-a-real-key-at-all", false],

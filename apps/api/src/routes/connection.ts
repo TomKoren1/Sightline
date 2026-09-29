@@ -137,10 +137,18 @@ function diagnose(
 
     if (!src.envKeySet) {
       checked.push("AWS_ACCESS_KEY_ID is not set");
+    } else if (src.envKeyIsMockPlaceholder) {
+      // The decisive case: nothing was replaced, so say that rather than
+      // describing the shape of a value the reader never chose.
+      checked.push(
+        'AWS_ACCESS_KEY_ID is still the placeholder "mock" that .env.example ships — it has not ' +
+          "been replaced, and it is removed at startup so it cannot shadow the rest of the chain",
+      );
     } else if (!src.envKeyLooksReal) {
       checked.push(
-        "AWS_ACCESS_KEY_ID is set but is not shaped like a real key (real ones start AKIA/ASIA), " +
-          "so it was removed to stop it shadowing the rest of the chain",
+        `AWS_ACCESS_KEY_ID is set (${src.envKeyLength} characters) but does not start AKIA or ASIA, ` +
+          "so it is not a real key id and was removed. Check you pasted the access key id rather " +
+          "than the secret, and that none of it is missing",
       );
     } else {
       checked.push("AWS_ACCESS_KEY_ID looks real, so the failure is elsewhere");

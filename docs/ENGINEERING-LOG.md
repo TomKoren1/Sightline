@@ -2529,6 +2529,34 @@ _prefix alternation_, not the character class. The realistic regression is addin
 an `/i` flag, which does fire. **Breaking a guard tells you nothing unless you
 broke the thing it guards.**
 
+**A follow-up, from the same reader hitting the improved message.** It read:
+
+> _AWS_ACCESS_KEY_ID is set but is not shaped like a real key (real ones start
+> AKIA/ASIA), so it was removed_
+
+Better, and still one step short: "not shaped like a real key" covers both _"you
+have not replaced the placeholder"_ and _"the value you pasted is wrong"_, which
+need different actions. Describing the shape of a value the reader never chose is
+a description of the wrong thing.
+
+Before assuming, I checked what could mangle a genuine key on Windows, since
+that is where this was reported. Compose's `env_file` handles all three
+candidates cleanly — `cat -A` on the container's own environment shows quotes
+stripped, a trailing space stripped, and **CRLF stripped** — so none of them was
+the cause, and the value really was a non-key.
+
+So `credentialSources()` now reports `envKeyIsMockPlaceholder` and `envKeyLength`,
+and the message splits:
+
+- _AWS_ACCESS_KEY_ID is still the placeholder "mock" that .env.example ships — it
+  has not been replaced_
+- _AWS_ACCESS_KEY_ID is set (38 characters) but does not start AKIA or ASIA …
+  check you pasted the access key id rather than the secret_
+
+Length, never the value. A test asserts the constant matches what `.env.example`
+actually ships, because a message naming a string the reader has never seen is
+worse than a vague one.
+
 **What to take from it.** **An error message is a diagnosis, and a diagnosis that
 lists every possible cause is a diagnosis of none of them.** This project already
 argued that for AWS failures — `AccessDenied` versus "the trust policy does not
