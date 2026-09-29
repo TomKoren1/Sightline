@@ -37,8 +37,19 @@ describe("maskForDisplay", () => {
   });
 
   it("masks the LLM key", () => {
-    const masked = maskForDisplay("ANTHROPIC_API_KEY", "sk-ant-api03-abcdefghijklmnop");
-    expect(masked).not.toContain("api03-abcdefghijklmnop");
+    /**
+     * Deliberately not shaped like a real key.
+     *
+     * The first version of this used `sk-ant-api03-…`, which the repository's own
+     * gitleaks rule matches — so the secret scan failed on a fixture. The shape is
+     * irrelevant to what is being tested: masking is decided by the variable
+     * *name*, not by whether the value looks like a credential. A fixture that
+     * trips the scanner costs a CI run and teaches the reader to ignore it.
+     */
+    const fake = "definitely-not-a-real-key-0123456789";
+    const masked = maskForDisplay("ANTHROPIC_API_KEY", fake);
+    expect(masked).not.toContain("not-a-real-key-0123456789");
+    expect(masked).toContain("•");
   });
 
   it("never leaks the middle of a short secret", () => {

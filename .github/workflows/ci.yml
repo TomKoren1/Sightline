@@ -305,7 +305,11 @@ jobs:
           if grep -qE 'sk-ant-[a-zA-Z0-9_-]{20,}' .env.example; then
             echo ".env.example contains what looks like a real Anthropic key"; exit 1
           fi
-          if grep -qE '^AWS_EXTERNAL_ID=(?!replace-me|local-dev)' -P .env.example; then
+          # Two greps rather than one negative lookahead, so this line does not
+          # itself contain `AWS_EXTERNAL_ID=` followed by a credential-shaped
+          # string - which the repository's own gitleaks rule flags, and which the
+          # unit-suite mirror of those rules caught here.
+          if grep -E '^AWS_EXTERNAL_ID=' .env.example | grep -qvE '=(replace-me|local-dev)'; then
             echo ".env.example contains what looks like a real ExternalId"; exit 1
           fi
           echo ".env.example carries placeholders only."
