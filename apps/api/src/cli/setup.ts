@@ -181,12 +181,21 @@ async function confirm(question: string, opts: Options): Promise<boolean> {
 
 // --- env file ---------------------------------------------------------------
 
+/**
+ * The `.env` to plan against.
+ *
+ * When there is none, `.env.example` is the baseline — because that is what a real
+ * run copies before doing anything else, so diffing against nothing would make
+ * `--dry-run` describe a different operation than the one it is previewing. On a
+ * fresh clone the preview showed `+ AWS_MODE=mock` for a key the example already
+ * sets, which is the first thing anyone sees.
+ */
 function loadEnv(): string {
   if (!existsSync(envPath)) {
     if (!existsSync(examplePath)) {
       fail(`neither .env nor .env.example is here. Is ${repoRoot} the repository root?`);
     }
-    return "";
+    return readFileSync(examplePath, "utf8");
   }
   return readFileSync(envPath, "utf8");
 }

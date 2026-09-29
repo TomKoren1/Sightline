@@ -178,6 +178,32 @@ describe("applyEnvEdits", () => {
   });
 });
 
+describe("planning against a .env that does not exist yet", () => {
+  /**
+   * On a fresh clone there is no `.env`, and a real run copies `.env.example`
+   * before anything else. So the baseline for a preview has to be that example,
+   * not an empty string — otherwise `--dry-run` describes a different operation
+   * than the one it is previewing.
+   *
+   * The symptom was cosmetic and the first thing anyone sees: a fresh-clone
+   * preview reported `+ AWS_MODE=mock` for a key the example already sets.
+   */
+  it("reports no change for a key the example already sets", () => {
+    const example = "AWS_MODE=mock\nAWS_REGION=us-east-1\n";
+    expect(diffEnv(example, [{ key: "AWS_MODE", value: "mock" }])[0]!.kind).toBe("unchanged");
+  });
+
+  it("reports an addition only for a key the example lacks", () => {
+    const example = "AWS_MODE=mock\n";
+    expect(diffEnv(example, [{ key: "COMPOSE_FILE", value: "a:b" }])[0]!.kind).toBe("add");
+  });
+
+  it("would report everything as an addition against nothing, which is the bug", () => {
+    // Pinning the wrong behaviour so the reason for the baseline is visible.
+    expect(diffEnv("", [{ key: "AWS_MODE", value: "mock" }])[0]!.kind).toBe("add");
+  });
+});
+
 describe("untouchedKeys", () => {
   it("is empty when only declared keys changed", () => {
     const edits = [{ key: "AWS_MODE", value: "real" }];
