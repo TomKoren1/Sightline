@@ -32,13 +32,31 @@ container beside the app.
 
 ### Start it
 
+**Just to see it work** — Docker only, against the mock account:
+
 ```bash
 git clone <this repo> && cd dave.io_home-assignment
 cp .env.example .env
 docker compose --profile app up -d --build
 ```
 
-Then open **<http://localhost:8080>**.
+Then open **<http://localhost:8080>**. Nothing else to configure.
+
+**To point it at your own AWS account** — one command, once the above is up:
+
+```bash
+npm install
+npm run setup
+```
+
+It finds the identity to trust, creates the read-only role with CloudFormation,
+reads the `RoleArn` back out of the stack outputs, writes `.env`, mounts your AWS
+profile into the container, restarts the API and tells you whether the connection
+works. It shows the plan and asks before anything changes, and
+`npm run setup -- --dry-run` previews the whole thing without touching anything.
+[Details below](#connecting-a-real-aws-account).
+
+---
 
 The first run builds two images and takes a couple of minutes; after that it is
 seconds. It starts Postgres, Neo4j and the mock AWS control plane, seeds the
@@ -113,17 +131,9 @@ the `.env` it read if the key is missing.
 
 ### Connecting a real AWS account
 
-Entirely optional — the mock account exercises the same code paths. The scanner
-does not know it is talking to a mock.
-
-```bash
-npm run setup
-```
-
-One command. It finds the identity to trust, creates the read-only role with
-CloudFormation, reads the `RoleArn` back out of the stack outputs, writes `.env`,
-mounts your AWS profile into the container if it needs to, restarts the API, and
-then tells you whether the connection works.
+Entirely optional — the mock account exercises the same code paths, and the scanner
+does not know it is talking to a mock. `npm run setup` is introduced
+[above](#start-it); this is what it does and how to steer it.
 
 It shows what it will do and asks before anything changes, backs `.env` up first,
 and rewrites **only** the keys it names — verified against its own output rather
@@ -288,7 +298,7 @@ the Vite dev server solves in development.
 | `npm run drift`                              | Change the mock account, so a second scan has a diff   |
 | `npm run inspect -w @daveio/api`             | Scan and print findings without touching the databases |
 | `npm run query -w @daveio/api`               | Run every curated query against the graph              |
-| `npm test`                                   | 388 unit tests                                         |
+| `npm test`                                   | 393 unit tests                                         |
 | `npm run verify`                             | Everything CI's static job runs — use before pushing   |
 | `npm run evals:ground-truth -w @daveio/api`  | Tier-1 evals — no API key needed                       |
 | `npm run evals -w @daveio/api`               | Tier-2 agent evals — needs a key                       |

@@ -34,6 +34,7 @@ import { promisify } from "node:util";
 import { DAVEIO_PREFIX, formatDeployCommand, READ_ONLY_ROLE_NAME } from "@daveio/shared";
 
 import { assumablePrincipalArn } from "../aws/principal.js";
+import { apiReachable } from "../setup/reachable.js";
 import {
   applyEnvEdits,
   diffEnv,
@@ -288,12 +289,37 @@ async function apiContainerRunning(): Promise<boolean> {
   }
 }
 
+/**
+ * Is an API listening on the host's own port?
+ *
+ * Distinguishes "running on the host, restart it" from "not running at all,
+ * start it". Without that, a first-time reader who runs setup before starting
+ * anything is told to restart a process that does not exist — which is what this
+ * said, and is exactly the wrong first impression.
+ */
+async function hostApiRunning(port?: string): Promise<boolean> {
+  const p = port ?? readEnvValue(loadEnv(), "BACKEND_PORT") ?? "3000";
+  return apiReachable(`http://localhost:${p}/api/health`);
+}
+
 async function restartApi(containerised: boolean, opts: Options): Promise<void> {
   if (!containerised) {
-    console.log(
-      `\n  ${yellow("→")} Restart the API so it re-reads .env: stop ${bold("npm run dev:api")} and start it again.\n` +
-        dim("    (configuration is read once at startup)"),
-    );
+    if (await hostApiRunning()) {
+      console.log(
+        `\n  ${yellow("→")} Restart the API so it re-reads .env: stop ${bold("npm run dev:api")} and start it again.\n` +
+          dim("    (configuration is read once at startup)"),
+      );
+    } else {
+      // Nothing is up, so "restart" would be advice about a process that does
+      // not exist. Give the two ways to start one instead.
+      console.log(`\n  ${yellow("→")} Nothing is running yet. Start it with either:`);
+      console.log(
+        `      ${bold("docker compose --profile app up -d --build")}   ${dim("→ http://localhost:8080")}`,
+      );
+      console.log(
+        `      ${bold("npm run dev:api")} and ${bold("npm run dev:web")}   ${dim("→ http://localhost:5173")}`,
+      );
+    }
     return;
   }
   if (opts.dryRun) {
