@@ -2317,3 +2317,81 @@ Second, smaller: **"restart" and "recreate" are different operations and only on
 of them reads configuration.** `docker compose restart api` exits zero and
 silently reuses the environment frozen at create time (#44). Both failures in this
 pair come from a command that succeeds while doing less than its name suggests.
+
+---
+
+## #46 — The legend said "filled in" above a placeholder
+
+**Symptom.** A real deployment, on a second machine:
+
+```
+aws cloudformation deploy ... DaveIoScannerRoleArn=arn:aws:iam::672299759593:role/DaveIoScanner
+aws: [ERROR]: Failed to create/update the stack.
+```
+
+`describe-stack-events` gave the reason:
+
+```
+Invalid principal in policy: "AWS":"arn:aws:iam::672299759593:role/DaveIoScanner"
+```
+
+`role/DaveIoScanner` does not exist in that account. The identity that does is
+`user/terraform-bootstrap`. The stack rolled back cleanly, so nothing was damaged
+— but nothing about the error says _which half_ of the ARN was wrong, and a reader
+who supplied the account id themselves will reasonably assume the account id is
+the part being rejected.
+
+**Cause, and it is in the feature built to prevent exactly this.** #39 added a
+`Fields` legend under every command block, tagging each value **filled in** or
+**you replace**, because handing someone a command without saying which parts are
+theirs is how they deploy into the wrong place. Two defects in that work:
+
+1. **`DaveIoScannerRoleArn` was tagged `kind: "filled"` unconditionally**, with the
+   note _"the identity this backend runs as"_. But the value is
+   `c.scannerPrincipal ?? <fallback>` — when the backend cannot resolve its own
+   identity (no credentials, or a container without the profile mount) the command
+   carries a **placeholder** and the legend still said it was filled in. The one
+   element on the page whose entire job is to distinguish real values from blanks
+   was asserting the blank was real.
+
+2. **The fallback marked one blank and hid two.**
+   `arn:aws:iam::<account>:role/DaveIoScanner` invites exactly one substitution.
+   The account id is visibly a placeholder; `role/DaveIoScanner` is not — it reads
+   like a name someone chose. Substitute the marked blank and you get a
+   syntactically perfect ARN for a principal that does not exist, which passes the
+   template's own `AllowedPattern` and fails in IAM.
+
+Together: the page said the value was correct, and the value looked correct. There
+was no signal available to the reader at all.
+
+**Fix.** The fallback marks every unknown segment —
+`arn:aws:iam::<account-id>:<role-or-user>/<name-of-this-identity>` — so no partial
+substitution can produce something plausible. The legend branches on
+`principalUnresolved`, reading _"NOT filled in — this backend could not work out
+its own identity"_ with the command to get it. And the warning above now says
+**"Do not run the command above as it stands"** rather than "contains a
+placeholder", names the `Invalid principal in policy` error the reader will
+otherwise meet, and says the role name is a placeholder too.
+
+**Two guards had to change, and both were wrong in the same interesting way.** The
+`kind: "replace"` count asserted exactly one across the whole file; making the
+scanner principal _conditionally_ the reader's value made it two, so an assertion
+that was only ever true by accident broke on an improvement. It is now scoped to
+the `.env` block, where "exactly one value is yours" is a real invariant. And the
+no-status-words check fired on the word "unknowns" inside a doc comment explaining
+this bug — the guard reporting its own explanation as a defect. It now strips
+comments first, because a comment cannot be rendered.
+
+**What to take from it.** **The mechanism that distinguishes real from placeholder
+has to be correct in the case where the value is missing — which is the only case
+it exists for.** Tagged values were right whenever the backend knew its identity,
+and wrong precisely when it did not: the legend was decoration in the working case
+and a lie in the failing one. #42 was a trust-policy condition that could never
+match; this is a label that could never be wrong when it mattered and never right
+when it did.
+
+And the narrower one, which is the third entry on this theme (#17, #28, #31, #36,
+#38, #39, #42, #45): **a partially-marked placeholder is worse than an unmarked
+one.** Marking the account id told the reader "this is the part to fill in", which
+is a statement about the rest of the string. An honest placeholder marks
+everything it does not know, or it is not a placeholder — it is a suggestion.

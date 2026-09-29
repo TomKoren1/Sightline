@@ -145,7 +145,18 @@ export function ConnectionGuide() {
    * principal to trust in somebody's real account. The conversion happens on
    * the server (aws/principal.ts); see engineering log #28.
    */
-  const scannerPrincipal = c.scannerPrincipal ?? "arn:aws:iam::<account>:role/DaveIoScanner";
+  /**
+   * Every unknown part is marked, not just the account id.
+   *
+   * This was `arn:aws:iam::<account>:role/DaveIoScanner`, which has one marked
+   * blank and *two* unknowns: the role name is equally invented. A reader fills
+   * in the account they know, leaves the rest because it looks real, and deploys
+   * a trust policy naming a principal that does not exist - CloudFormation
+   * rejects it with "Invalid principal in policy", which says nothing about
+   * which half was wrong. That happened (engineering log #46).
+   */
+  const scannerPrincipal =
+    c.scannerPrincipal ?? "arn:aws:iam::<account-id>:<role-or-user>/<name-of-this-identity>";
   const principalUnresolved = c.scannerPrincipal === null;
 
   /** Proves which account and identity the next command will actually act as. */
@@ -329,11 +340,23 @@ export function ConnectionGuide() {
           <Copyable value={deployCommand} />
           <Fields
             rows={[
-              {
-                name: "DaveIoScannerRoleArn",
-                kind: "filled",
-                note: "the identity this backend runs as, converted to a form a trust policy accepts",
-              },
+              /**
+               * "filled in" only when it really is. Unresolved, this said
+               * "filled in — the identity this backend runs as" above a
+               * placeholder, which is the legend actively lying in the one place
+               * a reader trusts it to be right.
+               */
+              principalUnresolved
+                ? {
+                    name: "DaveIoScannerRoleArn",
+                    kind: "replace" as const,
+                    note: "NOT filled in — this backend could not work out its own identity. Run `aws sts get-caller-identity` and use the Arn it reports, converting assumed-role/Foo/session to role/Foo. Every angle-bracketed part above is a placeholder, the role name included.",
+                  }
+                : {
+                    name: "DaveIoScannerRoleArn",
+                    kind: "filled" as const,
+                    note: "the identity this backend runs as, converted to a form a trust policy accepts",
+                  },
               { name: "ExternalId", kind: "filled", note: "the value from step 2" },
               {
                 name: "--region",
@@ -349,8 +372,13 @@ export function ConnectionGuide() {
           />
           {principalUnresolved && (
             <p className="rounded border border-warn/40 bg-warn/10 px-2 py-1.5 text-[10px] leading-relaxed text-warn">
-              The command above contains a placeholder.{" "}
-              {c.scannerPrincipalNote ?? "This backend could not determine its own identity."}
+              <strong>Do not run the command above as it stands.</strong>{" "}
+              {c.scannerPrincipalNote ?? "This backend could not determine its own identity."} Every
+              angle-bracketed part of that ARN is a placeholder — the <code>role/</code> name as
+              much as the account id. Deployed as-is it names a principal that does not exist, and
+              CloudFormation fails with <code>Invalid principal in policy</code> without saying
+              which part was wrong. Run <code>aws sts get-caller-identity</code> and use the{" "}
+              <code>Arn</code> it reports.
             </p>
           )}
           {!principalUnresolved && c.callerIdentityIsMock && (

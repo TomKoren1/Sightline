@@ -102,8 +102,67 @@ describe("the guide's own claims about itself", () => {
       const after = guide.slice(at, at + 400);
       expect(after, `${name} has no <Fields> legend`).toContain("<Fields");
     }
-    // And exactly one field is the reader's, so "you replace" means something.
-    expect((guide.match(/kind: "replace"/g) ?? []).length).toBe(1);
+    /**
+     * Exactly one field in the `.env` block is the reader's, so "you replace"
+     * means something there.
+     *
+     * Scoped to that block rather than counted across the file: step 3's
+     * `DaveIoScannerRoleArn` is *conditionally* the reader's - marked "filled in"
+     * when the backend resolved its own identity and "you replace" when it could
+     * not - so a file-wide count of 1 was only ever true by accident, and broke
+     * the moment that honesty was added.
+     */
+    const envAt = guide.indexOf("<Copyable value={envSnippet}");
+    const envFields = guide.slice(envAt, guide.indexOf("</Step>", envAt));
+    expect((envFields.match(/kind: "replace"/g) ?? []).length).toBe(1);
+  });
+});
+
+describe("a placeholder is never labelled as filled in", () => {
+  /**
+   * The failure this exists to prevent, which happened on a real account.
+   *
+   * `DaveIoScannerRoleArn` was labelled `kind: "filled"` unconditionally, with
+   * the note "the identity this backend runs as". When the backend *could not*
+   * resolve its identity, the command carried a placeholder and the legend still
+   * said the value was filled in - the legend lying in the one place a reader
+   * trusts it to be right.
+   *
+   * The placeholder compounded it: `arn:aws:iam::<account>:role/DaveIoScanner`
+   * marks one blank and hides two. A reader substitutes the account id they
+   * know, leaves `role/DaveIoScanner` because it reads like a real name, and
+   * deploys a trust policy naming a principal that does not exist.
+   * CloudFormation answers `Invalid principal in policy` without saying which
+   * half was wrong (engineering log #46).
+   */
+  it("marks the scanner principal as the reader's when it could not be resolved", () => {
+    const at = guide.indexOf('name: "DaveIoScannerRoleArn"');
+    expect(at, "the DaveIoScannerRoleArn legend is gone").toBeGreaterThan(-1);
+    // The label has to depend on whether resolution succeeded.
+    const region = guide.slice(Math.max(0, at - 700), at + 700);
+    expect(region, "the label must branch on principalUnresolved").toContain("principalUnresolved");
+    expect(region).toContain('kind: "replace" as const');
+    expect(region).toContain('kind: "filled" as const');
+  });
+
+  it("marks every unknown part of the fallback ARN, not only the account", () => {
+    const m = /c\.scannerPrincipal \?\?\s*"([^"]+)"/.exec(guide);
+    expect(m, "the scanner principal fallback was restructured").toBeTruthy();
+    const fallback = m![1]!;
+    const [, , , , account, resource] = fallback.split(":");
+    expect(account, "the account segment must be a marked placeholder").toMatch(/^<.+>$/);
+    // The resource half is `type/name`, and BOTH are unknown when unresolved.
+    const [type, name] = resource!.split("/");
+    expect(type, `"${type}" reads as a real value; it must be marked`).toMatch(/^<.+>$/);
+    expect(name, `"${name}" reads as a real value; it must be marked`).toMatch(/^<.+>$/);
+  });
+
+  it("tells the reader not to run the unresolved command, and how to fix it", () => {
+    const flowed = guide.replace(/\s+/g, " ");
+    expect(flowed).toMatch(/Do not run the command above as it stands/);
+    expect(flowed).toMatch(/aws sts get-caller-identity/);
+    // Naming the AWS error is what connects the page to what they will see.
+    expect(flowed).toMatch(/Invalid principal in policy/);
   });
 });
 
@@ -139,7 +198,17 @@ describe("no command block can carry a non-value", () => {
      * which is what a reader mistakes for a generated value. The ASCII "..."
      * is not checked: doc comments here elide real ARNs with it.
      */
-    const withoutTokens = commandRegion.replace(/\b[A-Z][A-Z0-9_]{2,}\b/g, "");
+    /**
+     * Comments are removed before the search, then upper-snake constants.
+     *
+     * A comment cannot be rendered, so prose *about* the bug is not the bug -
+     * and this fired on a doc comment containing the word "unknowns", which is
+     * the guard reporting its own explanation as a defect.
+     */
+    const withoutComments = commandRegion
+      .replace(/\/\*[\s\S]*?\*\//g, "")
+      .replace(/^\s*\/\/.*$/gm, "");
+    const withoutTokens = withoutComments.replace(/\b[A-Z][A-Z0-9_]{2,}\b/g, "");
     for (const word of ["generating", "loading", "pending", "unknown", "\u2026"]) {
       expect(
         withoutTokens.toLowerCase().includes(word),
