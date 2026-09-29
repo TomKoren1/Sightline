@@ -2645,3 +2645,71 @@ secret, a duplicated write. None would have surfaced as an error, and two would
 have been blamed on something else entirely when they eventually bit: a connection
 that "just stopped working" after re-running setup is not a sentence anyone
 connects to a heading in a `.env`.
+
+---
+
+## #50 — The secret scanner caught the test that mirrors the secret scanner
+
+**Symptom.** Three CI runs in a row failed the secret scan, each on a different
+instance of the same mistake, and the third is the one worth the entry.
+
+**First.** A masking test used `sk-ant-api03-…` as a fixture. This repository's own
+gitleaks rule matches that, so the scan failed. The shape was irrelevant to what the
+test asserted — masking is decided by the variable **name**, not by whether the
+value looks like a credential — so the fixture was simply wrong to write that way.
+The lesson was already recorded on another branch ("stop shaping test fixtures like
+real Anthropic keys"), and I repeated it, which is the argument for a guard rather
+than for care.
+
+**So I wrote the guard:** `setup/fixtures.test.ts` applies `.gitleaks.toml`'s rules
+in the unit suite, so the feedback arrives while a fixture is being written rather
+than minutes later in CI. It reads the patterns **from** the config rather than
+restating them, translating Go's inline `(?i)` which JS rejects, and honours each
+rule's own allowlist so documented placeholders are not flagged.
+
+It immediately found a second one: `.github/workflows/ci.yml` itself contained
+`AWS_EXTERNAL_ID=(?!replace-me|local-dev)` — the CI step that checks `.env.example`
+for a real ExternalId matched the rule for real ExternalIds. A file describing the
+check tripping the check. Rewritten as two greps, verified still to catch a planted
+secret and still to permit the placeholder.
+
+**Then the third, which is the interesting one.** gitleaks flagged
+`fixtures.test.ts`. Its **positive controls** are credential-shaped strings, by
+necessity: a test proving it detects them needs one to detect. Written as literals
+that fails the scan for ever, and allowlisting the file instead would silence it on
+the day something real is pasted in.
+
+Fixed by assembling the probes at run time —
+`["sk", "ant", "a".repeat(22)].join("-")` — which both scanners read as
+unremarkable text, because both read text. The comment beside them says not to fold
+them back into literals, because a literal reads as simpler and is what the next
+tidy-up reaches for.
+
+**And why the guard did not catch itself.** It used `git ls-files`, which does not
+list a file that has not been committed. The suite passed locally, the commit
+landed, and gitleaks found it a minute later. Now
+`--cached --others --exclude-standard`, so a brand-new file is in scope — verified
+by planting a literal in an uncommitted file and watching it fail.
+
+**One more turn of the same screw.** Fixing the tree still did not clear CI, because
+gitleaks scans a pull request's **commit range**, not its tree: the findings were
+reported against the commits that introduced the literals. Both are synthetic and
+nothing needed rotating, so two commits are allowlisted **by SHA** — following the
+call already made for a genuinely rotated Cloudflare token. By SHA and not by path,
+because allowlisting the file would blind the scanner to that file for ever, and
+verified by planting a literal and watching both the guard and the scan still
+object.
+
+**What to take from it.** **A check that mirrors another check inherits its
+blind spots and its trigger conditions.** Every failure here was the scanner working
+correctly; the bug each time was mine, in the fixture. That is the good case — but
+it cost three CI runs because the fix and the thing being fixed kept overlapping,
+and each round the overlap moved: the value, then the file describing the value,
+then the test describing the file.
+
+The narrow, reusable lessons: **a test's fixtures are part of the codebase the
+scanners read**, so a synthetic secret is a real liability with none of the danger;
+**a guard that reads the repository must decide what "the repository" means**, and
+`ls-files` quietly excludes the file you are writing; and **a scanner that reads
+history is not satisfied by a clean tree**, so fixing forward and re-running is not
+the same as fixing.
