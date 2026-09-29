@@ -26,6 +26,8 @@
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { useState } from "react";
 
+import { formatDeployCommand, readOnlyRoleArn } from "@daveio/shared";
+
 import { api, type Connection, type ConnectionTest } from "../api.js";
 import { Copyable } from "./Copyable.js";
 
@@ -41,7 +43,7 @@ import { Copyable } from "./Copyable.js";
 const EXTERNAL_ID_PENDING = "PASTE_EXTERNAL_ID_FROM_STEP_2";
 
 /** The one value in step 3 the reader must replace, shaped like a real ARN. */
-const ROLE_ARN_TEMPLATE = "arn:aws:iam::<your-12-digit-account-id>:role/DaveIoReadOnlyRole";
+const ROLE_ARN_TEMPLATE = readOnlyRoleArn("<your-12-digit-account-id>");
 
 function Step({
   n,
@@ -170,17 +172,18 @@ export function ConnectionGuide() {
     c.scannerPrincipal ?? "arn:aws:iam::<account-id>:<role-or-user>/<name-of-this-identity>";
   const principalUnresolved = c.scannerPrincipal === null;
 
-  const deployCommand = [
-    "aws cloudformation deploy \\",
-    "  --template-file infra/readonly-role.yaml \\",
-    "  --stack-name daveio-readonly \\",
-    // Without this the command fails outright on a CLI with no default region.
-    `  --region ${c.homeRegion} \\`,
-    "  --capabilities CAPABILITY_NAMED_IAM \\",
-    "  --parameter-overrides \\",
-    `      DaveIoScannerRoleArn=${scannerPrincipal} \\`,
-    `      ExternalId=${suggestedId}`,
-  ].join("\n");
+  /**
+   * Built from the shared recipe, not composed here.
+   *
+   * `npm run setup` executes the same definition, so the command a reader copies
+   * and the command the script runs cannot drift - which is the defect class this
+   * project's log keeps returning to (#39, #42, #45, #47).
+   */
+  const deployCommand = formatDeployCommand({
+    scannerPrincipalArn: scannerPrincipal,
+    externalId: suggestedId,
+    region: c.homeRegion,
+  });
 
   const envSnippet = [
     "AWS_MODE=real",

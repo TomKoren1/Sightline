@@ -46,43 +46,43 @@ const template = read("infra/readonly-role.yaml");
  */
 const copy = guide.replace(/\/\*[\s\S]*?\*\//g, "").replace(/^\s*\/\/.*$/gm, "");
 
-/** The `Name=value` overrides the rendered deploy command passes. */
-function passedParameters(): string[] {
-  const block = /const deployCommand = \[([\s\S]*?)\]\.join/.exec(guide);
-  expect(block, "deployCommand was renamed or restructured").toBeTruthy();
-  return [...block![1]!.matchAll(/([A-Za-z][A-Za-z0-9]*)=\$?\{?/g)]
-    .map((m) => m[1]!)
-    .filter((name) => /^[A-Z]/.test(name));
-}
-
-/** Parameter names the template declares, from its `Parameters:` block. */
-function declaredParameters(): string[] {
-  const block = /\nParameters:\n([\s\S]*?)\n[A-Z][A-Za-z]*:/.exec(template);
-  expect(block, "the template's Parameters block was restructured").toBeTruthy();
-  return [...block![1]!.matchAll(/^ {2}([A-Za-z][A-Za-z0-9]*):$/gm)].map((m) => m[1]!);
-}
-
 describe("connection guide and role template agree", () => {
-  it("passes only parameters the template declares", () => {
-    const declared = declaredParameters();
-    expect(declared.length, "no parameters were parsed out of the template").toBeGreaterThan(2);
-    for (const name of passedParameters()) {
-      expect(
-        declared,
-        `the deploy command passes ${name}, which the template does not declare`,
-      ).toContain(name);
-    }
+  /**
+   * The command is no longer composed in this component.
+   *
+   * It comes from `@daveio/shared`'s `formatDeployCommand`, which
+   * `npm run setup` also executes, and which is checked against the template
+   * directly in `packages/shared/src/onboarding.test.ts`. So the assertion here
+   * is not "the parameters match the template" - that moved somewhere stronger -
+   * but "this component did not go back to composing its own", which is the only
+   * way the two could diverge again.
+   */
+  it("builds the deploy command from the shared recipe rather than its own", () => {
+    expect(guide, "the component no longer imports the shared builder").toContain(
+      "formatDeployCommand",
+    );
+    /**
+     * A literal command here would be a second source of truth. Matched on the
+     * command itself rather than the word "cloudformation", which also appears
+     * legitimately in prose about the IAM permissions this step needs - the
+     * first version of this assertion flagged that sentence.
+     */
+    expect(
+      copy,
+      "the component composes its own deploy command again; use formatDeployCommand",
+    ).not.toMatch(/cloudformation\s+deploy/);
+    expect(copy).not.toContain("--parameter-overrides");
   });
 
-  it("names the role the guide tells the reader to configure", () => {
-    // Step 4's placeholder ARN ends in the role name, which is the template's
-    // RoleName default. If one changes, the reader configures a role that does
-    // not exist and step 5 reports NoSuchEntity.
-    const placeholder = /const ROLE_ARN_TEMPLATE = "([^"]+)"/.exec(guide);
-    expect(placeholder, "ROLE_ARN_TEMPLATE was renamed").toBeTruthy();
-    const roleName = placeholder![1]!.split(":role/")[1];
-    expect(roleName, "ROLE_ARN_TEMPLATE is not shaped like a role ARN").toBeTruthy();
-    expect(template).toContain(`Default: "${roleName}"`);
+  it("derives the role ARN placeholder from the shared recipe", () => {
+    /**
+     * The placeholder used to carry the role name as a literal, checked against
+     * the template's `RoleName` default here. It is now built by
+     * `readOnlyRoleArn`, which that same assertion covers in the shared package -
+     * so what matters here is that this component does not hardcode it again.
+     */
+    expect(guide).toContain("readOnlyRoleArn(");
+    expect(copy, "the role name is hardcoded here again").not.toContain("role/DaveIoReadOnlyRole");
   });
 });
 
@@ -235,10 +235,15 @@ describe("no command block can carry a non-value", () => {
     }
   });
 
-  it("pins a region, so the command runs without CLI defaults", () => {
-    const block = /const deployCommand = \[([\s\S]*?)\]\.join/.exec(guide)![1]!;
-    expect(block, "the deploy command relies on the CLI's default region").toContain("--region");
-    // From the server's reported home region, not hardcoded.
-    expect(block).toMatch(/--region \$\{c\.homeRegion\}/);
+  it("passes the server's region into the shared builder", () => {
+    /**
+     * That the command carries `--region` at all is asserted in the shared
+     * package; what this file owns is that the value comes from the server rather
+     * than being hardcoded, since a wrong region deploys the stack somewhere the
+     * reader is not looking.
+     */
+    const call = /formatDeployCommand\(\{([\s\S]*?)\}\)/.exec(guide);
+    expect(call, "formatDeployCommand is no longer called here").toBeTruthy();
+    expect(call![1]!).toContain("c.homeRegion");
   });
 });
