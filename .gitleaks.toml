@@ -39,3 +39,34 @@ keywords = ["aws_external_id"]
 [allowlist]
 description = "The committed example carries placeholders only, and this file quotes the patterns it matches"
 paths = ['''\.env\.example$''', '''\.gitleaks\.toml$''']
+
+# Two commits, allowlisted by SHA rather than by path or by value.
+#
+# Both hold **synthetic** credential-shaped strings in test fixtures, and both were
+# caught by this scanner doing its job:
+#
+#   48b292c  a fake Anthropic key in a masking test, where the value's shape was
+#            irrelevant to the assertion - masking is decided by the variable name.
+#   b74f1d5  the positive controls of `setup/fixtures.test.ts`, which mirrors these
+#            rules in the unit suite. A test proving it detects credential-shaped
+#            strings needs one to detect, so it necessarily contained them.
+#   e07e702  engineering log #50, which quoted the CI pattern it was describing -
+#            a write-up of the bug reproducing the bug. Now described, not quoted.
+#
+# Each was fixed in the tree and each still needed an entry, because gitleaks scans
+# a pull request's commit **range**: fixing forward is not the same as fixing. That
+# is the single most useful thing in this list.
+#
+# Nothing was rotated because nothing was real. The current tree assembles those
+# probes at run time instead, so it matches no rule here; the strings survive only
+# in this branch's history, and force-pushing over a ref with an open PR is a bigger
+# hammer than the problem - the same call made for the rotated token previously.
+#
+# By SHA, not by path: allowlisting `fixtures.test.ts` would silence that file for
+# ever, including the day something real is pasted into it. These two entries
+# silence exactly two reviewed commits. A key committed tomorrow still fails.
+commits = [
+  "48b292c0266dd7f4b2c9fcc1a3260b3126ae5cc5",
+  "b74f1d5c6c1ea7941a4d0e49435af5919591db69",
+  "e07e702dfec8a4db3631b1c510b75360fd155e62",
+]

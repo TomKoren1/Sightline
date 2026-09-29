@@ -1,0 +1,339 @@
+# The assignment, answered
+
+The [README](../README.md) is the product. This is the engineering write-up: what the
+brief asked for, where each piece lives, why it is built the way it is, and what I
+would do next.
+
+- [The brief's seven items, and where each one lives](#the-briefs-seven-items-and-where-each-one-lives)
+- [Why this storage model](#why-this-storage-model-and-how-it-serves-the-agents-questions)
+- [How the agent works](#how-the-agent-works-and-why-it-is-built-that-way)
+- [How I know the answers are right](#how-i-know-the-answers-are-right-and-how-i-would-know-if-a-change-made-it-worse)
+- [What breaks first on a large account](#what-breaks-first-on-a-large-account)
+- [What I would build next](#what-i-would-build-next-given-another-week)
+- [Notes on the brief](#notes-on-the-brief)
+
+---
+
+## The brief's seven items, and where each one lives
+
+The definition of done asks that the seven numbered items in "The problem" are
+addressed in code or explained. All seven are in code, so this is a map rather
+than an argument.
+
+| #     | Item                              | Where it lives                                                                                                                                                                                                                                                                                                                                                                                                                          |
+| ----- | --------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **1** | Connect with the read-only role   | [`infra/readonly-role.yaml`](../infra/readonly-role.yaml), replaced for the reasons under "Notes on the brief", with the original kept beside it as [`readonly-role.original.yaml`](../infra/readonly-role.original.yaml) for comparison. `sts:AssumeRole` with an external id in [`aws/credentials.ts`](../apps/api/src/aws/credentials.ts). The **Connection** panel walks a customer through deploying it and then tests the result. |
+| **2** | Discover and ingest               | Six collectors — EC2, VPC, S3, IAM, RDS, Lambda — in [`scan/collectors/`](../apps/api/src/scan/collectors), over every enabled region. Resource Explorer is an optional fast path; SDK enumeration is the tested default. Full pagination, `retryMode: "adaptive"`, and one independently-failable unit per service per region.                                                                                                         |
+| **3** | Store resources and relationships | Both databases, doing different jobs: Postgres is the system of record and the history that change detection diffs against; Neo4j is a projection rebuilt from it, because the agent's hardest questions are path questions ([ADR-003](DECISIONS.md)).                                                                                                                                                                                  |
+| **4** | The agent                         | Sixteen curated tools in [`agent/`](../apps/api/src/agent), a read-only Cypher escape hatch behind two independent guards, and citations validated against the ARNs the tools actually returned.                                                                                                                                                                                                                                        |
+| **5** | Visualize the graph               | React Flow in [`GraphView.tsx`](../apps/web/src/components/GraphView.tsx), laid out left-to-right with Dagre so reachability reads the way people expect it to: the internet on the left, the database at the end of the chain.                                                                                                                                                                                                         |
+| **6** | Chat, with resources findable     | Every ARN the agent cites is highlighted in the graph, with a count in the header and a way to clear it. Clicking any node opens its properties, its findings and its remediation.                                                                                                                                                                                                                                                      |
+| **7** | Communicate state                 | Below — it is the item most often skipped, so it gets its own section.                                                                                                                                                                                                                                                                                                                                                                  |
+
+### Communicating state
+
+Seven states, all of which answer one question the user is really asking: _can I
+trust what I am looking at?_ That is why most of them live in one component
+([`ScanBanner.tsx`](../apps/web/src/components/ScanBanner.tsx)) rather than being
+scattered.
+
+- **Empty.** An empty database offers to run the first scan, rather than
+  presenting an empty canvas and leaving the user to find the button.
+- **Progress.** The scanner streams an event per completed unit, so the header
+  counts real services — `Scanning — 7/14 services` — instead of animating a
+  bar on a timer.
+- **Freshness.** `101 resources across 3 regions · scanned 4m ago`, which turns
+  amber and says `(stale)` after an hour. Inventory is a snapshot and saying so
+  is cheaper than being wrong.
+- **Refresh.** Rescan is always one click, and disabled while a scan is running.
+- **Partial failure.** The state most worth being loud about, because the data
+  looks complete and is not: a scan of fourteen units (six services, three regions, two of them global) does not fail because one
+  did. The banner names the service, the region and the error, and says results
+  below are incomplete. Set `SCAN_FAULT_INJECTION=rds:eu-west-1` to demonstrate
+  it on demand.
+- **Error.** A scan that fails outright reports why, not "something went wrong".
+- **What the agent is doing.** The names of the running tools in plain language
+  — `Tracing network paths`, `Checking for admin privileges` — because a spinner and a tool name cost
+  the same to render and only one of them is an answer. Tokens stream as they
+  arrive, and every reply keeps an expandable trail of the tool calls behind it.
+
+One more, which the brief does not ask for but the runtime account toggle
+creates: switching between the demo account and a real one does not rescan, so
+the graph still holds the previous account's inventory. The banner says so
+rather than quietly relabelling one account's resources with another's name.
+
+---
+
+# Design note
+
+## Why this storage model, and how it serves the agent's questions
+
+**Both databases, with a strict hierarchy: Postgres is authoritative and Neo4j
+is a rebuildable projection of it.**
+
+Neo4j earns its place because the brief's questions are overwhelmingly about
+relationships, and one of them — _what can reach the production RDS instance?_
+— is a variable-length path query. In Cypher that is one `MATCH` with a `*1..n`
+hop. In SQL it is a recursive CTE over a junction table that nobody will enjoy
+maintaining. The graph is not decoration; it is the shape of the problem.
+
+Postgres earns its place because three things fit badly in a graph:
+
+- **Scan history.** _What changed since the last scan?_ needs immutable
+  snapshots over time, not a mutable current-state graph.
+- **Partial failure.** Per-`(service, region)` status, error codes, durations
+  and API-call counts are a plain relational fact table.
+- **Agent traces.** Conversations, tool calls and eval results are relational
+  and high-volume, and must never compete with the queries the agent runs.
+
+The hierarchy is what makes running two stores tolerable. Each scan writes
+immutable snapshots to Postgres, then rebuilds the Neo4j projection in one
+transaction. There is exactly one writer and one direction of flow. If Neo4j is
+lost, or the graph model changes, it replays from Postgres with no rescan and
+no further AWS calls — which makes the graph disposable, and therefore safe to
+change.
+
+**The decision underneath this one matters more.** Questions like _which
+buckets are public?_ are security reasoning, not data lookup: a bucket is
+public if its policy or ACL grants a wildcard principal **and** neither the
+bucket-level nor account-level public access block overrides it. That reasoning
+is done **deterministically, in code, at ingest time** — never by the model.
+Analysers compute `isPublic`, `isAdmin`, `isIdle` and the derived `CAN_REACH`
+edges, each paired with a `reason` string recording its evidence.
+
+So the graph the agent queries does not contain raw AWS JSON for it to
+interpret. It contains verdicts that a unit test can check, with the evidence
+attached. That is what makes the agent's answers auditable, and it is why
+`prod-db-sg allows tcp/5432 from prod-app-sg, which prod-app-1 belongs to` can
+be quoted verbatim rather than paraphrased by a model that might get it wrong.
+
+## How the agent works, and why it is built that way
+
+A plain tool-calling loop over **sixteen curated, parameterised tools** — no
+agent framework. The model chooses which tool to call and with what arguments;
+it never writes the query.
+
+Text-to-Cypher was the obvious alternative and was rejected on four counts.
+_Safety_: the brief's one hard rule is that the agent must never change
+anything, and a curated tool cannot express a mutation. _Correctness_:
+hand-written Cypher for "every path from the internet to this resource" is
+reviewable, testable and identical on every run. _Cost_: a tool call returns
+rows, whereas text-to-Cypher tends to return a schema, a failed query, an error
+and a retry. _Auditability_: because every tool records exactly which ARNs it
+returned, citations can be validated mechanically.
+
+There is still a `graph_query` escape hatch for genuinely novel questions. It
+runs behind a lexical write-clause validator **and** inside a Neo4j read
+transaction, because neither layer is trusted alone.
+
+No framework, including the suggested **Deep Agents** — which I read before
+deciding against it. Its value is planning, sub-agents and a filesystem for
+long-horizon work that outgrows a context window, and the questions here are
+one or two tool calls deep against a graph that is already summarised. What it
+would have cost is the part that matters: the two decisions that actually
+define this agent are the tool boundary and citation validation, and both live
+exactly where a framework puts its own abstractions. Validating that every ARN
+in an answer came from a tool result means holding the tool results, which means
+owning the loop. The result is one 250-line file, and I can say precisely what
+the model was given on every turn.
+
+**"Never change anything" is enforced at four layers**, not asserted in a
+prompt: the IAM role has no write permissions and an explicit deny on data
+reads; the scanner only ever calls `Describe`/`List`/`Get`; no tool can express
+a mutation; and raw Cypher is validated and run read-only.
+
+That is also why **remediation is generated and never applied** ([ADR-014](DECISIONS.md)).
+Every finding carries the exact commands that would fix it, what each one might
+break, and a read-only command to confirm it worked — as strings. There is no
+endpoint that executes them. A "Fix it" button would undo the three guarantees
+above in one click, and the honest version is more useful anyway: the person who
+knows whether a public bucket is a mistake or a deliberate CDN origin is at the
+keyboard, not in the scanner. The commands are computed from the same evidence
+as the verdict, not written by the model — the fixture's admin role gets its
+`*:*` from an inline policy called `legacy-deploy-inline`, so the obvious
+`detach-role-policy --policy-arn .../AdministratorAccess` would run cleanly and
+fix nothing. And `caution` is a required field: an unprotected bucket rates
+**low risk** because no anonymous access exists to lose, while a genuinely
+public one rates high.
+
+One honest boundary: **Neo4j Community has no role-based access control**, so a
+read-only database _user_ is not available. In production this would be an
+Enterprise read-only role or a read replica. Recorded in
+[engineering log #7](ENGINEERING-LOG.md) rather than glossed over.
+
+## How I know the answers are right, and how I would know if a change made it worse
+
+Two eval suites that fail for different reasons ([ADR-008](DECISIONS.md)).
+
+**Tier 1 — ground truth over the data.** Seeds the mock account, runs a real
+scan, and asserts the result against the hand-written answer key. After
+`npm run drift` the checks that deliberately break are attributed to it
+individually, so a failure nothing explains still shows red — a caveat covering
+every failure would hide the one that mattered. **No model,
+no API key, about two seconds**, and it runs in CI on every commit. Fifteen
+checks, including the ones that matter most: the neutralised bucket is
+_not_ public, the inline-admin role _is_ admin, the private database is
+reachable by both expected chains, and the publicly-flagged database is
+reachable by none.
+
+**Tier 2 — answer quality.** Twenty-one cases against the live agent, scored on
+the ARNs each answer cites, with precision and recall.
+
+Last recorded full run on `claude-sonnet-5`: **21/21, mean F1 1.0, no
+unsupported citations** — one case per question the brief names, plus fifteen
+more.
+
+Getting there is the better advertisement for the suite than the score is. It
+caught two real problems. One was a defect in a test rather than an answer
+(engineering log #13). The other was the agent answering _"please delete this
+volume"_ with the volume's details and a CLI command — safe, useful, and never
+saying it could not act. Three attempts to fix that by prompting failed,
+including one where the Style rules turned out to be competing with the
+constraint; the guarantee now lives in code (ADR-009, engineering log #15). Each case asserts what
+must be cited, what must **not** be (the traps), and which tools should have
+been chosen. Precision matters as much as recall precisely because of the
+traps: an answer naming every bucket achieves perfect recall and is useless.
+
+**Underneath both, citation validation.** Every tool records the ARNs it
+returned; every ARN in an answer is checked against that set, and anything
+unsupported is flagged on the response and shown to the user. This turns the
+most dangerous failure mode — a confident, plausible, invented identifier —
+from something a prompt hopes to prevent into something the system detects.
+Any unsupported citation fails an eval case outright.
+
+**An outage cannot masquerade as a regression.** A case that never reached the
+model is recorded as `errored` rather than failed, excluded from the mean, and a
+run that did not complete is not written to `eval_runs` at all — so it cannot
+replace the baseline the next run is diffed against. A spend cap aborts the run
+instead of repeating itself twenty times, and exits `2` where a quality
+regression exits `1`. This exists because the alternative happened: four capped
+cases reported "17/21, mean F1 0.81", which reads as an agent that got worse
+(engineering log #40).
+
+**How I would know a change made it worse:** tier 1 fails in CI within
+seconds; tier 2 produces a mean F1 and a pass count, stored in `eval_runs` and
+written to `evals/results/` so two runs can be diffed. The split also makes
+failures diagnosable — if tier 1 passes and tier 2 fails, the data is right and
+the agent misused it, which is a prompt or tool-description problem. If tier 1
+fails, nothing about the agent is worth looking at yet.
+
+**What this does not catch**, stated plainly: an answer that cites exactly the
+right resources and describes them wrongly. The `mustMention` patterns cover
+the cases where that has teeth, but a genuinely adversarial wrong answer with
+correct citations would pass. Closing that needs an LLM judge over a larger
+case set, which is on the list below.
+
+## What breaks first on a large account
+
+In the order it would actually happen:
+
+**1. The graph rebuild, at roughly 50k resources.** Neo4j is rebuilt wholesale
+in one transaction. That is simple and leaves no stale nodes, but it is O(all
+resources) per scan and the transaction gets large. _Fix:_ diff the Postgres
+snapshots — which already exist — and `MERGE` only what changed. The snapshots
+were designed with this in mind.
+
+**2. Scan wall-clock, across many regions.** 6 services × 30 regions is 180
+units at a concurrency of 6. Because per-bucket S3 calls are four API calls
+each, an account with 10,000 buckets is 40,000 calls in one unit.
+
+Partly addressed: the Resource Explorer fast path asks one indexed query which
+regions actually hold resources and skips the rest, so an account with 30
+enabled regions and resources in four scans 4 regions rather than 30. It cannot
+do more than that — a search result carries an ARN, type and region, not the
+security group rules or bucket policies every question here depends on, so the
+detailed Describe calls still happen. It is also unavailable on any account
+without an aggregator index, which a read-only role cannot create, and it cannot
+be exercised against the mock at all. _Remaining fix:_ per-service concurrency
+rather than one global limit, and splitting oversized units.
+
+**3. Throttling, well before that.** `retryMode: adaptive` handles bursts, but
+a full parallel scan of a busy account will hit service quotas — and worse,
+compete with the customer's own workloads. _Fix:_ a token bucket per
+`(service, region)` sized from published quotas, and a scan budget the customer
+controls.
+
+**4. The frontend, at about 2,000 nodes.** React Flow renders every node; dagre
+layout is O(V+E) but the DOM is not. Already mitigated by filtering noisy kinds
+by default. _Fix:_ server-side aggregation — collapse a VPC to one node until
+expanded — and viewport virtualisation.
+
+**5. The agent's context, on broad questions.** Tool results are capped at 12k
+characters and truncated. On a large account "list all EC2 instances" is
+useless anyway. _Fix:_ tools should return aggregates with drill-down rather
+than rows, and say so when truncating.
+
+**What does not break:** partial failure handling and credential renewal both
+get _more_ useful at scale, which is why they were built in from the start
+rather than added later.
+
+**Multi-tenancy** is the other axis. Today a single module-level flag tracks
+whether a scan is running, and the graph holds one account. Multi-tenant needs
+an account id on every node and query, per-tenant credential caching, and a job
+queue instead of an in-process scan. The storage model already carries
+`accountId` on every resource; the scan orchestration is what would change.
+
+## What I would build next, given another week
+
+1. **Incremental graph updates.** The highest-value change: it removes the
+   first scaling limit and makes scans cheap enough to run continuously rather
+   than on demand.
+2. **Real idle detection.** Current idle findings use structural signals only —
+   attached to nothing, associated with nothing, stopped. CloudWatch metrics
+   and Cost Explorer would turn "this volume is unattached" into "this instance
+   has been under 2% CPU for thirty days", which is a much more useful finding.
+   The role already grants the permissions.
+3. **An LLM judge over a larger eval set.** Closes the gap named above, and
+   makes prompt changes safe to make quickly.
+4. **Scheduled scans, so change detection runs without being asked.** Diffing
+   exists, the agent can query it and the **Changes** tab surfaces it — but
+   every scan is still triggered by a human, so "what changed overnight?" is
+   only answerable if somebody remembered to scan last night. A scheduled scan
+   plus a digest of what materially changed is what makes this a product
+   someone opens daily rather than one they remember to use.
+5. **More of the account.** ELB, ECS, EKS, API Gateway, CloudFront and
+   Route 53. The collector interface is deliberately small — each is an
+   afternoon — and load balancers in particular would fill a real gap in the
+   reachability graph.
+6. **NACLs, peering and Transit Gateway in the reachability model.** Today the
+   analysis is conservative: it can miss a path, but a path it reports is
+   justified by rules that really exist. Peering and Transit Gateway are the
+   biggest honest gaps.
+
+---
+
+## Notes on the brief
+
+Taking up the invitation to say what could have been clearer or different.
+
+**`ReadOnlyAccess` is the sharpest thing in the brief, and I suspect
+deliberately so.** The supplied template grants it while the evaluation
+criteria ask whether candidates understand "what read-only really means". It
+grants ~7,000 actions including `s3:GetObject`, `secretsmanager:GetSecretValue`
+and `lambda:GetFunction` (which returns a presigned URL to function source). An
+inventory product never needs to read an object out of a bucket, and granting
+the ability turns a compromise of dave.io's platform account into a compromise
+of every customer's _data_.
+
+`sqs:ReceiveMessage` is the detail I would flag to a real customer: it is not
+read-only even literally, since receiving a message starts its visibility
+timeout and can hide it from the consumer that should have processed it. A
+scanner holding that permission can breach the brief's own hard rule through a
+permission nobody thinks of as a write.
+
+I replaced the template — `SecurityAudit` + `ViewOnlyAccess` plus an explicit
+`Deny` on data-plane reads, trust scoped to the scanner role rather than
+`:root`, and `sts:SourceIdentity` so customers can attribute scans in their own
+CloudTrail. The original is kept alongside for comparison, and the reasoning is
+in [ADR-007](DECISIONS.md).
+
+**Two smaller things.** The trust policy's `Principal: ...:root` is worth
+calling out in the brief itself — it reads like "the root user" but means every
+principal in the account, and that is a common misreading rather than a
+candidate trap. And **AWS Resource Explorer needs an index created in the
+customer account**, which a read-only role cannot do. It is excellent advice
+for accounts that have it enabled, but as suggested it cannot be relied on;
+the scanner treats it as an optional fast path with SDK enumeration as the
+tested fallback.
+
+---

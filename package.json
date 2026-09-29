@@ -11,18 +11,19 @@
     "apps/*"
   ],
   "scripts": {
-    "typecheck": "npm run typecheck --workspaces --if-present",
-    "test": "vitest run",
-    "test:watch": "vitest",
-    "lint": "prettier --check .",
-    "format": "prettier --write .",
-    "seed": "npm run seed -w @daveio/mock-aws",
-    "scan": "npm run scan -w @daveio/api",
-    "dev:api": "npm run dev -w @daveio/api",
-    "dev:web": "npm run dev -w @daveio/web",
-    "evals": "npm run evals -w @daveio/api",
-    "verify": "npm run typecheck && npm run lint && vitest run --exclude '**/evals/**' && npm run build -w @daveio/web",
-    "drift": "npm run drift -w @daveio/mock-aws"
+    "typecheck": "node scripts/deps.mjs && npm run typecheck --workspaces --if-present",
+    "test": "node scripts/deps.mjs && vitest run",
+    "test:watch": "node scripts/deps.mjs && vitest",
+    "lint": "node scripts/deps.mjs && prettier --check .",
+    "format": "node scripts/deps.mjs && prettier --write .",
+    "seed": "node scripts/deps.mjs && npm run seed -w @daveio/mock-aws",
+    "scan": "node scripts/deps.mjs && npm run scan -w @daveio/api",
+    "dev:api": "node scripts/deps.mjs && npm run dev -w @daveio/api",
+    "dev:web": "node scripts/deps.mjs && npm run dev -w @daveio/web",
+    "evals": "node scripts/deps.mjs && npm run evals -w @daveio/api",
+    "verify": "node scripts/deps.mjs && npm run typecheck && npm run lint && vitest run --exclude '**/evals/**' && npm run build -w @daveio/web",
+    "drift": "node scripts/deps.mjs && npm run drift -w @daveio/mock-aws",
+    "setup": "node scripts/deps.mjs && tsx apps/api/src/cli/setup.ts"
   },
   "devDependencies": {
     "@types/node": "^22.10.2",

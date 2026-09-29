@@ -199,6 +199,76 @@ jobs:
         if: failure()
         run: docker compose --profile app logs --tail 120
 
+  # `npm run setup` writes .env and can deploy to AWS, so what CI can check is
+  # the half that must never be wrong: that it refuses, explains and changes
+  # nothing when it cannot proceed. The AWS path itself needs credentials CI does
+  # not have, and faking them would test the fake.
+  setup-script:
+    name: Setup script refuses safely
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      - run: npm ci
+
+      - name: --help works without a .env
+        run: npm run setup -- --help
+
+      - name: --dry-run on the demo account changes nothing
+        run: |
+          cp .env.example .env
+          before=$(sha256sum .env | cut -d' ' -f1)
+          npm run setup -- --mock --dry-run --yes
+          after=$(sha256sum .env | cut -d' ' -f1)
+          [ "$before" = "$after" ] || { echo ".env was modified by --dry-run"; exit 1; }
+          if ls .env.backup-* >/dev/null 2>&1; then
+            echo "--dry-run created a backup, so it wrote something"; exit 1
+          fi
+          echo "--dry-run left everything alone."
+
+      - name: it refuses a .env with duplicate keys, and writes nothing
+        run: |
+          cp .env.example .env
+          echo "AWS_MODE=mock" >> .env
+          before=$(sha256sum .env | cut -d' ' -f1)
+          if npm run setup -- --mock --yes; then
+            echo "it accepted an ambiguous .env"; exit 1
+          fi
+          after=$(sha256sum .env | cut -d' ' -f1)
+          [ "$before" = "$after" ] || { echo ".env was modified despite refusing"; exit 1; }
+          echo "Refused, and left the file alone."
+
+      - name: the real path stops when there are no AWS credentials
+        env:
+          # Point the CLI at a profile that does not exist, so
+          # get-caller-identity cannot succeed.
+          AWS_PROFILE: definitely-not-configured
+        run: |
+          cp .env.example .env
+          before=$(sha256sum .env | cut -d' ' -f1)
+          if npm run setup -- --yes --region us-east-1; then
+            echo "it continued without credentials"; exit 1
+          fi
+          after=$(sha256sum .env | cut -d' ' -f1)
+          [ "$before" = "$after" ] || { echo ".env was modified before credentials were checked"; exit 1; }
+          echo "Stopped before touching anything."
+
+      - name: --mock actually writes, so the checks above mean something
+        # A script that never writes would pass every assertion in this job.
+        run: |
+          cp .env.example .env
+          sed -i 's/^AWS_MODE=mock/AWS_MODE=real/' .env
+          npm run setup -- --mock --yes
+          grep -q '^AWS_MODE=mock$' .env || { echo "it did not write AWS_MODE"; exit 1; }
+          ls .env.backup-* >/dev/null 2>&1 || { echo "no backup was taken"; exit 1; }
+          echo "Wrote the change and backed up first."
+
   # The repository holds AWS role ARNs, external ids and an LLM key in .env.
   # A leak check is cheap and the consequences of skipping it are not.
   secrets:
@@ -235,7 +305,11 @@ jobs:
           if grep -qE 'sk-ant-[a-zA-Z0-9_-]{20,}' .env.example; then
             echo ".env.example contains what looks like a real Anthropic key"; exit 1
           fi
-          if grep -qE '^AWS_EXTERNAL_ID=(?!replace-me|local-dev)' -P .env.example; then
+          # Two greps rather than one negative lookahead, so this line does not
+          # itself contain `AWS_EXTERNAL_ID=` followed by a credential-shaped
+          # string - which the repository's own gitleaks rule flags, and which the
+          # unit-suite mirror of those rules caught here.
+          if grep -E '^AWS_EXTERNAL_ID=' .env.example | grep -qvE '=(replace-me|local-dev)'; then
             echo ".env.example contains what looks like a real ExternalId"; exit 1
           fi
           echo ".env.example carries placeholders only."

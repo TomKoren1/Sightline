@@ -2569,3 +2569,264 @@ were `if (something) expect(...)`, where the condition depended on ambient state
 The pattern is seductive because it makes a test pass everywhere; that is also
 exactly what makes it worthless. If a branch needs particular state, the test has
 to construct it.
+
+---
+
+## #49 — Two bugs found by testing my own script, and one visible in its output
+
+**Context.** Four defects reached a user following the connection steps on a second
+machine, each a product bug rather than their mistake. The conclusion was that
+hand-editing `.env` and copying a CloudFormation command is too many chances to be
+wrong, so `npm run setup` now does it (ADR-015).
+
+A script that writes someone's configuration and deploys to their AWS account has
+to be held to a higher standard than the thing it replaces, so this records what
+testing it found — including the part where I was wrong about my own plan.
+
+**What I got wrong first.** The proposal on the table was a **form in the product**.
+It would not have worked, and I only saw why when I checked what the container can
+reach: the API has no AWS CLI, no permission to create an IAM role, and no access
+to the `.env` on the host. A form could have collected a role ARN into a database;
+the reader would still have run the CloudFormation command by hand, which is
+exactly where the four failures were. It would have removed the smaller half of the
+work and cost a rewrite of ADR-010 to do it.
+
+The suggestion that replaced it — a script — is better for a reason worth stating:
+**it runs where the capability already is.** The user's AWS CLI, their SSO session,
+their `.env`, their Docker. No new endpoint, no authentication question, ADR-010
+untouched.
+
+**Bug 1: the script appended a new heading every run.** `applyEnvEdits` writes
+unknown keys under a `# --- written by npm run setup ---` marker. A second run that
+added a _different_ key appended a _second_ marker, so a user's `.env` accumulated
+one block per run. Nothing broke — which is why it would have gone unnoticed
+indefinitely. It just quietly degrades a file the script promised to treat
+carefully. Found by a test asserting the marker appears once; it now appends under
+the existing one.
+
+**Bug 2: the script rotated a working secret.** It generated a fresh ExternalId on
+every run. The stack's trust policy requires the value `.env` holds, so re-running
+would have invalidated a connection that worked until the stack was redeployed with
+the new value — **the script breaking the setup it had just made.** Caught by
+running `--dry-run` twice and noticing an ExternalId change on a deployment that
+was already correct. `chooseExternalId()` now reuses one in use, and only treats
+the shipped placeholder as absent.
+
+**Bug 3, visible in the first successful run.** It wrote `.env` twice, with two
+confirmations and two backup files, because the profile mount was decided _after_
+the connection was written. One operation, two mutations, two chances to be
+interrupted half-done. Containerisation is now resolved before the edits are built,
+and it is one write.
+
+**What testing the failure paths found.** Nothing, which is the point of recording
+it. Duplicate keys, absent credentials, an unusable AWS CLI and a failed deploy all
+stop with an actionable message, exit non-zero, and leave `.env` byte-identical —
+verified by sha256 before and after each. The deploy failure quotes
+CloudFormation's own reason _and_ explains it, because the alternative is what a
+user hit for real: `Invalid principal in policy`, which names neither which half of
+the ARN was wrong nor how to find the right one.
+
+**Two of my own sabotages were wrong,** and both times the guard was fine. A PATH
+without `aws` also had no `node`, because both live in `/usr/bin` on this machine;
+and a non-executable `aws` stub earlier in PATH is _skipped_ by the OS, which then
+finds the real one. A stub that is executable and exits non-zero is the test that
+actually exercises the branch. **Breaking a guard proves nothing unless the break
+reached the thing it guards** — the third time that has come up in this log.
+
+**What to take from it.** **Automation that edits a user's files has to prove its
+restraint, not assert it.** The load-bearing piece is not `applyEnvEdits`, which is
+tested; it is `untouchedKeys()`, which checks the _produced content_ before writing
+and refuses if anything undeclared moved. That is a backstop against a bug in the
+tested code, and it costs one function.
+
+Second: **the most dangerous bug in a setup script is the one that succeeds.** All
+three found here produced a working outcome — a slightly messier file, a rotated
+secret, a duplicated write. None would have surfaced as an error, and two would
+have been blamed on something else entirely when they eventually bit: a connection
+that "just stopped working" after re-running setup is not a sentence anyone
+connects to a heading in a `.env`.
+
+---
+
+## #50 — The secret scanner caught the test that mirrors the secret scanner
+
+**Symptom.** Three CI runs in a row failed the secret scan, each on a different
+instance of the same mistake, and the third is the one worth the entry.
+
+**First.** A masking test used `sk-ant-api03-…` as a fixture. This repository's own
+gitleaks rule matches that, so the scan failed. The shape was irrelevant to what the
+test asserted — masking is decided by the variable **name**, not by whether the
+value looks like a credential — so the fixture was simply wrong to write that way.
+The lesson was already recorded on another branch ("stop shaping test fixtures like
+real Anthropic keys"), and I repeated it, which is the argument for a guard rather
+than for care.
+
+**So I wrote the guard:** `setup/fixtures.test.ts` applies `.gitleaks.toml`'s rules
+in the unit suite, so the feedback arrives while a fixture is being written rather
+than minutes later in CI. It reads the patterns **from** the config rather than
+restating them, translating Go's inline `(?i)` which JS rejects, and honours each
+rule's own allowlist so documented placeholders are not flagged.
+
+It immediately found a second one, in `.github/workflows/ci.yml`: the step that
+checks `.env.example` for a real ExternalId used an `AWS_EXTERNAL_ID=` prefix
+followed by a negative lookahead for the two placeholders — which matches the rule
+for real ExternalIds. A file describing the check tripping the check. Rewritten as
+two greps, verified still to catch a planted secret and still to permit the
+placeholder.
+
+**Then the third, which is the interesting one.** gitleaks flagged
+`fixtures.test.ts`. Its **positive controls** are credential-shaped strings, by
+necessity: a test proving it detects them needs one to detect. Written as literals
+that fails the scan for ever, and allowlisting the file instead would silence it on
+the day something real is pasted in.
+
+Fixed by assembling the probes at run time —
+`["sk", "ant", "a".repeat(22)].join("-")` — which both scanners read as
+unremarkable text, because both read text. The comment beside them says not to fold
+them back into literals, because a literal reads as simpler and is what the next
+tidy-up reaches for.
+
+**And why the guard did not catch itself.** It used `git ls-files`, which does not
+list a file that has not been committed. The suite passed locally, the commit
+landed, and gitleaks found it a minute later. Now
+`--cached --others --exclude-standard`, so a brand-new file is in scope — verified
+by planting a literal in an uncommitted file and watching it fail.
+
+**One more turn of the same screw.** Fixing the tree still did not clear CI, because
+gitleaks scans a pull request's **commit range**, not its tree: the findings were
+reported against the commits that introduced the literals. Both are synthetic and
+nothing needed rotating, so two commits are allowlisted **by SHA** — following the
+call already made for a genuinely rotated Cloudflare token. By SHA and not by path,
+because allowlisting the file would blind the scanner to that file for ever, and
+verified by planting a literal and watching both the guard and the scan still
+object.
+
+**What to take from it.** **A check that mirrors another check inherits its
+blind spots and its trigger conditions.** Every failure here was the scanner working
+correctly; the bug each time was mine, in the fixture. That is the good case — but
+it cost three CI runs because the fix and the thing being fixed kept overlapping,
+and each round the overlap moved: the value, then the file describing the value,
+then the test describing the file.
+
+**A fourth instance, in this entry.** The paragraph above originally quoted that CI
+pattern verbatim, so committing the write-up failed the guard — a log describing the
+bug reproducing the bug. It is now described rather than quoted. Worth recording
+because it is the cheapest possible demonstration of the shape: anything that
+_discusses_ a credential pattern is itself a file the scanners read.
+
+The narrow, reusable lessons: **a test's fixtures are part of the codebase the
+scanners read**, so a synthetic secret is a real liability with none of the danger;
+**a guard that reads the repository must decide what "the repository" means**, and
+`ls-files` quietly excludes the file you are writing; and **a scanner that reads
+history is not satisfied by a clean tree**, so fixing forward and re-running is not
+the same as fixing.
+
+---
+
+## #51 — The first command in the README did not run on a clean machine
+
+**Symptom.** On a second laptop, following the README from the top:
+
+```
+'tsx' is not recognized as an internal or external command,
+operable program or batch file.
+```
+
+from `npm run setup -- --anthropic-key sk-ant-...`. Reproduced in three seconds
+with `git clone` into an empty directory — the same failure, phrased by the shell
+of the day (`sh: 1: tsx: not found`).
+
+**Cause.** `npm run setup` ran `tsx apps/api/src/cli/setup.ts`, and `tsx` is a
+devDependency. Nothing had ever run `npm install`, because the README says
+"You need Docker. Nothing else" and then hands the reader an npm command. The
+containerised path is genuinely self-contained; the npm commands sitting inside
+it are not, and nothing in between said so.
+
+**Not one command.** `npm run drift` and `npm run scan` are in the same README
+paragraph, three lines above, and fail identically. So does every other script in
+the root `package.json`, because all of them resolve a binary out of
+`node_modules/.bin` — vitest, prettier, tsc. The bug was in the entire surface,
+and only visible on the one command a new reader happens to run first.
+
+**Fix.** `scripts/deps.mjs`: if `tsx` is absent, say so in a sentence and run
+`npm install`, then let the real command proceed. Every root script is prefixed
+with `node scripts/deps.mjs && `, and a test asserts that every one of them still
+is, so a script added later cannot quietly reintroduce this for whoever runs it
+first.
+
+**Why a prefix works.** `npm` puts `node_modules/.bin` on `PATH` whether or not
+that directory exists, and `PATH` is resolved when a command is executed rather
+than when the script begins — so a directory that appears midway through an `&&`
+chain is found by the second half. Verified rather than assumed: a probe script
+in a fresh clone printed seven `node_modules/.bin` entries on `PATH`, none of
+which existed. This is what let the fix be additive. The commands after the `&&`
+are byte-for-byte what they were, so no working path changed shape to gain this.
+
+**Three details that are the actual engineering.**
+
+_It probes `tsx`, not `node_modules`._ A tree left by `npm ci --omit=dev` has a
+`node_modules` and none of the tooling, which is exactly the case the guard is
+for — the cheaper test passes precisely when it must not.
+
+_It checks again after installing._ `npm install` can exit 0 against a tree that
+still lacks devDependencies — an `--omit=dev` in someone's `.npmrc` will do it.
+Trusting the exit code there would hand the reader back `'tsx' is not recognized`
+one step later, which is the error the file exists to replace. It names the
+missing path and the likely cause instead.
+
+_It never touches a shell._ On Windows `npm` is `npm.cmd`, and since Node 20.12
+`spawn` refuses a `.cmd` without `shell: true` — which would put a command line
+back through a parser to run one constant command. `npm` sets `npm_execpath` to
+its own JavaScript entry point when it runs a script, so the Node process already
+running can execute that directly: one argv vector, no shell, the same on every
+platform. Absent that variable, it asks rather than guessing at a binary name.
+
+**And it installs rather than instructing.** The counter-argument is that 259 MB
+and a minute or two is a surprise, and this project's rule is to show the plan and
+ask first. That rule is about `.env` and about AWS: things outside the repository,
+things with a blast radius. `npm install` writes to one directory inside the
+folder the reader just cloned, is undone by deleting it, and is the thing they
+would have been told to type anyway. Asking would also make the command fail
+outright when stdin is not a terminal, which is every CI job and every piped
+shell. So it announces, and proceeds.
+
+**Proof.** Five deliberate breakages, each caught by exactly the assertion written
+for it: probe `node_modules` instead of `tsx`; drop the post-install re-check;
+collapse npm's exit code to 1; guess at `npm` when `npm_execpath` is missing;
+remove the guard from one script. Then the real thing, end to end — a fresh
+`git clone` with no `node_modules`, `npm run setup -- --mock --dry-run --yes`,
+which installed and then printed its plan, and a second run that was silent
+because there was nothing to do.
+
+**And then it broke the container, which is the part I did not see coming.** The
+fix made every root script depend on a _file_, and the API image does not copy the
+whole repository — it copies `packages/`, `apps/api/` and two configs, by design,
+so that a code change does not reinvalidate the `npm ci` layer. `scripts/` was not
+in that list. The compose `seed` service runs `npm run seed`, so it died with
+`Cannot find module /app/scripts/deps.mjs`, and because the API waits on
+`service_completed_successfully` the whole `app` profile came down with it — the
+one-command path in the README, broken by the fix to the other command in the
+README. Caught by CI, three minutes after the commit that caused it.
+
+One `COPY` fixes it. The guard is a no-op inside the image, since `npm ci` there
+installs devDependencies deliberately. `infra/dockerfileScripts.test.ts` is the
+part worth keeping: it resolves each stage's `FROM` chain, finds every compose
+service and `CMD` that runs a _root_ script — workspace-scoped `-w` invocations
+resolve elsewhere and are excluded — and asserts the stage copies `scripts/`.
+One of its three assertions exists only to prove the other two are looking at
+something, because a parser that silently matches nothing passes every test built
+on it. All three were verified by breaking them.
+
+**What to take from it.** **A prerequisite you have satisfied is invisible.**
+Every command in this repository worked on my machine for the same reason: I ran
+`npm install` in week one and never thought about it again. The README was not
+written carelessly — it was written from a directory where the claim was true.
+The general form is that the first five minutes of a project can only be tested
+from a clean machine, and "it works here" is the one piece of evidence that
+cannot establish it.
+
+That has a second half here. The container had satisfied it too — `npm ci` runs in
+the image — so the only thing missing was the file, and nothing in either the
+`package.json` or the `Dockerfile` hints that the other exists. **A guard that adds
+a dependency is a change to every environment that runs the guarded thing**, and
+the environments that are not your laptop are the ones that find out.

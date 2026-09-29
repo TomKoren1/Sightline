@@ -104,7 +104,12 @@ describe("the real-AWS override for the containerised app", () => {
   });
 
   it("is referenced by the documentation that tells people to use it", () => {
-    const readme = read("README.md");
+    /**
+     * `docs/SETUP.md`, not the README. The README was shortened to read like a
+     * product page and this detail moved with the rest of the configuration
+     * material; the guard follows the content rather than the filename.
+     */
+    const readme = read("docs/SETUP.md");
     expect(readme).toContain("COMPOSE_FILE=docker-compose.yml:deploy/compose.aws-profile.yml");
     /**
      * And the trap it avoids is stated, not only the command. Newlines are

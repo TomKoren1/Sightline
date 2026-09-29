@@ -115,7 +115,12 @@ services:
       target: api
     container_name: daveio-seed
     restart: "no"
-    env_file: [.env]
+    # Optional, so `docker compose --profile app up` works on a fresh clone with
+    # no setup step at all. Every value it would supply has a default here or in
+    # `config.ts`; a `.env` only overrides them.
+    env_file:
+      - path: .env
+        required: false
     environment:
       AWS_ENDPOINT_URL: http://moto:5000
       AWS_ACCESS_KEY_ID: mock
@@ -132,7 +137,12 @@ services:
       target: api
     container_name: daveio-api
     restart: unless-stopped
-    env_file: [.env]
+    # Optional, so `docker compose --profile app up` works on a fresh clone with
+    # no setup step at all. Every value it would supply has a default here or in
+    # `config.ts`; a `.env` only overrides them.
+    env_file:
+      - path: .env
+        required: false
     environment:
       DATABASE_URL: postgres://${POSTGRES_USER:-dave}:${POSTGRES_PASSWORD:-dave}@postgres:5432/${POSTGRES_DB:-dave}
       NEO4J_URI: bolt://neo4j:7687

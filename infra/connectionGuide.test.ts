@@ -24,7 +24,7 @@
  * read as `agent/toolLabels.test.ts`.
  */
 
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 
@@ -46,43 +46,88 @@ const template = read("infra/readonly-role.yaml");
  */
 const copy = guide.replace(/\/\*[\s\S]*?\*\//g, "").replace(/^\s*\/\/.*$/gm, "");
 
-/** The `Name=value` overrides the rendered deploy command passes. */
-function passedParameters(): string[] {
-  const block = /const deployCommand = \[([\s\S]*?)\]\.join/.exec(guide);
-  expect(block, "deployCommand was renamed or restructured").toBeTruthy();
-  return [...block![1]!.matchAll(/([A-Za-z][A-Za-z0-9]*)=\$?\{?/g)]
-    .map((m) => m[1]!)
-    .filter((name) => /^[A-Z]/.test(name));
-}
-
-/** Parameter names the template declares, from its `Parameters:` block. */
-function declaredParameters(): string[] {
-  const block = /\nParameters:\n([\s\S]*?)\n[A-Z][A-Za-z]*:/.exec(template);
-  expect(block, "the template's Parameters block was restructured").toBeTruthy();
-  return [...block![1]!.matchAll(/^ {2}([A-Za-z][A-Za-z0-9]*):$/gm)].map((m) => m[1]!);
-}
-
 describe("connection guide and role template agree", () => {
-  it("passes only parameters the template declares", () => {
-    const declared = declaredParameters();
-    expect(declared.length, "no parameters were parsed out of the template").toBeGreaterThan(2);
-    for (const name of passedParameters()) {
-      expect(
-        declared,
-        `the deploy command passes ${name}, which the template does not declare`,
-      ).toContain(name);
-    }
+  /**
+   * The command is no longer composed in this component.
+   *
+   * It comes from `@daveio/shared`'s `formatDeployCommand`, which
+   * `npm run setup` also executes, and which is checked against the template
+   * directly in `packages/shared/src/onboarding.test.ts`. So the assertion here
+   * is not "the parameters match the template" - that moved somewhere stronger -
+   * but "this component did not go back to composing its own", which is the only
+   * way the two could diverge again.
+   */
+  it("builds the deploy command from the shared recipe rather than its own", () => {
+    expect(guide, "the component no longer imports the shared builder").toContain(
+      "formatDeployCommand",
+    );
+    /**
+     * A literal command here would be a second source of truth. Matched on the
+     * command itself rather than the word "cloudformation", which also appears
+     * legitimately in prose about the IAM permissions this step needs - the
+     * first version of this assertion flagged that sentence.
+     */
+    expect(
+      copy,
+      "the component composes its own deploy command again; use formatDeployCommand",
+    ).not.toMatch(/cloudformation\s+deploy/);
+    expect(copy).not.toContain("--parameter-overrides");
   });
 
-  it("names the role the guide tells the reader to configure", () => {
-    // Step 4's placeholder ARN ends in the role name, which is the template's
-    // RoleName default. If one changes, the reader configures a role that does
-    // not exist and step 5 reports NoSuchEntity.
-    const placeholder = /const ROLE_ARN_TEMPLATE = "([^"]+)"/.exec(guide);
-    expect(placeholder, "ROLE_ARN_TEMPLATE was renamed").toBeTruthy();
-    const roleName = placeholder![1]!.split(":role/")[1];
-    expect(roleName, "ROLE_ARN_TEMPLATE is not shaped like a role ARN").toBeTruthy();
-    expect(template).toContain(`Default: "${roleName}"`);
+  it("derives the role ARN placeholder from the shared recipe", () => {
+    /**
+     * The placeholder used to carry the role name as a literal, checked against
+     * the template's `RoleName` default here. It is now built by
+     * `readOnlyRoleArn`, which that same assertion covers in the shared package -
+     * so what matters here is that this component does not hardcode it again.
+     */
+    expect(guide).toContain("readOnlyRoleArn(");
+    expect(copy, "the role name is hardcoded here again").not.toContain("role/DaveIoReadOnlyRole");
+  });
+});
+
+describe("the guide offers the command that actually exists", () => {
+  /**
+   * The page now leads with `npm run setup` rather than five manual steps. That
+   * makes it a cross-artefact claim: the page names a command, `package.json`
+   * has to define it, and the file it points at has to be there. Renaming any
+   * one of the three would leave the product telling people to run something
+   * that does not work - the same shape as every other drift in this log.
+   */
+  it("offers the script, prominently", () => {
+    /**
+     * As a copyable command, not merely mentioned. The first version of this
+     * asserted the phrase appeared anywhere, and passed when the command block
+     * was replaced with prose - because the page also says
+     * `npm run setup -- --dry-run` further down.
+     */
+    expect(copy, "the page no longer offers `npm run setup` as a command to copy").toMatch(
+      /<Copyable value="npm run setup"/,
+    );
+    // Before the manual steps, not buried under them.
+    const script = copy.indexOf("npm run setup");
+    const manual = copy.indexOf("Or do it by hand");
+    expect(manual, "the manual fallback is gone").toBeGreaterThan(-1);
+    expect(script, "the script should be offered before the manual steps").toBeLessThan(manual);
+  });
+
+  it("names a script package.json defines, pointing at a file that exists", () => {
+    const pkg = JSON.parse(read("package.json")) as { scripts?: Record<string, string> };
+    const command = pkg.scripts?.["setup"];
+    expect(command, "package.json has no `setup` script").toBeTruthy();
+    // `tsx apps/api/src/cli/setup.ts` - the path it runs must be real.
+    const match = /([\w./-]+\.ts)/.exec(command!);
+    expect(match, `could not find a script path in "${command}"`).toBeTruthy();
+    expect(
+      existsSync(root + match![1]!),
+      `the setup script points at ${match![1]}, which does not exist`,
+    ).toBe(true);
+  });
+
+  it("mentions the flags it documents", () => {
+    // --dry-run is the one that makes the page's safety claim checkable.
+    expect(copy).toContain("--dry-run");
+    expect(copy).toContain("--disconnect");
   });
 });
 
@@ -235,10 +280,15 @@ describe("no command block can carry a non-value", () => {
     }
   });
 
-  it("pins a region, so the command runs without CLI defaults", () => {
-    const block = /const deployCommand = \[([\s\S]*?)\]\.join/.exec(guide)![1]!;
-    expect(block, "the deploy command relies on the CLI's default region").toContain("--region");
-    // From the server's reported home region, not hardcoded.
-    expect(block).toMatch(/--region \$\{c\.homeRegion\}/);
+  it("passes the server's region into the shared builder", () => {
+    /**
+     * That the command carries `--region` at all is asserted in the shared
+     * package; what this file owns is that the value comes from the server rather
+     * than being hardcoded, since a wrong region deploys the stack somewhere the
+     * reader is not looking.
+     */
+    const call = /formatDeployCommand\(\{([\s\S]*?)\}\)/.exec(guide);
+    expect(call, "formatDeployCommand is no longer called here").toBeTruthy();
+    expect(call![1]!).toContain("c.homeRegion");
   });
 });
