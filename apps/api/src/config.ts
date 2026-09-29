@@ -3,7 +3,7 @@
 import { fileURLToPath } from "node:url";
 
 import { config as loadDotenv } from "dotenv";
-import { existsSync } from "node:fs";
+import { existsSync, readdirSync } from "node:fs";
 import { z } from "zod";
 
 import { validateAssumeRoleTarget } from "./aws/principal.js";
@@ -272,7 +272,7 @@ export function targetRoleProblem(): string | null {
  * Real ones carry a documented prefix and a fixed shape. The placeholder value
  * shipped in `.env.example` for talking to the mock does not.
  */
-function looksLikeRealAccessKey(value: string | undefined): boolean {
+export function looksLikeRealAccessKey(value: string | undefined): boolean {
   return Boolean(value && /^(AKIA|ASIA|ABIA|ACCA|A3T)[A-Z0-9]{12,}$/.test(value));
 }
 
@@ -360,6 +360,60 @@ export function sourceCredentials(): { accessKeyId: string; secretAccessKey: str
   return looksLikeRealAccessKey(cfg.AWS_ACCESS_KEY_ID) && cfg.AWS_SECRET_ACCESS_KEY
     ? { accessKeyId: cfg.AWS_ACCESS_KEY_ID!, secretAccessKey: cfg.AWS_SECRET_ACCESS_KEY }
     : undefined;
+}
+
+/**
+ * Where the AWS credential chain looks for a shared profile.
+ *
+ * Exported so the diagnosis below can be tested against a directory that exists
+ * and is empty, which is the Windows failure mode and cannot be reproduced by
+ * whatever happens to be on the machine running the tests.
+ */
+export function awsProfileDir(home = process.env["HOME"] ?? "/root"): string {
+  return `${home}/.aws`;
+}
+
+/**
+ * What the AWS credential chain has to work with, for diagnosis.
+ *
+ * `CredentialsProviderError` means "nothing in the chain produced credentials",
+ * which is accurate and tells a reader nothing about which link is missing. In a
+ * container there are two plausible answers and they need opposite fixes: no keys
+ * in the environment, or no `~/.aws` because the host's profile was never
+ * mounted. Enumerating both turns one generic sentence into a specific one
+ * (engineering log #48).
+ *
+ * Reports only presence and shape, never a value. A diagnosis that leaks half a
+ * secret into a UI is not an improvement.
+ */
+export function credentialSources(): {
+  containerised: boolean;
+  envKeySet: boolean;
+  envKeyLooksReal: boolean;
+  /** The directory exists, whether or not it holds anything. */
+  profileDirExists: boolean;
+  profileFiles: string[];
+} {
+  const dir = awsProfileDir();
+  let profileFiles: string[] = [];
+  try {
+    profileFiles = readdirSync(dir);
+  } catch {
+    // Absent or unreadable; both mean the chain cannot use it.
+  }
+  return {
+    containerised: inContainer(),
+    envKeySet: Boolean(cfg.AWS_ACCESS_KEY_ID),
+    envKeyLooksReal: looksLikeRealAccessKey(cfg.AWS_ACCESS_KEY_ID),
+    /**
+     * Existence is reported separately from contents, because the two point at
+     * different fixes. An empty directory means the mount landed on the wrong
+     * path - the Windows case, where an unset HOME resolves the source to
+     * `/.aws` - while an absent one means no mount was configured at all.
+     */
+    profileDirExists: existsSync(dir),
+    profileFiles,
+  };
 }
 
 /** Regions configured for scanning, or `null` to discover them from AWS. */

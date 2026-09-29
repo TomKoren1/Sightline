@@ -2448,3 +2448,96 @@ it can be found directly instead of inferred from proximity.
 Proximity is the weaker idea of the two. "The nearest guard above this text" is a
 guess about structure that happens to be right until the file grows, and a file
 that is being simplified grows in exactly the places that break it.
+
+---
+
+## #48 — "Provide credentials" was the whole diagnosis
+
+**Symptom.** Reported by someone following the new five-step onboarding on a fresh
+Windows machine:
+
+```
+No source credentials were found.
+In AWS_MODE=real the standard AWS credential chain is used.
+Provide credentials, or an instance or task role.
+
+CredentialsProviderError
+```
+
+Accurate, and useless. They _had_ provided credentials, by one of the two routes
+the page offers.
+
+**Why it was useless.** `CredentialsProviderError` means "nothing in the chain
+produced credentials". In a container that has at least three distinct causes,
+each needing a different fix, and **none of them is visible from outside the
+container**:
+
+1. No keys in the environment and no profile mounted.
+2. The mock's placeholder still in `AWS_ACCESS_KEY_ID`. It is deliberately
+   stripped from `process.env` at startup — being first in the SDK's chain it
+   would otherwise shadow everything else — so the reader has set a variable, the
+   warning about it scrolls past in the container log they are not watching, and
+   the effect is identical to not setting it.
+3. A profile mounted from the wrong host path. On Windows this is what an unset
+   `HOME` produces: Compose resolves `${HOME}/.aws` to `/.aws`, the mount
+   succeeds, and the directory is empty (#45).
+
+A reader cannot tell these apart by inspection, and the message invited the one
+action — "provide credentials" — that they had already taken.
+
+**Fix.** `credentialSources()` reports what the chain actually has: whether a key
+is set, whether it is _shaped_ like a real one, whether the profile directory
+exists, and which files are in it. Presence and shape only, never a value — a
+diagnosis that leaks half a secret into a UI is not an improvement, and that is
+asserted rather than intended. `diagnose()` renders it as a "What was checked"
+line, and the remedy branches on whether the API is containerised.
+
+The three failure modes now read:
+
+- _AWS_ACCESS_KEY_ID is not set; no ~/.aws profile directory at all, so no profile
+  was mounted_
+- _AWS_ACCESS_KEY_ID is set but is not shaped like a real key (real ones start
+  AKIA/ASIA), so it was removed to stop it shadowing the rest of the chain_
+- _a ~/.aws directory exists but is EMPTY, which means the mount resolved to the
+  wrong host path — on Windows that is an unset HOME, so set AWS_PROFILE_DIR_
+
+All three reproduced in the container before and after, and the success path
+re-checked: with a real profile mounted the error moves on to `AccessDenied`,
+which is the deployed role's stale trust policy (#44) and no longer a credentials
+problem.
+
+**Two guards missed, both conditional on state that cannot occur.** This is the
+part worth recording.
+
+The empty-versus-absent assertion was written as _"if there are files, the
+directory must exist"_ — true, trivial, and untestable on a machine with a
+populated `~/.aws`, which is every machine I run tests on. It passed while the
+distinction it guards was removed. It now builds real directories in a temp home
+and checks all three states.
+
+The placeholder assertion was conditioned on seeing `AWS_ACCESS_KEY_ID=mock` in
+`process.env` — which **the code under test deletes at import time**, that being
+its entire purpose. The condition was never true, so the assertion never ran. The
+shape check is now a table-driven test of an exported pure function, for the same
+reason `toSourceIdentity` (#42) and `isTerminalApiError` (#40) are separate
+functions: a branch reachable only through frozen module state is a branch no test
+will reach.
+
+And one sabotage of my own was wrong: I widened the key regex's character class to
+accept lowercase, and nothing failed — because lowercase is rejected by the
+_prefix alternation_, not the character class. The realistic regression is adding
+an `/i` flag, which does fire. **Breaking a guard tells you nothing unless you
+broke the thing it guards.**
+
+**What to take from it.** **An error message is a diagnosis, and a diagnosis that
+lists every possible cause is a diagnosis of none of them.** This project already
+argued that for AWS failures — `AccessDenied` versus "the trust policy does not
+name this principal" (#28) — and then shipped the generic version for the
+credential chain, which is the first thing a new user meets. The fix was not
+better wording: it was _looking_, and reporting what was found.
+
+Second: **a conditional assertion is a test that may not exist.** Both misses here
+were `if (something) expect(...)`, where the condition depended on ambient state.
+The pattern is seductive because it makes a test pass everywhere; that is also
+exactly what makes it worthless. If a branch needs particular state, the test has
+to construct it.

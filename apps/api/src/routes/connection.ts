@@ -24,6 +24,7 @@ import { STSClient, GetCallerIdentityCommand } from "@aws-sdk/client-sts";
 import {
   activeConnection,
   cfg,
+  credentialSources,
   configuredMode,
   configuredRegions,
   currentMode,
@@ -122,11 +123,55 @@ function diagnose(
       fix: "These are the source credentials used to call AssumeRole, not the customer's. Check the host's own AWS credentials.",
     };
   }
-  if (name === "CredentialsProviderError") {
+  if (name === "CredentialsProviderError" || name === "CredentialsError") {
+    /**
+     * Say which link of the chain is missing, not that the chain failed.
+     *
+     * "Provide credentials" is true and useless: in a container there are two
+     * plausible causes needing opposite fixes, and the reader cannot see inside
+     * the container to tell which applies. This reports what was actually
+     * checked (engineering log #48).
+     */
+    const src = credentialSources();
+    const checked: string[] = [];
+
+    if (!src.envKeySet) {
+      checked.push("AWS_ACCESS_KEY_ID is not set");
+    } else if (!src.envKeyLooksReal) {
+      checked.push(
+        "AWS_ACCESS_KEY_ID is set but is not shaped like a real key (real ones start AKIA/ASIA), " +
+          "so it was removed to stop it shadowing the rest of the chain",
+      );
+    } else {
+      checked.push("AWS_ACCESS_KEY_ID looks real, so the failure is elsewhere");
+    }
+
+    if (src.profileFiles.length > 0) {
+      checked.push(`a profile directory was found containing ${src.profileFiles.join(", ")}`);
+    } else if (src.profileDirExists) {
+      // Distinguished because it points at a different fix: the mount happened
+      // and landed on the wrong host path.
+      checked.push(
+        "a ~/.aws directory exists but is EMPTY, which means the mount resolved to the wrong host " +
+          "path - on Windows that is an unset HOME, so set AWS_PROFILE_DIR",
+      );
+    } else {
+      checked.push("no ~/.aws profile directory at all, so no profile was mounted");
+    }
+
+    const fix = src.containerised
+      ? "This API is running in a container, so the host's credentials do not reach it by default. " +
+        "Either set real values for AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY in .env, or mount your " +
+        "profile by uncommenting COMPOSE_FILE=docker-compose.yml:deploy/compose.aws-profile.yml in .env " +
+        "(on Windows also set AWS_PROFILE_DIR to your .aws folder, because PowerShell does not set HOME). " +
+        "Then recreate it with `docker compose --profile app up -d api` - `restart` reuses the old environment."
+      : "In AWS_MODE=real the standard AWS credential chain is used. Set AWS_ACCESS_KEY_ID and " +
+        "AWS_SECRET_ACCESS_KEY, configure a CLI profile, or run somewhere with an instance or task role.";
+
     return {
       code: name,
       problem: "No source credentials were found.",
-      fix: "In AWS_MODE=real the standard AWS credential chain is used. Provide credentials, or an instance or task role.",
+      fix: `${fix}\n\n  What was checked: ${checked.join("; ")}.`,
     };
   }
   return {
