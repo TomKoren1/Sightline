@@ -22,7 +22,8 @@
     "dev:web": "npm run dev -w @daveio/web",
     "evals": "npm run evals -w @daveio/api",
     "verify": "npm run typecheck && npm run lint && vitest run --exclude '**/evals/**' && npm run build -w @daveio/web",
-    "drift": "npm run drift -w @daveio/mock-aws"
+    "drift": "npm run drift -w @daveio/mock-aws",
+    "setup": "tsx apps/api/src/cli/setup.ts"
   },
   "devDependencies": {
     "@types/node": "^22.10.2",

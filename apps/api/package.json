@@ -12,7 +12,8 @@
     "typecheck": "tsc --noEmit",
     "inspect": "tsx src/cli/inspect.ts",
     "query": "tsx src/cli/query.ts",
-    "evals:ground-truth": "vitest run src/evals/groundTruth.test.ts"
+    "evals:ground-truth": "vitest run src/evals/groundTruth.test.ts",
+    "setup": "tsx src/cli/setup.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.128.0",
