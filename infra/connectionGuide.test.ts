@@ -24,7 +24,7 @@
  * read as `agent/toolLabels.test.ts`.
  */
 
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 
@@ -83,6 +83,51 @@ describe("connection guide and role template agree", () => {
      */
     expect(guide).toContain("readOnlyRoleArn(");
     expect(copy, "the role name is hardcoded here again").not.toContain("role/DaveIoReadOnlyRole");
+  });
+});
+
+describe("the guide offers the command that actually exists", () => {
+  /**
+   * The page now leads with `npm run setup` rather than five manual steps. That
+   * makes it a cross-artefact claim: the page names a command, `package.json`
+   * has to define it, and the file it points at has to be there. Renaming any
+   * one of the three would leave the product telling people to run something
+   * that does not work - the same shape as every other drift in this log.
+   */
+  it("offers the script, prominently", () => {
+    /**
+     * As a copyable command, not merely mentioned. The first version of this
+     * asserted the phrase appeared anywhere, and passed when the command block
+     * was replaced with prose - because the page also says
+     * `npm run setup -- --dry-run` further down.
+     */
+    expect(copy, "the page no longer offers `npm run setup` as a command to copy").toMatch(
+      /<Copyable value="npm run setup"/,
+    );
+    // Before the manual steps, not buried under them.
+    const script = copy.indexOf("npm run setup");
+    const manual = copy.indexOf("Or do it by hand");
+    expect(manual, "the manual fallback is gone").toBeGreaterThan(-1);
+    expect(script, "the script should be offered before the manual steps").toBeLessThan(manual);
+  });
+
+  it("names a script package.json defines, pointing at a file that exists", () => {
+    const pkg = JSON.parse(read("package.json")) as { scripts?: Record<string, string> };
+    const command = pkg.scripts?.["setup"];
+    expect(command, "package.json has no `setup` script").toBeTruthy();
+    // `tsx apps/api/src/cli/setup.ts` - the path it runs must be real.
+    const match = /([\w./-]+\.ts)/.exec(command!);
+    expect(match, `could not find a script path in "${command}"`).toBeTruthy();
+    expect(
+      existsSync(root + match![1]!),
+      `the setup script points at ${match![1]}, which does not exist`,
+    ).toBe(true);
+  });
+
+  it("mentions the flags it documents", () => {
+    // --dry-run is the one that makes the page's safety claim checkable.
+    expect(copy).toContain("--dry-run");
+    expect(copy).toContain("--disconnect");
   });
 });
 

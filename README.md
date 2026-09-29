@@ -96,6 +96,38 @@ is configured.
 
 ### Pointing it at a real AWS account
 
+```bash
+npm run setup
+```
+
+One command. It finds the identity to trust, creates the read-only role with
+CloudFormation, reads the `RoleArn` back out of the stack outputs, writes `.env`,
+mounts your AWS profile into the container if it needs to, restarts the API and
+then tells you whether the connection works.
+
+It shows what it will do and asks before anything changes, backs `.env` up first,
+and rewrites **only** the keys it names — verified against its own output rather
+than promised. It never asks for an access key and cannot write one. Re-running is
+a no-op, and it reuses an ExternalId already in use rather than rotating a working
+secret.
+
+|                                   |                                                 |
+| --------------------------------- | ----------------------------------------------- |
+| `npm run setup -- --dry-run`      | print the plan, change nothing                  |
+| `npm run setup -- --mock`         | stay on the demo account                        |
+| `npm run setup -- --disconnect`   | delete the role and go back to the demo account |
+| `npm run setup -- --profile work` | use a named AWS CLI profile                     |
+| `npm run setup -- --yes`          | no confirmations, for scripting                 |
+
+It needs the AWS CLI, which is also what creates the role, and Node. The demo
+account needs neither.
+
+The rest of this section is what the script does for you, kept because a reader
+who wants to see every step — or who would rather not run a script against their
+own AWS account — should be able to.
+
+#### By hand
+
 Two things beyond the usual `AWS_MODE=real`, `AWS_TARGET_ROLE_ARN` and
 `AWS_EXTERNAL_ID`.
 
@@ -276,12 +308,13 @@ is one of only two variables where blank is meaningful rather than unset.
 | `docker compose up -d`                       | Postgres, Neo4j and moto — just the dependencies       |
 | `docker compose --profile app up -d --build` | The whole thing in Docker, served on `:8080`           |
 | `docker compose --profile app down -v`       | Tear it all down, volumes included                     |
+| `npm run setup`                              | Connect an AWS account, or switch back to the demo one |
 | `npm run seed`                               | Rebuild the mock account from scratch                  |
 | `npm run scan`                               | Scan, persist, project the graph                       |
 | `npm run drift`                              | Change the mock account, so a second scan has a diff   |
 | `npm run inspect -w @daveio/api`             | Scan and print findings without touching the databases |
 | `npm run query -w @daveio/api`               | Run every curated query against the graph              |
-| `npm test`                                   | 319 unit tests                                         |
+| `npm test`                                   | 380 unit tests                                         |
 | `npm run verify`                             | Everything CI's static job runs — use before pushing   |
 | `npm run evals:ground-truth -w @daveio/api`  | Tier-1 evals — no API key needed                       |
 | `npm run evals -w @daveio/api`               | Tier-2 agent evals — needs a key                       |
@@ -653,11 +686,12 @@ docs/               decisions, engineering log, commit log, walkthrough
 
 ## Documentation
 
-- **[docs/DECISIONS.md](docs/DECISIONS.md)** — fourteen ADRs: the stack, the
+- **[docs/DECISIONS.md](docs/DECISIONS.md)** — fifteen ADRs: the stack, the
   mock, the two-database split, deterministic analysis, the tool boundary,
   citation validation, the IAM role, the eval strategy, the read-only refusal in
   code, guided onboarding, evals shown in the product, public vs unprotected,
-  the runtime account toggle, and remediation that is never applied.
+  the runtime account toggle, remediation that is never applied, and onboarding
+  automated by a host script rather than a form.
 - **[docs/ENGINEERING-LOG.md](docs/ENGINEERING-LOG.md)** — every non-obvious
   problem hit while building this, with diagnosis and fix. Includes a silent
   moto account-namespacing trap, two capability gaps in the mock recorded as

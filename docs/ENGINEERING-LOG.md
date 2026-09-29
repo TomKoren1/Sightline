@@ -2569,3 +2569,79 @@ were `if (something) expect(...)`, where the condition depended on ambient state
 The pattern is seductive because it makes a test pass everywhere; that is also
 exactly what makes it worthless. If a branch needs particular state, the test has
 to construct it.
+
+---
+
+## #49 — Two bugs found by testing my own script, and one visible in its output
+
+**Context.** Four defects reached a user following the connection steps on a second
+machine, each a product bug rather than their mistake. The conclusion was that
+hand-editing `.env` and copying a CloudFormation command is too many chances to be
+wrong, so `npm run setup` now does it (ADR-015).
+
+A script that writes someone's configuration and deploys to their AWS account has
+to be held to a higher standard than the thing it replaces, so this records what
+testing it found — including the part where I was wrong about my own plan.
+
+**What I got wrong first.** The proposal on the table was a **form in the product**.
+It would not have worked, and I only saw why when I checked what the container can
+reach: the API has no AWS CLI, no permission to create an IAM role, and no access
+to the `.env` on the host. A form could have collected a role ARN into a database;
+the reader would still have run the CloudFormation command by hand, which is
+exactly where the four failures were. It would have removed the smaller half of the
+work and cost a rewrite of ADR-010 to do it.
+
+The suggestion that replaced it — a script — is better for a reason worth stating:
+**it runs where the capability already is.** The user's AWS CLI, their SSO session,
+their `.env`, their Docker. No new endpoint, no authentication question, ADR-010
+untouched.
+
+**Bug 1: the script appended a new heading every run.** `applyEnvEdits` writes
+unknown keys under a `# --- written by npm run setup ---` marker. A second run that
+added a _different_ key appended a _second_ marker, so a user's `.env` accumulated
+one block per run. Nothing broke — which is why it would have gone unnoticed
+indefinitely. It just quietly degrades a file the script promised to treat
+carefully. Found by a test asserting the marker appears once; it now appends under
+the existing one.
+
+**Bug 2: the script rotated a working secret.** It generated a fresh ExternalId on
+every run. The stack's trust policy requires the value `.env` holds, so re-running
+would have invalidated a connection that worked until the stack was redeployed with
+the new value — **the script breaking the setup it had just made.** Caught by
+running `--dry-run` twice and noticing an ExternalId change on a deployment that
+was already correct. `chooseExternalId()` now reuses one in use, and only treats
+the shipped placeholder as absent.
+
+**Bug 3, visible in the first successful run.** It wrote `.env` twice, with two
+confirmations and two backup files, because the profile mount was decided _after_
+the connection was written. One operation, two mutations, two chances to be
+interrupted half-done. Containerisation is now resolved before the edits are built,
+and it is one write.
+
+**What testing the failure paths found.** Nothing, which is the point of recording
+it. Duplicate keys, absent credentials, an unusable AWS CLI and a failed deploy all
+stop with an actionable message, exit non-zero, and leave `.env` byte-identical —
+verified by sha256 before and after each. The deploy failure quotes
+CloudFormation's own reason _and_ explains it, because the alternative is what a
+user hit for real: `Invalid principal in policy`, which names neither which half of
+the ARN was wrong nor how to find the right one.
+
+**Two of my own sabotages were wrong,** and both times the guard was fine. A PATH
+without `aws` also had no `node`, because both live in `/usr/bin` on this machine;
+and a non-executable `aws` stub earlier in PATH is _skipped_ by the OS, which then
+finds the real one. A stub that is executable and exits non-zero is the test that
+actually exercises the branch. **Breaking a guard proves nothing unless the break
+reached the thing it guards** — the third time that has come up in this log.
+
+**What to take from it.** **Automation that edits a user's files has to prove its
+restraint, not assert it.** The load-bearing piece is not `applyEnvEdits`, which is
+tested; it is `untouchedKeys()`, which checks the _produced content_ before writing
+and refuses if anything undeclared moved. That is a backstop against a bug in the
+tested code, and it costs one function.
+
+Second: **the most dangerous bug in a setup script is the one that succeeds.** All
+three found here produced a working outcome — a slightly messier file, a rotated
+secret, a duplicated write. None would have surfaced as an error, and two would
+have been blamed on something else entirely when they eventually bit: a connection
+that "just stopped working" after re-running setup is not a sentence anyone
+connects to a heading in a `.env`.

@@ -589,3 +589,77 @@ The generators also need maintaining alongside the analysers: a new verdict with
 no remediation is a finding that dead-ends. That is a real cost, and the reason
 the contract tests assert that every remediation has a caution and a read-only
 verify command rather than trusting each generator to remember.
+
+---
+
+## ADR-015 — Onboarding is automated by a host script, not by a form in the product
+
+**Context.** ADR-010 decided the UI guides onboarding rather than performing it,
+and the reason still holds: this API has no authentication, so a form that
+accepted a role ARN and an external id would be an open endpoint that assumes a
+role into somebody's AWS account and persists a value the role template calls a
+credential.
+
+What that left was a reader hand-editing `.env` and copying a CloudFormation
+command. Tested on a second machine, that flow produced four separate defects
+before it worked — a placeholder pasted whole, credentials not reaching the
+container, a generic error that named none of its three causes, and a trust policy
+condition that could never match. Every one was a product bug rather than a
+mistake by the person following the instructions.
+
+**The constraint that decides it.** A form could not have fixed the expensive
+half. The API runs in a container with no AWS CLI, no permission to create an IAM
+role, and no access to the `.env` on the host. A form could have collected a role
+ARN into a database; the reader would still have run the CloudFormation command by
+hand, which is where the failures were.
+
+A script runs where the capability already is: the user's AWS CLI, their SSO
+session and named profiles, their `.env`, and Docker.
+
+**Decision.** `npm run setup`. It resolves the identity to trust, converts the
+session ARN to one a trust policy can name, deploys the stack, reads `RoleArn`
+back out of the stack **outputs** rather than having anyone copy it, writes `.env`,
+adds the profile mount when the API is containerised, recreates the container, and
+runs the connection test. `--mock`, `--dry-run`, `--disconnect`, `--profile`,
+`--region`, `--anthropic-key`, `--yes`.
+
+ADR-010 is unchanged. There is still no form, still no unauthenticated endpoint
+that touches AWS, and the guided steps remain in the UI behind a disclosure — for
+a reader who wants to see each one, or who would reasonably rather not run a
+script against their own AWS account.
+
+**What makes it safe enough to run against a real account.**
+
+- Nothing writes before the plan is shown and accepted. Confirmations default to
+  **no**; `--yes` exists for scripting. `--dry-run` performs read-only AWS calls
+  and no mutations at all.
+- `.env` is backed up, then rewritten touching only declared keys — checked
+  against the produced content by `untouchedKeys()` before the write, not merely
+  intended, and refused outright if an edit strays outside the shared allow-list.
+- Credentials are never printed: the ExternalId and the LLM key are masked in the
+  diff. The script never asks for an access key and **cannot** write one — the
+  allow-list excludes them, asserted over the list itself.
+- Every AWS call passes an argument vector, never a composed command line, so no
+  value a user supplies can become shell syntax.
+- Re-running is a no-op, and an ExternalId already in use is reused rather than
+  rotated. Deleting anything needs `--disconnect`.
+
+**Why the command lives in one place.** The stack name, role name, ExternalId
+prefix and the deploy command itself moved to `@daveio/shared`. The Connection
+screen renders it, the script executes it, and the API diagnoses what the reader
+ended up with. Three consumers of one definition, with the recipe checked against
+the template directly — because the alternative is the failure mode this log
+returns to more than any other (#39, #42, #45, #47): two artefacts that must
+agree, and nothing checking that they do.
+
+**Cost.** The script needs Node, which the one-command Docker path otherwise does
+not. That is an acceptable trade because connecting a real account already needs
+the AWS CLI, a larger dependency, and because the demo account — the path a
+reviewer uses — needs neither. The alternative, a shell script plus a PowerShell
+script, is two implementations of a sequence of confirmations and error parsing,
+which is precisely where the cross-platform bugs in this project have lived.
+
+CI cannot test the AWS path, because it has no credentials and faking them would
+test the fake. What it does test is the half that must never be wrong: that the
+script refuses, explains, and changes nothing when it cannot proceed — and, so
+those assertions mean something, that `--mock` really does write and back up.
