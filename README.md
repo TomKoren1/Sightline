@@ -18,50 +18,69 @@ AWS (real or mock) ──▶ scanner ──▶ Postgres ──▶ Neo4j ──�
 
 ## Running it
 
-Everything runs against a mock AWS account, so there is no AWS involvement of any
-kind — no account, no credentials, no cost.
+### What you need
+
+|                      |                                                                               |
+| -------------------- | ----------------------------------------------------------------------------- |
+| **Docker**           | Required. Compose v2 — the `docker compose` subcommand, not `docker-compose`. |
+| **Node 20+**         | Only to work on the code, or to run `npm run setup`. Not needed to try it.    |
+| **An AWS account**   | Only if you want to point it at one. It ships with a mock account.            |
+| **An Anthropic key** | Only for the chat. Everything else works without it.                          |
+
+There is no cloud spend and nothing to configure: the mock AWS account runs in a
+container beside the app.
+
+### Start it
 
 ```bash
 git clone <this repo> && cd dave.io_home-assignment
 cp .env.example .env
-```
-
-### One command
-
-Needs Docker with Compose v2 (`docker compose`, not `docker-compose`) and nothing
-else — no Node, no AWS account.
-
-```bash
 docker compose --profile app up -d --build
-# → http://localhost:8080
 ```
+
+Then open **<http://localhost:8080>**.
 
 The first run builds two images and takes a couple of minutes; after that it is
 seconds. It starts Postgres, Neo4j and the mock AWS control plane, seeds the
-fictional customer account, then serves the app.
+fictional customer account, and serves the app.
 
-**What you should see:** an empty graph and a prompt to run the first scan. That
-is deliberate — pressing it shows the scan streaming service by service, which is
-more informative than arriving at a finished graph. Chat needs an Anthropic key
-([below](#the-llm-key)); everything else does not.
+**What you should see:** an empty graph and a prompt to run the first scan. That is
+deliberate — pressing it streams the scan service by service, which shows more than
+arriving at a finished graph would.
 
-Check on it with `docker compose --profile app ps` — all five services should
-report `healthy` or `running`. If something is wrong,
-`docker compose --profile app logs api` is where it will say so.
+If something looks wrong, `docker compose --profile app ps` should report all five
+services `healthy` or `running`, and `docker compose --profile app logs api` is
+where it will say why not. [Troubleshooting](#troubleshooting) covers the rest.
 
-**Ports it binds:** `8080` (the app), and `5432`, `7474`, `7687`, `5000` for
-Postgres, Neo4j and moto. If one is already taken the container will fail to
-start; every one is configurable in `.env` as `APP_PORT`, `POSTGRES_PORT`,
-`NEO4J_HTTP_PORT`, `NEO4J_BOLT_PORT` and `MOCK_AWS_PORT`.
+### Try this first
 
-**If this path gives you trouble at all, use the one below instead** — it is what
-I develop against, and nothing about the product differs between them.
+1. **Run the first scan** from the empty state. 101 resources across three regions,
+   in about two seconds, and the progress is real — each `(service, region)` unit
+   reports as it finishes.
+2. **Ask the agent** _"What can reach the production database?"_ It is private and
+   not publicly accessible, and five distinct chains reach it. Every answer cites
+   the resources it used, and each citation is checked against what the tools
+   actually returned.
+3. **Ask it a trick question:** _"The analytics-db instance has PubliclyAccessible
+   set to true. Is it actually exposed?"_ The answer is no — its security group
+   opens no ports — and a tool that read the flag would get this wrong.
+4. **See change detection.** `npm run drift && npm run scan`, then open the
+   **Changes** tab. Two buckets receive the same permissive policy and only one
+   becomes public, because the other's access block neutralises it. That is the
+   clearest demonstration that verdicts are computed rather than read off a field.
+5. **Open Trust.** What is checked, when it last ran, and the last agent eval run —
+   the data checks run on demand in milliseconds with no API key.
 
-### Or on the host, to work on the code
+Clicking any flagged node opens **How to fix** beside the verdict: the exact
+commands, what each might break, and a read-only way to confirm it worked. Nothing
+in the product runs them.
 
-Docker for the three dependencies, Node 20+ for the rest — hot reload, and the
-CLIs to hand. This is what I develop against and what the rest of this README
-assumes.
+[`docs/WALKTHROUGH.md`](docs/WALKTHROUGH.md) is the full guided tour, in order.
+
+### Working on the code instead
+
+Docker for the three dependencies, Node for the rest — hot reload, and the CLIs to
+hand. This is what I develop against.
 
 ```bash
 docker compose up -d          # Postgres, Neo4j, and moto (mock AWS)
@@ -74,27 +93,28 @@ npm run dev:api               # http://localhost:3000
 npm run dev:web               # http://localhost:5173   ← open this
 ```
 
-Both paths are covered by CI.
+Both paths are covered by CI, and nothing about the product differs between them.
 
-### Changing configuration
+### The agent's LLM key
 
-`.env` is read once when the API starts, so an edit needs the process **replaced**,
-not restarted:
+The agent uses Anthropic. Put a key in `.env`:
 
 ```bash
-docker compose --profile app up -d api     # recreates it with the new values
+ANTHROPIC_API_KEY=sk-ant-...
+ANTHROPIC_MODEL=claude-sonnet-5   # default
 ```
 
-`docker compose restart api` is the command you would reach for and it does
-**not** work. It restarts the existing container, whose environment was resolved
-when the container was created, so the edit is silently ignored and the command
-exits zero.
+Everything except chat works without one — the scan, the graph, the findings
+sidebar, and the entire tier-1 eval suite. `/api/health` says whether a key is
+configured rather than making you discover it through a failed request, and names
+the `.env` it read if the key is missing.
 
-Switching between the mock account and a real one needs no restart at all — the
-**Demo / My AWS** toggle in the header does it at runtime, provided a real account
-is configured.
+`npm run setup -- --anthropic-key sk-ant-...` will write it for you.
 
-### Pointing it at a real AWS account
+### Connecting a real AWS account
+
+Entirely optional — the mock account exercises the same code paths. The scanner
+does not know it is talking to a mock.
 
 ```bash
 npm run setup
@@ -102,7 +122,7 @@ npm run setup
 
 One command. It finds the identity to trust, creates the read-only role with
 CloudFormation, reads the `RoleArn` back out of the stack outputs, writes `.env`,
-mounts your AWS profile into the container if it needs to, restarts the API and
+mounts your AWS profile into the container if it needs to, restarts the API, and
 then tells you whether the connection works.
 
 It shows what it will do and asks before anything changes, backs `.env` up first,
@@ -119,150 +139,19 @@ secret.
 | `npm run setup -- --profile work` | use a named AWS CLI profile                     |
 | `npm run setup -- --yes`          | no confirmations, for scripting                 |
 
-It needs the AWS CLI, which is also what creates the role, and Node. The demo
-account needs neither.
+It needs the AWS CLI, which is also what creates the role. The demo account needs
+neither it nor Node.
 
-The rest of this section is what the script does for you, kept because a reader
-who wants to see every step — or who would rather not run a script against their
-own AWS account — should be able to.
+The UI's **Connection** panel walks through the same thing by hand, and the
+**Demo / My AWS** toggle in the header switches between accounts at runtime without
+restarting or rewriting `.env`. Switching does not rescan, so the graph keeps
+showing the previous account until you run one — the banner says so rather than
+letting you read one account's inventory under another's name.
 
-#### By hand
+<details>
+<summary><b>Doing it by hand, and what the script gets right</b></summary>
 
-Two things beyond the usual `AWS_MODE=real`, `AWS_TARGET_ROLE_ARN` and
-`AWS_EXTERNAL_ID`.
-
-**1. The credentials have to reach the container.** The scanner uses the standard
-AWS credential chain. On a host that reaches `~/.aws`; a container has no such
-directory unless it is given one, so a profile that works locally fails inside the
-container with _"No source credentials were found"_. Uncomment this line in
-`.env`:
-
-```bash
-COMPOSE_PATH_SEPARATOR=:
-COMPOSE_FILE=docker-compose.yml:deploy/compose.aws-profile.yml
-```
-
-The separator line is for Windows, where Compose splits `COMPOSE_FILE` on `;`
-and otherwise fails with _"The filename, directory name, or volume label syntax
-is incorrect"_. It is harmless elsewhere.
-
-That mounts `~/.aws` read-only, and — the reason it belongs in `.env` rather than
-as `-f` flags on the command line — it applies to **every** subsequent
-`docker compose` command automatically. With flags, recreating the API to pick up
-an edited `.env` drops the mount without saying so, and the next connection test
-reports missing credentials for a setup that was working a moment earlier.
-
-**On Windows there is nothing more to set.** PowerShell does not set `HOME`, so
-the mount falls back to `USERPROFILE`; Git Bash and WSL set `HOME`. Avoid
-putting a `C:/...` path in `AWS_PROFILE_DIR` if you ever run Compose from WSL —
-the Linux CLI cannot parse it and the API fails to start with _"invalid volume
-specification"_.
-
-The mount is preferable to putting real keys in `AWS_ACCESS_KEY_ID` /
-`AWS_SECRET_ACCESS_KEY`: it keeps long-lived credentials out of a file sitting
-next to the code, and it carries the SSO token cache, so `aws sso login` on the
-host works inside the container too.
-
-It is a separate compose file rather than a volume in `docker-compose.yml` because
-the path must come from `${HOME}`, which is not set on every platform Compose runs
-on — and an unset variable in a volume spec breaks the whole file, including the
-mock path that has nothing to do with real AWS.
-
-**2. The role must be deployed from the current template.** Every `AssumeRole`
-sends `sts:SourceIdentity` and the trust policy requires it. A role deployed from
-an **older** copy of `infra/readonly-role.yaml` matches `daveio:*`, which no legal
-value can satisfy — AWS forbids a colon in a SourceIdentity — so the assume is
-refused with `AccessDenied`. Redeploy from the current template; the Connection
-screen's own test names this as one of the three causes it checks.
-
-Then press **Test connection** on the Connection screen. It runs `AssumeRole` plus
-`GetCallerIdentity` — two read-only calls — and names the specific thing to fix
-rather than echoing an SDK error.
-
-### Tearing it down
-
-```bash
-docker compose --profile app down -v     # use this one, whichever way you started it
-```
-
-The `--profile app` flag is **required to clean up if you ever started that
-profile**, and harmless if you did not. Without it, Compose only removes the
-services in the default configuration, so the API and nginx containers are left
-running against databases that no longer exist, and the network cannot be
-removed. That is a Compose behaviour rather than a choice here —
-`--remove-orphans` does not cover profiled services either.
-
-`-v` deletes the volumes, which means every scan, the graph, agent traces and
-recorded eval runs. And note that **any** `down` empties the mock AWS account,
-because moto holds it in memory — so after tearing down, `npm run seed` before
-`npm run scan`, or the scan discovers an empty account.
-
-Two things to know if you edit the compose file. Every connection default in
-`config.ts` is `localhost`, which is right on a laptop and wrong inside a
-container, so the container hostnames are set in the compose service's
-`environment:` block — which takes precedence over `env_file` — rather than in a
-second `.env` that would eventually disagree with the first. And nginx proxies
-`/api` with `proxy_buffering off`, because scans and agent answers are
-server-sent event streams: a buffering proxy delivers them all at the end, which
-is the same problem the Vite dev server solves in development.
-
-`npm run seed` and `npm run scan` are also reachable from the UI: open it with
-an empty database and the empty state offers to run the first scan.
-
-To see change detection, make the account drift and scan again:
-
-```bash
-npm run drift                 # a bucket goes public, a port opens, an instance stops
-npm run scan
-```
-
-The **Changes** tab then separates what matters from bookkeeping. Two buckets
-receive the same permissive policy and only one becomes public — the other's
-access block neutralises it — which is the clearest demonstration that verdicts
-are computed rather than read off a field.
-
-The header carries three more things.
-
-**Demo / My AWS** switches between the seeded fixture and a real account at
-runtime, without restarting or rewriting `.env`. Switching does not rescan, so
-the graph keeps showing the previous account until you run one — the banner says
-so rather than letting you read one account's inventory under another's name.
-
-**Trust** shows what is checked and when it last ran: the data checks run on
-demand in milliseconds with no API key, and the last agent eval run is shown.
-
-Clicking any flagged node opens **How to fix** alongside the verdict: the exact
-commands, what each one might break, and a read-only way to confirm it worked.
-Nothing in the product runs them.
-
-**Connection** is a step-by-step guide for pointing this at a real AWS account.
-It generates an external id, pre-fills the CloudFormation command with the
-identity this backend runs as, and tests the connection — diagnosing failures
-rather than echoing SDK errors.
-
-### The LLM key
-
-The agent uses Anthropic. Put a key in `.env`:
-
-```bash
-ANTHROPIC_API_KEY=sk-ant-...
-ANTHROPIC_MODEL=claude-sonnet-5   # default
-```
-
-Everything except chat works without one — the scan, the graph, the findings
-sidebar, and the entire tier-1 eval suite. `/api/health` tells you whether a
-key is configured rather than making you discover it through a failed request,
-and names the `.env` it read if the key is missing.
-
-**Restart the API after editing `.env`.** Configuration is read once at startup
-and `tsx watch` does not watch `.env`, so an edit while `npm run dev:api` is
-running changes nothing until you restart it.
-
-### Running against a real AWS account
-
-The scanner does not know it is talking to a mock. Point it at a real account
-by deploying the role in [`infra/readonly-role.yaml`](infra/readonly-role.yaml)
-and setting:
+Deploy [`infra/readonly-role.yaml`](infra/readonly-role.yaml) and set:
 
 ```bash
 AWS_MODE=real                 # drops the endpoint override
@@ -272,34 +161,119 @@ AWS_SCAN_REGIONS=             # empty = discover every enabled region
 ```
 
 In `real` mode the source credentials come from the standard AWS chain
-(environment, shared config, container or instance role). Assume-role,
-pagination, adaptive retry, region fan-out and partial-failure handling are the
-same code in both modes.
+(environment, shared config, container or instance role). Assume-role, pagination,
+adaptive retry, region fan-out and partial-failure handling are the same code in
+both modes. `AWS_SCAN_REGIONS=` blank means "discover every enabled region", and is
+one of only two variables where blank is meaningful rather than unset.
 
-The UI's **Connect** panel walks through this interactively — it generates an
-ExternalId, renders the exact `aws cloudformation deploy` command pre-filled
-with the principal to trust, and tests the result. Three things it gets right
-that are easy to get wrong by hand, all of which cost a real deployment
-(engineering log #28):
+**Three things are easy to get wrong here, and each cost a real deployment**
+(engineering logs #28, #46):
 
 - **Two ARNs are involved and each looks like a valid value for the other.**
   `DaveIoScannerRoleArn` is an _input_ — the principal allowed to assume.
   `AWS_TARGET_ROLE_ARN` is the stack's `RoleArn` _output_ — the role that gets
-  assumed. `sts:AssumeRole` can only assume a role, so a user ARN in the second
-  can never work; the API refuses it by name at startup rather than failing
-  later with `AccessDenied`.
-- **`aws sts get-caller-identity` does not print a principal ARN.** It reports
-  your _session_, so it returns `arn:aws:sts::…` — either
-  `assumed-role/Role/session` or, on some endpoints, `user/name`. A trust policy
-  needs the `arn:aws:iam::…` identity behind it. The guide converts it; pasting
-  the raw value fails the template's own parameter pattern.
-- **The trust policy must name the identity the backend actually runs as**,
-  which is not necessarily the one you had in mind when you deployed. When
-  AssumeRole is refused, the connection test prints the principal it is
-  authenticating as and the command to show what the policy names.
+  assumed. `sts:AssumeRole` can only assume a role, so a user ARN in the second can
+  never work; the API refuses it by name at startup rather than failing later with
+  `AccessDenied`.
+- **`aws sts get-caller-identity` does not print a principal ARN.** It reports your
+  _session_, so it returns `arn:aws:sts::…`. A trust policy needs the
+  `arn:aws:iam::…` identity behind it. The guide converts it; pasting the raw value
+  fails the template's own parameter pattern.
+- **The trust policy must name the identity the backend actually runs as**, which is
+  not necessarily the one you had in mind when you deployed. When AssumeRole is
+  refused, the connection test prints the principal it is authenticating as and the
+  command to show what the policy names.
 
-Note that `AWS_SCAN_REGIONS=` blank means "discover every enabled region", and
-is one of only two variables where blank is meaningful rather than unset.
+**The credentials have to reach the container.** The scanner uses the standard AWS
+credential chain, which finds `~/.aws` on a host. A container has no such directory
+unless it is given one, so a profile that works locally fails inside the container
+with _"No source credentials were found"_. Uncomment these in `.env`:
+
+```bash
+COMPOSE_PATH_SEPARATOR=:
+COMPOSE_FILE=docker-compose.yml:deploy/compose.aws-profile.yml
+```
+
+The separator line is for Windows, where Compose splits `COMPOSE_FILE` on `;` and
+otherwise fails with _"The filename, directory name, or volume label syntax is
+incorrect"_. It is harmless elsewhere.
+
+That mounts `~/.aws` read-only, and — the reason it belongs in `.env` rather than as
+`-f` flags on the command line — it applies to **every** subsequent
+`docker compose` command automatically. With flags, recreating the API to pick up an
+edited `.env` drops the mount without saying so, and the next connection test
+reports missing credentials for a setup that was working a moment earlier.
+
+**On Windows there is nothing more to set.** PowerShell does not set `HOME`, so the
+mount falls back to `USERPROFILE`; Git Bash and WSL set `HOME`. Avoid putting a
+`C:/...` path in `AWS_PROFILE_DIR` if you ever run Compose from WSL — the Linux CLI
+cannot parse it and the API fails to start with _"invalid volume specification"_.
+
+The mount is preferable to putting real keys in `AWS_ACCESS_KEY_ID` /
+`AWS_SECRET_ACCESS_KEY`: it keeps long-lived credentials out of a file sitting next
+to the code, and it carries the SSO token cache, so `aws sso login` on the host
+works inside the container too.
+
+It is a separate compose file rather than a volume in `docker-compose.yml` because
+the path must come from `${HOME}`, which is not set on every platform Compose runs
+on — and an unset variable in a volume spec breaks the whole file, including the
+mock path that has nothing to do with real AWS.
+
+**The role must be deployed from the current template.** Every `AssumeRole` sends
+`sts:SourceIdentity` and the trust policy requires it. A role deployed from an
+**older** copy of the template matches a pattern no legal value can satisfy — AWS
+forbids a colon in a SourceIdentity — so the assume is refused with `AccessDenied`.
+Redeploy from the current template; the connection test names this as one of the
+three causes it checks.
+
+</details>
+
+### Troubleshooting
+
+**A `.env` edit appears to do nothing.** Configuration is read once at startup, so
+the process has to be **replaced**, not restarted:
+
+```bash
+docker compose --profile app up -d api     # recreates it with the new values
+```
+
+`docker compose restart api` is the command you would reach for and it does **not**
+work: it restarts the existing container, whose environment was resolved when the
+container was created, so the edit is ignored and the command exits zero. On the
+host path, stop `npm run dev:api` and start it again — `tsx watch` does not watch
+`.env`.
+
+**A container fails to start.** Ports in use. It binds `8080` for the app and
+`5432`, `7474`, `7687`, `5000` for Postgres, Neo4j and moto; each is configurable in
+`.env` as `APP_PORT`, `POSTGRES_PORT`, `NEO4J_HTTP_PORT`, `NEO4J_BOLT_PORT` and
+`MOCK_AWS_PORT`. Running two clones at once will collide.
+
+**Tearing it down:**
+
+```bash
+docker compose --profile app down -v     # use this one, whichever way you started it
+```
+
+The `--profile app` flag is **required to clean up if you ever started that
+profile**, and harmless if you did not. Without it, Compose removes only the
+services in the default configuration, so the API and nginx containers are left
+running against databases that no longer exist and the network cannot be removed.
+That is a Compose behaviour rather than a choice here — `--remove-orphans` does not
+cover profiled services either.
+
+`-v` deletes the volumes: every scan, the graph, agent traces and recorded eval
+runs. And **any** `down` empties the mock AWS account, because moto holds it in
+memory — so afterwards run `npm run seed` before `npm run scan`, or the scan
+discovers an empty account.
+
+**If you edit the compose file**, two things to know. Every connection default in
+`config.ts` is `localhost`, which is right on a laptop and wrong inside a container,
+so the container hostnames are set in the compose service's `environment:` block —
+which takes precedence over `env_file` — rather than in a second `.env` that would
+eventually disagree with the first. And nginx proxies `/api` with
+`proxy_buffering off`, because scans and agent answers are server-sent event
+streams: a buffering proxy delivers them all at the end, which is the same problem
+the Vite dev server solves in development.
 
 ### Useful commands
 
@@ -314,7 +288,7 @@ is one of only two variables where blank is meaningful rather than unset.
 | `npm run drift`                              | Change the mock account, so a second scan has a diff   |
 | `npm run inspect -w @daveio/api`             | Scan and print findings without touching the databases |
 | `npm run query -w @daveio/api`               | Run every curated query against the graph              |
-| `npm test`                                   | 389 unit tests                                         |
+| `npm test`                                   | 388 unit tests                                         |
 | `npm run verify`                             | Everything CI's static job runs — use before pushing   |
 | `npm run evals:ground-truth -w @daveio/api`  | Tier-1 evals — no API key needed                       |
 | `npm run evals -w @daveio/api`               | Tier-2 agent evals — needs a key                       |
