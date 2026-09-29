@@ -2720,3 +2720,88 @@ scanners read**, so a synthetic secret is a real liability with none of the dang
 `ls-files` quietly excludes the file you are writing; and **a scanner that reads
 history is not satisfied by a clean tree**, so fixing forward and re-running is not
 the same as fixing.
+
+---
+
+## #51 — The first command in the README did not run on a clean machine
+
+**Symptom.** On a second laptop, following the README from the top:
+
+```
+'tsx' is not recognized as an internal or external command,
+operable program or batch file.
+```
+
+from `npm run setup -- --anthropic-key sk-ant-...`. Reproduced in three seconds
+with `git clone` into an empty directory — the same failure, phrased by the shell
+of the day (`sh: 1: tsx: not found`).
+
+**Cause.** `npm run setup` ran `tsx apps/api/src/cli/setup.ts`, and `tsx` is a
+devDependency. Nothing had ever run `npm install`, because the README says
+"You need Docker. Nothing else" and then hands the reader an npm command. The
+containerised path is genuinely self-contained; the npm commands sitting inside
+it are not, and nothing in between said so.
+
+**Not one command.** `npm run drift` and `npm run scan` are in the same README
+paragraph, three lines above, and fail identically. So does every other script in
+the root `package.json`, because all of them resolve a binary out of
+`node_modules/.bin` — vitest, prettier, tsc. The bug was in the entire surface,
+and only visible on the one command a new reader happens to run first.
+
+**Fix.** `scripts/deps.mjs`: if `tsx` is absent, say so in a sentence and run
+`npm install`, then let the real command proceed. Every root script is prefixed
+with `node scripts/deps.mjs && `, and a test asserts that every one of them still
+is, so a script added later cannot quietly reintroduce this for whoever runs it
+first.
+
+**Why a prefix works.** `npm` puts `node_modules/.bin` on `PATH` whether or not
+that directory exists, and `PATH` is resolved when a command is executed rather
+than when the script begins — so a directory that appears midway through an `&&`
+chain is found by the second half. Verified rather than assumed: a probe script
+in a fresh clone printed seven `node_modules/.bin` entries on `PATH`, none of
+which existed. This is what let the fix be additive. The commands after the `&&`
+are byte-for-byte what they were, so no working path changed shape to gain this.
+
+**Three details that are the actual engineering.**
+
+_It probes `tsx`, not `node_modules`._ A tree left by `npm ci --omit=dev` has a
+`node_modules` and none of the tooling, which is exactly the case the guard is
+for — the cheaper test passes precisely when it must not.
+
+_It checks again after installing._ `npm install` can exit 0 against a tree that
+still lacks devDependencies — an `--omit=dev` in someone's `.npmrc` will do it.
+Trusting the exit code there would hand the reader back `'tsx' is not recognized`
+one step later, which is the error the file exists to replace. It names the
+missing path and the likely cause instead.
+
+_It never touches a shell._ On Windows `npm` is `npm.cmd`, and since Node 20.12
+`spawn` refuses a `.cmd` without `shell: true` — which would put a command line
+back through a parser to run one constant command. `npm` sets `npm_execpath` to
+its own JavaScript entry point when it runs a script, so the Node process already
+running can execute that directly: one argv vector, no shell, the same on every
+platform. Absent that variable, it asks rather than guessing at a binary name.
+
+**And it installs rather than instructing.** The counter-argument is that 259 MB
+and a minute or two is a surprise, and this project's rule is to show the plan and
+ask first. That rule is about `.env` and about AWS: things outside the repository,
+things with a blast radius. `npm install` writes to one directory inside the
+folder the reader just cloned, is undone by deleting it, and is the thing they
+would have been told to type anyway. Asking would also make the command fail
+outright when stdin is not a terminal, which is every CI job and every piped
+shell. So it announces, and proceeds.
+
+**Proof.** Five deliberate breakages, each caught by exactly the assertion written
+for it: probe `node_modules` instead of `tsx`; drop the post-install re-check;
+collapse npm's exit code to 1; guess at `npm` when `npm_execpath` is missing;
+remove the guard from one script. Then the real thing, end to end — a fresh
+`git clone` with no `node_modules`, `npm run setup -- --mock --dry-run --yes`,
+which installed and then printed its plan, and a second run that was silent
+because there was nothing to do.
+
+**What to take from it.** **A prerequisite you have satisfied is invisible.**
+Every command in this repository worked on my machine for the same reason: I ran
+`npm install` in week one and never thought about it again. The README was not
+written carelessly — it was written from a directory where the claim was true.
+The general form is that the first five minutes of a project can only be tested
+from a clean machine, and "it works here" is the one piece of evidence that
+cannot establish it.
