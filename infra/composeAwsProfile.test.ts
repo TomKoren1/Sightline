@@ -86,9 +86,14 @@ describe("the real-AWS override for the containerised app", () => {
      * error the mount exists to prevent. Verified by running `docker compose
      * config` with HOME stripped: source became `/.aws` and the only complaint
      * was a warning (engineering log #45).
+     *
+     * USERPROFILE is the fallback rather than a Windows path in .env, because
+     * .env is shared by every shell: a `C:/...` value there is rejected as an
+     * "invalid volume specification" when the same checkout runs Compose from
+     * WSL, whose Linux CLI does not translate drive letters.
      */
-    expect(override, "the mount must accept an explicit override path").toMatch(
-      /\$\{AWS_PROFILE_DIR:-\$\{HOME\}\/\.aws\}/,
+    expect(override, "the mount must fall back to USERPROFILE where HOME is unset").toMatch(
+      /\$\{AWS_PROFILE_DIR:-\$\{HOME:-\$\{USERPROFILE\}\}\/\.aws\}/,
     );
     expect(envExample, "AWS_PROFILE_DIR must be documented for shells without HOME").toMatch(
       /^#\s*AWS_PROFILE_DIR=/m,
@@ -115,9 +120,12 @@ describe("the real-AWS override for the containerised app", () => {
       /drops the mount without saying so/,
     );
     // Windows is the platform this was never tested on, so the guidance for it
-    // must not quietly disappear.
-    expect(flowed, "the README should tell Windows users to set AWS_PROFILE_DIR").toMatch(
-      /On Windows, set `AWS_PROFILE_DIR`/,
+    // must not quietly disappear. COMPOSE_FILE is split on `;` there, so the
+    // `:` form fails unless the separator is set alongside it.
+    expect(readme).toContain("COMPOSE_PATH_SEPARATOR=:");
+    expect(envExample).toMatch(/^#\s*COMPOSE_PATH_SEPARATOR=:/m);
+    expect(flowed, "the README should say what Windows needs").toMatch(
+      /On Windows there is nothing more to set/,
     );
   });
 });

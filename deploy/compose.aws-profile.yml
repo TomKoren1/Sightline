@@ -25,12 +25,12 @@
 services:
   api:
     volumes:
-      # AWS_PROFILE_DIR wins, ${HOME}/.aws is the fallback.
+      # AWS_PROFILE_DIR wins, then ${HOME}/.aws, then ${USERPROFILE}/.aws.
       #
-      # The fallback alone is not portable. Compose treats an unset variable as an
-      # empty string with a *warning*, not an error, so on a shell where HOME is
-      # not set - PowerShell, where the equivalent is USERPROFILE - this silently
-      # becomes `/.aws`, mounts nothing, and produces the same "No source
-      # credentials were found" the mount exists to prevent. Set AWS_PROFILE_DIR
-      # in .env there; see .env.example.
-      - ${AWS_PROFILE_DIR:-${HOME}/.aws}:/root/.aws:ro
+      # HOME alone is not portable. Compose treats an unset variable as an empty
+      # string with a *warning*, so in PowerShell - which sets USERPROFILE, not
+      # HOME - it would silently become `/.aws` and mount nothing. Falling back to
+      # USERPROFILE covers that without a hardcoded path in .env, which matters:
+      # a `C:/...` value there breaks the same .env when Compose runs from WSL,
+      # whose Linux CLI rejects it as an "invalid volume specification".
+      - ${AWS_PROFILE_DIR:-${HOME:-${USERPROFILE}}/.aws}:/root/.aws:ro

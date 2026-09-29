@@ -106,8 +106,13 @@ container with _"No source credentials were found"_. Uncomment this line in
 `.env`:
 
 ```bash
+COMPOSE_PATH_SEPARATOR=:
 COMPOSE_FILE=docker-compose.yml:deploy/compose.aws-profile.yml
 ```
+
+The separator line is for Windows, where Compose splits `COMPOSE_FILE` on `;`
+and otherwise fails with _"The filename, directory name, or volume label syntax
+is incorrect"_. It is harmless elsewhere.
 
 That mounts `~/.aws` read-only, and — the reason it belongs in `.env` rather than
 as `-f` flags on the command line — it applies to **every** subsequent
@@ -115,16 +120,11 @@ as `-f` flags on the command line — it applies to **every** subsequent
 an edited `.env` drops the mount without saying so, and the next connection test
 reports missing credentials for a setup that was working a moment earlier.
 
-**On Windows, set `AWS_PROFILE_DIR` as well:**
-
-```bash
-AWS_PROFILE_DIR=C:/Users/you/.aws
-```
-
-PowerShell does not set `HOME` (its equivalent is `$env:USERPROFILE`), and Compose
-treats an unset variable as an empty string with only a _warning_ — so the mount
-would resolve to `/.aws`, contain nothing, and produce the very error it exists to
-prevent. Git Bash and WSL set `HOME`, so there the fallback is enough.
+**On Windows there is nothing more to set.** PowerShell does not set `HOME`, so
+the mount falls back to `USERPROFILE`; Git Bash and WSL set `HOME`. Avoid
+putting a `C:/...` path in `AWS_PROFILE_DIR` if you ever run Compose from WSL —
+the Linux CLI cannot parse it and the API fails to start with _"invalid volume
+specification"_.
 
 The mount is preferable to putting real keys in `AWS_ACCESS_KEY_ID` /
 `AWS_SECRET_ACCESS_KEY`: it keeps long-lived credentials out of a file sitting
