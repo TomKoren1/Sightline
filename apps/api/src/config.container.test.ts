@@ -18,7 +18,15 @@ import { describe, expect, it } from "vitest";
 import { inContainer } from "./config.js";
 
 const root = fileURLToPath(new URL("../../../", import.meta.url));
-const guide = readFileSync(`${root}apps/web/src/components/ConnectionGuide.tsx`, "utf8");
+const source = readFileSync(`${root}apps/web/src/components/ConnectionGuide.tsx`, "utf8");
+
+/**
+ * The guide with comments removed, because a comment cannot be rendered.
+ *
+ * Assertions here are about what the page shows, and matching a comment instead
+ * of the copy is how one of them passed while the thing it guarded was gone.
+ */
+const guide = source.replace(/\/\*[\s\S]*?\*\//g, "").replace(/^\s*\/\/.*$/gm, "");
 
 describe("container detection", () => {
   it("agrees with the marker the Docker daemon writes", () => {
@@ -45,15 +53,30 @@ describe("the guide renders one restart instruction, matched to the runtime", ()
 
   it("shows the credentials mount only in a container", () => {
     /**
-     * On a host the credential chain finds ~/.aws by itself, so this callout
-     * would be noise - and noise in a security flow is how the parts that matter
-     * stop being read. It must sit inside the containerised branch.
+     * Asserted by call site, not by scanning backwards for the nearest guard -
+     * which is how this passed while the guard had been removed: an unrelated
+     * `{c.containerised && (` earlier in the file satisfied the search. The
+     * content now lives in a named component with exactly one call site, and
+     * that call site has to be guarded.
+     *
+     * On a host the credential chain finds ~/.aws by itself, so showing it there
+     * is noise, and noise in a security flow is how the parts that matter stop
+     * being read.
      */
-    const at = guide.indexOf("COMPOSE_FILE=docker-compose.yml");
-    expect(at, "the mount instruction is gone").toBeGreaterThan(-1);
-    const guard = guide.lastIndexOf("{c.containerised && (", at);
-    expect(guard, "the mount instruction is not inside a containerised-only block").toBeGreaterThan(
-      -1,
+    expect(guide, "the mount instruction is gone").toContain("COMPOSE_FILE=docker-compose.yml");
+
+    const definition = guide.indexOf("function ContainerCredentialsNote()");
+    expect(definition, "ContainerCredentialsNote was renamed or inlined").toBeGreaterThan(-1);
+    const body = guide.slice(definition, guide.indexOf("\n}", definition));
+    expect(body, "the mount instruction moved out of the container-only component").toContain(
+      "COMPOSE_FILE=docker-compose.yml",
+    );
+
+    const callSites = [...guide.matchAll(/<ContainerCredentialsNote\s*\/>/g)];
+    expect(callSites, "expected exactly one call site").toHaveLength(1);
+    const before = guide.slice(Math.max(0, callSites[0]!.index! - 60), callSites[0]!.index!);
+    expect(before, "the call site is not guarded by c.containerised").toContain(
+      "c.containerised &&",
     );
   });
 

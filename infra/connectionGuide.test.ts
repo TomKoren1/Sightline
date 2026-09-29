@@ -34,6 +34,18 @@ const read = (path: string) => readFileSync(root + path, "utf8");
 const guide = read("apps/web/src/components/ConnectionGuide.tsx");
 const template = read("infra/readonly-role.yaml");
 
+/**
+ * The guide with comments stripped, for any assertion about what the page *says*.
+ *
+ * A comment cannot be rendered, and two assertions here have already been
+ * defeated by matching one: a status-word check that fired on the word
+ * "unknowns" inside a doc comment, and the step-count check below, which read
+ * "Five steps, one action each" out of the file header and so passed while the
+ * rendered sentence said four. A test that reads source has to decide which
+ * parts of it are the product; comments never are.
+ */
+const copy = guide.replace(/\/\*[\s\S]*?\*\//g, "").replace(/^\s*\/\/.*$/gm, "");
+
 /** The `Name=value` overrides the rendered deploy command passes. */
 function passedParameters(): string[] {
   const block = /const deployCommand = \[([\s\S]*?)\]\.join/.exec(guide);
@@ -80,7 +92,13 @@ describe("the guide's own claims about itself", () => {
     expect(rendered.length, "no <Step> elements found").toBeGreaterThan(0);
 
     const words: Record<string, number> = { one: 1, two: 2, three: 3, four: 4, five: 5, six: 6 };
-    const claim = /takes (\w+) steps/.exec(guide);
+    /**
+     * Matched on "<number word> steps" rather than the exact sentence it used to
+     * be ("takes five steps"), which coupled the assertion to one phrasing and
+     * failed on a rewrite that had the count right. The invariant is that the
+     * page states a count, not how the sentence reads.
+     */
+    const claim = /\b(one|two|three|four|five|six) steps\b/i.exec(copy);
     expect(claim, "the intro no longer states a step count").toBeTruthy();
     const promised = words[claim![1]!.toLowerCase()];
     expect(promised, `"${claim![1]}" is not a number word this test knows`).toBeDefined();

@@ -2395,3 +2395,56 @@ And the narrower one, which is the third entry on this theme (#17, #28, #31, #36
 one.** Marking the account id told the reader "this is the part to fill in", which
 is a statement about the rest of the string. An honest placeholder marks
 everything it does not know, or it is not a placeholder — it is a suggestion.
+
+---
+
+## #47 — Three assertions that read comments instead of copy
+
+**Context.** The connection page had reached 613 lines and was reported, fairly, as
+_"very confusing, has too much text."_ Rewritten to five steps of one action each,
+with the reasoning moved behind native `<details>` disclosures — the argument for
+each decision is a click away rather than above the command the reader came for,
+and none of it is the only copy, since `docs/DECISIONS.md` carries the same
+reasoning.
+
+**What the rewrite broke, and what that revealed.** Two guards failed immediately,
+which is the system working. Then I tried to prove the rest still fired by
+breaking each on purpose, and **two sabotages came back clean** — the interesting
+result, because a guard that cannot detect its own defect is not a guard.
+
+Both had the same cause: **the assertion matched a comment rather than rendered
+copy.**
+
+1. The step-count check reads the page's claim about itself and compares it to the
+   number of `<Step>` elements. Its regex was case-insensitive, and the rewrite's
+   own file header began _"Five steps, one action each"_. So it matched the
+   comment, got 5, and passed while the rendered sentence said four.
+
+2. The container-only credentials note was verified by finding the text and then
+   scanning **backwards** for the nearest `{c.containerised && (`. The rewrite
+   introduced an unrelated `c.containerised` earlier in the file — one line about
+   credentials inside step 1's warning — so removing the real guard still left the
+   search satisfied.
+
+This is the third time (#39, #42, #45) a cross-artefact test has been defeated by
+the _shape_ of a file rather than its content. The earlier two were fixed locally,
+one assertion at a time.
+
+**Fix, structural this time.** Each test file now derives a comment-stripped copy
+of the component once, and every assertion about what the page _says_ reads that
+instead of the raw source. And the container-only content moved into a named
+`ContainerCredentialsNote` component, so its guard is asserted by **call site** —
+exactly one call site, and that site must be preceded by `c.containerised &&` —
+rather than by a backwards search that any similar-looking line can satisfy.
+
+**What to take from it.** **A test that reads source has to decide which parts of
+that source are the product, and it will not decide correctly by accident.**
+Comments are the obvious non-product part and were repeatedly matched anyway,
+because each assertion was written against the file as it looked that day. The
+fix that finally holds is not a better regex: it is normalising the input once,
+where a future assertion inherits it, and giving the thing being guarded a name so
+it can be found directly instead of inferred from proximity.
+
+Proximity is the weaker idea of the two. "The nearest guard above this text" is a
+guess about structure that happens to be right until the file grows, and a file
+that is being simplified grows in exactly the places that break it.
