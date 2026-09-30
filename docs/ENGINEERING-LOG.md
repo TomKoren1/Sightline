@@ -2038,3 +2038,795 @@ at all**, right up until the day something depends on it. The same shape as #44'
 labels falling through to a working default — but more dangerous, because the two
 earlier cases degraded to something visibly wrong, and this one degraded to
 silence in an audit trail a customer was told to rely on.
+
+---
+
+## #43 — A healthcheck that could never pass on a server that worked
+
+**Context.** Added a second way to run the project: `docker compose --profile app
+up -d` brings up the API and an nginx container serving the built frontend, so a
+reviewer needs no Node on the host. Opt-in on purpose — the default
+`docker compose up -d` still starts exactly the three dependencies it always
+did, because a new path misbehaving on a platform I cannot test must not break
+the documented one.
+
+**Symptom.** `dependency failed to start: container daveio-api is unhealthy` —
+and `web` therefore refused to start at all. Meanwhile the API's own log said:
+
+```
+Server listening at http://127.0.0.1:3000
+Server listening at http://172.19.0.5:3000
+AWS mode: mock
+```
+
+The process was alive, `ps` showed it running, and it had bound two addresses.
+Docker had marked it unhealthy anyway, with an empty healthcheck output and exit
+code 1 — the least informative failure available.
+
+**Cause.** The healthcheck probed `http://localhost:3000`. Inside that image:
+
+```
+# getent hosts localhost
+::1               localhost  localhost
+```
+
+`localhost` resolves to IPv6 loopback, and Fastify bound to `0.0.0.0` listens on
+**IPv4 only** — both addresses in the log are v4. So `wget` connected to `[::1]`
+and got a connection refused, forever, against a server that was serving
+perfectly. Probing `127.0.0.1` from the same shell returned the health JSON
+immediately.
+
+**Fix.** `127.0.0.1` in the healthcheck, with the reason in a comment beside it,
+since the next person to write a healthcheck in this file will reach for
+`localhost` exactly as I did.
+
+Worth noting what did _not_ need changing: the Neo4j and moto healthchecks both
+use `localhost` and have always passed. Their images resolve it differently, or
+their servers bind dual-stack. So the bug is not "never use localhost in a
+healthcheck" — it is that the resolution and the bind have to agree, and nothing
+in either image tells you whether they do.
+
+**Two other things this path needed, both the same shape.** Every connection
+default in `config.ts` is `localhost` — correct on a laptop, wrong inside a
+container. Rather than a second env file that would eventually disagree with the
+first, the container hostnames are set in the compose service's `environment:`
+block, which takes precedence over `env_file`, so `.env` stays the single source
+of truth. And nginx needs `proxy_buffering off` on `/api`, because scans and
+agent answers are server-sent event streams: a buffering proxy delivers the whole
+stream at the end, which removes the live progress without erroring. The Vite dev
+server solves the identical problem in `vite.config.ts`, which is where I went to
+find out what nginx would need.
+
+Seeding is a one-shot service with
+`depends_on: { seed: { condition: service_completed_successfully } }` rather than
+an API entrypoint step, because `seed()` calls `resetMoto()` first: running it on
+every API boot would wipe the account whenever the container restarted, and the
+next scan diff would report every resource as new.
+
+**Verified, not assumed.** The CI job drives the product through nginx rather
+than the API directly: the SPA is served, a deep link falls back to it, the
+seeder exited zero, a scan **streams** — asserted by requiring `unit.finished`
+events in the response, not merely `scan.finished` — and the graph and findings
+come back through the proxy. Locally I also confirmed events arrive a second
+before the run completes rather than all at once.
+
+**A second thing the profile broke, found by asking.** `docker compose down -v`
+no longer cleans up. Compose removes only the services in the **default**
+configuration, so the api, web and seed containers survive — left running against
+databases that have just been deleted — and the network cannot be removed
+(`Resource is still in use`). `--remove-orphans` does not help either: Compose
+v5.5.0 does not treat profiled services as orphans.
+
+So the teardown command is `docker compose --profile app down -v`, which is
+harmless when the profile was never started and therefore the only one worth
+documenting. Verified all four ways round: profile up then plain down (leaks
+three containers), profile up then `--remove-orphans` (still leaks them), profile
+up then profile down (clean), and deps-only then profile down (clean).
+
+This is the more instructive half of the entry. The healthcheck bug announced
+itself; **this one is silent and leaves the system in a state that looks torn
+down.** A convenience added at one end of a workflow changed the meaning of a
+command at the other end, and nothing in the change itself pointed there. The
+only reason it was caught before a reviewer hit it is that someone asked whether
+the old command still worked — which is a better question than it sounds, and the
+honest answer needed an experiment rather than a recollection.
+
+**What to take from it.** **A healthcheck is a claim about a system, and it can
+be wrong in the direction that says "broken" as easily as the direction that says
+"fine".** Most of this log is the second kind — a plausible default hiding a gap
+(#17, #28, #31, #36, #38, #39, #42). This is the first kind, and it is much
+cheaper: it fails loudly, immediately, and blocks startup. A healthcheck that
+wrongly reported _healthy_ would have let `web` start against a dead API and
+produced a blank page with no explanation.
+
+The reason it still cost time is that the failure pointed at the wrong layer.
+"Container unhealthy" reads as "the application is broken", so I went looking at
+the application — which was fine. The empty healthcheck output is what makes this
+expensive: Docker reports that the probe failed without reporting what the probe
+saw. Running the probe by hand inside the container was the step that took ten
+seconds and should have been first.
+
+---
+
+## #44 — Requiring SourceIdentity broke an account that was already connected
+
+**Symptom.** Asked whether the real-AWS connection still worked under the new
+containerised setup. It did not — but not for the reason the question implied.
+
+**First cause, and the expected one.** In the container, `Test connection`
+returned _"No source credentials were found."_ `.env` carries
+`AWS_ACCESS_KEY_ID=mock`, the placeholder, and real mode works **on the host**
+through a two-step fallback nobody had written down: `config.ts` strips the
+`"mock"` placeholder from `process.env` — it would otherwise shadow real
+credentials, which is why that stripping exists — and the SDK's credential chain
+then falls through to `~/.aws/credentials`. A container has no `~/.aws`, so the
+second step lands on nothing.
+
+Fixed with an opt-in override, `deploy/compose.aws-profile.yml`, that mounts the
+host's `~/.aws` read-only. Deliberately a separate file: the path must come from
+`${HOME}`, which is not set on every platform Compose runs on, and an unset
+variable in a volume spec breaks the **entire** compose file — including the mock
+path, which has nothing to do with real AWS. Opt-in costs one flag and cannot
+break anyone who does not use it. The alternative, real long-lived keys in `.env`,
+is worse in a project whose argument is scoped temporary credentials.
+
+**Second cause, which I had caused two commits earlier.** With the profile
+mounted, the assume got further and was refused: _"The role exists but refused to
+be assumed."_ Reading the deployed trust policy explained it:
+
+```json
+"Sid": "AllowDaveIoScannerToSetSourceIdentity",
+"Condition": { "StringLike": { "sts:SourceIdentity": "daveio:*" } }
+```
+
+That role was deployed from the template **before** #42. Every `AssumeRole` now
+sends `SourceIdentity: daveio-system`, `sts:SetSourceIdentity` is a separately
+authorised action, and `daveio-system` does not match `daveio:*` — so the action
+is denied and the whole assume fails.
+
+Which is also the cleanest possible proof that #42 was a real bug rather than a
+tidy-up: **that deployed policy can never accept a request that sets a
+SourceIdentity**, because AWS forbids a colon in the value. It sat there looking
+like a working control for as long as nothing exercised it, and the moment
+something did, it refused every call.
+
+**The cost is the one ADR-007 already named.** Scoping a trust policy precisely
+means the customer has to redeploy when the contract changes. I wrote that as an
+accepted trade-off in an ADR and then experienced it as a broken connection two
+days later, which is a fair summary of what accepted trade-offs feel like in
+practice.
+
+**What I changed, and what I deliberately did not.** `diagnose()` now names this
+as a third cause of `AccessDenied`, quoting the value the scanner sends and the
+pattern an older stack matches, because the denial itself says nothing about
+SourceIdentity and the obvious readings — wrong principal, wrong ExternalId —
+are both wrong here.
+
+What I did **not** do is make the scanner retry without a SourceIdentity on
+`AccessDenied`. It would have fixed this instantly and quietly made attribution
+optional again, which is the whole thing #42 existed to prevent. A fallback that
+silently drops a security property is worse than the error it removes.
+
+**A third thing, found while testing the first two.** `docker compose restart api`
+does not pick up an edited `.env`: it restarts the existing container, whose
+environment was resolved when the container was created. `docker compose
+--profile app up -d api` recreates it and does. Verified both ways by flipping
+`AWS_MODE` and reading `/api/health`: after `restart` it still reported `real`,
+after `up -d` it reported `mock`.
+
+That matters because the Connection screen's step 4 says _"restart the API"_, and
+`restart` is exactly the command a reader would reach for — one that appears to
+succeed and changes nothing. Both the screen and the README now name `up -d api`
+and say why `restart` fails.
+
+**What to take from it.** **A control nothing exercises is not a control, and
+making it real is a breaking change.** #42 found a condition that could never
+match; fixing it turned a decorative clause into an enforced one, and every
+already-deployed stack was relying on it being decorative. The lesson is not
+"don't fix it" — it is that enabling a dormant guarantee is a migration, and
+should be planned like one rather than discovered by the next person who tries to
+connect.
+
+The narrower one, for the third finding: **"restart" meaning "reuse the old
+configuration" is a trap that only exists because the word is borrowed.** Nothing
+in the name suggests the environment is frozen at create time, and the command
+exits zero.
+
+---
+
+## #45 — The documented restart command dropped the credentials it needed
+
+**Symptom.** Asked, before merging, what the sequence actually is: bring the
+containerised app up, then restart the API to pick up a real-account `.env`. Two
+answers, and the second was a defect I had written into the README the day before.
+
+**First, a misconception worth correcting because the docs invited it.**
+`docker compose up -d` does **not** start the app. It starts the three
+dependencies, exactly as it always has — the whole point of making the profile
+opt-in. The app needs `docker compose --profile app up -d`. The README said so in
+one place and then discussed "the containerised path" elsewhere as if `up -d` were
+enough, which is the kind of gap that only shows up when somebody follows it.
+
+**The real defect.** The documented way to give the container real credentials was
+a pair of `-f` flags:
+
+```bash
+docker compose -f docker-compose.yml -f deploy/compose.aws-profile.yml \
+  --profile app up -d
+```
+
+That works. Then the next thing the README told the reader to do — recreate the
+API to pick up an edited `.env` — was:
+
+```bash
+docker compose --profile app up -d api
+```
+
+No flags. So Compose recreated the container from the base file alone, **silently
+dropping the `~/.aws` mount**, and the connection test reported _"No source
+credentials were found"_ for a setup that had worked sixty seconds earlier.
+Verified exactly that way: mount present, edit `.env`, run the documented restart,
+mount gone, credentials gone.
+
+The two instructions were each correct and the pair was not. A reader following
+them in order breaks their own working setup, and the error blames credentials
+rather than the command that removed them.
+
+**Fix.** `COMPOSE_FILE` in `.env`, commented out by default:
+
+```bash
+COMPOSE_FILE=docker-compose.yml:deploy/compose.aws-profile.yml
+```
+
+Compose applies it to **every** invocation, so there is no longer a command that
+can forget the override. Confirmed: with it set, the same
+`--profile app up -d api` that previously dropped the mount now keeps it, and the
+connection gets far enough to fail on the deployed role's stale SourceIdentity
+pattern instead (#44) — a different, honest error.
+
+Left commented because uncommenting it makes every compose command mount
+`${HOME}/.aws`, including the mock path for someone who never touches real AWS, on
+platforms where `HOME` may not be set at all.
+
+**The guard.** `infra/composeAwsProfile.test.ts` ties together three artefacts
+that previously had nothing in common: the `COMPOSE_FILE` line in `.env.example`,
+the override file it names, and the README passage telling people to use it. It
+asserts the setting is documented as `COMPOSE_FILE` rather than as flags, that
+every file it names exists, that it stays commented out, that the mount is
+read-only and touches only the `api` service — the seeder in particular must never
+get real credentials, since it writes — and that the README still explains _why_,
+not merely what to type. All five proven by breaking them.
+
+One assertion was wrong first, in a way worth recording: it matched a README
+phrase with a regex that assumed the words sat on one line. Prettier wraps prose,
+so the phrase spanned a line break and the test failed on formatting rather than
+on meaning. It now collapses whitespace before matching. **Third time a
+cross-artefact test has been defeated by the shape of the file rather than its
+content** (#39, #42), and the lesson is the same each time: when a test reads a
+document, normalise the document first.
+
+**What to take from it.** **Two correct commands can compose into a broken
+procedure, and documentation is where that happens.** Nothing was wrong with
+either instruction in isolation; the defect lived in the transition between them,
+which is precisely the part no test covered and no reviewer reads as a unit. The
+fix was not better wording — it was removing the state the reader had to carry
+between commands. A setting in a file cannot be forgotten on the next invocation;
+a flag can.
+
+Second, smaller: **"restart" and "recreate" are different operations and only one
+of them reads configuration.** `docker compose restart api` exits zero and
+silently reuses the environment frozen at create time (#44). Both failures in this
+pair come from a command that succeeds while doing less than its name suggests.
+
+---
+
+## #46 — The legend said "filled in" above a placeholder
+
+**Symptom.** A real deployment, on a second machine:
+
+```
+aws cloudformation deploy ... DaveIoScannerRoleArn=arn:aws:iam::672299759593:role/DaveIoScanner
+aws: [ERROR]: Failed to create/update the stack.
+```
+
+`describe-stack-events` gave the reason:
+
+```
+Invalid principal in policy: "AWS":"arn:aws:iam::672299759593:role/DaveIoScanner"
+```
+
+`role/DaveIoScanner` does not exist in that account. The identity that does is
+`user/terraform-bootstrap`. The stack rolled back cleanly, so nothing was damaged
+— but nothing about the error says _which half_ of the ARN was wrong, and a reader
+who supplied the account id themselves will reasonably assume the account id is
+the part being rejected.
+
+**Cause, and it is in the feature built to prevent exactly this.** #39 added a
+`Fields` legend under every command block, tagging each value **filled in** or
+**you replace**, because handing someone a command without saying which parts are
+theirs is how they deploy into the wrong place. Two defects in that work:
+
+1. **`DaveIoScannerRoleArn` was tagged `kind: "filled"` unconditionally**, with the
+   note _"the identity this backend runs as"_. But the value is
+   `c.scannerPrincipal ?? <fallback>` — when the backend cannot resolve its own
+   identity (no credentials, or a container without the profile mount) the command
+   carries a **placeholder** and the legend still said it was filled in. The one
+   element on the page whose entire job is to distinguish real values from blanks
+   was asserting the blank was real.
+
+2. **The fallback marked one blank and hid two.**
+   `arn:aws:iam::<account>:role/DaveIoScanner` invites exactly one substitution.
+   The account id is visibly a placeholder; `role/DaveIoScanner` is not — it reads
+   like a name someone chose. Substitute the marked blank and you get a
+   syntactically perfect ARN for a principal that does not exist, which passes the
+   template's own `AllowedPattern` and fails in IAM.
+
+Together: the page said the value was correct, and the value looked correct. There
+was no signal available to the reader at all.
+
+**Fix.** The fallback marks every unknown segment —
+`arn:aws:iam::<account-id>:<role-or-user>/<name-of-this-identity>` — so no partial
+substitution can produce something plausible. The legend branches on
+`principalUnresolved`, reading _"NOT filled in — this backend could not work out
+its own identity"_ with the command to get it. And the warning above now says
+**"Do not run the command above as it stands"** rather than "contains a
+placeholder", names the `Invalid principal in policy` error the reader will
+otherwise meet, and says the role name is a placeholder too.
+
+**Two guards had to change, and both were wrong in the same interesting way.** The
+`kind: "replace"` count asserted exactly one across the whole file; making the
+scanner principal _conditionally_ the reader's value made it two, so an assertion
+that was only ever true by accident broke on an improvement. It is now scoped to
+the `.env` block, where "exactly one value is yours" is a real invariant. And the
+no-status-words check fired on the word "unknowns" inside a doc comment explaining
+this bug — the guard reporting its own explanation as a defect. It now strips
+comments first, because a comment cannot be rendered.
+
+**What to take from it.** **The mechanism that distinguishes real from placeholder
+has to be correct in the case where the value is missing — which is the only case
+it exists for.** Tagged values were right whenever the backend knew its identity,
+and wrong precisely when it did not: the legend was decoration in the working case
+and a lie in the failing one. #42 was a trust-policy condition that could never
+match; this is a label that could never be wrong when it mattered and never right
+when it did.
+
+And the narrower one, which is the third entry on this theme (#17, #28, #31, #36,
+#38, #39, #42, #45): **a partially-marked placeholder is worse than an unmarked
+one.** Marking the account id told the reader "this is the part to fill in", which
+is a statement about the rest of the string. An honest placeholder marks
+everything it does not know, or it is not a placeholder — it is a suggestion.
+
+---
+
+## #47 — Three assertions that read comments instead of copy
+
+**Context.** The connection page had reached 613 lines and was reported, fairly, as
+_"very confusing, has too much text."_ Rewritten to five steps of one action each,
+with the reasoning moved behind native `<details>` disclosures — the argument for
+each decision is a click away rather than above the command the reader came for,
+and none of it is the only copy, since `docs/DECISIONS.md` carries the same
+reasoning.
+
+**What the rewrite broke, and what that revealed.** Two guards failed immediately,
+which is the system working. Then I tried to prove the rest still fired by
+breaking each on purpose, and **two sabotages came back clean** — the interesting
+result, because a guard that cannot detect its own defect is not a guard.
+
+Both had the same cause: **the assertion matched a comment rather than rendered
+copy.**
+
+1. The step-count check reads the page's claim about itself and compares it to the
+   number of `<Step>` elements. Its regex was case-insensitive, and the rewrite's
+   own file header began _"Five steps, one action each"_. So it matched the
+   comment, got 5, and passed while the rendered sentence said four.
+
+2. The container-only credentials note was verified by finding the text and then
+   scanning **backwards** for the nearest `{c.containerised && (`. The rewrite
+   introduced an unrelated `c.containerised` earlier in the file — one line about
+   credentials inside step 1's warning — so removing the real guard still left the
+   search satisfied.
+
+This is the third time (#39, #42, #45) a cross-artefact test has been defeated by
+the _shape_ of a file rather than its content. The earlier two were fixed locally,
+one assertion at a time.
+
+**Fix, structural this time.** Each test file now derives a comment-stripped copy
+of the component once, and every assertion about what the page _says_ reads that
+instead of the raw source. And the container-only content moved into a named
+`ContainerCredentialsNote` component, so its guard is asserted by **call site** —
+exactly one call site, and that site must be preceded by `c.containerised &&` —
+rather than by a backwards search that any similar-looking line can satisfy.
+
+**What to take from it.** **A test that reads source has to decide which parts of
+that source are the product, and it will not decide correctly by accident.**
+Comments are the obvious non-product part and were repeatedly matched anyway,
+because each assertion was written against the file as it looked that day. The
+fix that finally holds is not a better regex: it is normalising the input once,
+where a future assertion inherits it, and giving the thing being guarded a name so
+it can be found directly instead of inferred from proximity.
+
+Proximity is the weaker idea of the two. "The nearest guard above this text" is a
+guess about structure that happens to be right until the file grows, and a file
+that is being simplified grows in exactly the places that break it.
+
+---
+
+## #48 — "Provide credentials" was the whole diagnosis
+
+**Symptom.** Reported by someone following the new five-step onboarding on a fresh
+Windows machine:
+
+```
+No source credentials were found.
+In AWS_MODE=real the standard AWS credential chain is used.
+Provide credentials, or an instance or task role.
+
+CredentialsProviderError
+```
+
+Accurate, and useless. They _had_ provided credentials, by one of the two routes
+the page offers.
+
+**Why it was useless.** `CredentialsProviderError` means "nothing in the chain
+produced credentials". In a container that has at least three distinct causes,
+each needing a different fix, and **none of them is visible from outside the
+container**:
+
+1. No keys in the environment and no profile mounted.
+2. The mock's placeholder still in `AWS_ACCESS_KEY_ID`. It is deliberately
+   stripped from `process.env` at startup — being first in the SDK's chain it
+   would otherwise shadow everything else — so the reader has set a variable, the
+   warning about it scrolls past in the container log they are not watching, and
+   the effect is identical to not setting it.
+3. A profile mounted from the wrong host path. On Windows this is what an unset
+   `HOME` produces: Compose resolves `${HOME}/.aws` to `/.aws`, the mount
+   succeeds, and the directory is empty (#45).
+
+A reader cannot tell these apart by inspection, and the message invited the one
+action — "provide credentials" — that they had already taken.
+
+**Fix.** `credentialSources()` reports what the chain actually has: whether a key
+is set, whether it is _shaped_ like a real one, whether the profile directory
+exists, and which files are in it. Presence and shape only, never a value — a
+diagnosis that leaks half a secret into a UI is not an improvement, and that is
+asserted rather than intended. `diagnose()` renders it as a "What was checked"
+line, and the remedy branches on whether the API is containerised.
+
+The three failure modes now read:
+
+- _AWS_ACCESS_KEY_ID is not set; no ~/.aws profile directory at all, so no profile
+  was mounted_
+- _AWS_ACCESS_KEY_ID is set but is not shaped like a real key (real ones start
+  AKIA/ASIA), so it was removed to stop it shadowing the rest of the chain_
+- _a ~/.aws directory exists but is EMPTY, which means the mount resolved to the
+  wrong host path — on Windows that is an unset HOME, so set AWS_PROFILE_DIR_
+
+All three reproduced in the container before and after, and the success path
+re-checked: with a real profile mounted the error moves on to `AccessDenied`,
+which is the deployed role's stale trust policy (#44) and no longer a credentials
+problem.
+
+**Two guards missed, both conditional on state that cannot occur.** This is the
+part worth recording.
+
+The empty-versus-absent assertion was written as _"if there are files, the
+directory must exist"_ — true, trivial, and untestable on a machine with a
+populated `~/.aws`, which is every machine I run tests on. It passed while the
+distinction it guards was removed. It now builds real directories in a temp home
+and checks all three states.
+
+The placeholder assertion was conditioned on seeing `AWS_ACCESS_KEY_ID=mock` in
+`process.env` — which **the code under test deletes at import time**, that being
+its entire purpose. The condition was never true, so the assertion never ran. The
+shape check is now a table-driven test of an exported pure function, for the same
+reason `toSourceIdentity` (#42) and `isTerminalApiError` (#40) are separate
+functions: a branch reachable only through frozen module state is a branch no test
+will reach.
+
+And one sabotage of my own was wrong: I widened the key regex's character class to
+accept lowercase, and nothing failed — because lowercase is rejected by the
+_prefix alternation_, not the character class. The realistic regression is adding
+an `/i` flag, which does fire. **Breaking a guard tells you nothing unless you
+broke the thing it guards.**
+
+**A follow-up, from the same reader hitting the improved message.** It read:
+
+> _AWS_ACCESS_KEY_ID is set but is not shaped like a real key (real ones start
+> AKIA/ASIA), so it was removed_
+
+Better, and still one step short: "not shaped like a real key" covers both _"you
+have not replaced the placeholder"_ and _"the value you pasted is wrong"_, which
+need different actions. Describing the shape of a value the reader never chose is
+a description of the wrong thing.
+
+Before assuming, I checked what could mangle a genuine key on Windows, since
+that is where this was reported. Compose's `env_file` handles all three
+candidates cleanly — `cat -A` on the container's own environment shows quotes
+stripped, a trailing space stripped, and **CRLF stripped** — so none of them was
+the cause, and the value really was a non-key.
+
+So `credentialSources()` now reports `envKeyIsMockPlaceholder` and `envKeyLength`,
+and the message splits:
+
+- _AWS_ACCESS_KEY_ID is still the placeholder "mock" that .env.example ships — it
+  has not been replaced_
+- _AWS_ACCESS_KEY_ID is set (38 characters) but does not start AKIA or ASIA …
+  check you pasted the access key id rather than the secret_
+
+Length, never the value. A test asserts the constant matches what `.env.example`
+actually ships, because a message naming a string the reader has never seen is
+worse than a vague one.
+
+**What to take from it.** **An error message is a diagnosis, and a diagnosis that
+lists every possible cause is a diagnosis of none of them.** This project already
+argued that for AWS failures — `AccessDenied` versus "the trust policy does not
+name this principal" (#28) — and then shipped the generic version for the
+credential chain, which is the first thing a new user meets. The fix was not
+better wording: it was _looking_, and reporting what was found.
+
+Second: **a conditional assertion is a test that may not exist.** Both misses here
+were `if (something) expect(...)`, where the condition depended on ambient state.
+The pattern is seductive because it makes a test pass everywhere; that is also
+exactly what makes it worthless. If a branch needs particular state, the test has
+to construct it.
+
+---
+
+## #49 — Two bugs found by testing my own script, and one visible in its output
+
+**Context.** Four defects reached a user following the connection steps on a second
+machine, each a product bug rather than their mistake. The conclusion was that
+hand-editing `.env` and copying a CloudFormation command is too many chances to be
+wrong, so `npm run setup` now does it (ADR-015).
+
+A script that writes someone's configuration and deploys to their AWS account has
+to be held to a higher standard than the thing it replaces, so this records what
+testing it found — including the part where I was wrong about my own plan.
+
+**What I got wrong first.** The proposal on the table was a **form in the product**.
+It would not have worked, and I only saw why when I checked what the container can
+reach: the API has no AWS CLI, no permission to create an IAM role, and no access
+to the `.env` on the host. A form could have collected a role ARN into a database;
+the reader would still have run the CloudFormation command by hand, which is
+exactly where the four failures were. It would have removed the smaller half of the
+work and cost a rewrite of ADR-010 to do it.
+
+The suggestion that replaced it — a script — is better for a reason worth stating:
+**it runs where the capability already is.** The user's AWS CLI, their SSO session,
+their `.env`, their Docker. No new endpoint, no authentication question, ADR-010
+untouched.
+
+**Bug 1: the script appended a new heading every run.** `applyEnvEdits` writes
+unknown keys under a `# --- written by npm run setup ---` marker. A second run that
+added a _different_ key appended a _second_ marker, so a user's `.env` accumulated
+one block per run. Nothing broke — which is why it would have gone unnoticed
+indefinitely. It just quietly degrades a file the script promised to treat
+carefully. Found by a test asserting the marker appears once; it now appends under
+the existing one.
+
+**Bug 2: the script rotated a working secret.** It generated a fresh ExternalId on
+every run. The stack's trust policy requires the value `.env` holds, so re-running
+would have invalidated a connection that worked until the stack was redeployed with
+the new value — **the script breaking the setup it had just made.** Caught by
+running `--dry-run` twice and noticing an ExternalId change on a deployment that
+was already correct. `chooseExternalId()` now reuses one in use, and only treats
+the shipped placeholder as absent.
+
+**Bug 3, visible in the first successful run.** It wrote `.env` twice, with two
+confirmations and two backup files, because the profile mount was decided _after_
+the connection was written. One operation, two mutations, two chances to be
+interrupted half-done. Containerisation is now resolved before the edits are built,
+and it is one write.
+
+**What testing the failure paths found.** Nothing, which is the point of recording
+it. Duplicate keys, absent credentials, an unusable AWS CLI and a failed deploy all
+stop with an actionable message, exit non-zero, and leave `.env` byte-identical —
+verified by sha256 before and after each. The deploy failure quotes
+CloudFormation's own reason _and_ explains it, because the alternative is what a
+user hit for real: `Invalid principal in policy`, which names neither which half of
+the ARN was wrong nor how to find the right one.
+
+**Two of my own sabotages were wrong,** and both times the guard was fine. A PATH
+without `aws` also had no `node`, because both live in `/usr/bin` on this machine;
+and a non-executable `aws` stub earlier in PATH is _skipped_ by the OS, which then
+finds the real one. A stub that is executable and exits non-zero is the test that
+actually exercises the branch. **Breaking a guard proves nothing unless the break
+reached the thing it guards** — the third time that has come up in this log.
+
+**What to take from it.** **Automation that edits a user's files has to prove its
+restraint, not assert it.** The load-bearing piece is not `applyEnvEdits`, which is
+tested; it is `untouchedKeys()`, which checks the _produced content_ before writing
+and refuses if anything undeclared moved. That is a backstop against a bug in the
+tested code, and it costs one function.
+
+Second: **the most dangerous bug in a setup script is the one that succeeds.** All
+three found here produced a working outcome — a slightly messier file, a rotated
+secret, a duplicated write. None would have surfaced as an error, and two would
+have been blamed on something else entirely when they eventually bit: a connection
+that "just stopped working" after re-running setup is not a sentence anyone
+connects to a heading in a `.env`.
+
+---
+
+## #50 — The secret scanner caught the test that mirrors the secret scanner
+
+**Symptom.** Three CI runs in a row failed the secret scan, each on a different
+instance of the same mistake, and the third is the one worth the entry.
+
+**First.** A masking test used `sk-ant-api03-…` as a fixture. This repository's own
+gitleaks rule matches that, so the scan failed. The shape was irrelevant to what the
+test asserted — masking is decided by the variable **name**, not by whether the
+value looks like a credential — so the fixture was simply wrong to write that way.
+The lesson was already recorded on another branch ("stop shaping test fixtures like
+real Anthropic keys"), and I repeated it, which is the argument for a guard rather
+than for care.
+
+**So I wrote the guard:** `setup/fixtures.test.ts` applies `.gitleaks.toml`'s rules
+in the unit suite, so the feedback arrives while a fixture is being written rather
+than minutes later in CI. It reads the patterns **from** the config rather than
+restating them, translating Go's inline `(?i)` which JS rejects, and honours each
+rule's own allowlist so documented placeholders are not flagged.
+
+It immediately found a second one, in `.github/workflows/ci.yml`: the step that
+checks `.env.example` for a real ExternalId used an `AWS_EXTERNAL_ID=` prefix
+followed by a negative lookahead for the two placeholders — which matches the rule
+for real ExternalIds. A file describing the check tripping the check. Rewritten as
+two greps, verified still to catch a planted secret and still to permit the
+placeholder.
+
+**Then the third, which is the interesting one.** gitleaks flagged
+`fixtures.test.ts`. Its **positive controls** are credential-shaped strings, by
+necessity: a test proving it detects them needs one to detect. Written as literals
+that fails the scan for ever, and allowlisting the file instead would silence it on
+the day something real is pasted in.
+
+Fixed by assembling the probes at run time —
+`["sk", "ant", "a".repeat(22)].join("-")` — which both scanners read as
+unremarkable text, because both read text. The comment beside them says not to fold
+them back into literals, because a literal reads as simpler and is what the next
+tidy-up reaches for.
+
+**And why the guard did not catch itself.** It used `git ls-files`, which does not
+list a file that has not been committed. The suite passed locally, the commit
+landed, and gitleaks found it a minute later. Now
+`--cached --others --exclude-standard`, so a brand-new file is in scope — verified
+by planting a literal in an uncommitted file and watching it fail.
+
+**One more turn of the same screw.** Fixing the tree still did not clear CI, because
+gitleaks scans a pull request's **commit range**, not its tree: the findings were
+reported against the commits that introduced the literals. Both are synthetic and
+nothing needed rotating, so two commits are allowlisted **by SHA** — following the
+call already made for a genuinely rotated Cloudflare token. By SHA and not by path,
+because allowlisting the file would blind the scanner to that file for ever, and
+verified by planting a literal and watching both the guard and the scan still
+object.
+
+**What to take from it.** **A check that mirrors another check inherits its
+blind spots and its trigger conditions.** Every failure here was the scanner working
+correctly; the bug each time was mine, in the fixture. That is the good case — but
+it cost three CI runs because the fix and the thing being fixed kept overlapping,
+and each round the overlap moved: the value, then the file describing the value,
+then the test describing the file.
+
+**A fourth instance, in this entry.** The paragraph above originally quoted that CI
+pattern verbatim, so committing the write-up failed the guard — a log describing the
+bug reproducing the bug. It is now described rather than quoted. Worth recording
+because it is the cheapest possible demonstration of the shape: anything that
+_discusses_ a credential pattern is itself a file the scanners read.
+
+The narrow, reusable lessons: **a test's fixtures are part of the codebase the
+scanners read**, so a synthetic secret is a real liability with none of the danger;
+**a guard that reads the repository must decide what "the repository" means**, and
+`ls-files` quietly excludes the file you are writing; and **a scanner that reads
+history is not satisfied by a clean tree**, so fixing forward and re-running is not
+the same as fixing.
+
+---
+
+## #51 — The first command in the README did not run on a clean machine
+
+**Symptom.** On a second laptop, following the README from the top:
+
+```
+'tsx' is not recognized as an internal or external command,
+operable program or batch file.
+```
+
+from `npm run setup -- --anthropic-key sk-ant-...`. Reproduced in three seconds
+with `git clone` into an empty directory — the same failure, phrased by the shell
+of the day (`sh: 1: tsx: not found`).
+
+**Cause.** `npm run setup` ran `tsx apps/api/src/cli/setup.ts`, and `tsx` is a
+devDependency. Nothing had ever run `npm install`, because the README says
+"You need Docker. Nothing else" and then hands the reader an npm command. The
+containerised path is genuinely self-contained; the npm commands sitting inside
+it are not, and nothing in between said so.
+
+**Not one command.** `npm run drift` and `npm run scan` are in the same README
+paragraph, three lines above, and fail identically. So does every other script in
+the root `package.json`, because all of them resolve a binary out of
+`node_modules/.bin` — vitest, prettier, tsc. The bug was in the entire surface,
+and only visible on the one command a new reader happens to run first.
+
+**Fix.** `scripts/deps.mjs`: if `tsx` is absent, say so in a sentence and run
+`npm install`, then let the real command proceed. Every root script is prefixed
+with `node scripts/deps.mjs && `, and a test asserts that every one of them still
+is, so a script added later cannot quietly reintroduce this for whoever runs it
+first.
+
+**Why a prefix works.** `npm` puts `node_modules/.bin` on `PATH` whether or not
+that directory exists, and `PATH` is resolved when a command is executed rather
+than when the script begins — so a directory that appears midway through an `&&`
+chain is found by the second half. Verified rather than assumed: a probe script
+in a fresh clone printed seven `node_modules/.bin` entries on `PATH`, none of
+which existed. This is what let the fix be additive. The commands after the `&&`
+are byte-for-byte what they were, so no working path changed shape to gain this.
+
+**Three details that are the actual engineering.**
+
+_It probes `tsx`, not `node_modules`._ A tree left by `npm ci --omit=dev` has a
+`node_modules` and none of the tooling, which is exactly the case the guard is
+for — the cheaper test passes precisely when it must not.
+
+_It checks again after installing._ `npm install` can exit 0 against a tree that
+still lacks devDependencies — an `--omit=dev` in someone's `.npmrc` will do it.
+Trusting the exit code there would hand the reader back `'tsx' is not recognized`
+one step later, which is the error the file exists to replace. It names the
+missing path and the likely cause instead.
+
+_It never touches a shell._ On Windows `npm` is `npm.cmd`, and since Node 20.12
+`spawn` refuses a `.cmd` without `shell: true` — which would put a command line
+back through a parser to run one constant command. `npm` sets `npm_execpath` to
+its own JavaScript entry point when it runs a script, so the Node process already
+running can execute that directly: one argv vector, no shell, the same on every
+platform. Absent that variable, it asks rather than guessing at a binary name.
+
+**And it installs rather than instructing.** The counter-argument is that 259 MB
+and a minute or two is a surprise, and this project's rule is to show the plan and
+ask first. That rule is about `.env` and about AWS: things outside the repository,
+things with a blast radius. `npm install` writes to one directory inside the
+folder the reader just cloned, is undone by deleting it, and is the thing they
+would have been told to type anyway. Asking would also make the command fail
+outright when stdin is not a terminal, which is every CI job and every piped
+shell. So it announces, and proceeds.
+
+**Proof.** Five deliberate breakages, each caught by exactly the assertion written
+for it: probe `node_modules` instead of `tsx`; drop the post-install re-check;
+collapse npm's exit code to 1; guess at `npm` when `npm_execpath` is missing;
+remove the guard from one script. Then the real thing, end to end — a fresh
+`git clone` with no `node_modules`, `npm run setup -- --mock --dry-run --yes`,
+which installed and then printed its plan, and a second run that was silent
+because there was nothing to do.
+
+**And then it broke the container, which is the part I did not see coming.** The
+fix made every root script depend on a _file_, and the API image does not copy the
+whole repository — it copies `packages/`, `apps/api/` and two configs, by design,
+so that a code change does not reinvalidate the `npm ci` layer. `scripts/` was not
+in that list. The compose `seed` service runs `npm run seed`, so it died with
+`Cannot find module /app/scripts/deps.mjs`, and because the API waits on
+`service_completed_successfully` the whole `app` profile came down with it — the
+one-command path in the README, broken by the fix to the other command in the
+README. Caught by CI, three minutes after the commit that caused it.
+
+One `COPY` fixes it. The guard is a no-op inside the image, since `npm ci` there
+installs devDependencies deliberately. `infra/dockerfileScripts.test.ts` is the
+part worth keeping: it resolves each stage's `FROM` chain, finds every compose
+service and `CMD` that runs a _root_ script — workspace-scoped `-w` invocations
+resolve elsewhere and are excluded — and asserts the stage copies `scripts/`.
+One of its three assertions exists only to prove the other two are looking at
+something, because a parser that silently matches nothing passes every test built
+on it. All three were verified by breaking them.
+
+**What to take from it.** **A prerequisite you have satisfied is invisible.**
+Every command in this repository worked on my machine for the same reason: I ran
+`npm install` in week one and never thought about it again. The README was not
+written carelessly — it was written from a directory where the claim was true.
+The general form is that the first five minutes of a project can only be tested
+from a clean machine, and "it works here" is the one piece of evidence that
+cannot establish it.
+
+That has a second half here. The container had satisfied it too — `npm ci` runs in
+the image — so the only thing missing was the file, and nothing in either the
+`package.json` or the `Dockerfile` hints that the other exists. **A guard that adds
+a dependency is a change to every environment that runs the guarded thing**, and
+the environments that are not your laptop are the ones that find out.

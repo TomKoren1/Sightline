@@ -210,9 +210,13 @@ Resources:
             Principal:
               AWS: !Ref DaveIoScannerRoleArn
             Action: sts:SetSourceIdentity
+            # No sts:ExternalId condition here. That key is only in the request
+            # context of sts:AssumeRole, so on this action it is absent and a
+            # StringEquals on it never matches - every assume was refused with
+            # "not authorized to perform: sts:SetSourceIdentity". The ExternalId
+            # is still enforced: this action is only evaluated as part of an
+            # AssumeRole, which the statement above gates on it.
             Condition:
-              StringEquals:
-                sts:ExternalId: !Ref ExternalId
               StringLike:
                 # Attributes every session to a named dave.io operator or
                 # system, immutably, in this account's own CloudTrail.

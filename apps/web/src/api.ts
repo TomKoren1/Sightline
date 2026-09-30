@@ -114,6 +114,8 @@ export interface Connection {
   /** Set when AWS_TARGET_ROLE_ARN cannot be assumed at all. */
   roleArnProblem: string | null;
   mode: "mock" | "real";
+  /** True when the API runs in a container, so the guide shows the right restart. */
+  containerised: boolean;
   /** What .env says, so the UI can show when the toggle has diverged. */
   configuredMode: "mock" | "real";
   realAccountConfigured: boolean;

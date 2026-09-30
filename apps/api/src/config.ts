@@ -3,6 +3,7 @@
 import { fileURLToPath } from "node:url";
 
 import { config as loadDotenv } from "dotenv";
+import { existsSync, readdirSync } from "node:fs";
 import { z } from "zod";
 
 import { validateAssumeRoleTarget } from "./aws/principal.js";
@@ -271,7 +272,14 @@ export function targetRoleProblem(): string | null {
  * Real ones carry a documented prefix and a fixed shape. The placeholder value
  * shipped in `.env.example` for talking to the mock does not.
  */
-function looksLikeRealAccessKey(value: string | undefined): boolean {
+/**
+ * The placeholder `.env.example` ships, so "you have not replaced it yet" can be
+ * distinguished from "your value is wrong". Those need different actions and the
+ * old message covered both with one sentence.
+ */
+export const MOCK_ACCESS_KEY_PLACEHOLDER = "mock";
+
+export function looksLikeRealAccessKey(value: string | undefined): boolean {
   return Boolean(value && /^(AKIA|ASIA|ABIA|ACCA|A3T)[A-Z0-9]{12,}$/.test(value));
 }
 
@@ -361,6 +369,70 @@ export function sourceCredentials(): { accessKeyId: string; secretAccessKey: str
     : undefined;
 }
 
+/**
+ * Where the AWS credential chain looks for a shared profile.
+ *
+ * Exported so the diagnosis below can be tested against a directory that exists
+ * and is empty, which is the Windows failure mode and cannot be reproduced by
+ * whatever happens to be on the machine running the tests.
+ */
+export function awsProfileDir(home = process.env["HOME"] ?? "/root"): string {
+  return `${home}/.aws`;
+}
+
+/**
+ * What the AWS credential chain has to work with, for diagnosis.
+ *
+ * `CredentialsProviderError` means "nothing in the chain produced credentials",
+ * which is accurate and tells a reader nothing about which link is missing. In a
+ * container there are two plausible answers and they need opposite fixes: no keys
+ * in the environment, or no `~/.aws` because the host's profile was never
+ * mounted. Enumerating both turns one generic sentence into a specific one
+ * (engineering log #48).
+ *
+ * Reports only presence and shape, never a value. A diagnosis that leaks half a
+ * secret into a UI is not an improvement.
+ */
+export function credentialSources(): {
+  containerised: boolean;
+  envKeySet: boolean;
+  envKeyLooksReal: boolean;
+  /** The value is still the placeholder `.env.example` ships for the mock. */
+  envKeyIsMockPlaceholder: boolean;
+  /**
+   * Length only, so a truncated or half-pasted key is visible without printing
+   * one. An access key id is an identifier rather than a secret, and even so
+   * there is no reason to echo it.
+   */
+  envKeyLength: number;
+  /** The directory exists, whether or not it holds anything. */
+  profileDirExists: boolean;
+  profileFiles: string[];
+} {
+  const dir = awsProfileDir();
+  let profileFiles: string[] = [];
+  try {
+    profileFiles = readdirSync(dir);
+  } catch {
+    // Absent or unreadable; both mean the chain cannot use it.
+  }
+  return {
+    containerised: inContainer(),
+    envKeySet: Boolean(cfg.AWS_ACCESS_KEY_ID),
+    envKeyLooksReal: looksLikeRealAccessKey(cfg.AWS_ACCESS_KEY_ID),
+    envKeyIsMockPlaceholder: cfg.AWS_ACCESS_KEY_ID === MOCK_ACCESS_KEY_PLACEHOLDER,
+    envKeyLength: cfg.AWS_ACCESS_KEY_ID?.length ?? 0,
+    /**
+     * Existence is reported separately from contents, because the two point at
+     * different fixes. An empty directory means the mount landed on the wrong
+     * path - the Windows case, where an unset HOME resolves the source to
+     * `/.aws` - while an absent one means no mount was configured at all.
+     */
+    profileDirExists: existsSync(dir),
+    profileFiles,
+  };
+}
+
 /** Regions configured for scanning, or `null` to discover them from AWS. */
 export function configuredRegions(): string[] | null {
   const raw = cfg.AWS_SCAN_REGIONS.trim();
@@ -409,6 +481,24 @@ const SOURCE_IDENTITY_ALLOWED = /[^A-Za-z0-9_+=,.@-]/g;
 export function toSourceIdentity(operator: string): string {
   const cleaned = operator.replace(SOURCE_IDENTITY_ALLOWED, "-").replace(/^-+|-+$/g, "");
   return `${SOURCE_IDENTITY_PREFIX}${cleaned || "system"}`.slice(0, 64);
+}
+
+/**
+ * Whether this process is running inside a container.
+ *
+ * Used by the onboarding guide to show the restart command that applies here
+ * rather than both and a rule for choosing. The two differ in a way that
+ * matters: on a host the API is restarted, in a container it has to be
+ * *recreated*, because `docker compose restart` reuses the environment resolved
+ * when the container was created and so ignores an edited `.env` entirely
+ * (engineering log #44).
+ *
+ * `/.dockerenv` is written by the Docker daemon into every container it starts.
+ * It is a heuristic - a different runtime may not create it - so it is only ever
+ * used to pick which instructions to show, never to decide anything about AWS.
+ */
+export function inContainer(): boolean {
+  return existsSync("/.dockerenv");
 }
 
 /** The value sent as `sts:SourceIdentity` on every AssumeRole. */

@@ -24,11 +24,14 @@ import { STSClient, GetCallerIdentityCommand } from "@aws-sdk/client-sts";
 import {
   activeConnection,
   cfg,
+  credentialSources,
   configuredMode,
   configuredRegions,
   currentMode,
+  inContainer,
   isMock,
   setMode,
+  sourceIdentity,
   targetRoleProblem,
 } from "../config.js";
 import { assumablePrincipalArn } from "../aws/principal.js";
@@ -71,13 +74,32 @@ function diagnose(
         `DaveIoScannerRoleArn=${callerIdentity}, or give this host credentials for the principal it does name. ` +
         "Check with: aws iam get-role --role-name DaveIoReadOnlyRole --query 'Role.AssumeRolePolicyDocument'"
       : "";
+
+    /**
+     * A third cause, and now the most likely one for an existing deployment.
+     *
+     * Every AssumeRole sets `sts:SourceIdentity` (ADR-007). A stack deployed
+     * before that became mandatory carries `StringLike sts:SourceIdentity:
+     * "daveio:*"` - a pattern no legal value can match, because AWS forbids a
+     * colon in SourceIdentity - so `sts:SetSourceIdentity` is denied and the
+     * whole AssumeRole fails. The denial says nothing about SourceIdentity, and
+     * the obvious reading is that the ExternalId or the principal is wrong, so
+     * naming it here saves an hour of looking in the wrong place (log #44).
+     */
+    const sourceIdentityHint =
+      "\n  If this role was deployed before SourceIdentity became mandatory, its trust policy still matches " +
+      `"daveio:*" while the scanner now sends "${sourceIdentity()}" - a colon is not legal in a SourceIdentity, ` +
+      "so that condition can never match and the assume is refused. Redeploy the stack from the current " +
+      "infra/readonly-role.yaml to fix it; the Connection screen shows the exact command.";
     return {
       code: name,
       problem: "The role exists but refused to be assumed.",
       fix:
-        "Usually one of two things: the trust policy does not name this principal, or the ExternalId does not match. " +
+        "Usually one of three things: the trust policy does not name this principal, the ExternalId does not match, " +
+        "or the stack predates SourceIdentity being required. " +
         "Check that AWS_EXTERNAL_ID here is byte-identical to the value used when the stack was deployed." +
-        identity,
+        identity +
+        sourceIdentityHint,
     };
   }
   if (message.includes("ExternalId") || message.includes("external id")) {
@@ -101,11 +123,63 @@ function diagnose(
       fix: "These are the source credentials used to call AssumeRole, not the customer's. Check the host's own AWS credentials.",
     };
   }
-  if (name === "CredentialsProviderError") {
+  if (name === "CredentialsProviderError" || name === "CredentialsError") {
+    /**
+     * Say which link of the chain is missing, not that the chain failed.
+     *
+     * "Provide credentials" is true and useless: in a container there are two
+     * plausible causes needing opposite fixes, and the reader cannot see inside
+     * the container to tell which applies. This reports what was actually
+     * checked (engineering log #48).
+     */
+    const src = credentialSources();
+    const checked: string[] = [];
+
+    if (!src.envKeySet) {
+      checked.push("AWS_ACCESS_KEY_ID is not set");
+    } else if (src.envKeyIsMockPlaceholder) {
+      // The decisive case: nothing was replaced, so say that rather than
+      // describing the shape of a value the reader never chose.
+      checked.push(
+        'AWS_ACCESS_KEY_ID is still the placeholder "mock" that .env.example ships — it has not ' +
+          "been replaced, and it is removed at startup so it cannot shadow the rest of the chain",
+      );
+    } else if (!src.envKeyLooksReal) {
+      checked.push(
+        `AWS_ACCESS_KEY_ID is set (${src.envKeyLength} characters) but does not start AKIA or ASIA, ` +
+          "so it is not a real key id and was removed. Check you pasted the access key id rather " +
+          "than the secret, and that none of it is missing",
+      );
+    } else {
+      checked.push("AWS_ACCESS_KEY_ID looks real, so the failure is elsewhere");
+    }
+
+    if (src.profileFiles.length > 0) {
+      checked.push(`a profile directory was found containing ${src.profileFiles.join(", ")}`);
+    } else if (src.profileDirExists) {
+      // Distinguished because it points at a different fix: the mount happened
+      // and landed on the wrong host path.
+      checked.push(
+        "a ~/.aws directory exists but is EMPTY, which means the mount resolved to the wrong host " +
+          "path - on Windows that is an unset HOME, so set AWS_PROFILE_DIR",
+      );
+    } else {
+      checked.push("no ~/.aws profile directory at all, so no profile was mounted");
+    }
+
+    const fix = src.containerised
+      ? "This API is running in a container, so the host's credentials do not reach it by default. " +
+        "Mount your ~/.aws profile by adding these two lines to .env: " +
+        "COMPOSE_PATH_SEPARATOR=: and COMPOSE_FILE=docker-compose.yml:deploy/compose.aws-profile.yml " +
+        "(or set real values for AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY instead). " +
+        "Then recreate it with `docker compose --profile app up -d api` - `restart` reuses the old environment."
+      : "In AWS_MODE=real the standard AWS credential chain is used. Set AWS_ACCESS_KEY_ID and " +
+        "AWS_SECRET_ACCESS_KEY, configure a CLI profile, or run somewhere with an instance or task role.";
+
     return {
       code: name,
       problem: "No source credentials were found.",
-      fix: "In AWS_MODE=real the standard AWS credential chain is used. Provide credentials, or an instance or task role.",
+      fix: `${fix}\n\n  What was checked: ${checked.join("; ")}.`,
     };
   }
   return {
@@ -173,6 +247,11 @@ export function registerConnectionRoutes(app: FastifyInstance): void {
        * instead of letting a scan fail with AccessDenied later.
        */
       roleArnProblem: targetRoleProblem(),
+      /**
+       * Whether the API is containerised, so the guide can show the restart
+       * command that applies rather than both and a rule for choosing.
+       */
+      containerised: inContainer(),
       mode: currentMode(),
       // What .env says, so the UI can show when the toggle has diverged from it.
       configuredMode,
