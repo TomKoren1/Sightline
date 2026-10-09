@@ -3127,3 +3127,79 @@ scope — each is a library doing something defensible, and each produced a defe
 that only a test about observable behaviour could see. The corollary, for the
 third one: **when a cache sits between you and the thing you are testing, every
 experiment is worthless until you clear it.**
+
+---
+
+## #56 — Two tests that were not running, and one that was lying about what it needs
+
+CI on the refactor branch failed two jobs. Neither failure was in the code being
+refactored; both were in the machinery that is supposed to notice when it
+breaks.
+
+**One: a test file that stopped running, loudly by luck.**
+
+The NestJS port moved `resourceArn.test.ts` out of `routes/` and into `graph/`
+with the rest of that feature. CI runs it by path, because it needs the compose
+stack and the dependency-free job must not have one:
+
+```
+npx vitest run apps/api/src/routes/resourceArn.test.ts
+→ No test files found, exiting with code 1
+```
+
+That is the lucky version. vitest treats an empty filter as an error, so the
+job went red. A step that tolerated a missing file would have gone green while
+running nothing, which is the same mistake with no symptom — and the suite in
+question is the one guarding HTTP 414 on every service-linked IAM role
+(log #37).
+
+`infra/workflowPaths.test.ts` now reads every workflow, extracts anything shaped
+like a path into this repository, and asserts it exists. Proven by pointing the
+workflow back at the old location, and by making the extraction pattern match
+nothing — the second being the canary, because a check that finds no paths
+passes.
+
+**Two: a test whose header claimed it needed no infrastructure.**
+
+`ledger.test.ts` opens with "No network and no API key: the model is a stub, so
+this runs in the dependency-free job on every commit". That was the design and
+it was not the behaviour. `ask()` reads scan freshness and account summary for
+the system prompt before it calls the model:
+
+```ts
+const [latest, summary] = await Promise.all([
+  getLatestScan(),
+  summariseAccount().catch(() => null),
+]);
+```
+
+`summariseAccount` is already tolerant. `getLatestScan` is not, and it opens a
+Postgres connection on the first line of the function under test. On a laptop
+with the stack running that is invisible. In the dependency-free job it is five
+`ECONNREFUSED` failures.
+
+Both reads are stubbed now, so the claim in the header is true. The alternative
+was gating the file behind the compose stack, which would have taken the guard
+on the citation ledger — the one safety property most worth checking on every
+commit — out of the job that runs on every commit. A test of a safety property
+should not need a database to express it.
+
+**Why I did not catch either locally.** `npm run verify` runs the same vitest
+command, on a machine where Postgres, Neo4j and moto have been up for days, and
+without `SKIP_INTEGRATION`. It is not the same thing the job runs, and the
+difference is exactly the set of assumptions a dependency-free job exists to
+check. Reproducing it is one line:
+
+```bash
+SKIP_INTEGRATION=1 DATABASE_URL=postgres://x@127.0.0.1:59999/none \
+NEO4J_URI=bolt://127.0.0.1:59998 npx vitest run --exclude '**/evals/**'
+```
+
+372 pass, 34 skip, nothing else was hiding.
+
+**What to take from it.** **A comment describing an invariant is not the
+invariant.** The header said "no network, no databases" because that was the
+intent at the time it was written, and nothing re-read it when `ask()` grew a
+database call. The repeatable version of the lesson is the command above: if a
+job claims to run without something, the only way to know is to take that thing
+away and run it.

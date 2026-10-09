@@ -16,9 +16,16 @@
  * flagged instead — and that is the failure that matters, because a product
  * that cries wolf about genuine resources is worse than one with no check.
  *
- * No network and no API key: the model is a stub, so this runs in the
- * dependency-free job on every commit, which is where a guard on a safety
- * property belongs.
+ * No network, no API key and no databases. The model is a stub and the two
+ * reads `ask()` makes for the system prompt are stubbed too, so this runs in
+ * the dependency-free job on every commit — which is where a guard on a safety
+ * property belongs, and is the reason it is worth stubbing them rather than
+ * gating the file behind a database.
+ *
+ * It did not start that way. The header claimed exactly the above while
+ * `getLatestScan()` opened a Postgres connection on the first line of `ask()`,
+ * which is invisible on a laptop with the stack running and `ECONNREFUSED` in
+ * CI. See engineering log #56.
  */
 
 import { describe, expect, it, vi } from "vitest";
@@ -27,6 +34,8 @@ import type { LanguageModelV4StreamPart, LanguageModelV4Usage } from "@ai-sdk/pr
 import type { AgentEvent } from "@daveio/shared";
 
 import { ask } from "./agent.js";
+import * as queries from "../db/queries.js";
+import * as repository from "../db/repository.js";
 import * as tools from "./tools.js";
 
 const REAL_ARN = "arn:aws:rds:us-east-1:123456789012:db:northwind-prod-db";
@@ -85,6 +94,41 @@ function scriptedModel(answer: string, toolName = "find_public_resources") {
   });
 }
 
+/**
+ * The two reads `ask()` makes before it calls the model.
+ *
+ * They fill in scan freshness and partial-failure context for the system
+ * prompt. Neither has anything to do with what is under test here, and both
+ * talk to a database, so both are stubbed — otherwise this file silently
+ * becomes an integration test.
+ */
+function stubPromptContext() {
+  const scan = vi.spyOn(repository, "getLatestScan").mockResolvedValue({
+    id: "11111111-1111-1111-1111-111111111111",
+    accountId: "123456789012",
+    status: "succeeded",
+    startedAt: new Date().toISOString(),
+    finishedAt: new Date().toISOString(),
+    regions: ["us-east-1"],
+    units: [],
+    resourceCount: 1,
+    relationshipCount: 0,
+  });
+  const summary = vi.spyOn(queries, "summariseAccount").mockResolvedValue({
+    byKind: [{ kind: "RdsInstance", count: 1 }],
+    byRegion: [{ region: "us-east-1", count: 1 }],
+    publicCount: 1,
+    adminCount: 0,
+    idleCount: 0,
+    unprotectedCount: 0,
+    idleCost: 0,
+  });
+  return () => {
+    scan.mockRestore();
+    summary.mockRestore();
+  };
+}
+
 /** The one tool call returns exactly one real ARN, and nothing else. */
 function stubTool() {
   return vi.spyOn(tools, "runTool").mockResolvedValue({
@@ -106,6 +150,7 @@ async function askWith(answer: string) {
 describe("every ARN in an answer is checked against what the tools returned", () => {
   it("accepts an ARN a tool returned", async () => {
     const spy = stubTool();
+    const restoreContext = stubPromptContext();
     try {
       const { message } = await askWith(`The database ${REAL_ARN} is reachable.`);
       expect(message.citations?.map((c) => c.arn)).toContain(REAL_ARN);
@@ -113,11 +158,13 @@ describe("every ARN in an answer is checked against what the tools returned", ()
       expect(message.warnings ?? []).toEqual([]);
     } finally {
       spy.mockRestore();
+      restoreContext();
     }
   });
 
   it("flags an ARN no tool returned", async () => {
     const spy = stubTool();
+    const restoreContext = stubPromptContext();
     try {
       const { message } = await askWith(`You should look at ${INVENTED_ARN}.`);
       const invented = message.citations?.find((c) => c.arn === INVENTED_ARN);
@@ -130,11 +177,13 @@ describe("every ARN in an answer is checked against what the tools returned", ()
       expect(message.warnings?.length ?? 0).toBeGreaterThan(0);
     } finally {
       spy.mockRestore();
+      restoreContext();
     }
   });
 
   it("records the tool call, its result count and the ARNs it returned", async () => {
     const spy = stubTool();
+    const restoreContext = stubPromptContext();
     try {
       const { message, events } = await askWith(`${REAL_ARN} is public.`);
       expect(message.toolCalls).toHaveLength(1);
@@ -152,11 +201,13 @@ describe("every ARN in an answer is checked against what the tools returned", ()
       expect(kinds).toContain("agent.finished");
     } finally {
       spy.mockRestore();
+      restoreContext();
     }
   });
 
   it("hands a tool failure back to the model instead of ending the turn", async () => {
     const spy = vi.spyOn(tools, "runTool").mockRejectedValue(new Error("neo4j is down"));
+    const restoreContext = stubPromptContext();
     try {
       const { message } = await askWith("I could not look that up.");
       expect(message.content).toContain("could not look that up");
@@ -164,6 +215,7 @@ describe("every ARN in an answer is checked against what the tools returned", ()
       expect(message.toolCalls![0]!.resultCount).toBe(0);
     } finally {
       spy.mockRestore();
+      restoreContext();
     }
   });
 });
@@ -171,6 +223,7 @@ describe("every ARN in an answer is checked against what the tools returned", ()
 describe("the read-only guard still runs on the way out", () => {
   it("adds the refusal to an answer the model gave without one", async () => {
     const spy = stubTool();
+    const restoreContext = stubPromptContext();
     try {
       const events: AgentEvent[] = [];
       const message = await ask({
@@ -188,6 +241,7 @@ describe("the read-only guard still runs on the way out", () => {
       ).toMatch(/can.?t|cannot/);
     } finally {
       spy.mockRestore();
+      restoreContext();
     }
   });
 });
