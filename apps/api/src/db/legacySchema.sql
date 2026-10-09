@@ -1,3 +1,14 @@
+-- The schema as it was before the ORM, kept as a test fixture.
+--
+-- NOT applied by anything at runtime: `drizzle/0000_*.sql` is the schema now.
+-- This exists so `adoption.test.ts` can build a database in the shape a user
+-- who ran an earlier version of this project actually has, and prove that
+-- migrating it produces the same database as creating one from scratch.
+--
+-- Do not edit to match schema changes. It describes a moment in the past; a
+-- change to the schema belongs in a new migration, and this file is what that
+-- migration has to cope with.
+
 -- Postgres is the system of record. Neo4j is a projection of what is here, and
 -- can be rebuilt from these tables without going back to AWS.
 --

@@ -13,3 +13,10 @@ package-lock.json
 # intrinsics (!Ref, !Sub, !GetAtt) that are not portable YAML tags. Neither is
 # worth reformatting; both are worth not corrupting.
 infra/*.yaml
+
+# Drizzle's generated migration metadata.
+#
+# `drizzle-kit generate` rewrites these on every run, so formatting them means
+# every schema change arrives with an unrelated reformat in the diff. The
+# migration SQL beside them is reviewed; this is the tool's bookkeeping.
+apps/api/drizzle/meta

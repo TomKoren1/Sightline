@@ -23,7 +23,8 @@ import { gradeCase, summarise, type CaseResult } from "../evals/grade.js";
 import { isTerminalApiError } from "../evals/terminalError.js";
 import { listResources } from "../db/queries.js";
 import { closeDriver } from "../db/neo4j.js";
-import { closePool, pool } from "../db/postgres.js";
+import { closePool, db } from "../db/postgres.js";
+import { evalRuns } from "../db/schema.js";
 import { getLatestScan } from "../db/repository.js";
 
 const bold = (s: string) => `\x1b[1m${s}\x1b[0m`;
@@ -187,17 +188,14 @@ try {
     );
     console.log(dim("  The previous recorded run is left as the reference. Re-run when able."));
   } else {
-    await pool.query(
-      `INSERT INTO eval_runs (id, model, total, passed, mean_f1, results) VALUES ($1,$2,$3,$4,$5,$6)`,
-      [
-        runId,
-        cfg.ANTHROPIC_MODEL,
-        summary.total,
-        summary.passed,
-        summary.meanF1,
-        JSON.stringify(results),
-      ],
-    );
+    await db.insert(evalRuns).values({
+      id: runId,
+      model: cfg.ANTHROPIC_MODEL,
+      total: summary.total,
+      passed: summary.passed,
+      meanF1: summary.meanF1,
+      results,
+    });
   }
 
   // Also written to disk, so a CI run can publish it as an artifact and a

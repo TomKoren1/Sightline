@@ -1,5 +1,5 @@
 /**
- * Evaluation endpoints, backing the Trust panel.
+ * Evaluation reads, backing the Trust panel.
  *
  * "How do you know the agent is right?" is a fair question from someone about
  * to act on an answer, and answering it inside the product is more use than
@@ -11,20 +11,25 @@
  *     produce, so it is displayed rather than re-run from a web request.
  */
 
-import type { FastifyInstance } from "fastify";
+import { ConflictException, Injectable } from "@nestjs/common";
+import { desc } from "drizzle-orm";
 
 import { cfg, isMock } from "../config.js";
-import { pool } from "../db/postgres.js";
+import { db } from "../db/postgres.js";
+import { evalRuns } from "../db/schema.js";
 import { getLatestScan, loadRelationships, loadResources } from "../db/repository.js";
 import { DRIFT_EXPECTED_CHECK_FAILURES, DRIFT_MARKER_RESOURCES } from "@daveio/mock-aws";
 
 import { CHECKS, runChecks } from "../evals/checks.js";
 
-export function registerEvalRoutes(app: FastifyInstance): void {
+@Injectable()
+export class EvalsService {
   /** What the checks cover, without running them. */
-  app.get("/api/evals/checks", async () => ({
-    checks: CHECKS.map((c) => ({ id: c.id, description: c.description, rationale: c.rationale })),
-  }));
+  describeChecks() {
+    return {
+      checks: CHECKS.map((c) => ({ id: c.id, description: c.description, rationale: c.rationale })),
+    };
+  }
 
   /**
    * Run the ground-truth checks against the latest persisted scan.
@@ -32,10 +37,10 @@ export function registerEvalRoutes(app: FastifyInstance): void {
    * Reads from Postgres rather than rescanning: it is the data the UI is
    * showing that we want to validate, and it makes the call free and instant.
    */
-  app.post("/api/evals/ground-truth", async (_req, reply) => {
+  async groundTruth() {
     const latest = await getLatestScan();
     if (!latest) {
-      return reply.code(409).send({
+      throw new ConflictException({
         error: "No scan has completed yet, so there is nothing to check.",
         code: "NO_SCAN",
       });
@@ -45,7 +50,7 @@ export function registerEvalRoutes(app: FastifyInstance): void {
     // customer they are meaningless, and pretending otherwise would be worse
     // than not offering the check at all.
     if (!isMock()) {
-      return reply.code(409).send({
+      throw new ConflictException({
         error:
           "Ground-truth checks are defined against the seeded mock account and do not apply to a real AWS account.",
         code: "NOT_APPLICABLE",
@@ -92,7 +97,7 @@ export function registerEvalRoutes(app: FastifyInstance): void {
     const failures = annotated.filter((r) => !r.passed);
     const unexplained = failures.filter((r) => r.expectedAfterDrift === null);
 
-    return reply.send({
+    return {
       scanId: latest.id,
       scannedAt: latest.startedAt,
       durationMs: Date.now() - started,
@@ -115,16 +120,12 @@ export function registerEvalRoutes(app: FastifyInstance): void {
               .map((r) => r.id)
               .join(", ")}.`,
       results: annotated,
-    });
-  });
+    };
+  }
 
   /** The most recent agent eval run, if one has been recorded. */
-  app.get("/api/evals/latest", async () => {
-    const { rows } = await pool.query(
-      `SELECT id, started_at, model, total, passed, mean_f1, results
-         FROM eval_runs ORDER BY started_at DESC LIMIT 1`,
-    );
-    const row = rows[0];
+  async latest() {
+    const [row] = await db.select().from(evalRuns).orderBy(desc(evalRuns.startedAt)).limit(1);
     if (!row) {
       return {
         run: null,
@@ -180,7 +181,7 @@ export function registerEvalRoutes(app: FastifyInstance): void {
     return {
       run: {
         id: row.id,
-        startedAt: row.started_at.toISOString(),
+        startedAt: row.startedAt.toISOString(),
         model: row.model,
         total: row.total,
         passed: row.passed,
@@ -212,5 +213,5 @@ export function registerEvalRoutes(app: FastifyInstance): void {
       // produced these numbers matters as much as the numbers.
       currentModel: cfg.ANTHROPIC_MODEL,
     };
-  });
+  }
 }

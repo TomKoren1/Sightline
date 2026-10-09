@@ -1,0 +1,19 @@
+{
+  "extends": "./tsconfig.base.json",
+  "compilerOptions": {
+    // Decorators have to be enabled here, not only in `apps/api/tsconfig.json`.
+    //
+    // tsx and vitest hand esbuild one tsconfig resolved from the working
+    // directory, rather than looking one up per file, and several entry points
+    // run from the repository root. Without this, esbuild refuses the Nest
+    // controllers with "Parameter decorators only work when experimental
+    // decorators are enabled" — from the root, and only from the root.
+    //
+    // `emitDecoratorMetadata` is deliberately absent; see apps/api/tsconfig.json.
+    "experimentalDecorators": true
+  }
+  // No `files` or `include`. With an empty one esbuild treats every source as
+  // out of scope and silently ignores the options above, which is the same
+  // failure this file exists to fix (engineering log #55). Type-checking is
+  // per workspace, so nothing runs `tsc` against this config anyway.
+}

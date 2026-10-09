@@ -663,3 +663,163 @@ CI cannot test the AWS path, because it has no credentials and faking them would
 test the fake. What it does test is the half that must never be wrong: that the
 script refuses, explains, and changes nothing when it cannot proceed — and, so
 those assertions mean something, that `--mock` really does write and back up.
+
+---
+
+## ADR-016 — Drizzle as the data layer, superseding hand-written SQL
+
+**Context.** The original decision was no ORM: seven tables, eighteen query sites,
+and queries whose interesting parts — a self-join on fingerprint, two `NOT EXISTS`
+set differences, a batched insert sized against Postgres's parameter cap — are
+relational enough that an ORM would have been a layer to argue with rather than a
+help.
+
+Reviewed, that read as a legibility problem rather than a correctness one: an
+engineer picking up `repository.ts` meets placeholder arithmetic (`$${b + 1}`)
+before they meet the domain. The criticism is fair, and it is about the reader
+rather than about the code being wrong.
+
+**Decision.** Drizzle, not Prisma.
+
+Drizzle is SQL-shaped, so every query ported roughly one-for-one and the ones
+worth reading got shorter: thirty lines of placeholder arithmetic became
+`.values(batch.map(...))`, and the diff's self-join became an `alias()` and an
+`innerJoin` that says what it does. Prisma would have owned the migration layer
+and then handed the three interesting queries back through `$queryRaw` — half
+ORM, half raw, which reads worse than consistent raw SQL.
+
+The schema is now TypeScript, in `src/db/schema.ts`, and `drizzle-kit` generates
+migrations from it. The server still applies them on boot, so nothing about how
+the project starts changed.
+
+**What the ORM found that the driver had hidden.** `pg` returns `any`. Typed
+columns immediately surfaced three places where that mattered: `scan_units.status`
+and `.service` were being narrowed by a cast rather than by the schema, `derived`
+was `any` rather than `DerivedFacts`, and a test fixture carried `kind: "ec2"` —
+not a `ResourceKind` at all — behind an `as Resource` that silenced it. None were
+live bugs. All were checks that were not happening.
+
+**What stayed as SQL.** The health probe's `SELECT 1`, because it is a liveness
+check rather than a question about the domain, and `excluded.*` inside the upsert,
+which is the dialect's own word for "the row that was being inserted".
+
+**The cost, and it is the real one.** Introducing migrations to a database that
+already holds rows is the awkward part, and the first attempt got it wrong in a way
+that passed: see engineering log #53. The baseline migration is hand-edited to be
+idempotent _and_ to rename the constraints an older database already carries, so a
+migrated database and a fresh one end up with identical catalogues. That
+equivalence is asserted on every run by `src/db/adoption.test.ts`, which builds
+both and diffs them.
+
+---
+
+## ADR-018 — The Vercel AI SDK, superseding the hand-written agent loop
+
+**Context.** ADR-005 chose a curated tool library over text-to-Cypher, and the
+loop that drove it was written by hand. The argument for writing it was specific
+and, I thought, decisive:
+
+> Validating that every ARN in an answer came from a tool result means holding
+> the tool results, which means owning the loop.
+
+Reviewed, the absence of a framework was read as not knowing the conventional
+option. That is worth taking seriously even where the reasoning was sound,
+because an unconventional choice costs the reader time whether or not it was
+right — and this one was only half right.
+
+**What the argument got wrong.** Holding the tool results is necessary. Owning
+the loop is not how you get it. In the AI SDK a tool's `execute` is _our_
+function: the SDK decides when to call it and with what arguments, and the rows
+it returns pass through our hands before they reach anything else, including the
+model. The ledger records there. No framework callback mediates it, so the
+failure the original argument feared — an incomplete ledger flagging a real
+resource as invented — is not reachable by the route it feared.
+
+What was genuinely correct in the argument is the _stakes_: a ledger that misses
+one tool's output marks a real ARN unsupported, the user sees the product cry
+wolf once, and the warnings stop being read. That is why the property is now
+asserted rather than reasoned about — see below.
+
+**Decision.** `ai` with `@ai-sdk/anthropic`. `streamText`, `stopWhen:
+stepCountIs(8)`, tools built from the existing `TOOL_DEFINITIONS` and handed over
+through `jsonSchema()` so not one of the sixteen schemas was rewritten. The
+direct `@anthropic-ai/sdk` dependency is gone; the tool-definition type is
+declared in `tools.ts`, because the tool boundary should not be shaped by
+whichever client happens to deliver it.
+
+**What is unchanged, deliberately.** `CitationTracker`, `validateCitations`,
+`enforceReadOnlyNotice`, the sixteen tools, the Cypher write-guard, and the
+events the UI renders. The guard still runs on the single exit path after the
+model has finished, so nothing reaches a user without passing it.
+
+**The test that makes this a decision rather than a hope.**
+`agent/ledger.test.ts` drives `ask()` with a scripted model that does what no
+prompt reliably produces: calls a tool, then answers naming a resource that tool
+never returned. It asserts the invented ARN is flagged and a real one is not, and
+it runs with no network and no API key, so it is in the suite on every commit.
+Verified by breaking it four ways — never record, record without the ARNs, skip
+the read-only guard, drop the trace — each failing its own assertion.
+
+**What I would still hand-write.** The loop is now worth about ten lines of
+configuration, which is the correct amount of code to own for something that
+standard. If this needed sub-agents, planning, or work that outlives a context
+window, that is where a heavier framework starts earning its keep; it does not
+here, and that was never the question.
+
+---
+
+## ADR-017 — NestJS, superseding the Fastify route modules
+
+**Context.** The HTTP layer was five `registerXRoutes(app)` functions holding
+their handlers inline. That is a clean enough shape, and it was read as the
+absence of a backend framework — which in a Node team means NestJS: modules,
+controllers, services, dependency injection. Fastify is an HTTP server; it was
+never the thing being asked for.
+
+The criticism is about the reader, not the code. Under time pressure an
+unfamiliar structure costs more than an untidy familiar one, and a reviewer
+arrives knowing where a Nest controller lives.
+
+**Decision.** NestJS on the **Fastify** adapter, not Express. The HTTP behaviour
+underneath stays the one this project already had: the SSE endpoints write to
+the raw socket, and `maxParamLength: 2048` is a Fastify router setting that a
+whole class of IAM ARNs depends on (engineering log #37). Changing the server as
+well as the framework would have made every behavioural difference ambiguous.
+
+Six feature modules — `health`, `graph`, `scans`, `chat`, `evals`, `connection`
+— each a controller over a service, listed in `app.module.ts`.
+
+**The constraint that shapes every file.** Nest normally infers what to inject
+from a constructor parameter's type, which needs `emitDecoratorMetadata`.
+esbuild cannot emit it — it requires type information a transpiler does not
+have — and esbuild is what both `tsx` and `vitest` use here. Nest does not fail
+loudly on that: it injects `undefined`, and the handler throws at request time.
+
+So every injection in this package names its token:
+
+```ts
+constructor(@Inject(GraphService) private readonly graph: GraphService) {}
+```
+
+The alternative was moving the whole package onto SWC — in the runtime, in the
+Docker image, and in the test runner that 406 tests depend on. Three places to
+keep in step, to delete one redundant-looking argument per constructor. The
+token is the cheaper honesty.
+
+**What the framework actually bought, beyond familiarity.** `scanInProgress` was
+a module-level `let` in the route file. It is now `ScanStateService`, and that
+is not ceremony: a module-level mutable is shared by everything in the process
+with no way to scope it, whereas a provider can be given a narrower lifetime
+without touching a caller. It is one of exactly two things standing between this
+and multi-tenancy — the other is the cached AWS session — and both now have a
+seam.
+
+**What was deliberately not adopted.** `@Sse()`. It serialises an Observable
+into its own wire format, and the frontend already parses this one. Both
+streaming endpoints take `@Res()` and write to the raw socket exactly as before,
+which is what a hand-managed stream wants and what kept the port invisible to
+clients.
+
+**The cost.** More files for the same behaviour, decorators, and a DI container
+to understand. Worth it for a team; it would not be worth it for a service with
+three endpoints.

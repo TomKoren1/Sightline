@@ -18,7 +18,7 @@
  */
 
 import { randomBytes } from "node:crypto";
-import type { FastifyInstance } from "fastify";
+import { BadRequestException, ConflictException, Injectable, Logger } from "@nestjs/common";
 import { STSClient, GetCallerIdentityCommand } from "@aws-sdk/client-sts";
 
 import {
@@ -189,9 +189,12 @@ function diagnose(
   };
 }
 
-export function registerConnectionRoutes(app: FastifyInstance): void {
+@Injectable()
+export class ConnectionService {
+  private readonly log = new Logger(ConnectionService.name);
+
   /** Current connection state, with nothing secret in the response. */
-  app.get("/api/connection", async () => {
+  async state() {
     const latest = await getLatestScan().catch(() => null);
     const connection = activeConnection();
     const accountId = accountIdFromArn(connection.roleArn);
@@ -269,7 +272,7 @@ export function registerConnectionRoutes(app: FastifyInstance): void {
       endpointOverride: connection.endpoint,
       lastScan: latest ? { id: latest.id, at: latest.startedAt, status: latest.status } : null,
     };
-  });
+  }
 
   /**
    * Switch between the seeded mock account and the configured real one.
@@ -282,14 +285,14 @@ export function registerConnectionRoutes(app: FastifyInstance): void {
    * The cached STS session is dropped, so the next call assumes the right role
    * rather than reusing credentials for the account we just left.
    */
-  app.post<{ Body: { mode?: string } }>("/api/connection/mode", async (req, reply) => {
-    const mode = req.body?.mode;
+  async setMode(body: { mode?: string } | undefined) {
+    const mode = body?.mode;
     if (mode !== "mock" && mode !== "real") {
-      return reply.code(400).send({ error: 'mode must be "mock" or "real"' });
+      throw new BadRequestException({ error: 'mode must be "mock" or "real"' });
     }
 
     if (mode === "real" && !cfg.AWS_TARGET_ROLE_ARN) {
-      return reply.code(409).send({
+      throw new ConflictException({
         error:
           "No real account is configured. Set AWS_TARGET_ROLE_ARN and AWS_EXTERNAL_ID in .env.",
         code: "NOT_CONFIGURED",
@@ -300,7 +303,7 @@ export function registerConnectionRoutes(app: FastifyInstance): void {
     resetSession();
 
     const connection = activeConnection();
-    return reply.send({
+    return {
       mode,
       roleArn: connection.roleArn,
       accountId: accountIdFromArn(connection.roleArn),
@@ -308,8 +311,8 @@ export function registerConnectionRoutes(app: FastifyInstance): void {
       // other account's data. Saying so is better than letting the user read
       // one account's inventory under the other's name.
       note: "Switched. The graph still shows the previous scan - run a scan to load this account.",
-    });
-  });
+    };
+  }
 
   /**
    * A fresh ExternalId for a new customer.
@@ -319,10 +322,12 @@ export function registerConnectionRoutes(app: FastifyInstance): void {
    * are acts an operator performs. An endpoint that persisted it would be
    * storing a credential behind no authentication.
    */
-  app.get("/api/connection/external-id", async () => ({
-    externalId: `daveio-${randomBytes(18).toString("base64url")}`,
-    note: "Generated for you to use. It is not stored — put it in the CloudFormation stack and in AWS_EXTERNAL_ID.",
-  }));
+  newExternalId() {
+    return {
+      externalId: `daveio-${randomBytes(18).toString("base64url")}`,
+      note: "Generated for you to use. It is not stored — put it in the CloudFormation stack and in AWS_EXTERNAL_ID.",
+    };
+  }
 
   /**
    * Test the configured connection.
@@ -330,7 +335,7 @@ export function registerConnectionRoutes(app: FastifyInstance): void {
    * Read-only by construction: AssumeRole followed by GetCallerIdentity, which
    * together prove the trust policy works without touching anything.
    */
-  app.post("/api/connection/test", async (_req, reply) => {
+  async test() {
     const started = Date.now();
 
     /**
@@ -359,7 +364,7 @@ export function registerConnectionRoutes(app: FastifyInstance): void {
       });
       const identity = await sts.send(new GetCallerIdentityCommand({}));
 
-      return reply.send({
+      return {
         ok: true,
         durationMs: Date.now() - started,
         assumedRoleArn: session.assumedRoleArn,
@@ -371,16 +376,24 @@ export function registerConnectionRoutes(app: FastifyInstance): void {
         // believing you are on a real account is the worst outcome this
         // endpoint can produce - see engineering log #17.
         endpoint: isMock() ? cfg.AWS_ENDPOINT_URL : "AWS (no endpoint override)",
-      });
+      };
     } catch (err) {
-      app.log.warn({ err }, "connection test failed");
-      return reply.code(200).send({
+      /**
+       * A failure is a 200 with `ok: false`, not an error status.
+       *
+       * This endpoint's job is to produce a diagnosis, and the diagnosis is
+       * the useful part of a failure. Returning 5xx would make the UI render
+       * "the request failed" over the top of an explanation of exactly which
+       * of three things is wrong.
+       */
+      this.log.warn({ err }, "connection test failed");
+      return {
         ok: false,
         durationMs: Date.now() - started,
         mode: cfg.AWS_MODE,
         callerIdentity,
         ...diagnose(err, callerIdentity),
-      });
+      };
     }
-  });
+  }
 }

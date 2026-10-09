@@ -97,7 +97,7 @@ jobs:
       - name: HTTP routing against the live stack
         # Proves the router reaches its handlers for a real, full-length ARN.
         # Needs the databases, so it cannot run in the unit job.
-        run: npx vitest run apps/api/src/routes/resourceArn.test.ts
+        run: npx vitest run apps/api/src/graph/resourceArn.test.ts
 
       - name: Verify the API serves what the scan produced
         run: |

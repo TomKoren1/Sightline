@@ -2830,3 +2830,376 @@ the image — so the only thing missing was the file, and nothing in either the
 `package.json` or the `Dockerfile` hints that the other exists. **A guard that adds
 a dependency is a change to every environment that runs the guarded thing**, and
 the environments that are not your laptop are the ones that find out.
+
+---
+
+## #52 — Building the net before the refactor, and what it caught on the first run
+
+**Context.** The project was reviewed and the feedback was three things: no ORM, no
+backend framework, and an LLM loop written by hand — all of which "made it harder
+to read". None of that is a correctness complaint. It is a legibility complaint,
+and the fix is to move the data layer onto an ORM, the HTTP layer onto a
+structured framework, and the agent loop onto a standard SDK, while keeping the
+two properties that were worth having: verdicts computed in code, and every ARN in
+an answer checked against what the tools returned.
+
+**The problem with that plan.** A refactor of three layers at once is only safe if
+something pins the behaviour. The suite had 424 tests and **exactly one of them
+issued an HTTP request** — `resourceArn.test.ts`, written to catch a 414 on long
+ARNs. Everything else tested functions. So the thing a port is most likely to break
+— the shape of what the frontend receives — was the thing nothing asserted.
+
+**The schemas were captured, not written.** Every endpoint was called against a
+populated database and its real response recorded, then described in Zod. Writing
+the contract from reading the handlers would have pinned what I _believed_ the API
+returned, which is the same class of error the refactor is trying to survive. Twice
+the capture disagreed with what I expected — `/api/scans/diff` returns two different
+shapes depending on whether there is anything to compare, and several `region`
+fields are nullable on IAM resources, which is obvious once seen and was not before.
+
+**Three endpoints must not be exercised, and saying so is part of the contract.**
+`POST /api/chat` spends money on every run. `POST /api/connection/mode` switches the
+deployment between the mock and a real account and drops the cached STS session, so
+a test calling it would reconfigure whoever was using the app. `POST
+/api/evals/ground-truth` re-seeds the account and runs a full scan. For each, the
+_refusal_ is a contract the UI renders, so that is what is pinned, and the entry says
+why rather than leaving a reader to think the test is lazy.
+
+`POST /api/scans` is worse: its only refusal is 409 when a scan is already running,
+and that flag is module-private, so **no input makes it decline**. It is excluded by
+name, in a map that carries the reason and what covers it instead. A second
+assertion refuses an exclusion whose reason is shorter than a sentence, because the
+cheapest way to silence a completeness check is to add a line to the exclusion list.
+
+**The completeness check found two untested routes on its first run** — `POST
+/api/scans` and `POST /api/connection/test`, both of which I had missed while
+writing a list I believed was exhaustive. It reads the route table out of Fastify's
+own router rather than grepping source, so a route registered by any path is in
+scope.
+
+**Proven by breaking it, five ways.** A handler renaming `idleCost` →
+`idleCostUsd`; a new route with no contract; a contract naming a route that no
+longer exists; an exclusion whose reason is "TODO"; and the `printRoutes` parser
+matching nothing. Each failed exactly the assertion written for it, and the last
+failed two — the canary that exists to prove the comparison is comparing something,
+and the comparison itself, which with an empty parse decided every contract was
+stale. That is the right behaviour: a parser that silently matches nothing makes
+every check built on it pass.
+
+**Baselines recorded before anything moves:** 390 tests in `verify`, 18 in the
+tier-1 ground-truth suite with drift attribution exact, and the stored tier-2 run at
+21/21 with mean F1 1.0.
+
+**What to take from it.** **A test suite can be large and still not cover the thing
+a refactor breaks.** 424 tests sounds like protection; one HTTP request is what it
+actually was, because the suite had grown by testing each new function rather than
+each new surface. The useful question before a refactor is not "how many tests are
+there" but "which of them would fail if the output changed".
+
+---
+
+## #53 — Adopting an ORM added every foreign key a second time
+
+**Symptom.** None. That is the entry.
+
+The baseline migration applied cleanly to a database with 14 scans and 1414
+resource snapshots in it. Nothing errored, no data moved, every test passed, and
+the API served the same payloads. The database then had **ten** foreign keys where
+it should have had five.
+
+**Cause.** `drizzle-kit` emits plain `CREATE TABLE`, which is correct for a
+database that does not exist and fails on the first statement against one that
+does. So the baseline was hand-edited to be idempotent: `IF NOT EXISTS` on tables
+and indexes, and on the foreign keys the wrapper drizzle-kit itself used to
+generate —
+
+```sql
+DO $$ BEGIN
+  ALTER TABLE "scan_units" ADD CONSTRAINT "scan_units_scan_id_scan_runs_id_fk" ...;
+EXCEPTION
+  WHEN duplicate_object THEN null;
+END $$;
+```
+
+That reads as "add it unless it is already there". It is not what it does. It
+catches a collision of **names**, and Drizzle names constraints differently from
+the names Postgres generates for one declared inline: `scan_units_scan_id_fkey`
+against `scan_units_scan_id_scan_runs_id_fk`. Same columns, same target, same
+cascade — different name, no collision, so Postgres added a second one. Every
+insert now validated the same foreign key twice.
+
+**How it surfaced.** Not from a test, because no test compared the two paths. I
+dumped the catalogue of the migrated database and of one created from scratch and
+diffed them, on the general principle that the two ought to be identical. Five
+lines of difference, all foreign keys.
+
+**And the first diff lied.** The query used `contype` without a cast, Postgres
+rejected it with `operator is not unique: text || "char"`, both dumps came back
+empty, and `diff` reported them identical. A comparison of two failures is a pass.
+That is the same shape as the migration bug directly above it: something that
+reads like a check, succeeding without checking.
+
+**Fix.** The baseline _adopts_ rather than adds. Before the `ADD CONSTRAINT`
+statements it renames each constraint an older database already carries to the
+name this schema uses — nine of them, including the two primary keys and the two
+`CHECK`s, whose names also differed. `undefined_object` is caught, which is the
+normal case on a new database. Renamed rather than dropped and re-added, because
+re-adding a foreign key takes a lock and revalidates every row while a rename is a
+catalogue update.
+
+**The guard.** `src/db/adoption.test.ts` creates two scratch databases, builds one
+with the pre-ORM `schema.sql` — kept as a fixture for exactly this — migrates
+both, and diffs the full catalogue including constraint names. Names are compared
+deliberately: a name is what the next migration will have to say to drop or alter
+something, so two databases differing only in names are not interchangeable, and a
+name is precisely what this bug got wrong.
+
+Proven by breaking it three ways: remove the foreign-key renames (both the
+equality assertion and the dedicated duplicate check fail), remove the primary-key
+and check renames (the equality assertion fails), and make the catalogue query
+return nothing — which fails the canary that exists because an empty comparison is
+how the original diff lied.
+
+**Also worth recording: the write path had no test at all.** `saveScanResult` is a
+transaction over three kinds of write, two of them chunked by hand against
+Postgres's 65535-parameter cap, and nothing read a scan back and compared it. The
+port was the moment to notice. `repository.test.ts` now writes 1200 resources —
+past the 500-row boundary, so a bug in the second chunk is in scope — reads them
+back and compares by content rather than by count, and asserts the transaction
+actually rolls back by failing a row in the second batch. Verified by breaking the
+transaction, the chunking, the `'global'` sentinel that stands in for a null
+region, and the fingerprint comparison in the diff.
+
+**What to take from it.** **An idempotent migration is not the same as an
+adopting one.** "Run this safely twice" and "arrive at the same database from two
+different starting points" sound like one requirement and are two, and only the
+second is what you actually need when a schema definition changes hands. The
+cheap test for it is to build both and diff the catalogue — which is also the only
+reason this was ever visible, since the symptom was nothing at all.
+
+---
+
+## #54 — The SDK declined to run a tool, and said nothing at all
+
+**Context.** Porting the agent loop onto the Vercel AI SDK. The port itself was
+straightforward — `streamText`, `stopWhen: stepCountIs(8)`, the sixteen existing
+JSON schemas handed over through `jsonSchema()` untouched. The work was in the
+test, because the whole point of the port was proving that the citation ledger
+survives it.
+
+**Symptom.** A scripted model, a stubbed tool, and five failing assertions. The
+agent answered `"I wasn't able to reach a conclusion within the tool-call
+limit"` — its own fallback for an empty answer. The tool had not run.
+
+**What made it slow to find.** Nothing was wrong. The stream carried a
+`tool-call` part, the step reported one tool call, `onError` never fired, and
+there was no `tool-error` part. The SDK had looked at the tool call and quietly
+decided not to execute it.
+
+Tracing the execution path in `node_modules` found the gate:
+
+```js
+case "model-call-end":
+  if (!isToolExecutionAllowedFinishReason(chunk.finishReason)) return;
+  await Promise.all(toolCallsToExecute.map(...))
+```
+
+Tools run when the model call ends, and only if the finish reason permits it.
+My mock emitted `finishReason: "tool-calls"` — a string, the shape every earlier
+version of this API used. In the v4 provider spec it is an object:
+`{ unified: "tool-calls", raw: "tool_use" }`. A bare string is not `"stop"` and
+not `"tool-calls"`, so the check said no, the queued calls were dropped, and the
+turn ended with nothing.
+
+**Fix.** One line in the fixture. The entry is not about the fix.
+
+**Why it is worth recording.** This is the exact failure mode the original
+no-framework argument was about, arriving from the direction I had not
+considered. I had worried that a framework would mediate tool _results_ and
+produce an incomplete ledger. It did not. What it did instead was decline to
+produce a result at all, silently, because a field three layers down had changed
+shape — and the only reason that surfaced in seconds rather than in production
+is that the test asserts on the _answer_, not on the plumbing. A test that
+checked "a tool-call part was emitted" would have passed.
+
+**What the test now does.** `ledger.test.ts` drives the real `ask()` with a
+scripted model that calls a tool and then names a resource that tool never
+returned — behaviour no prompt reliably produces, which is why it has to be
+scripted. It asserts the invented ARN is flagged and the real one is not. The
+model is injected through `AskOptions`, which is also the seam a DI container
+will want later.
+
+Proven by breaking it four ways: never record into the ledger, record the rows
+but lose the ARNs, skip the read-only guard, and drop the tool trace. The first
+two fail the assertion that a **real** ARN is accepted — which is the right
+alarm, because the dangerous version of a broken ledger is not that invention
+goes unflagged, it is that genuine resources get flagged and users stop reading
+the warnings.
+
+**Also worth recording: the port removed a dependency.** `@anthropic-ai/sdk` is
+gone, and `TOOL_DEFINITIONS` is now typed by an interface declared in
+`tools.ts` rather than borrowed from a provider's SDK. The tool boundary is the
+project's most load-bearing design decision; it should not be shaped by whichever
+client happens to deliver it.
+
+**And the thing the mock cannot prove.** A stub proves the wiring, not the
+provider. One live question — "how many resources, and in which regions?" —
+confirmed the real path: one tool call, a correct answer, every event emitted,
+and the model volunteering that the inventory was nine days old, which is the
+system prompt doing its job. The twenty-one scored cases remain the end-to-end
+measure and still cost money to run, so they are run deliberately rather than on
+every commit.
+
+**What to take from it.** **"It emitted the right thing" is not "it did the
+right thing".** Every observable signal said the tool call happened. The only
+assertion that could tell the difference was one about the user-visible outcome,
+which is an argument for testing the answer rather than the mechanism — and, for
+a third time in this log, for not trusting a check that cannot fail loudly.
+
+---
+
+## #55 — Three silent failures in one framework port
+
+Moving the HTTP layer to NestJS produced one bug worth the name and two
+configuration traps, and all three share a shape: the thing that was wrong
+reported nothing.
+
+**One: dependency injection resolves to `undefined`.**
+
+A minimal Nest app, one service, one controller, injected by type. Routes
+registered, app started, no error at boot. The request returned 500:
+`Cannot read properties of undefined (reading 'value')`.
+
+Nest infers the token from the parameter's type, which needs
+`emitDecoratorMetadata`. esbuild cannot emit it — the information is in the type
+system, not the syntax — and esbuild is what `tsx` uses. Nest treats the missing
+metadata as "nothing to inject" rather than as an error, so the failure arrives
+at request time, in a handler, in production.
+
+**And `vitest` transpiles with esbuild too**, which is what decided the fix.
+The idiomatic repair is SWC, which does emit the metadata — but then SWC has to
+be in the runtime, in the Docker image, _and_ in the test runner that 406 tests
+depend on. Three places to keep in step. Naming the token explicitly —
+`@Inject(GraphService)` — costs one redundant-looking argument per constructor
+and works identically everywhere. Verified both ways in a scratch project before
+choosing, because "esbuild cannot do decorator metadata" is the kind of claim
+that is easy to assert and worth checking.
+
+**Two: Nest answers 201 to a POST.**
+
+Three endpoints answered 200 before the port. Moving them into controllers
+changed all three to Nest's default 201, silently.
+
+`contract.test.ts` caught **one** — `POST /api/connection/test`, which is the
+only one whose success path is safe to exercise. The other two are pinned on
+their _refusal_ path, because one re-seeds the account and the other switches
+the running deployment between AWS accounts. A changed success status went
+straight past them.
+
+That is a gap in the contract, not a bug in it, and the fix is for the class
+rather than the two instances: a test now reads every controller and requires
+each `@Post` to either declare `@HttpCode` or take `@Res()` and set the status
+on the raw socket itself. Proven by removing one `@HttpCode(200)` and watching
+it fail, and by pointing the file-finder at a suffix that matches nothing — the
+canary that exists because a check reading zero files passes.
+
+**Three: a config fix that worked, appeared not to, then appeared to for the
+wrong reason.**
+
+`tsx` hands esbuild one tsconfig resolved from the working directory rather than
+looking one up per file, so running anything from the repository root missed
+`apps/api/tsconfig.json` and the decorators were refused. Adding a root
+`tsconfig.json` fixed it — and the next run failed identically, because **tsx
+caches transforms** and was serving the failure back. With the cache disabled it
+passed. I then removed `"files": []` on a hunch, it passed again, and I nearly
+recorded the hunch as the cause.
+
+It was both. With a cold cache and `"files": []` present, it fails: esbuild
+treats every source as outside the config's scope and ignores the options in
+it. Two causes, one symptom, and a cache that made each test of either one
+unreliable. The only reason the right answer came out is that the last check
+cleared the cache _and_ changed one thing.
+
+**What to take from it.** **A silent default is worse than a wrong one.** Nest
+injecting `undefined` rather than refusing to start, Nest answering 201 rather
+than asking, esbuild ignoring options rather than warning that nothing is in
+scope — each is a library doing something defensible, and each produced a defect
+that only a test about observable behaviour could see. The corollary, for the
+third one: **when a cache sits between you and the thing you are testing, every
+experiment is worthless until you clear it.**
+
+---
+
+## #56 — Two tests that were not running, and one that was lying about what it needs
+
+CI on the refactor branch failed two jobs. Neither failure was in the code being
+refactored; both were in the machinery that is supposed to notice when it
+breaks.
+
+**One: a test file that stopped running, loudly by luck.**
+
+The NestJS port moved `resourceArn.test.ts` out of `routes/` and into `graph/`
+with the rest of that feature. CI runs it by path, because it needs the compose
+stack and the dependency-free job must not have one:
+
+```
+npx vitest run apps/api/src/routes/resourceArn.test.ts
+→ No test files found, exiting with code 1
+```
+
+That is the lucky version. vitest treats an empty filter as an error, so the
+job went red. A step that tolerated a missing file would have gone green while
+running nothing, which is the same mistake with no symptom — and the suite in
+question is the one guarding HTTP 414 on every service-linked IAM role
+(log #37).
+
+`infra/workflowPaths.test.ts` now reads every workflow, extracts anything shaped
+like a path into this repository, and asserts it exists. Proven by pointing the
+workflow back at the old location, and by making the extraction pattern match
+nothing — the second being the canary, because a check that finds no paths
+passes.
+
+**Two: a test whose header claimed it needed no infrastructure.**
+
+`ledger.test.ts` opens with "No network and no API key: the model is a stub, so
+this runs in the dependency-free job on every commit". That was the design and
+it was not the behaviour. `ask()` reads scan freshness and account summary for
+the system prompt before it calls the model:
+
+```ts
+const [latest, summary] = await Promise.all([
+  getLatestScan(),
+  summariseAccount().catch(() => null),
+]);
+```
+
+`summariseAccount` is already tolerant. `getLatestScan` is not, and it opens a
+Postgres connection on the first line of the function under test. On a laptop
+with the stack running that is invisible. In the dependency-free job it is five
+`ECONNREFUSED` failures.
+
+Both reads are stubbed now, so the claim in the header is true. The alternative
+was gating the file behind the compose stack, which would have taken the guard
+on the citation ledger — the one safety property most worth checking on every
+commit — out of the job that runs on every commit. A test of a safety property
+should not need a database to express it.
+
+**Why I did not catch either locally.** `npm run verify` runs the same vitest
+command, on a machine where Postgres, Neo4j and moto have been up for days, and
+without `SKIP_INTEGRATION`. It is not the same thing the job runs, and the
+difference is exactly the set of assumptions a dependency-free job exists to
+check. Reproducing it is one line:
+
+```bash
+SKIP_INTEGRATION=1 DATABASE_URL=postgres://x@127.0.0.1:59999/none \
+NEO4J_URI=bolt://127.0.0.1:59998 npx vitest run --exclude '**/evals/**'
+```
+
+372 pass, 34 skip, nothing else was hiding.
+
+**What to take from it.** **A comment describing an invariant is not the
+invariant.** The header said "no network, no databases" because that was the
+intent at the time it was written, and nothing re-read it when `ask()` grew a
+database call. The repeatable version of the lesson is the command above: if a
+job claims to run without something, the only way to know is to take that thing
+away and run it.

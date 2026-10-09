@@ -8,15 +8,17 @@
     "start": "tsx src/server.ts",
     "scan": "tsx src/cli/scan.ts",
     "evals": "tsx src/cli/evals.ts",
-    "migrate": "tsx src/cli/migrate.ts",
     "typecheck": "tsc --noEmit",
     "inspect": "tsx src/cli/inspect.ts",
     "query": "tsx src/cli/query.ts",
     "evals:ground-truth": "vitest run src/evals/groundTruth.test.ts",
-    "setup": "tsx src/cli/setup.ts"
+    "setup": "tsx src/cli/setup.ts",
+    "db:generate": "drizzle-kit generate",
+    "db:migrate": "tsx src/cli/migrate.ts",
+    "db:studio": "drizzle-kit studio"
   },
   "dependencies": {
-    "@anthropic-ai/sdk": "^0.128.0",
+    "@ai-sdk/anthropic": "^4.0.78",
     "@aws-sdk/client-ec2": "^3.716.0",
     "@aws-sdk/client-iam": "^3.716.0",
     "@aws-sdk/client-lambda": "^3.716.0",
@@ -25,16 +27,25 @@
     "@aws-sdk/client-s3": "^3.716.0",
     "@aws-sdk/client-sts": "^3.716.0",
     "@aws-sdk/credential-providers": "^3.1140.0",
+    "@daveio/mock-aws": "*",
     "@daveio/shared": "*",
     "@fastify/cors": "^10.0.1",
+    "@nestjs/common": "^12.1.2",
+    "@nestjs/core": "^12.1.2",
+    "@nestjs/platform-fastify": "^12.1.2",
+    "ai": "^7.0.136",
     "dotenv": "^16.4.7",
+    "drizzle-orm": "^0.45.4",
     "fastify": "^5.2.0",
     "neo4j-driver": "^5.27.0",
     "pg": "^8.13.1",
-    "zod": "^3.24.1",
-    "@daveio/mock-aws": "*"
+    "reflect-metadata": "^0.2.2",
+    "rxjs": "^7.8.2",
+    "zod": "^3.24.1"
   },
   "devDependencies": {
-    "@types/pg": "^8.11.10"
+    "@ai-sdk/provider": "^4.0.26",
+    "@types/pg": "^8.11.10",
+    "drizzle-kit": "^0.31.11"
   }
 }

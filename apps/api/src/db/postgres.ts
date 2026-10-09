@@ -1,11 +1,14 @@
-/** Postgres connection pool and schema migration. */
+/** Postgres connection, Drizzle client, and schema migration. */
 
 import { createHash } from "node:crypto";
-import { readFile } from "node:fs/promises";
+import { fileURLToPath } from "node:url";
+import { drizzle } from "drizzle-orm/node-postgres";
+import { migrate as runMigrations } from "drizzle-orm/node-postgres/migrator";
 import pg from "pg";
 import type { Resource } from "@daveio/shared";
 
 import { cfg } from "../config.js";
+import * as schema from "./schema.js";
 
 export const pool = new pg.Pool({
   connectionString: cfg.DATABASE_URL,
@@ -16,16 +19,32 @@ export const pool = new pg.Pool({
 });
 
 /**
- * Apply the schema.
+ * The Drizzle client. Every query in this package goes through it.
  *
- * Every statement is `IF NOT EXISTS`, so this is safe to run on every boot.
- * A real deployment would use versioned migrations; this is a single-tenant
- * take-home, and an idempotent schema is honest about that rather than
- * pretending to a migration history that does not exist.
+ * `pool` is still exported because the health check issues a bare `SELECT 1`
+ * to prove the connection works, which is a liveness probe rather than a query
+ * about the domain and gains nothing from the query builder.
+ */
+export const db = drizzle(pool, { schema });
+
+export type Database = typeof db;
+
+/**
+ * Apply any migrations the database has not seen.
+ *
+ * Runs on boot, as the idempotent `schema.sql` did before it, so nothing about
+ * how the project starts has changed — but the schema is now defined once, in
+ * `schema.ts`, and changes to it produce a reviewable migration instead of an
+ * edit to a file that was applied by being re-read.
+ *
+ * `fileURLToPath`, not `URL.pathname`: on Windows the latter yields
+ * `/C:/projects/app/drizzle` and any directory containing a space arrives
+ * percent-encoded (engineering log #36).
  */
 export async function migrate(): Promise<void> {
-  const sql = await readFile(new URL("./schema.sql", import.meta.url), "utf8");
-  await pool.query(sql);
+  await runMigrations(db, {
+    migrationsFolder: fileURLToPath(new URL("../../drizzle", import.meta.url)),
+  });
 }
 
 /**
