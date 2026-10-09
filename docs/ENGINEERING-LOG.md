@@ -2830,3 +2830,68 @@ the image — so the only thing missing was the file, and nothing in either the
 `package.json` or the `Dockerfile` hints that the other exists. **A guard that adds
 a dependency is a change to every environment that runs the guarded thing**, and
 the environments that are not your laptop are the ones that find out.
+
+---
+
+## #52 — Building the net before the refactor, and what it caught on the first run
+
+**Context.** The project was reviewed and the feedback was three things: no ORM, no
+backend framework, and an LLM loop written by hand — all of which "made it harder
+to read". None of that is a correctness complaint. It is a legibility complaint,
+and the fix is to move the data layer onto an ORM, the HTTP layer onto a
+structured framework, and the agent loop onto a standard SDK, while keeping the
+two properties that were worth having: verdicts computed in code, and every ARN in
+an answer checked against what the tools returned.
+
+**The problem with that plan.** A refactor of three layers at once is only safe if
+something pins the behaviour. The suite had 424 tests and **exactly one of them
+issued an HTTP request** — `resourceArn.test.ts`, written to catch a 414 on long
+ARNs. Everything else tested functions. So the thing a port is most likely to break
+— the shape of what the frontend receives — was the thing nothing asserted.
+
+**The schemas were captured, not written.** Every endpoint was called against a
+populated database and its real response recorded, then described in Zod. Writing
+the contract from reading the handlers would have pinned what I _believed_ the API
+returned, which is the same class of error the refactor is trying to survive. Twice
+the capture disagreed with what I expected — `/api/scans/diff` returns two different
+shapes depending on whether there is anything to compare, and several `region`
+fields are nullable on IAM resources, which is obvious once seen and was not before.
+
+**Three endpoints must not be exercised, and saying so is part of the contract.**
+`POST /api/chat` spends money on every run. `POST /api/connection/mode` switches the
+deployment between the mock and a real account and drops the cached STS session, so
+a test calling it would reconfigure whoever was using the app. `POST
+/api/evals/ground-truth` re-seeds the account and runs a full scan. For each, the
+_refusal_ is a contract the UI renders, so that is what is pinned, and the entry says
+why rather than leaving a reader to think the test is lazy.
+
+`POST /api/scans` is worse: its only refusal is 409 when a scan is already running,
+and that flag is module-private, so **no input makes it decline**. It is excluded by
+name, in a map that carries the reason and what covers it instead. A second
+assertion refuses an exclusion whose reason is shorter than a sentence, because the
+cheapest way to silence a completeness check is to add a line to the exclusion list.
+
+**The completeness check found two untested routes on its first run** — `POST
+/api/scans` and `POST /api/connection/test`, both of which I had missed while
+writing a list I believed was exhaustive. It reads the route table out of Fastify's
+own router rather than grepping source, so a route registered by any path is in
+scope.
+
+**Proven by breaking it, five ways.** A handler renaming `idleCost` →
+`idleCostUsd`; a new route with no contract; a contract naming a route that no
+longer exists; an exclusion whose reason is "TODO"; and the `printRoutes` parser
+matching nothing. Each failed exactly the assertion written for it, and the last
+failed two — the canary that exists to prove the comparison is comparing something,
+and the comparison itself, which with an empty parse decided every contract was
+stale. That is the right behaviour: a parser that silently matches nothing makes
+every check built on it pass.
+
+**Baselines recorded before anything moves:** 390 tests in `verify`, 18 in the
+tier-1 ground-truth suite with drift attribution exact, and the stored tier-2 run at
+21/21 with mean F1 1.0.
+
+**What to take from it.** **A test suite can be large and still not cover the thing
+a refactor breaks.** 424 tests sounds like protection; one HTTP request is what it
+actually was, because the suite had grown by testing each new function rather than
+each new surface. The useful question before a refactor is not "how many tests are
+there" but "which of them would fail if the output changed".
