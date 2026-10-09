@@ -1195,4 +1195,4 @@ all. Narrowed to the single file, which immediately made
 knows the difference. `LICENSE`, `SECURITY.md`, `.nvmrc` and a grouped
 Dependabot config, and `npm audit --omit=dev` reports zero. Engineering log #59.
 
-**485 unit tests.**
+**488 unit tests.**

@@ -1,21 +1,15 @@
 /**
  * The scan write path, round-tripped.
  *
- * `saveScanResult` is the riskiest thing the ORM port touched: a transaction
- * wrapping three different kinds of write, two of them batched by hand because
- * Postgres caps a statement at 65535 parameters. Before the port it was strings
- * of SQL with `$1, $2, …` placeholder arithmetic; nothing read it back and
- * compared, so an off-by-one in that arithmetic would have shown up as missing
- * resources in the UI rather than as a failing test.
+ * `saveScanResult` was the riskiest thing the ORM port touched - a transaction
+ * over three kinds of write, two batched by hand because Postgres caps a
+ * statement at 65535 parameters. Nothing read it back, so an off-by-one in the
+ * old placeholder arithmetic would have surfaced as missing resources in the UI
+ * rather than a failing test.
  *
- * So this writes a scan, reads it back, and asserts it came out the way it went
- * in — deliberately with more resources than `BATCH_SIZE`, because a batching
- * bug that only appears on the second chunk is the one worth catching.
- *
- * Runs against the configured database and cleans up after itself. The scan ids
- * are generated and the account id is obviously synthetic, so it cannot collide
- * with real scan history, and `ON DELETE CASCADE` removes the snapshots with
- * the run.
+ * Writes more resources than `BATCH_SIZE` on purpose: a batching bug that only
+ * appears on the second chunk is the one worth catching. Cleans up after
+ * itself, with a synthetic account id that cannot collide with real history.
  */
 
 import { afterAll, beforeAll, describe, expect, it } from "vitest";

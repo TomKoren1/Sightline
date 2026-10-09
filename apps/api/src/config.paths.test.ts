@@ -1,25 +1,19 @@
 /**
  * Filesystem paths derived from `import.meta.url`.
  *
- * Four files built a path with `new URL(..., import.meta.url).pathname`, which
- * is a **URL** path rather than a filesystem path. The two are identical only
- * when nothing in the path needs escaping, which is true on the machine this
- * was written on and false in two common situations:
+ * Four files used `new URL(...).pathname`, a URL path, which `fs` cannot open
+ * once anything needs escaping:
  *
- *   Windows            -> /C:/projects/app/.env      (leading slash, drive letter)
- *   a space in a dir   -> /home/me/My%20Projects/.env
+ *   Windows          -> /C:/projects/app/.env
+ *   a space in a dir -> /home/me/My%20Projects/.env
  *
- * `fs` cannot open either, so `dotenv` failed with ENOENT — silently, because
- * it was called with `quiet: true`. No variable from `.env` was ever loaded.
- * The Zod defaults happen to match `.env.example`, so everything kept working
- * except `ANTHROPIC_API_KEY`, which has no default: a Windows user was told the
- * key was not set while looking at it in their `.env`, and every other value
- * they had edited was being ignored too (engineering log #36).
+ * `dotenv` then failed ENOENT silently and no `.env` value loaded - only
+ * `ANTHROPIC_API_KEY` broke visibly, since the Zod defaults cover the rest
+ * (engineering log #36).
  *
- * Two guards, because they catch different things. The first checks that the
- * path this module actually computes resolves to a real file. The second
- * refuses the broken idiom anywhere in the repository, including in files that
- * do not exist yet — which is the one that would have prevented all four.
+ * Two guards: one that the computed path resolves to a real file, and one that
+ * refuses the idiom anywhere in the repository - including in files that do not
+ * exist yet, which is what would have prevented all four.
  */
 
 import { existsSync, readFileSync, readdirSync } from "node:fs";

@@ -1,26 +1,15 @@
 /**
- * Onboarding guide for connecting a real AWS account.
+ * Onboarding guide for connecting a real AWS account. Five steps, one action
+ * each, reasoning behind `<Why>` disclosures - the page was 613 lines when each
+ * argument sat inline above the command the reader came for.
  *
- * Five steps, one action each, and the reasoning moved behind `<Why>`
- * disclosures.
+ * It **guides** onboarding rather than performing it. The obvious feature is a
+ * form, but this API has no authentication, so that form would be an open
+ * endpoint that assumes a role into somebody's account.
  *
- * This screen previously explained itself as it went, and reached 613 lines: the
- * argument for each decision sat inline, above the command the reader had come
- * for. Each paragraph was worth keeping and the page was not usable, which is
- * the trade-off a disclosure removes - the depth is one click away rather than
- * in the way. The reasoning also lives in docs/DECISIONS.md, so nothing here is
- * the only copy.
- *
- * It still **guides** onboarding rather than performing it. The obvious feature
- * is a form: paste a role ARN and an external id, press connect. This API has no
- * authentication, so that form would be an open endpoint that assumes a role
- * into somebody's AWS account and persists a value the role template itself
- * calls a credential.
- *
- * Both command blocks declare which values are pre-filled and which are the
- * reader's, via `<Fields>` - and a value that is *not* known is never labelled
- * as filled in, which is the defect that sent a real deploy at a principal that
- * did not exist (engineering log #46).
+ * `<Fields>` declares which values are pre-filled and which are the reader's. A
+ * value that is not known is never labelled as filled in - the defect that sent
+ * a real deploy at a principal that did not exist (engineering log #46).
  */
 
 import { useMutation, useQuery } from "@tanstack/react-query";

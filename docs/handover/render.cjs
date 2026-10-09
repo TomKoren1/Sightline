@@ -26,14 +26,8 @@ const puppeteer = require("puppeteer");
     args: ["--no-sandbox", "--disable-dev-shm-usage"],
   });
   const page = await browser.newPage();
-  /**
-   * Resolved to an absolute path first.
-   *
-   * `"file://" + src` with the relative argument this script's own README
-   * documents produces `file://handover.html`, which Chrome rejects outright
-   * with `net::ERR_INVALID_URL` - so the documented command had never worked
-   * from the directory it tells you to run it in.
-   */
+  // Absolute: `"file://" + src` with the relative argument the README documents
+  // gives `file://handover.html`, which Chrome rejects as ERR_INVALID_URL.
   await page.goto(`file://${path.resolve(src)}`, { waitUntil: "networkidle0" });
 
   const footer = label ?? (await page.title());

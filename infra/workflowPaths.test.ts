@@ -1,20 +1,14 @@
 /**
- * Every repository path a workflow names has to exist.
+ * Every repository path a workflow names has to exist. CI runs some suites by
+ * path, and a path is a reference the type system cannot see.
  *
- * CI runs some suites by path rather than by pattern, because they need the
- * compose stack and the rest must not. A path is a reference the type system
- * cannot see, so moving a file leaves the workflow pointing at nothing.
+ * `resourceArn.test.ts` moved during the NestJS port and its step reported
+ * `No test files found, exiting with code 1` - the lucky, loud version. The
+ * quiet version is a step that tolerates a missing file, where the suite stops
+ * running and nothing says so (engineering log #56).
  *
- * That happened: `resourceArn.test.ts` moved from `routes/` into `graph/`
- * during the NestJS port, and the step that ran it reported `No test files
- * found, exiting with code 1`. The loud version is the lucky one — vitest
- * treats an empty filter as an error. The quiet version is the same mistake in
- * a step that tolerates a missing file, where the suite simply stops running
- * and nothing says so (engineering log #56).
- *
- * Paths rather than globs: a glob that matches nothing is indistinguishable
- * from a glob that matches nothing *yet*, and this only needs to catch the case
- * where a specific named file was moved or deleted.
+ * Paths rather than globs: a glob matching nothing is indistinguishable from
+ * one that matches nothing *yet*.
  */
 
 import { existsSync, readFileSync, readdirSync } from "node:fs";
@@ -35,18 +29,11 @@ const PATH_PATTERN =
   /\b(?:apps|packages|infra|scripts|deploy|evals)\/[A-Za-z0-9_./-]+\.[a-z]{2,4}\b/g;
 
 /**
- * Glob patterns are not paths, and must not be checked as if they were.
- *
- * The CI exclusion for `groundTruth.test.ts` is written as a double-star glob,
- * and the pattern it contains is the substring
- * `evals/groundTruth.test.ts`, which `PATH_PATTERN` happily matches and which
- * does not exist at the repository root - the real file is four directories
- * down. Reported as a missing path, that is a false failure on a correct
- * workflow, and the fix people reach for is deleting the check.
- *
- * Whole tokens are dropped rather than the `*` characters trimmed: a pattern is
- * a pattern wherever the wildcard sits in it, and a partially de-globbed string
- * is exactly the kind of near-path that produced the false failure.
+ * Glob patterns are not paths. CI's exclusion glob contains the substring
+ * `evals/groundTruth.test.ts`, which does not exist at the root - the real file
+ * is four directories down - so it was reported as missing on a correct
+ * workflow. Whole tokens are dropped, not just the `*`: a partially de-globbed
+ * string is the same near-path that caused the false failure.
  */
 function withoutGlobs(text: string): string {
   return text

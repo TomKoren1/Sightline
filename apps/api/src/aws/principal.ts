@@ -1,34 +1,18 @@
 /**
  * Turning "who am I" into "who a trust policy can name".
  *
- * `sts:GetCallerIdentity` answers a different question from the one an IAM
- * trust policy asks. It reports the **session** you are currently using, so it
- * returns an `arn:aws:sts::...` ARN. A trust policy's `Principal` needs the
- * **identity** behind that session, which is always an `arn:aws:iam::...` ARN.
- * The two are not interchangeable and IAM rejects the former outright.
- *
- * This mattered in practice. The onboarding guide pre-filled its deploy command
- * with whatever `GetCallerIdentity` returned, which against the mock is
- * `arn:aws:sts::123456789012:user/moto`. Copying that into the template gives
- *
- *   Parameter 'SightlineScannerRoleArn' must match pattern
- *   ^arn:aws:iam::[0-9]{12}:(role|user)/.+$
- *
- * which does at least name the parameter, but says nothing about the one
- * character that is wrong. Worse, a trust policy that *does* accept an `sts`
- * ARN silently never matches, so the stack deploys and every AssumeRole fails
- * later with AccessDenied. Converting here means the guide shows a value that
- * works (engineering log #28).
- *
- * The conversions, which are the documented equivalences:
+ * `GetCallerIdentity` reports the **session** (`arn:aws:sts::...`); a trust
+ * policy's `Principal` needs the **identity** behind it (`arn:aws:iam::...`).
+ * IAM rejects the former outright, and a policy that does accept one silently
+ * never matches - the stack deploys and every AssumeRole fails later with
+ * AccessDenied (engineering log #28).
  *
  *   sts::A:assumed-role/Role/session  ->  iam::A:role/Role
  *   sts::A:user/name                  ->  iam::A:user/name
- *   iam::A:(role|user)/...            ->  unchanged, already a principal
+ *   iam::A:(role|user)/...            ->  unchanged
  *
- * Everything else - federated users, the account root, service principals - is
- * either not assumable or not accepted by this template, and is reported as
- * such rather than being coerced into something plausible-looking.
+ * Everything else - federated users, account root, service principals - is not
+ * assumable, and is reported rather than coerced into something plausible.
  */
 
 /** A caller identity that a trust policy can name, or why it cannot. */

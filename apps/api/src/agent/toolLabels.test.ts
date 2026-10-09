@@ -1,21 +1,16 @@
 /**
  * Every tool the model can call has user-facing copy.
  *
- * The chat header answers "what is the agent doing" by naming the running tool
- * in plain language, which users need and a spinner does not do. That
- * only holds if the label map keeps up with the tool library, and it had already
- * fallen behind: `find_unprotected_buckets` (ADR-012) and `suggest_remediation`
- * (ADR-014) were both added after the map was written, so both fell through to
- * `Running find_unprotected_buckets` — the raw tool name that the map's own
- * comment says is not user-facing copy.
+ * The chat header names the running tool in plain language, which only holds if
+ * the label map keeps up with the tool library - and it had already fallen
+ * behind twice, both tools falling through to the raw name the map's own comment
+ * says is not user-facing copy.
  *
- * Nobody would notice, because the fallback works and the label flashes past in
- * under a second. That is exactly why it needs a test rather than vigilance: the
- * next tool added will have the same problem on the same day it ships.
+ * Nobody would notice: the fallback works and the label flashes past in under a
+ * second. Which is why it needs a test rather than vigilance.
  *
- * This reads the web component as text from the API's test suite because
- * `vitest.config.ts` does not include `apps/web`, and one cross-workspace read
- * is cheaper than a second test runner for a single assertion.
+ * Reads the web component as text because `vitest.config.ts` does not include
+ * `apps/web`, and one cross-workspace read is cheaper than a second runner.
  */
 
 import { readFileSync } from "node:fs";

@@ -1,21 +1,16 @@
 /**
- * Agent eval cases.
+ * Agent eval cases. Tier one proves the data is right; this proves the agent
+ * *uses* it right - a correct graph can still be answered wrongly.
  *
- * Tier two of the eval suite. Tier one (`groundTruth.test.ts`) proves the data
- * is right; this proves the agent *uses* it right, which is a different
- * failure mode - a correct graph can still be answered wrongly by picking the
- * wrong tool or over-generalising from a partial result.
+ * Expectations are by resource **name**: moto assigns random ids, so the grader
+ * resolves names to ARNs at run time.
  *
- * Expectations are expressed by resource **name**, because moto assigns random
- * ids and the grader resolves names to ARNs at run time.
- *
- * Each case can assert three things:
  *   - `expectResources`  every one must be cited (recall)
  *   - `forbidResources`  none may be cited - the traps (precision)
- *   - `expectTools`      at least one of these must be called
+ *   - `expectTools`      at least one must be called
  *
- * `mustMention` / `mustNotMention` catch answers that are technically
- * well-cited but say the wrong thing.
+ * `mustMention` / `mustNotMention` catch answers that are well-cited but say
+ * the wrong thing.
  */
 
 export interface EvalCase {
@@ -99,28 +94,18 @@ export const EVAL_CASES: EvalCase[] = [
     expectResources: ["northwind-ci-deploy"],
     expectTools: ["find_admin_principals"],
     /**
-     * Asserted positively, on purpose - there is no `mustNotMention` here, and
-     * removing it was the finding.
+     * Asserted positively on purpose: removing `mustNotMention` was the finding.
      *
-     * The point of this case is that the answer must NOT make the role-shaped
-     * inference "used by nothing, therefore delete it". Two attempts to test
-     * that as a forbidden substring both failed correct answers. The first
-     * forbade /unused|candidate for removal/ anywhere, and the agent had
-     * written "UnusedAdminRole - admin, unused by anything (cleanup
-     * candidates)" about a *different* resource. The second anchored the
-     * pattern to within 120 characters of "northwind-ci-deploy", and the agent
-     * had written "a different kind of risk than an unused admin role" - a
-     * sentence that states the exact distinction being tested for, and matches
-     * a regex looking for its opposite.
+     * This case tests that the answer does *not* infer "used by nothing,
+     * therefore delete it". Two forbidden-substring attempts both failed
+     * correct answers - one matched the phrase about a different resource, the
+     * other matched "a different kind of risk than an unused admin role", a
+     * sentence stating the exact distinction being tested for.
      *
-     * Negation and comparison defeat substring matching, and no amount of
-     * tightening fixes that: "X is not unused" and "X is unused" differ by a
-     * token that carries the whole meaning. So the wrong inference is tested
-     * by requiring the right one instead - the answer has to reach for
-     * long-lived credentials AND distinguish a user from a role, neither of
-     * which an answer making the delete-it inference would do. Catching the
-     * negative form properly needs an LLM judge, which is on the roadmap for
-     * exactly this reason. Same lesson as engineering log #13, twice over.
+     * Negation defeats substring matching: "X is not unused" and "X is unused"
+     * differ by the token carrying the whole meaning. So the wrong inference is
+     * tested by requiring the right one instead. Catching the negative form
+     * properly needs an LLM judge (log #13, twice over).
      */
     mustMention: [/long-lived|standing|long-term|rotate|leak/i, /\buser\b/i],
     rationale:

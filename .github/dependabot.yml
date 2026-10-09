@@ -1,7 +1,5 @@
-# Dependency updates, grouped so that a week's patches arrive as one reviewable
-# pull request rather than fifteen. The AWS SDK alone would otherwise open a
-# handful every week - it publishes most days, and this project depends on six
-# of its clients.
+# Grouped so a week's patches arrive as one reviewable PR. The AWS SDK alone
+# publishes most days, and this project depends on six of its clients.
 version: 2
 updates:
   - package-ecosystem: npm
@@ -21,10 +19,15 @@ updates:
         dependency-type: production
         update-types: ["minor", "patch"]
 
-  # The workflows pin actions by major version, so this is what notices when a
-  # pinned major goes end-of-life - the failure mode being a deprecation warning
-  # nobody reads until the action stops running.
+  # Notices when a pinned action major goes end-of-life.
   - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: monthly
+
+  # Base images. `node:22-alpine` and `nginx:alpine` float on patch, so this is
+  # what notices a major going out of support rather than a silent rebuild.
+  - package-ecosystem: docker
     directory: /
     schedule:
       interval: monthly

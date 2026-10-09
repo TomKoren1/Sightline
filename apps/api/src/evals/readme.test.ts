@@ -1,24 +1,14 @@
 /**
- * Guards on the README.
+ * Guards on the README: every documented command must exist, and every number it
+ * quotes must match what is there.
  *
- * The README is the first thing anyone reads and the only instructions most
- * people will follow, and nothing executes it — which is the same situation the
- * CloudFormation template was in before engineering log #20 and #22, where it
- * turned out to have never been deployed and not to work.
+ * It has rotted twice. `npm run query -w @sightline/api` was in the commands
+ * table with no such script defined - the CLI file existed and its own header
+ * gave that invocation. And the counts drifted: eight ADRs claimed where there
+ * were thirteen.
  *
- * It has already rotted twice. An audit found `npm run query -w @sightline/api`
- * documented in the commands table with no such script defined: the CLI file
- * existed, its own header comment gave that exact invocation, and running it as
- * written failed. And separately the counts drifted — eight ADRs claimed where
- * there were thirteen, fourteen assertions where there were fifteen.
- *
- * So the cheapest possible check: every command the documentation tells you to run
- * must exist, and the numbers it quotes must match what is actually there. "The
- * documentation" is the README plus `docs/SETUP.md` and `docs/ROADMAP.md`,
- * since the detail was moved there and a guard reading one file could be defeated
- * by moving a line.
- * These would look eccentric in most repositories. Here they are cheaper than
- * the two audits it took to find these by hand.
+ * "The documentation" is the README plus `docs/SETUP.md` and `docs/ROADMAP.md`,
+ * so moving a line between them is not a way to escape the check.
  */
 
 import { readFileSync, readdirSync } from "node:fs";

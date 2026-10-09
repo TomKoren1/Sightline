@@ -1,29 +1,17 @@
 /**
- * AWS Resource Explorer, used as an optional fast path.
+ * AWS Resource Explorer, as an optional fast path. Two limits:
  *
- * Resource Explorer is suggested for pulling a bulk inventory across
- * services and regions in a few calls, and on a large real account it is the
- * right first move. Two things constrain how far it can be taken:
+ *  1. **It returns identity, not configuration** - ARN, type, region, tags, but
+ *     not a security group's rules or a bucket's policy, which is what every
+ *     question here depends on. It cannot replace the collectors.
+ *  2. **It needs an index the customer must create,** and a read-only role
+ *     cannot create one. On an account without it this path is unavailable.
  *
- *  1. **It returns identity, not configuration.** A search result carries an
- *     ARN, a type, a region and tags. It does not carry a security group's
- *     rules, a bucket's policy, or an RDS instance's subnet group - which are
- *     exactly the fields every question in this project depends on. So it
- *     cannot replace the collectors; the detailed Describe calls still happen.
+ * So it is used only to narrow the scan plan: one Search tells us which four of
+ * 30 enabled regions hold resources, which is 30 scan units instead of 180.
  *
- *  2. **It needs an index the customer has to create.** Resource Explorer
- *     requires a local index per region plus one aggregator index, and a
- *     read-only role cannot create either. On an account that has not enabled
- *     it, this path is simply unavailable no matter what we do.
- *
- * What it *is* used for here: narrowing the scan plan. On an account with 30
- * enabled regions and resources in four of them, one Search call tells us which
- * four, and the other 26 regions are skipped instead of costing six Describe
- * calls each. That is the difference between 180 scan units and 30.
- *
- * Every failure mode degrades to "fast path unavailable", never to an error:
- * missing index, missing permission, unsupported region, or a mock that does
- * not implement the service at all (see engineering log #4).
+ * Every failure degrades to "fast path unavailable", never to an error -
+ * including a mock that does not implement the service (engineering log #4).
  */
 
 import { ListIndexesCommand, paginateSearch } from "@aws-sdk/client-resource-explorer-2";

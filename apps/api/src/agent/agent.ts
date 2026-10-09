@@ -1,33 +1,16 @@
 /**
- * The agent loop.
+ * The agent loop: ask the model, run the tools it asked for, repeat until it
+ * answers in prose. The loop is the AI SDK's; what matters is what wraps it.
  *
- * Ask the model, run whatever tools it asked for, hand the results back, repeat
- * until it answers in prose. The loop itself is the AI SDK's; what matters here
- * is what wraps it.
+ * The hand-written loop was replaced once it was clear that owning the loop was
+ * not the only way to keep the citation ledger exact. `execute` below is this
+ * file's own function - it records into the tracker where the rows are produced,
+ * so nothing mediates the results. The two load-bearing parts are unchanged:
+ * the ledger, and `enforceReadOnlyNotice` on the single exit path (ADR-005,
+ * ADR-006, ADR-018).
  *
- * **Why this runs on a framework now.** The loop was hand-written, and the
- * argument for that was specific: validating that every ARN in an answer came
- * from a tool result means holding the tool results, and a framework that owns
- * tool execution would put its own callback API between me and the one
- * mechanism that catches the model inventing a resource.
- *
- * That argument turned out to be half right. It is true that the citation
- * ledger has to be exact — a ledger that misses one tool's output flags a real
- * resource as invented, and a user who sees that once stops believing the
- * warnings. It is not true that owning the loop is the only way to get there:
- * `execute` below is *this* file's function, called by the SDK with the model's
- * arguments, and it records into the tracker at the point the rows are
- * produced. Nothing mediates the results. The framework schedules the calls; it
- * never sees what they returned before the ledger does.
- *
- * So the loop is conventional and the two load-bearing parts are unchanged:
- * the citation ledger below, and `enforceReadOnlyNotice`, which runs on the
- * single exit path after the model has finished (ADR-005, ADR-006, ADR-018).
- *
- * Everything the loop does is emitted as an event, so the UI can show which
- * tool is running rather than a spinner - "what is the agent doing while it
- * works" is one of the things users need, and a tool name is a far
- * better answer than "Thinking...".
+ * Every step is emitted as an event, so the UI can name the running tool rather
+ * than show a spinner.
  */
 
 import { randomUUID } from "node:crypto";

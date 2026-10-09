@@ -197,22 +197,14 @@ export async function findReachableFrom(params: {
   /**
    * The source is returned too, at `hops: 0`.
    *
-   * It was not, and that turned out to matter. Every answer to "if X were
-   * compromised, what could it reach?" names X - so with X absent from the
-   * result, its ARN was absent from the citable set, and the agent filled the
-   * gap by emitting a bare `arn:aws:ec2:...:instance/` prefix followed by "let
-   * me confirm exact ARN". The citation validator flagged it, correctly, as
-   * unsupported.
+   * Every answer to "if X were compromised, what could it reach?" names X, so
+   * with X absent its ARN was outside the citable set and the agent emitted a
+   * bare ARN prefix plus "let me confirm exact ARN" - correctly flagged as
+   * unsupported. An eval case had been *relaxed* to stop expecting the source
+   * (log #13), which fixed the test and left the defect (log #32).
    *
-   * An earlier eval case had been *relaxed* to stop expecting the source, on
-   * the grounds that it was not citable (engineering log #13). That fixed the
-   * test and left the defect: a tool whose result set cannot support the
-   * obvious answer to its own question. Returning the source fixes the cause
-   * rather than the symptom (engineering log #32).
-   *
-   * Two queries rather than a Cypher UNION subquery: the source lookup also
-   * distinguishes "no such resource" (no rows at all) from "reaches nothing"
-   * (one row, the source), which a single query conflated into an empty result.
+   * Two queries rather than a UNION: the source lookup also separates "no such
+   * resource" from "reaches nothing", which one query conflated.
    */
   const [source] = await readQuery<ResourceRow>(
     `MATCH (source:Resource)

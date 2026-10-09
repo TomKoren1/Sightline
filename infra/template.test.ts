@@ -1,24 +1,16 @@
 /**
- * Guards on the CloudFormation template.
+ * Guards on the CloudFormation template, which grants Sightline its access and
+ * which nothing in this repository executes. Two things went wrong as a result:
  *
- * The template is the artefact that grants Sightline its access, and the README
- * and ADR-007 both argue in detail about what it permits. Nothing in this
- * repository executes it, so for a long time nothing checked that any of that
- * was true - and two separate things went wrong as a result.
+ *  - it shipped `iam::aws:policy/ViewOnlyAccess`, which does not exist -
+ *    ViewOnlyAccess is a job-function policy. A real deployment rolled back
+ *    (engineering log #20).
+ *  - twice the explanatory header was silently truncated, ~70 lines each time,
+ *    including the rationale the README points readers at - and nothing failed,
+ *    because comments have no tests.
  *
- * It shipped with `arn:aws:iam::aws:policy/ViewOnlyAccess`, which does not
- * exist: ViewOnlyAccess is a job-function policy and lives under
- * `job-function/`. A real deployment failed and rolled back (engineering log
- * #20).
- *
- * And twice the explanatory header was silently truncated - once demonstrably
- * by Prettier reformatting a folded block scalar (#18), once by something never
- * identified. Both times ~70 lines vanished, including the entire rationale the
- * README points readers at, and nothing failed, because comments have no tests.
- *
- * So these tests assert both halves: that the permissions are the ones we
- * claim, and that the reasoning is still present. A document nobody checks
- * rots; this is the cheapest possible check.
+ * So both halves are asserted: the permissions are the ones claimed, and the
+ * reasoning is still present.
  */
 
 import { readFileSync } from "node:fs";

@@ -1,34 +1,20 @@
 #!/usr/bin/env node
 /**
- * Make sure the project's dependencies are installed, before an npm script that
- * needs them tries to run.
+ * Install the project's dependencies if an npm script needs them and they are
+ * missing. Every root script is prefixed `node scripts/deps.mjs &&`.
  *
- * Every script in the root `package.json` is prefixed with `node
- * scripts/deps.mjs &&`, so this runs first and the real command runs second.
+ * On a fresh clone the README's own `npm run setup` fails with
+ * `'tsx' is not recognized as an internal or external command` - true, not the
+ * reader's fault, and no help at all.
  *
- * **Why this exists.** The README promises Docker and nothing else, and then
- * tells the reader to run `npm run setup -- --anthropic-key sk-ant-...`. On a
- * fresh clone that has never been `npm install`ed there is no `tsx`, so the
- * shell reports:
+ * This works as a prefix rather than a wrapper because npm puts
+ * `node_modules/.bin` on PATH whether or not it exists, and PATH resolves at
+ * execution - so installing here lets the second half of the `&&` find its
+ * binary on the same run, leaving every existing command byte-identical.
  *
- *     'tsx' is not recognized as an internal or external command
- *
- * which is true, is not the reader's fault, and does not name the thing they
- * need to do. It is also not specific to `setup`: `npm run drift` and `npm run
- * scan` are in the same README paragraph and fail the same way, as would every
- * other script here, since all of them are binaries under `node_modules/.bin`.
- *
- * `npm` puts `node_modules/.bin` on PATH whether or not that directory exists,
- * and PATH is resolved when the command is executed rather than when the script
- * starts - so installing here makes the second half of the `&&` find its binary
- * on the same run. That is what lets this be a prefix rather than a wrapper, and
- * it is why the existing commands are left byte-for-byte identical after it: no
- * working path changes shape to gain this.
- *
- * Zero dependencies and plain JavaScript on purpose. It is the one file that has
- * to run correctly when nothing is installed, so it may not import from the
- * workspace packages, which are TypeScript and need `tsx` to load - the very
- * thing whose absence it exists to handle.
+ * Zero dependencies and plain JavaScript: it is the one file that must run when
+ * nothing is installed, so it cannot import the workspace packages - they are
+ * TypeScript and need the very binary whose absence it handles.
  */
 
 import { spawnSync } from "node:child_process";
@@ -92,12 +78,9 @@ export const NOTICE =
   "to node_modules/ in this folder.\n";
 
 /**
- * The narrow slice of `spawnSync` this file actually depends on.
- *
- * Declared rather than inherited from `typeof spawnSync` so the seam states its
- * own contract: the only things read from the result are the exit status and the
- * spawn error. A test can then pass a two-field stub instead of constructing a
- * whole `SpawnSyncReturns` - which, in plain JavaScript, it cannot do at all.
+ * The slice of `spawnSync` this file depends on. Declared rather than inherited
+ * from `typeof spawnSync` so a test can pass a two-field stub instead of a
+ * whole `SpawnSyncReturns` - which, in plain JavaScript, it cannot build.
  *
  * @typedef {(
  *   command: string,

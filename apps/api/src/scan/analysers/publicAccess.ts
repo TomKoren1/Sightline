@@ -1,25 +1,15 @@
 /**
- * Is an S3 bucket reachable by an anonymous principal?
+ * Is an S3 bucket reachable by an anonymous principal? Four inputs interact:
+ * the bucket policy, its ACL, its public access block, and the account's.
  *
- * This is the question this opens with, and it is a good example of why
- * the model is not allowed to answer it. Four inputs interact:
+ * A wildcard-principal policy is NOT public under `RestrictPublicBuckets`, and
+ * a public ACL is NOT public under `IgnorePublicAcls`. The mock holds two
+ * buckets with byte-identical policies where exactly one is effectively public,
+ * so reading only the policy is visibly wrong.
  *
- *   1. the bucket policy - does it allow a wildcard principal?
- *   2. the bucket ACL - does it grant to AllUsers or AuthenticatedUsers?
- *   3. the bucket's public access block
- *   4. the account's public access block (not read here; see the caveat below)
- *
- * A bucket with a wildcard-principal policy is NOT public if
- * `RestrictPublicBuckets` is set, and a bucket with a public ACL is NOT public
- * if `IgnorePublicAcls` is set. The mock account contains two buckets with
- * byte-identical policies where exactly one is effectively public, so any
- * implementation that reads only the policy is visibly wrong.
- *
- * Caveat, stated rather than hidden: the account-level public access block
- * overrides all of this and is not read, because doing so needs
- * `s3control:GetPublicAccessBlock` against the account id. Where it is set,
- * this analyser can only be too cautious in the "public" direction, never too
- * permissive - it may call a bucket public that the account level blocks.
+ * The account-level block overrides all of this and is not read - that needs
+ * `s3control:GetPublicAccessBlock`. So this can only be too cautious in the
+ * "public" direction, never too permissive.
  */
 
 const ALL_USERS = "http://acs.amazonaws.com/groups/global/AllUsers";

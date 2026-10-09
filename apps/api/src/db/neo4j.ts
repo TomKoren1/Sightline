@@ -1,19 +1,14 @@
 /**
- * The Neo4j projection.
+ * The Neo4j projection: derived, not authoritative (ADR-003). Rebuilt wholesale
+ * from one scan's Postgres snapshots in a single transaction, so a reader never
+ * sees a half-built graph and a failed rebuild leaves the previous one intact.
  *
- * This graph is derived, not authoritative (ADR-003). It is rebuilt wholesale
- * from the Postgres snapshots of a single scan, inside one transaction, so a
- * reader never sees a half-built graph and a failed rebuild leaves the previous
- * one intact.
+ * Every node carries `:Resource`, which the uniqueness constraint hangs off,
+ * plus its kind (`:Ec2Instance`) - so a query can be generic or specific
+ * without two sets of queries.
  *
- * Every node carries two labels: `:Resource`, which everything shares and the
- * uniqueness constraint hangs off, and its kind (`:Ec2Instance`, `:S3Bucket`).
- * That lets a query be generic across the estate or specific to one type
- * without maintaining two sets of queries.
- *
- * Labels and relationship types cannot be parameterised in Cypher, so writes
- * are grouped by kind and the label is interpolated - safely, because it comes
- * from our own closed enum and never from user input.
+ * Labels cannot be parameterised in Cypher, so writes are grouped by kind and
+ * the label interpolated - safely, since it comes from a closed enum.
  */
 
 import neo4j, { type Driver, type Session } from "neo4j-driver";

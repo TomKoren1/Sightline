@@ -1,22 +1,15 @@
 /**
- * Migrating an existing database must produce the same schema as creating one.
+ * Migrating an existing database must produce the same schema as creating one,
+ * because the baseline migration does both jobs and the drift is silent.
  *
- * The ORM was introduced to a project that already had users with data in it,
- * so the baseline migration has to do two different jobs: build the schema on a
- * new database, and adopt one that the `schema.sql` it replaced had already
- * built. Those two paths are easy to let drift, and the drift is silent.
+ * The first version wrapped each `ADD CONSTRAINT` in
+ * `EXCEPTION WHEN duplicate_object`, which catches a clash of *names* rather
+ * than an equivalent constraint - and Drizzle names them differently from
+ * Postgres's defaults. Applied to a real database it added a second copy of
+ * every foreign key, five becoming ten, with nothing failing anywhere. It
+ * surfaced only by diffing both catalogues, which is what this now does.
  *
- * It was not hypothetical. The first version of the baseline wrapped each
- * `ADD CONSTRAINT` in `EXCEPTION WHEN duplicate_object`, which reads like it
- * handles "the constraint is already there". It does not: it catches a clash of
- * *names*, and Drizzle names constraints differently from Postgres's defaults.
- * Applied to a real database it added a second copy of every foreign key —
- * five became ten, each one enforced twice on every insert, and nothing
- * anywhere failed. It surfaced only by dumping both catalogues and diffing
- * them, which is what this test now does on every run.
- *
- * Builds two scratch databases next to the configured one, so it needs a
- * Postgres but touches nothing that matters.
+ * Builds two scratch databases, so it needs a Postgres but touches nothing.
  */
 
 import { afterAll, beforeAll, describe, expect, it } from "vitest";

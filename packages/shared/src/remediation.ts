@@ -1,30 +1,16 @@
 /**
- * Remediation: the fix, written out, and never applied.
+ * Remediation: the fix, written out, and never applied (ADR-005, 007, 009). A
+ * remediation is a document an engineer reads and runs themselves.
  *
- * The product tells you exactly what to change and will not change it. That is
- * not a limitation worked around — it is the same position the rest of the
- * system takes, carried to its conclusion. Sightline holds read-only access by
- * design (ADR-007), the agent cannot express a mutation (ADR-005), and a
- * request to alter the account is refused in code (ADR-009). A remediation is
- * therefore a **document**, not an action: a string an engineer reads, checks
- * against their own knowledge of the system, and runs themselves.
+ * Two properties make that useful rather than glib:
  *
- * Two properties make that useful rather than glib.
- *
- * **It is computed, not generated.** The commands come from the same evidence
- * the verdict came from — which policy statement, which access block, which
- * ingress rule — by the same argument as ADR-004. A model asked to write
- * `aws s3api put-public-access-block` will usually get it right, and "usually"
- * is not a property you want in a command someone pastes into a production
- * account.
- *
- * **Every remediation states what it might break.** `caution` is required, not
- * optional. A fix without a blast radius is a trap, and the most dangerous
- * output this feature could produce is a confident one-liner that takes a
- * public asset host offline or strips the permissions off a role a deployment
- * pipeline depends on. Where the finding is posture rather than exposure, the
- * caution says so plainly — re-enabling a guardrail on a bucket nobody can
- * reach cannot break access that does not exist.
+ * - **Computed, not generated.** The commands come from the same evidence as
+ *   the verdict, by the argument in ADR-004. A model asked to write
+ *   `put-public-access-block` *usually* gets it right, and "usually" is not a
+ *   property you want in a command pasted into production.
+ * - **`caution` is required.** A fix without a blast radius is a trap: the
+ *   worst output here would be a confident one-liner that takes a public asset
+ *   host offline.
  */
 
 /** How much damage applying this could do if the context is wrong. */

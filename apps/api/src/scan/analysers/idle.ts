@@ -1,20 +1,15 @@
 /**
  * Provisioned, billable, and doing nothing.
  *
- * Every rule here relies on a *structural* signal - something is attached to
- * nothing, or associated with nothing, or stopped. None of them needs usage
- * metrics, which matters because the signal has to survive on an account we
- * have only inventoried once.
+ * Every rule uses a *structural* signal - attached to nothing, associated with
+ * nothing, stopped - so none needs usage metrics, which matters on an account
+ * inventoried once. Proper detection would add CloudWatch utilisation, Cost
+ * Explorer for real spend, and a time window so "created ten minutes ago" is
+ * not reported as abandoned; all reachable from the read-only role
+ * (docs/ROADMAP.md).
  *
- * What proper idle detection would need, and this does not do: CloudWatch
- * metrics for real utilisation, Cost Explorer for actual spend rather than
- * list price, and a time window so that "created ten minutes ago" is not
- * reported as abandoned. Those are all reachable from a read-only role and are
- * the first thing to add here; see the README's "what I'd build next".
- *
- * Prices are us-east-1 list prices, hard-coded and therefore wrong in detail.
- * They are used only to rank findings by rough size, and the UI presents them
- * as estimates.
+ * Prices are hard-coded us-east-1 list prices, used only to rank findings by
+ * rough size, and presented as estimates.
  */
 
 import type { Relationship, Resource } from "@sightline/shared";

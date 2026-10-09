@@ -1,28 +1,18 @@
 /**
- * The fictional customer account that the scanner discovers.
+ * The fictional customer account the scanner discovers. Every element exists to
+ * make some question need reasoning rather than a field lookup:
  *
- * The mock data has to be "interesting enough that the agent's questions
- * have non-obvious answers". Every element below exists to make some question
- * require reasoning rather than a field lookup. The traps are deliberate:
+ *  - a bucket public via *policy* beside one that looks public but is
+ *    neutralised by its access block
+ *  - the production database, private and not publicly accessible, yet
+ *    reachable from the internet across three security group hops
+ *  - a second database with PubliclyAccessible=true that nobody can reach,
+ *    because its group opens no ports - the naive answer is wrong
+ *  - one admin role via the managed policy, another via an inline `*:*` under
+ *    an innocuous name: finding both means reading documents, not names
  *
- *  - A bucket that is public via *policy* sits next to one that looks public
- *    but is neutralised by its public-access block. "Is it public?" cannot be
- *    answered by reading one field.
- *
- *  - The production database is not publicly accessible and sits in a private
- *    subnet, yet it IS reachable from the internet - across three security
- *    group hops, and again by a shorter path through a bastion. "What can
- *    reach it?" requires walking the graph.
- *
- *  - A second database has PubliclyAccessible=true and is reachable by nobody,
- *    because its security group opens no ports. The naive answer is wrong.
- *
- *  - One admin role carries the AdministratorAccess managed policy; another
- *    grants the same power through an *inline* `*:*` statement and an
- *    innocuous name. Finding both means reading policy documents, not names.
- *
- * Names are stable and unique, so evals can express ground truth by name and
- * resolve to ARNs at run time (moto assigns random ids).
+ * Names are stable and unique so evals can state ground truth by name and
+ * resolve ARNs at run time (moto assigns random ids).
  */
 
 export const ACCOUNT_ID = process.env.MOCK_AWS_ACCOUNT_ID ?? "123456789012";

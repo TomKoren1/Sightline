@@ -1,20 +1,15 @@
 /**
  * IAM roles, their policies, and instance profiles.
  *
- * This collector does more work per resource than any other, because the
- * question it has to serve - "which roles have admin access?" - cannot be
- * answered from a listing. A role's effective permissions are the union of its
- * attached managed policies and its inline policies, and the *name* of a
- * policy tells you nothing: the mock account contains a role called
- * `LegacyDeployRole` whose inline policy grants `*` on `*`.
+ * More work per resource than any other collector, because "which roles have
+ * admin access?" cannot be answered from a listing: effective permissions are
+ * the union of attached and inline policies, and a policy's *name* tells you
+ * nothing - the mock holds a `LegacyDeployRole` whose inline policy grants `*`
+ * on `*`. So every document is fetched and the verdict computed by a unit-
+ * testable analyser.
  *
- * So every policy document is fetched and kept, and the admin verdict is
- * computed from the documents by an analyser that can be unit tested.
- *
- * Managed policy documents are fetched once and cached. `AdministratorAccess`
- * is attached to several roles, and on a real account a handful of managed
- * policies are attached to hundreds - re-fetching each time is the difference
- * between one API call and several hundred.
+ * Managed documents are cached: on a real account a handful of policies are
+ * attached to hundreds of roles, which is one API call rather than hundreds.
  */
 
 import {

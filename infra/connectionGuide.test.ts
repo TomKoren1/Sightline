@@ -1,27 +1,18 @@
 /**
- * The onboarding guide has to stay consistent with the template it deploys.
+ * The onboarding guide must stay consistent with the template it deploys. Three
+ * of these guard mistakes that were present, each invisible in review because
+ * the page renders perfectly either way:
  *
- * Three of these guard mistakes that were actually present, and every one of
- * them is invisible in review because the page renders perfectly either way:
+ *  - the intro promised "four steps" while five rendered, and two handover
+ *    documents copied the wrong number
+ *  - the deploy command carried no `--region`, so it failed for any reader
+ *    whose CLI had no default
+ *  - `ExternalId=` interpolated a loading string, so copying before the fetch
+ *    resolved deployed a stack whose shared secret was the text `generating…`
+ *    - and that connection tests *green*, against a secret neither side meant
  *
- *  - The intro promised "four steps" while five were rendered. Nothing
- *    connects the sentence to the `<Step>` elements, so it drifted the moment a
- *    fifth step was added, and two handover documents copied the wrong number.
- *  - The deploy command carried no `--region`, so it failed outright for any
- *    reader whose CLI had no default region configured - with an error that
- *    says nothing about this page.
- *  - `ExternalId=` interpolated a loading string, so a reader who copied before
- *    the fetch resolved deployed a stack whose shared secret was the literal
- *    text `generating…`, and put the same text in `.env`. That connection tests
- *    *green*, against a secret neither side meant.
- *
- * And one that would be a silent break rather than a regression: the command
- * passes CloudFormation parameters by name, so renaming a parameter in the
- * template leaves the guide handing out a command AWS rejects.
- *
- * Lives in `infra/` because that is where the template contract belongs and
- * because `vitest.config.ts` does not include `apps/web`. Same cross-workspace
- * read as `agent/toolLabels.test.ts`.
+ * Lives in `infra/` because the template contract belongs there and
+ * `vitest.config.ts` does not include `apps/web`.
  */
 
 import { existsSync, readFileSync } from "node:fs";

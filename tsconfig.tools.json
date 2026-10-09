@@ -1,17 +1,11 @@
 {
-  // Type-checking for the code that is not in a workspace.
+  // Type-checking for the code that is not in a workspace. `npm run typecheck`
+  // runs `--workspaces`, so `infra/`, `scripts/` and the root config files were
+  // checked by nothing: vitest transpiles them with esbuild, which strips types
+  // without reading them.
   //
-  // `npm run typecheck` runs `--workspaces`, so `infra/`, `scripts/` and the
-  // root config files were checked by nothing: vitest transpiles them with
-  // esbuild, which strips types without reading them. Five guard tests —
-  // the ones asserting the Dockerfile copies `scripts/` and that the workflows
-  // reference paths that exist — could therefore have been type-broken and
-  // still have gone green. They are the tests most likely to be edited in a
-  // hurry, which is the worst place to have no check at all.
-  //
-  // `checkJs` is on so `scripts/deps.mjs` is covered too. That file has to run
-  // before anything that can compile TypeScript is installed, so it can never
-  // be .ts; this is the only way it gets checked.
+  // `checkJs` covers `scripts/deps.mjs`, which has to run before anything that
+  // can compile TypeScript is installed and so can never be .ts.
   "extends": "./tsconfig.base.json",
   "compilerOptions": {
     "allowJs": true,

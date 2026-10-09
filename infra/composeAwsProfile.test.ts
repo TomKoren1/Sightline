@@ -1,20 +1,14 @@
 /**
- * The documented way to give the container real AWS credentials must keep working.
+ * The documented way to give the container real AWS credentials must keep
+ * working. Three artefacts must agree and nothing connected them: the
+ * `COMPOSE_FILE` line in `.env.example`, the override file it names, and the
+ * path inside the container the SDK reads.
  *
- * Three artefacts have to agree and nothing connected them: the `COMPOSE_FILE`
- * line commented into `.env.example`, the override file it names, and the path
- * inside the container that the AWS SDK actually reads.
- *
- * This exists because the first version of that documentation was wrong in a way
- * that only appeared on the second command. It told the reader to pass `-f` flags,
- * which works — and then the README's own instruction for picking up an edited
- * `.env` (`docker compose --profile app up -d api`) recreated the container
- * *without* them, silently dropping the mount. The connection test then reported
- * "No source credentials were found" for a setup that had been working a minute
- * earlier (engineering log #45).
- *
- * `COMPOSE_FILE` in `.env` cannot fail that way, because Compose applies it to
- * every invocation. These assertions pin that it stays correct.
+ * The first version told the reader to pass `-f` flags, which works - until the
+ * README's own recreate command drops them and silently loses the mount. The
+ * connection test then reported "No source credentials were found" for a setup
+ * working a minute earlier (engineering log #45). `COMPOSE_FILE` in `.env`
+ * cannot fail that way, because Compose applies it to every invocation.
  */
 
 import { existsSync, readFileSync } from "node:fs";
