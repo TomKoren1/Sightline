@@ -9,7 +9,7 @@
  * re-projected without going back to AWS.
  */
 
-import { rollUpStatus } from "@sightline/shared";
+import { rollUpStatus, errorMessage } from "@sightline/shared";
 
 import { callCounter } from "../aws/clients.js";
 import { closePool, migrate } from "../db/postgres.js";
@@ -61,7 +61,7 @@ try {
       `\n  ${callCounter.total()} AWS API calls in ${((Date.now() - started) / 1000).toFixed(1)}s`,
   );
 } catch (err) {
-  const message = err instanceof Error ? err.message : String(err);
+  const message = errorMessage(err);
   console.error(`\nScan failed: ${message}`);
   if (scanId) await failScanRun(scanId, message);
   process.exitCode = 1;

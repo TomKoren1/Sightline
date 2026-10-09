@@ -1,29 +1,18 @@
 /**
- * Network reachability.
+ * Network reachability: security group rules as a walkable graph, so "what can
+ * reach the production database?" is a path query rather than manual reading.
  *
- * Turns security group rules into a walkable graph, so that "what can reach
- * the production database?" becomes a path query instead of an exercise in
- * reading rules by hand.
+ *   Internet -> resource   a group admits 0.0.0.0/0 AND the resource is
+ *                          actually exposed (public subnet, public address, or
+ *                          flagged accessible). An open rule on an instance in
+ *                          a private subnet would otherwise bury real findings.
+ *   resource -> resource   the target's group admits a group the source is in.
+ *                          This is what makes multi-hop paths visible.
  *
- * Two kinds of edge are produced:
- *
- *   Internet -> resource   when a security group on that resource admits
- *                          0.0.0.0/0 AND the resource is actually exposed -
- *                          in a public subnet, holding a public address, or
- *                          flagged publicly accessible. An open rule on an
- *                          instance buried in a private subnet does not make
- *                          it reachable, and saying otherwise would bury the
- *                          real findings in noise.
- *
- *   resource -> resource   when the target's security group admits a group
- *                          that the source belongs to. This is the edge that
- *                          makes multi-hop paths visible.
- *
- * What this deliberately does not model: network ACLs, route tables between
- * subnets, VPC peering, Transit Gateway, PrivateLink, and on-premises
- * connectivity. Each would add edges, so the analysis is conservative: it can
- * miss a path, but a path it reports is justified by rules that really exist.
- * Every edge carries the rule that produced it, so any claim can be checked.
+ * Not modelled: NACLs, route tables, VPC peering, Transit Gateway, PrivateLink,
+ * on-premises. Each would add edges, so this is conservative - it can miss a
+ * path, but a path it reports is justified by rules that exist, and every edge
+ * carries the rule that produced it.
  */
 
 import { INTERNET_ARN, type Relationship, type Resource } from "@sightline/shared";

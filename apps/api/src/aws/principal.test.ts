@@ -34,7 +34,7 @@ describe("assumablePrincipalArn", () => {
   });
 
   it("leaves a real IAM user ARN alone", () => {
-    const arn = "arn:aws:iam::672299759593:user/sightline-home-assignment";
+    const arn = "arn:aws:iam::672299759593:user/sightline-operator";
     expect(assumablePrincipalArn(arn)).toEqual({ ok: true, principalArn: arn, converted: false });
   });
 
@@ -98,9 +98,7 @@ describe("validateAssumeRoleTarget", () => {
    * principal pasted into the target-role variable.
    */
   it("rejects a user ARN and names the two-role mix-up", () => {
-    const result = validateAssumeRoleTarget(
-      "arn:aws:iam::672299759593:user/sightline-home-assignment",
-    );
+    const result = validateAssumeRoleTarget("arn:aws:iam::672299759593:user/sightline-operator");
     expect(result.ok).toBe(false);
     expect(!result.ok && result.reason).toMatch(/can only assume a role/);
     expect(!result.ok && result.reason).toMatch(/RoleArn output/);

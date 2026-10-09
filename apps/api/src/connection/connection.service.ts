@@ -1,20 +1,15 @@
 /**
- * Connection endpoints, backing the onboarding guide.
+ * Connection endpoints, backing the onboarding guide. It **guides** onboarding;
+ * it does not **perform** it.
  *
- * A deliberate boundary runs through this file: it **guides** onboarding, it
- * does not **perform** it.
+ * The obvious feature is a form taking a role ARN and external id. This API has
+ * no authentication, so that form would be an open endpoint that assumes a role
+ * into somebody's account and stores a value the role template calls a
+ * credential.
  *
- * The obvious product feature is a form that takes a role ARN and an external
- * id and connects the account. This API has no authentication — every endpoint
- * is open — so that form would be an unauthenticated endpoint that assumes a
- * role into somebody's AWS account, and it would store an external id that the
- * role template itself calls a credential. Neither is something worth shipping
- * to make a demo look complete.
- *
- * So: the server generates the values a customer needs, renders the exact
- * command to run, and tests the connection that is already configured. Putting
- * the role ARN into configuration stays a deliberate act by an operator with
- * access to the host.
+ * So the server generates what a customer needs, renders the command, and tests
+ * the connection already configured. Putting the ARN into configuration stays a
+ * deliberate act by an operator with host access.
  */
 
 import { randomBytes } from "node:crypto";
@@ -37,6 +32,7 @@ import {
 import { assumablePrincipalArn } from "../aws/principal.js";
 import { accountIdFromArn, getSession, resetSession } from "../aws/credentials.js";
 import { getLatestScan } from "../db/repository.js";
+import { errorMessage } from "@sightline/shared";
 
 /** Show enough of a secret to confirm which one is configured, and no more. */
 function mask(value: string): string {
@@ -55,7 +51,7 @@ function diagnose(
   callerIdentity?: string | null,
 ): { code: string; problem: string; fix: string } {
   const name = err instanceof Error ? err.name : "UnknownError";
-  const message = err instanceof Error ? err.message : String(err);
+  const message = errorMessage(err);
 
   if (name === "AccessDenied" || message.includes("not authorized to perform: sts:AssumeRole")) {
     /**
@@ -285,7 +281,7 @@ export class ConnectionService {
    * The cached STS session is dropped, so the next call assumes the right role
    * rather than reusing credentials for the account we just left.
    */
-  async setMode(body: { mode?: string } | undefined) {
+  setMode(body: { mode?: string } | undefined) {
     const mode = body?.mode;
     if (mode !== "mock" && mode !== "real") {
       throw new BadRequestException({ error: 'mode must be "mock" or "real"' });

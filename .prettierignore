@@ -20,3 +20,6 @@ infra/*.yaml
 # every schema change arrives with an unrelated reformat in the diff. The
 # migration SQL beside them is reviewed; this is the tool's bookkeeping.
 apps/api/drizzle/meta
+
+# No parser, and nothing to format.
+LICENSE

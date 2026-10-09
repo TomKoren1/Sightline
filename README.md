@@ -1,5 +1,8 @@
 # Sightline — AWS inventory, graph and agent
 
+[![CI](https://github.com/TomKoren1/Sightline/actions/workflows/ci.yml/badge.svg)](https://github.com/TomKoren1/Sightline/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+
 Sightline connects to an AWS account with a read-only role, ingests what is
 there and how it fits together, and puts an agent on top that answers the
 questions a DevOps engineer would act on — what can reach the production
@@ -84,8 +87,8 @@ Full detail, and how to do it by hand: [`docs/SETUP.md`](docs/SETUP.md).
 
 ## What is in the mock account
 
-The brief asks for mock data whose questions have non-obvious answers, so the
-account is built around traps that defeat a naive lookup:
+The mock account is built around traps that defeat a naive lookup, because a
+fixture whose questions have obvious answers proves nothing:
 
 |                                         |                                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
 | --------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -140,7 +143,7 @@ cites, with traps that a tool reading flags rather than evaluating them would fa
 into. The same checks run inside the product, under **Trust**.
 
 The reasoning behind each of these is in
-[**docs/ASSIGNMENT.md**](docs/ASSIGNMENT.md) and the eighteen ADRs in
+the nineteen ADRs in
 [**docs/DECISIONS.md**](docs/DECISIONS.md).
 
 ## Repository layout
@@ -159,29 +162,35 @@ packages/shared     domain model shared by every package
 packages/mock-aws   the seeded customer account and its answer key
 infra/              the replacement read-only role, and the original
 deploy/             nginx config for the containerised frontend
+eslint.config.mjs   lint rules, with the reason for each exception
+tsconfig.tools.json type-checking for everything outside a workspace
 Dockerfile          API and frontend images, used only by the `app` profile
 docs/               decisions, engineering log, commit log, walkthrough
 ```
 
 ## Documentation
 
-- **[docs/DECISIONS.md](docs/DECISIONS.md)** — eighteen ADRs: the stack, the
+- **[docs/DECISIONS.md](docs/DECISIONS.md)** — nineteen ADRs: the stack, the
   mock, the two-database split, deterministic analysis, the tool boundary,
   citation validation, the IAM role, the eval strategy, the read-only refusal in
   code, guided onboarding, evals shown in the product, public vs unprotected,
   the runtime account toggle, remediation that is never applied, onboarding
-  automated by a host script rather than a form, and the three that supersede
-  earlier ones — Drizzle, NestJS, and the agent loop moving onto the Vercel AI
-  SDK, each recording what the decision it replaces got right as well as wrong.
+  automated by a host script rather than a form, type-aware linting and what its
+  first run found, and the three that supersede earlier ones — Drizzle, NestJS,
+  and the agent loop moving onto the Vercel AI SDK, each recording what the
+  decision it replaces got right as well as wrong.
 - **[docs/ENGINEERING-LOG.md](docs/ENGINEERING-LOG.md)** — every non-obvious
   problem hit while building this, with diagnosis and fix. Includes a silent
   moto account-namespacing trap, two capability gaps in the mock recorded as
   gaps rather than hidden, and an SDK type that degraded to `any` behind
   `skipLibCheck`.
-- **[docs/ASSIGNMENT.md](docs/ASSIGNMENT.md)** — the engineering write-up: what the
-  brief asked for and where each piece lives, the storage model, how the agent
-  works, how I know the answers are right, what breaks first at scale, and what I
-  would build next.
+- **[docs/ROADMAP.md](docs/ROADMAP.md)** — where this breaks as an account gets
+  large, in the order it would actually happen, and what I would build next.
+  Every limit is one I can point at in the code.
+- **[SECURITY.md](SECURITY.md)** — what the project holds and does not hold,
+  why the role template refuses `ReadOnlyAccess`, what the ExternalId is for,
+  and the limitations worth knowing before pointing this at an account you care
+  about.
 - **[docs/SETUP.md](docs/SETUP.md)** — configuration, the host development path,
   connecting AWS by hand, troubleshooting and every command. Nothing in it is
   needed to run the project.

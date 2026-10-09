@@ -4,6 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 
 import { Remediation } from "./Remediation.js";
 import { styleFor } from "../kinds.js";
+import { asText } from "@sightline/shared";
 
 interface Neighbour {
   type: string | null;
@@ -81,7 +82,7 @@ export function ResourceDetail({
 
       <div className="flex-1 overflow-y-auto p-2.5">
         {isLoading && <div className="h-20 animate-pulse rounded bg-ink-850" />}
-        {error && <p className="text-[12px] text-danger">{(error as Error).message}</p>}
+        {error && <p className="text-[12px] text-danger">{error.message}</p>}
 
         {resource && (
           <div className="space-y-3">
@@ -103,21 +104,21 @@ export function ResourceDetail({
                   <Verdict
                     tone="danger"
                     label="Reachable from the internet"
-                    reason={String(resource.props["publicReason"] ?? "")}
+                    reason={asText(resource.props["publicReason"])}
                   />
                 )}
                 {resource.props["isAdmin"] === true && (
                   <Verdict
                     tone="warn"
                     label="Administrator access"
-                    reason={String(resource.props["adminReason"] ?? "")}
+                    reason={asText(resource.props["adminReason"])}
                   />
                 )}
                 {resource.props["isUnprotected"] === true && (
                   <Verdict
                     tone="warn"
                     label="Block Public Access not fully enabled"
-                    reason={String(resource.props["unprotectedReason"] ?? "")}
+                    reason={asText(resource.props["unprotectedReason"])}
                   />
                 )}
                 {resource.props["isIdle"] === true && (
@@ -125,10 +126,10 @@ export function ResourceDetail({
                     tone="ink"
                     label={`Idle${
                       resource.props["estimatedMonthlyCostUsd"]
-                        ? ` · ~$${resource.props["estimatedMonthlyCostUsd"]}/mo`
+                        ? ` · ~$${asText(resource.props["estimatedMonthlyCostUsd"])}/mo`
                         : ""
                     }`}
-                    reason={String(resource.props["idleReason"] ?? "")}
+                    reason={asText(resource.props["idleReason"])}
                   />
                 )}
               </div>
@@ -161,7 +162,7 @@ export function ResourceDetail({
                     <div key={key} className="flex items-start justify-between gap-2 text-[11px]">
                       <span className="shrink-0 text-ink-400">{key}</span>
                       <span className="break-all text-right font-mono text-[10px] text-ink-300">
-                        {typeof value === "object" ? JSON.stringify(value) : String(value)}
+                        {asText(value)}
                       </span>
                     </div>
                   ))}

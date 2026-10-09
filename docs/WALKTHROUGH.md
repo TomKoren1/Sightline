@@ -1,15 +1,16 @@
 # Walkthrough
 
 A guided tour of the running system, and the reasoning behind the parts that
-are not obvious from the code. Written to be read before demonstrating or
-discussing this project.
+are not obvious from the code. Read it with the stack up and follow along: each
+step sets up the next, and the order is the one in which the design explains
+itself.
 
 ---
 
-## 0. Before recording
+## 0. Before you start
 
 Two settings decide whether any of this works, and both are easy to get wrong
-because they are invisible on screen.
+because nothing on screen reveals them.
 
 **`.env` must point at the mock account.** If it holds a real
 `AWS_TARGET_ROLE_ARN` and `AWS_MODE=real`, the API starts against that account
@@ -18,14 +19,14 @@ and every step below describes something you are not looking at. Either set
 the toggle is a legitimate thing to show, and it switches without a restart.
 
 **`SCAN_FAULT_INJECTION` must be empty**, or the partial-failure banner appears
-in every shot rather than the one where it is the point.
+at every step rather than the one where it is the point.
 
-A dry run of the whole script before recording is worth the eight minutes: it
-also leaves a recorded eval run for the Trust panel to display.
+Walking the whole thing through once is worth the eight minutes: it also leaves
+a recorded eval run for the Trust panel to display.
 
 ---
 
-## 1. The demo, in order
+## 1. The tour, in order
 
 About eight minutes, arranged so each step sets up the next.
 
@@ -38,12 +39,12 @@ npm run dev:api & npm run dev:web
 ```
 
 `npm run seed` is not optional here. `down -v` discards moto's volume along
-with the databases, and a scan of an unseeded account finds nothing — which
-looks exactly like a broken product on camera.
+with the databases, and a scan of an unseeded account finds nothing — which is
+indistinguishable from a broken product.
 
 Open http://localhost:5173. The empty state explains what a scan does and
-offers to run one. **Point out that this is a real state, not a placeholder** —
-a new customer sees exactly this.
+offers to run one. **This is a real state, not a placeholder** — a new customer
+sees exactly this.
 
 ### Run the scan from the UI
 
@@ -68,7 +69,7 @@ internet on the left, what it can touch to the right, the database at the end.
   property dump.
 - `analytics-db` is _not_ red, even though it is flagged publicly accessible.
 
-### Ask the agent the question the brief asks
+### Ask the agent the question this exists for
 
 > What can reach the production RDS instance?
 
@@ -114,7 +115,7 @@ nobody had administrator access — 157 tests passed, because the fixture had no
 users either. A fixture that shares the code's blind spot proves nothing
 (engineering log #29).
 
-Worth adding, if asked why users matter more: a role is assumed and issues
+Why users matter more than roles here: a role is assumed and issues
 credentials that expire; a user has access keys that do not.
 
 ### Show that it will not fix it for you
@@ -172,8 +173,8 @@ Header → **Trust**.
   ten milliseconds. Expand one to see what it guards against and what it found.
 - **Agent answer quality** shows the last recorded eval run — 21/21, mean F1
   1.0, no unsupported citations — with the model that produced it. If it says
-  "no run recorded", run `npm run evals -w @sightline/api` before recording; it
-  needs an API key and a few minutes.
+  "no run recorded", run `npm run evals -w @sightline/api` first; it needs an
+  API key and a few minutes.
 
 If drift has been applied, two data checks turn **amber with a `◆` and
 "expected after drift"**, not red — `public-buckets` because
@@ -311,7 +312,7 @@ designed in rather than added later.
 
 ---
 
-## 4. Questions to expect, and the honest answers
+## 4. The questions this design raises
 
 **"Why both databases? Isn't that over-engineering?"**
 The hierarchy is the answer: Postgres is authoritative, Neo4j is a rebuildable
@@ -324,7 +325,7 @@ get worse.
 
 **"Why not text-to-Cypher? It's more flexible."**
 Safety, correctness, cost and auditability. A curated tool cannot express a
-mutation, which is the brief's hard rule. Hand-written path queries are
+mutation, which is the read-only rule. Hand-written path queries are
 reviewable and identical every run. And because each tool records exactly which
 ARNs it returned, citations can be validated — which text-to-Cypher makes much
 harder. The escape hatch exists for genuinely novel questions, behind a
@@ -337,14 +338,14 @@ Tier 2 scores _answers_ on cited ARNs with precision and recall. The split
 makes failures diagnosable: tier 1 passing and tier 2 failing means the data is
 right and the agent misused it.
 
-**"What can't it do?"** — answer this one before being asked:
+**"What can't it do?"**
 Reachability ignores NACLs, VPC peering and Transit Gateway, so it is
 conservative: it can miss a path, but a path it reports is justified by rules
 that really exist. Idle detection uses structural signals only, not CloudWatch
 metrics. The account-level S3 public access block is not read. Admin detection
 ignores conditioned statements and `NotAction` rather than guessing at them.
 Every one of these is a deliberate boundary, and every derived fact carries its
-reason so a reviewer can disagree.
+reason, so the basis is visible and can be disagreed with.
 
 **"Is it really read-only?"**
 Four layers: the IAM role has no write permissions and an explicit deny on
@@ -360,7 +361,7 @@ object out of a bucket, and granting it turns a compromise of Sightline's accoun
 into a compromise of every customer's _data_. `sqs:ReceiveMessage` is the
 sharpest detail: it is not read-only even literally, because receiving a
 message starts its visibility timeout and can hide it from the consumer that
-should have processed it — a scanner could breach the brief's hard rule through
+should have processed it — a scanner could breach the read-only rule through
 a permission nobody thinks of as a write.
 
 **"Why moto rather than a real account?"**
@@ -374,7 +375,7 @@ against a stub instead) and has no Resource Explorer.
 
 ---
 
-## 5. If something goes wrong mid-demo
+## 5. When something goes wrong
 
 | Symptom                                        | Cause                                                         | Fix                                                                                                                                                   |
 | ---------------------------------------------- | ------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -396,9 +397,10 @@ both CLIs exist.
 
 ---
 
-## 6. What to say about what is unfinished
+## 6. What is unfinished
 
-Being direct about this is worth more than pretending otherwise.
+Recorded here rather than left to be discovered, because a known limit is a
+design boundary and an unknown one is a bug waiting to be filed.
 
 - **Incremental graph updates.** The rebuild is wholesale. It is the first
   thing that breaks at ~50k resources, and the Postgres snapshots were designed
@@ -416,5 +418,5 @@ Being direct about this is worth more than pretending otherwise.
   orchestration tracks "is a scan running" in a module-level boolean — both
   correct for one operator and wrong the moment there are two. Real tenancy
   means a tenant on every row, credentials resolved per tenant rather than
-  cached globally, and a job queue. Worth saying plainly if asked: the honest
-  version of this is a week of work, not a flag.
+  cached globally, and a job queue. The honest version of this is a week of
+  work, not a flag.

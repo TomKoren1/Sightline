@@ -49,7 +49,7 @@ export class GraphService {
     if (!resource) throw new NotFoundException({ error: "No such resource" });
     return {
       arn: resource.arn,
-      remediations: remediationsFor(remediationInputFromGraph(resource as never)),
+      remediations: remediationsFor(remediationInputFromGraph(resource)),
       note: "Generated for you to review and run yourself. Sightline holds read-only access and will never apply these.",
     };
   }

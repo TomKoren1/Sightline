@@ -76,12 +76,12 @@ function baseConfig(region: string) {
  * unions, so there is no shared supertype to write this against. The cast is
  * confined to this one bridge rather than leaking `any` into call sites.
  */
-type MiddlewareStack = {
+interface MiddlewareStack {
   add: (
     middleware: (next: (args: unknown) => Promise<unknown>) => (args: unknown) => Promise<unknown>,
     options: { step: "deserialize"; name: string; override: boolean },
   ) => void;
-};
+}
 
 function instrument<T extends object>(client: T, key: string): T {
   const { middlewareStack } = client as unknown as { middlewareStack: MiddlewareStack };

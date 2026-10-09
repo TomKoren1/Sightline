@@ -19,7 +19,7 @@ documented in engineering log #2.
 
 `.env.example` grew an `AWS_MODE` switch (`mock` | `real`) and an Anthropic
 section. The AWS onboarding variables are deliberately unchanged in shape from
-the ones the brief shipped: the same role ARN and external id drive both mock
+the ones the original template shipped: the same role ARN and external id drive both mock
 and real runs.
 
 npm workspaces rather than pnpm, so a reviewer needs nothing beyond the Node
@@ -50,7 +50,7 @@ computed fact rather than something a code path remembers to set.
 
 A three-region fictional estate built through the real AWS SDK against moto.
 
-The brief asks for mock data whose questions have non-obvious answers, so every
+The goal is mock data whose questions have non-obvious answers, so every
 element is chosen to defeat a naive lookup:
 
 - `northwind-public-assets` is public via bucket policy.
@@ -274,14 +274,14 @@ the first thing worth knowing when an agent answer looks wrong.
 
 ### `feat(api): the agent - tools, Cypher guard, citation validation`
 
-Part 2 of the brief.
+Part 2.
 
 **`cypherGuard.ts`** guards the raw-Cypher escape hatch: an allowlist of
 opening clauses plus a denylist of write keywords, applied _after_ string
 literals and comments are stripped — so a node named `"DELETE ME"` cannot trip
 it, and more importantly a write cannot hide inside a string. It is lexical,
 not a parser, and deliberately strict: a wrongly-rejected query costs one
-retry, a wrongly-accepted one breaks the brief's hard rule. It is the second
+retry, a wrongly-accepted one breaks the read-only rule. It is the second
 of two layers; the query also runs inside a Neo4j read transaction.
 
 **`tools.ts`** defines thirteen tools over the curated queries. The
@@ -342,7 +342,7 @@ empty graph, which produces confident nonsense.
 
 ---
 
-### `feat(web): graph, chat and the UX states the brief asks for`
+### `feat(web): graph, chat and the UX states`
 
 React, React Flow, TanStack Query, Tailwind v4.
 
@@ -358,7 +358,7 @@ nodes highlight, everything else dims, and the view re-frames onto them. The
 findings sidebar highlights through the same mechanism, so a standing finding
 and an agent answer feel like one feature rather than two.
 
-Every state the brief lists is handled explicitly: empty (never scanned), live
+Every state is handled explicitly: empty (never scanned), live
 scan progress with a per-service plan rendered up front, stale (amber, past an
 hour), **partial failure** (a loud banner naming each failed service, region
 and reason), graph load error with retry, and an agent-thinking state that
@@ -401,15 +401,15 @@ cost money and need a key.
 
 ### `docs: README design note, walkthrough, and the IAM analysis`
 
-The README answers the brief's five design-note questions directly, including
+The README answers the five design questions directly, including
 the two that are easy to hand-wave: how I know the answers are right (two eval
 tiers, and what neither catches), and what breaks first at scale (five limits
 in the order they would actually happen, each with the fix and why the
 groundwork for it already exists).
 
-It also takes up the brief's invitation to say what could have been clearer,
+It also takes up the invitation to say what could have been clearer,
 leading with the `ReadOnlyAccess` analysis and the `sqs:ReceiveMessage` detail
-— a permission that would let a scanner breach the brief's own hard rule
+— a permission that would let a scanner breach the read-only rule
 without anyone calling it a write.
 
 `docs/WALKTHROUGH.md` is a tour of the running system: a seven-minute demo
@@ -479,7 +479,7 @@ volume"_ with the volume's details, its cost, a warning that it was tagged
 `production`, and the exact CLI command — safe, genuinely useful, and never
 saying that Sightline holds no ability to touch the account.
 
-That matters because the brief's hard rule is one this project _claims_, and
+That matters because the read-only rule is one this project _claims_, and
 every reply to a change request is where a user tests the claim. An answer that
 quietly declines by handing over a command reads like a missing feature.
 
@@ -512,7 +512,7 @@ being read. Eight unit tests pin both halves.
 
 ### `feat(api): implement the Resource Explorer fast path, and close an eval gap`
 
-Both changes came from auditing the repository against the original brief and
+Both changes came from auditing the repository against its own goals and
 against its own README, rather than from a failing test.
 
 **The Resource Explorer fast path did not exist.** The README claimed it was
@@ -533,7 +533,7 @@ erroring. Verified live: against moto it prints `endpoint does not implement
 Resource Explorer, using per-service enumeration` and the scan proceeds intact.
 
 **"What changed since the last scan?" had no eval case** — one of the six
-questions the brief names by example. The capability worked; nothing verified
+headline questions. The capability worked; nothing verified
 it. Added, and it asserts the agent reaches for `diff_scans` rather than
 answering from current state, without pinning specific resources since what
 changed depends on the environment.
@@ -976,9 +976,9 @@ restoring the cap to 100 and watching four cases go red.
 
 248 unit tests.
 
-### `docs: map the brief's seven items, and fix the UX claim that turned out to be false`
+### `docs: map the seven goals, and fix the UX claim that turned out to be false`
 
-The README argued its design decisions well but left a grader doing clerical
+The README argued its design decisions well but left a reader doing clerical
 work. The definition of done asks that the seven numbered items in "The problem"
 are addressed; nothing in the README said where each one lived. And item 7 —
 communicate scan progress, freshness, refresh, empty, partial-failure and
@@ -1001,10 +1001,198 @@ and `agent/toolLabels.test.ts` now compares definitions to labels in both
 directions so the next added tool cannot ship unlabelled. Engineering log #38.
 
 Also in here: the suggested **Deep Agents** framework is now named and argued
-with rather than silently passed over — the brief offers it, and "no framework"
+with rather than silently passed over — the pattern is well known, and "no framework"
 is a more convincing answer when it is visibly a choice. And `render.js` becomes
 `render.cjs`, because the repository root declares `"type": "module"` and the
 handover README's own regeneration command failed with
 `require is not defined in ES module scope` when run from inside the repo.
 
 253 unit tests.
+
+---
+
+### `test(api): pin every HTTP response shape before the refactor`
+
+Three refactors were about to replace the data layer, the agent loop and the
+HTTP layer. Each one changes how a response is produced without intending to
+change the response, which is exactly the situation where a behaviour change
+slips through unnoticed.
+
+So: `contract.test.ts`, 25 assertions recording the status code and body shape
+of every endpoint, with an `EXCLUDED` map naming each endpoint it does not
+cover **and why**. Completeness is checked against Nest's own route table
+rather than a hand-written list, so a new endpoint cannot be added without
+either a contract or a stated reason.
+
+The one that earned its place immediately: a guard requiring every POST handler
+to carry `@HttpCode` or `@Res`. Nest answers 201 to POST by default, Fastify
+answered 200, and three endpoints changed status in the port. The contract
+caught one of them.
+
+**Captured contracts only cover the branches your data happens to take.** The
+suite was recorded against a populated database, so the empty-database shape of
+`GET /api/evals/latest` — which returns a `hint` and no `currentModel` — was
+not in it until a later commit put it there. Engineering log #57.
+
+---
+
+### `refactor(db): Drizzle as the data layer, replacing hand-written SQL`
+
+ADR-016. The schema now lives once, in `src/db/schema.ts`, and changes to it
+produce a reviewable migration instead of an edit to a file that was applied by
+being re-read on boot.
+
+**The migration found a bug that had been invisible since the beginning.**
+Adopting an existing database meant generating a baseline migration that had to
+be a no-op against a schema already in place. Drizzle wraps each statement in
+`EXCEPTION WHEN duplicate_object`, which catches a clash of _names_ — not the
+presence of an equivalent constraint. The hand-written schema had named its
+foreign keys differently, so every one of them was added a second time under
+Drizzle's name: five became ten, silently, with no error anywhere.
+
+The fix is nine constraint renames ahead of the adds, in the baseline SQL, with
+`adoption.test.ts` restoring a dump of the legacy schema and asserting the
+catalogue afterwards. Worth recording separately: **the first catalogue diff
+lied.** Comparing `contype` without `::text` errors in both dumps, and `diff`
+on two identical error messages reports no difference. Engineering log #51.
+
+---
+
+### `refactor(agent): run the loop on the Vercel AI SDK`
+
+ADR-018. The hand-written loop was defensible and the reason given for it —
+that validating citations means knowing which tool returned which ARN — turned
+out not to require a hand-written loop at all. The ledger moved inside the
+tool's own `execute`, where it is strictly harder to get wrong:
+
+```ts
+const result = await runTool(definition.name, input);
+ctx.tracker.record(result.rows, result.arns);
+```
+
+Nothing can now run a tool without recording what it returned, because the two
+are the same call.
+
+**What cost the afternoon:** the AI SDK declined to execute a tool, and said
+nothing about why. In the v4 provider spec `finishReason` is
+`{ unified, raw }`, not a string, and execution gates on it. A mock returning a
+bare string produced a loop that ran, finished, and called nothing — no error,
+no warning. Engineering log #53.
+
+---
+
+### `refactor(api): NestJS modules, controllers and services`
+
+ADR-017. Six modules — `health/ graph/ scans/ chat/ connection/ evals/` — each
+a controller over a service. The module-level `let scanInProgress` became
+`ScanStateService`, which is the change that makes the concurrency guard
+testable instead of merely correct.
+
+**Every injection names its token explicitly.** esbuild cannot emit
+`emitDecoratorMetadata` — it needs type information it does not have — and tsx
+and vitest both transpile with esbuild. Nest does not fail loudly on the
+missing metadata: it injects `undefined`, and the handler throws at request
+time, far from the cause. `@Inject(ScanStateService)` on every constructor
+parameter is the explicit form that does not depend on metadata existing.
+
+Also here: `"files": []` in the root tsconfig makes esbuild treat every source
+as out of scope and ignore the options it is being handed, and tsx caches
+transforms — so two experiments reported the wrong cause before the real one
+was found. Engineering log #55.
+
+---
+
+### `fix(ci): a moved test stopped running, and a test lied about its dependencies`
+
+`resourceArn.test.ts` moved from `routes/` to `graph/` during the NestJS port,
+and the CI step that ran it by path reported `No test files found, exiting with
+code 1`. That is the lucky version — vitest treats an empty filter as an error.
+The quiet version of the same mistake is a step that tolerates a missing file,
+where the suite stops running and nothing says so.
+
+`infra/workflowPaths.test.ts` now asserts that every repository path named in a
+workflow exists. And `agent/ledger.test.ts`, whose header claimed it needed no
+infrastructure, turned out to need both databases; the stubs it should have had
+are now there. Engineering log #56.
+
+---
+
+### `refactor: rename the project to Sightline`
+
+Every package, container name, log prefix, ARN prefix, role name and document.
+`@sightline/*` workspaces, `sightline-` container names, and the ExternalId
+prefix the role template's `sts:SourceIdentity` condition matches.
+
+The rename is mechanical; the risk is that it is _nearly_ mechanical. The
+`sts:SourceIdentity` pattern is one place where a half-applied rename produces
+a condition no legal value can satisfy, which is the failure mode of
+engineering log #42 — a pattern that matched nothing, and nothing noticed
+because nothing was sending a SourceIdentity at all.
+
+---
+
+### `docs: point at the renamed repository, and correct the handover documents`
+
+The repository moved to `TomKoren1/Sightline`. Clone URLs, badge links and the
+two print documents regenerated.
+
+---
+
+### `docs: drop the assignment framing — Sightline is its own project now`
+
+`ASSIGNMENT.md` deleted after moving its two sections that existed nowhere else
+— where this breaks on a large account, and what I would build next — into
+`docs/ROADMAP.md`.
+
+**Deleting the file disarmed three assertions.** `readme.test.ts` checks the
+numbers the documentation quotes against the code, and three of those claims
+lived only in the deleted file. They failed loudly, which was luck: the helper
+returns `null` on a miss. Repairing them, a Python raw string left `\n` as two
+literal characters, which put one `expect()` **inside** the comment above it —
+so it passed while the README claimed twelve agent tools instead of sixteen.
+Found only by changing each number on purpose to watch the guards fail. Two
+did. The third did not. Engineering log #58.
+
+The word survives wherever it means something else, each checked by hand rather
+than pattern-matched: `matchAssignment()` in the `.env` parser,
+`candidateRegions` in the scanner, the eval grader, and "a brief interruption"
+in a remediation command.
+
+---
+
+### `chore: type-aware ESLint, and type-checking what no project covered`
+
+ADR-019. `npm run lint` was Prettier alone — a formatting check standing in for
+a correctness check. And `npm run typecheck` runs `--workspaces`, so `infra/`,
+`scripts/` and the root config files were type-checked by nothing: vitest
+transpiles them with esbuild, which strips types without reading them.
+
+ESLint 9 with `typescript-eslint`'s type-checked rule sets, plus
+`tsconfig.tools.json` for the code outside every workspace. 215 problems on the
+first run, four of them real:
+
+- a SIGTERM handler that discarded the promise it was awaiting, so a failed
+  `close()` became an unhandled rejection and the process **never exited**;
+- `String(unknown)` in fourteen places, one object away from `[object Object]`
+  — now one `asText` helper, extracted from the one site that was already
+  getting it right;
+- the same `err instanceof Error …` idiom in 22 places and five spellings,
+  three of which had lost the `String(…)` and would print `[object Object]` for
+  a thrown object — now one `errorMessage`;
+- seven dead imports, including a `template` left in a test when the assertion
+  that used it moved somewhere stronger.
+
+Each exception in the config says what turning it on would have cost. The
+largest: `dot-notation` accounted for 106 of the 215 and cannot tell an index
+signature from a property access.
+
+Also here, and the more valuable half: **CI's test exclusion was hiding 32
+assertions.** `--exclude '**/evals/**'` was there for the one suite that needs
+databases, but it also excluded `readme.test.ts` and `summarise.test.ts`, which
+need nothing — so all 25 guards against documentation rot ran in no CI job at
+all. Narrowed to the single file, which immediately made
+`workflowPaths.test.ts` fail by parsing the new glob as a path; that guard now
+knows the difference. `LICENSE`, `SECURITY.md`, `.nvmrc` and a grouped
+Dependabot config, and `npm audit --omit=dev` reports zero. Engineering log #59.
+
+**488 unit tests.**

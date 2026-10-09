@@ -37,7 +37,7 @@ function stubClient(pages: Page[], failOnToken?: string): EC2Client {
     credentials: { accessKeyId: "test", secretAccessKey: "test" },
   });
 
-  client.send = (async (command: DescribeInstancesCommand) => {
+  client.send = async (command: DescribeInstancesCommand) => {
     const token = command.input.NextToken;
     if (failOnToken !== undefined && token === failOnToken) {
       const err = new Error("Rate exceeded");
@@ -51,7 +51,7 @@ function stubClient(pages: Page[], failOnToken?: string): EC2Client {
       Reservations: [{ Instances: page.ids.map((id) => ({ InstanceId: id })) }],
       NextToken: page.nextToken,
     };
-  }) as unknown as EC2Client["send"];
+  };
 
   return client;
 }

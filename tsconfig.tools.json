@@ -1,0 +1,16 @@
+{
+  // Type-checking for the code that is not in a workspace. `npm run typecheck`
+  // runs `--workspaces`, so `infra/`, `scripts/` and the root config files were
+  // checked by nothing: vitest transpiles them with esbuild, which strips types
+  // without reading them.
+  //
+  // `checkJs` covers `scripts/deps.mjs`, which has to run before anything that
+  // can compile TypeScript is installed and so can never be .ts.
+  "extends": "./tsconfig.base.json",
+  "compilerOptions": {
+    "allowJs": true,
+    "checkJs": true,
+    "types": ["node"]
+  },
+  "include": ["infra/**/*.ts", "scripts/**/*.mjs", "vitest.config.ts", "eslint.config.mjs"]
+}

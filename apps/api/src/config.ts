@@ -9,44 +9,22 @@ import { z } from "zod";
 import { validateAssumeRoleTarget } from "./aws/principal.js";
 
 /**
- * Where `.env` lives, as a **filesystem** path.
- *
- * `new URL(...).pathname` is a URL path, not a filesystem path, and the two
- * differ whenever the real path needs escaping. On Windows it yields
- * `/C:/projects/app/.env` - a leading slash before the drive letter, which
- * `fs` cannot open. On any OS, a directory containing a space yields
- * `/home/me/My%20Projects/.env`, which `fs` also cannot open.
- *
- * Either way `dotenv` failed with ENOENT, and because it was called with
- * `quiet: true` it failed **silently** - so no variable from `.env` was ever
- * loaded. The Zod defaults below happen to match `.env.example`, so Postgres,
- * Neo4j and the mock kept working and only `ANTHROPIC_API_KEY`, which has no
- * default, visibly broke. A Windows user got "ANTHROPIC_API_KEY not set" while
- * looking at the key in their `.env`, and any other value they had edited was
- * being ignored too (engineering log #36).
- *
- * `fileURLToPath` is the documented conversion and is correct on every
- * platform. `URL.pathname` should never be used to address the filesystem.
+ * `fileURLToPath`, never `URL.pathname`: the latter is a URL path, so a drive
+ * letter or a space in the directory gives `fs` something it cannot open.
+ * `dotenv` then failed silently and no `.env` value loaded at all - only
+ * `ANTHROPIC_API_KEY` broke visibly, since the Zod defaults below cover the
+ * rest (engineering log #36).
  */
 export const ENV_FILE = fileURLToPath(new URL("../../../.env", import.meta.url));
 
 loadDotenv({ path: ENV_FILE, quiet: true });
 
 /**
- * Treat an empty value as an unset one.
+ * Zod's `.default()` only fires on `undefined`, but a blanked-out `.env` line
+ * arrives as `""` - so `AWS_REGION=` reached the SDK as "Region is missing".
  *
- * `.env` is a text file, so a variable someone has blanked out arrives as `""`
- * rather than as `undefined` - and Zod's `.default()` only fires on
- * `undefined`. `AWS_REGION=` therefore produced `cfg.AWS_REGION === ""`, which
- * the AWS SDK rejects with "Region is missing" from whichever client happened
- * to be constructed first. The variable looked present and documented; it was
- * simply empty, and the default that was supposed to cover it never ran.
- *
- * Applied to every variable where a blank value means nothing. It is
- * deliberately **not** applied to AWS_SCAN_REGIONS or SCAN_FAULT_INJECTION,
- * where blank is a documented, meaningful value - "discover every region" and
- * "inject no faults" respectively - and collapsing it into the default would
- * silently change behaviour. See engineering log #28.
+ * Deliberately not applied to AWS_SCAN_REGIONS or SCAN_FAULT_INJECTION, where
+ * blank is meaningful ("every region", "no faults") - engineering log #28.
  */
 const blankAsUnset = <T extends z.ZodTypeAny>(inner: T) =>
   z.preprocess((value) => (value === "" ? undefined : value), inner);
@@ -73,15 +51,9 @@ const schema = z.object({
   AWS_REGION: blankAsUnset(z.string().default("us-east-1")),
 
   /**
-   * Who or what triggered this scan, for `sts:SourceIdentity`.
-   *
-   * Sent on every AssumeRole so the *customer's* CloudTrail attributes activity
-   * to an operator or system rather than only to the shared scanner role, and
-   * cannot be changed for the life of the session. See ADR-007 and the trust
-   * policy in `infra/readonly-role.yaml`.
-   *
-   * Prefixed and sanitised in `sourceIdentity()` below rather than here, so an
-   * operator name that AWS would reject cannot reach the API call.
+   * Who triggered this scan, for `sts:SourceIdentity` - so the customer's
+   * CloudTrail attributes activity to an operator, not just the shared role.
+   * Sanitised in `sourceIdentity()` below. ADR-007.
    */
   SCAN_OPERATOR: blankAsUnset(z.string().default("system")),
   AWS_ACCESS_KEY_ID: blankAsUnset(z.string().optional()),
@@ -130,13 +102,9 @@ export const cfg = parsed.data;
 export const configuredMode: "mock" | "real" = cfg.AWS_MODE;
 
 /**
- * The mode currently in effect.
- *
- * Switchable at runtime so the UI can move between the seeded demo account and
- * a real one without a restart. Everything that depends on it reads
- * `isMock()` per call rather than capturing a boolean at import, and the AWS
- * clients are constructed per request, so a switch takes effect immediately -
- * after the cached STS session is dropped, which `setMode` handles.
+ * Switchable at runtime, so the UI moves between demo and real without a
+ * restart. Readers call `isMock()` per call rather than capturing a boolean at
+ * import, and clients are built per request, so a switch is immediate.
  */
 let activeMode: "mock" | "real" = cfg.AWS_MODE;
 
@@ -158,12 +126,9 @@ export function accountOfArn(arn: string): string | null {
 }
 
 /**
- * Should mock mode use the role ARN from `.env`, or the mock's own?
- *
- * Exported as a pure function because the answer is load-bearing and the module
- * around it reads the environment at import time, which makes it untestable in
- * place. Getting this wrong writes a mock inventory to Postgres under a real
- * account id - see `activeConnection` and engineering log #31.
+ * Should mock mode use the role ARN from `.env`, or the mock's own? Pure and
+ * exported because the module around it reads the environment at import, and
+ * getting this wrong writes a mock inventory under a real account id (log #31).
  */
 export function honoursConfiguredArnInMock(
   mode: "mock" | "real",
@@ -176,12 +141,9 @@ export function honoursConfiguredArnInMock(
 }
 
 /**
- * Connection settings for the mode in effect.
- *
- * The mock's role ARN and external id are fixed by the seeder, so they are
- * derived rather than read from `.env` - which leaves `.env` free to hold the
- * real account's settings permanently, and makes the toggle lossless in both
- * directions.
+ * The mock's ARN and external id are derived, not read from `.env` - which
+ * leaves `.env` free to hold the real account's settings permanently and makes
+ * the toggle lossless both ways.
  */
 export function activeConnection(): {
   roleArn: string;
@@ -192,29 +154,14 @@ export function activeConnection(): {
     const account = process.env["MOCK_AWS_ACCOUNT_ID"] ?? "123456789012";
 
     /**
-     * When `.env` really does describe the mock, its values are authoritative.
+     * The onboarding variables win when `.env` really describes the mock -
+     * ignoring them because a runtime toggle exists would make editing them
+     * appear to do nothing (log #24).
      *
-     * `AWS_TARGET_ROLE_ARN` and `AWS_EXTERNAL_ID` are the onboarding variables
-     * the project ships with, and silently ignoring them because a runtime
-     * toggle exists would be a nasty surprise: editing them would appear to do
-     * nothing (engineering log #24). So they win - but the test for "describes
-     * the mock" is the **account id**, not the mode flag.
-     *
-     * That distinction is the whole fix. `AWS_MODE=mock npm run
-     * scan` against a `.env` that points at a real account makes
-     * `configuredMode` "mock" while `AWS_TARGET_ROLE_ARN` still names the real
-     * account - so this branch honoured a real role ARN while the endpoint
-     * override sent every call to moto. The scan read the mock's inventory and
-     * wrote it to Postgres under the *real* account id.
-     *
-     * That is engineering log #17 arriving through a different door: a
-     * confident, complete, entirely fictional inventory of somebody's real AWS
-     * account. Observed, not theorised - 100 mock resources persisted under a
-     * real twelve-digit account (engineering log #31).
-     *
-     * So the onboarding variables are honoured only when their account matches
-     * the mock's. Anything else is configuration for a different account and is
-     * ignored in favour of the mock's own identity, loudly.
+     * But the test is the **account id**, not the mode flag. `AWS_MODE=mock`
+     * against a `.env` naming a real account used to honour the real ARN while
+     * the endpoint override sent every call to moto, persisting 100 mock
+     * resources under a real twelve-digit account id (log #31).
      */
     if (honoursConfiguredArnInMock(configuredMode, cfg.AWS_TARGET_ROLE_ARN, account)) {
       return {
@@ -242,18 +189,12 @@ export function activeConnection(): {
 }
 
 /**
- * Whether the configured target role can possibly work, and if not, why.
+ * `sts:AssumeRole` can only assume a role, and a user ARN here is the likeliest
+ * misconfiguration - it is the right answer to the question the guide asks two
+ * steps earlier, and the two variables sit next to each other.
  *
- * `sts:AssumeRole` can only assume a **role**. A user ARN here is the single
- * most likely misconfiguration, because it is the correct answer to a
- * different question the onboarding guide asks two steps earlier - the
- * principal the customer's trust policy should name. The two variables sit
- * next to each other and one is a valid-looking value for the other.
- *
- * Reported rather than fatal. Exiting would leave the UI unable to load, and
- * the UI is where the connection guide that explains the fix lives; a process
- * that dies on bad configuration cannot tell you how to correct it. So this
- * surfaces at startup, through `/api/connection`, and in the connection test.
+ * Reported, not fatal: the UI is where the guide explaining the fix lives, so a
+ * process that dies on bad configuration cannot tell you how to correct it.
  */
 export function targetRoleProblem(): string | null {
   // The mock's derived ARN is always well-formed, so there is nothing to warn
@@ -288,30 +229,20 @@ export function looksLikeRealAccessKey(value: string | undefined): boolean {
 /**
  * Stop the mock's placeholder credentials from shadowing real ones.
  *
- * `.env` is loaded into `process.env`, which means `AWS_ACCESS_KEY_ID=mock` is
- * visible to the AWS SDK's own environment credential provider - the first
- * provider in its chain. So in `real` mode a leftover placeholder does not
- * merely get ignored, it actively wins over `~/.aws/credentials`, an instance
- * role, or anything else, and every call fails with `InvalidClientTokenId`.
- *
- * Deleting the variables is the only fix that works, because the SDK reads
- * `process.env` directly rather than anything we control. Values that look like
- * genuine AWS keys are left alone: supplying real credentials this way is
- * legitimate.
+ * `AWS_ACCESS_KEY_ID=mock` in `process.env` is visible to the SDK's environment
+ * provider - first in its chain - so in real mode it wins over
+ * `~/.aws/credentials` and every call fails `InvalidClientTokenId`. Deleting is
+ * the only fix, since the SDK reads `process.env` directly. Key-shaped values
+ * are left alone.
  */
 /**
- * Variables the AWS SDK reads directly from the environment, which `.env` must
- * not be allowed to set once we are talking to a real account.
+ * SDK-read variables `.env` must not set once we are talking to a real account.
  *
- * `AWS_ENDPOINT_URL` is the dangerous one. It is a documented SDK-wide endpoint
- * override, so a value left in `.env` for the mock silently redirects **every**
- * client - STS included - away from AWS. The scanner then enumerates the mock
- * and labels the results with the real account id taken from the role ARN, and
- * the connection test passes, because moto accepts any AssumeRole it is given.
- *
- * The result is a confident, plausible, entirely fabricated inventory of
- * somebody's AWS account. That is the exact failure this project exists to
- * prevent elsewhere, so it is worth being blunt about here.
+ * `AWS_ENDPOINT_URL` is the dangerous one: left over from the mock it redirects
+ * every client, STS included, away from AWS. The scan then enumerates the mock
+ * and labels it with the real account id, and the connection test passes
+ * because moto accepts any AssumeRole - a fabricated inventory of a real
+ * account.
  */
 const SDK_ENV_OVERRIDES = [
   "AWS_ENDPOINT_URL",
@@ -383,17 +314,10 @@ export function awsProfileDir(home = process.env["HOME"] ?? "/root"): string {
 }
 
 /**
- * What the AWS credential chain has to work with, for diagnosis.
- *
- * `CredentialsProviderError` means "nothing in the chain produced credentials",
- * which is accurate and tells a reader nothing about which link is missing. In a
- * container there are two plausible answers and they need opposite fixes: no keys
- * in the environment, or no `~/.aws` because the host's profile was never
- * mounted. Enumerating both turns one generic sentence into a specific one
- * (engineering log #48).
- *
- * Reports only presence and shape, never a value. A diagnosis that leaks half a
- * secret into a UI is not an improvement.
+ * `CredentialsProviderError` says nothing about which link in the chain is
+ * missing. In a container the two answers need opposite fixes: no keys in the
+ * environment, or no `~/.aws` mount (log #48). Reports presence and shape only,
+ * never a value.
  */
 export function credentialSources(): {
   containerised: boolean;
@@ -455,14 +379,10 @@ export function faultInjections(): ReadonlySet<string> {
 }
 
 /**
- * The prefix the role template's trust policy requires.
- *
- * Hyphen, not colon. AWS restricts `SourceIdentity` to alphanumerics,
- * underscore and `+=,.@-` - a colon is rejected outright. The trust policy
- * originally matched `sightline:*`, a pattern no legal value can satisfy, and
- * nothing caught it because no SourceIdentity was being sent at all. A
- * condition that can never match is indistinguishable from no condition until
- * the day you rely on it (engineering log #42).
+ * Hyphen, not colon: AWS restricts `SourceIdentity` to alphanumerics,
+ * underscore and `+=,.@-`. The trust policy originally matched `sightline:*`,
+ * which no legal value can satisfy, and nothing caught it because nothing was
+ * sending a SourceIdentity at all (engineering log #42).
  */
 export const SOURCE_IDENTITY_PREFIX = "sightline-";
 
@@ -470,15 +390,10 @@ export const SOURCE_IDENTITY_PREFIX = "sightline-";
 const SOURCE_IDENTITY_ALLOWED = /[^A-Za-z0-9_+=,.@-]/g;
 
 /**
- * Build a legal `sts:SourceIdentity` from an operator name.
- *
- * Sanitised rather than validated-and-rejected: an operator name with a space in
- * it should not be able to fail every scan. Truncated to AWS's 64-character
- * limit, and never empty, because the trust policy requires the key present.
- *
- * Pure, and exported separately from `sourceIdentity()` so the sanitising can be
- * tested across a range of inputs without reloading the config module - which is
- * frozen at import and cannot be re-read per test.
+ * Sanitised rather than rejected: an operator name with a space should not fail
+ * every scan. Truncated to AWS's 64 characters and never empty, since the trust
+ * policy requires the key present. Pure, so it is testable without reloading
+ * this module.
  */
 export function toSourceIdentity(operator: string): string {
   const cleaned = operator.replace(SOURCE_IDENTITY_ALLOWED, "-").replace(/^-+|-+$/g, "");
@@ -486,18 +401,13 @@ export function toSourceIdentity(operator: string): string {
 }
 
 /**
- * Whether this process is running inside a container.
+ * So the onboarding guide shows one restart command rather than both and a rule
+ * for choosing. The two differ: in a container the API must be *recreated*,
+ * because `docker compose restart` reuses the environment resolved at creation
+ * and ignores an edited `.env` (log #44).
  *
- * Used by the onboarding guide to show the restart command that applies here
- * rather than both and a rule for choosing. The two differ in a way that
- * matters: on a host the API is restarted, in a container it has to be
- * *recreated*, because `docker compose restart` reuses the environment resolved
- * when the container was created and so ignores an edited `.env` entirely
- * (engineering log #44).
- *
- * `/.dockerenv` is written by the Docker daemon into every container it starts.
- * It is a heuristic - a different runtime may not create it - so it is only ever
- * used to pick which instructions to show, never to decide anything about AWS.
+ * `/.dockerenv` is a heuristic, so it only picks which instructions to show -
+ * never anything about AWS.
  */
 export function inContainer(): boolean {
   return existsSync("/.dockerenv");

@@ -1,27 +1,17 @@
 /**
- * Guarantees that a request to change something is answered with an explicit
+ * Guarantees a request to change something is answered with an explicit
  * statement that the agent cannot.
  *
- * Why this is code and not a prompt instruction
- * ---------------------------------------------
- * It was a prompt instruction first, and the model did not reliably follow it.
- * Three attempts failed: stating it, stating it emphatically, and moving it
- * ahead of the style rules that were competing with it. The model kept
- * answering a request to delete a volume with the volume's details and the CLI
- * command - safe, genuinely useful, and never once saying that Sightline holds no
- * ability to touch the account.
+ * This was a prompt instruction first, and three attempts failed: stating it,
+ * stating it emphatically, and moving it ahead of the competing style rules.
+ * The model kept answering "delete this volume" with the volume's details and
+ * the CLI command - useful, and never once saying Sightline cannot touch the
+ * account. Same argument as ADR-004, applied to safety: a property that must
+ * hold is computed in code.
  *
- * That is the same argument as ADR-004, applied to safety rather than to
- * security analysis: a property that must hold is computed in code, and the
- * model is left to do the part it is good at. The agent was never *able* to
- * make a change - no tool can express a mutation - but a user learns that from
- * what the answer says, and "the agent cannot write" is a claim the brief asks
- * us to make.
- *
- * Deliberately conservative. It fires on a request *directed at the agent*, not
- * on any mention of a destructive verb, because a guard that prepends a notice
- * to "which volumes should I delete?" would be noise - and noise is how a
- * genuine safety notice stops being read.
+ * Conservative on purpose - it fires on a request *directed at the agent*, not
+ * on any destructive verb, because a notice prepended to "which volumes should
+ * I delete?" is noise, and noise is how a safety notice stops being read.
  */
 
 /** Verbs in imperative or infinitive form. Past tense is excluded on purpose. */

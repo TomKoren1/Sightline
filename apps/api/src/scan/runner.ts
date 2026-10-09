@@ -19,6 +19,7 @@ import {
   type ScannableService,
   type ScanResult,
   type ScanUnit,
+  errorMessage,
 } from "@sightline/shared";
 
 import { cfg, faultInjections } from "../config.js";
@@ -71,7 +72,7 @@ function errorCodeOf(err: unknown): string | undefined {
 function explainFailure(service: string, region: string | null, err: unknown): string {
   const code = errorCodeOf(err);
   const where = region ? `${service} in ${region}` : service;
-  const message = err instanceof Error ? err.message : String(err);
+  const message = errorMessage(err);
 
   switch (code) {
     case "UnauthorizedOperation":

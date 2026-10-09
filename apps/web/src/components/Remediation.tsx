@@ -1,22 +1,12 @@
 /**
- * The fix, written out, with a copy button and no way to apply it.
- *
- * The absence of an "Apply" button is the feature. Everything else in this
- * product argues that Sightline holds read-only access by design; a panel that
- * offered to run these would undo that argument in one click, and the honest
- * version — telling you precisely what to change and refusing to change it — is
- * both safer and more useful, because the person who understands the blast
+ * The fix, written out, with a copy button and no way to apply it. The absence
+ * of an "Apply" button is the feature: the person who understands the blast
  * radius is the one at the keyboard.
  *
- * Two deliberate choices in the layout:
- *
- * The **caution comes before the commands**, not after. A caution below a copy
- * button is read second, and by then the command is already on the clipboard.
- *
- * The **risk badge is not decoration**. An unprotected bucket rates low because
- * nothing can currently reach it, and a genuinely public one rates high; if
- * everything were red the rating would carry no information and people would
- * stop reading it.
+ * Two layout choices: the **caution comes before the commands**, since a
+ * caution below a copy button is read after the command is already on the
+ * clipboard. And the **risk badge is not decoration** - if everything were red
+ * the rating would carry no information and nobody would read it.
  */
 
 import { useQuery } from "@tanstack/react-query";

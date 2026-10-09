@@ -14,6 +14,7 @@ import { S3Client } from "@aws-sdk/client-s3";
 import { IAMClient } from "@aws-sdk/client-iam";
 import { RDSClient } from "@aws-sdk/client-rds";
 import { LambdaClient } from "@aws-sdk/client-lambda";
+import { errorMessage } from "@sightline/shared";
 
 const endpoint = process.env.AWS_ENDPOINT_URL ?? "http://localhost:5000";
 
@@ -48,7 +49,7 @@ export async function waitForMoto(timeoutMs = 60_000): Promise<void> {
       if (res.ok) return;
       lastError = `status ${res.status}`;
     } catch (err) {
-      lastError = err instanceof Error ? err.message : String(err);
+      lastError = errorMessage(err);
     }
     await new Promise((r) => setTimeout(r, 1000));
   }

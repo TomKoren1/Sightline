@@ -3,7 +3,7 @@
  *
  * Two things here are deliberate. While the agent works, the panel names the
  * tool that is running rather than showing a spinner - "what is the agent
- * doing" is a question the brief asks us to answer, and a tool name answers it
+ * doing" is a question users ask, and a tool name answers it
  * honestly. And every answer carries an expandable trail of the tool calls
  * behind it, because a DevOps engineer about to act on a finding should be
  * able to see where it came from.
@@ -13,6 +13,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import type { AgentEvent, Citation, ToolCallTrace } from "@sightline/shared";
 
 import { askAgent } from "../api.js";
+import { errorMessage } from "@sightline/shared";
 
 interface ChatMessage {
   id: string;
@@ -147,7 +148,7 @@ export function Chat({ ready, onCitations }: ChatProps) {
             {
               id: `e-${Date.now()}`,
               role: "assistant",
-              content: err instanceof Error ? err.message : String(err),
+              content: errorMessage(err),
               error: true,
             },
           ]);
@@ -216,7 +217,8 @@ export function Chat({ ready, onCitations }: ChatProps) {
             onToggle={() =>
               setExpanded((prev) => {
                 const next = new Set(prev);
-                next.has(message.id) ? next.delete(message.id) : next.add(message.id);
+                if (next.has(message.id)) next.delete(message.id);
+                else next.add(message.id);
                 return next;
               })
             }

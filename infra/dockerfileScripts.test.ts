@@ -61,7 +61,7 @@ function parseDockerfile(text: string): Map<string, Stage> {
     const copy = /^COPY\s+(.*)$/i.exec(line);
     // `--from=` reads another stage, not the build context, so it cannot supply
     // a directory the context has.
-    if (copy && !/^--from=/.test(copy[1]!.trim())) current.copies.push(...argv(copy[1]!));
+    if (copy && !copy[1]!.trim().startsWith("--from=")) current.copies.push(...argv(copy[1]!));
 
     const run = /^(?:RUN|CMD|ENTRYPOINT)\s+(.*)$/i.exec(line);
     if (run) current.commands.push(argv(run[1]!));
@@ -81,8 +81,8 @@ function parseComposeServices(text: string): Map<string, string> {
   const body = text.slice(text.indexOf("\nservices:"));
   const heads = [...body.matchAll(/^ {2}([a-z][\w-]*):$/gim)];
   heads.forEach((head, i) => {
-    const start = head.index! + head[0].length;
-    const end = i + 1 < heads.length ? heads[i + 1]!.index! : body.length;
+    const start = head.index + head[0].length;
+    const end = i + 1 < heads.length ? heads[i + 1]!.index : body.length;
     services.set(head[1]!, body.slice(start, end));
   });
   return services;

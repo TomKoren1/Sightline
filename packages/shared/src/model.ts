@@ -1,22 +1,15 @@
 /**
- * The domain model shared by the scanner, the graph projection, the agent and
- * the frontend.
+ * The domain model shared by the scanner, the graph, the agent and the frontend.
  *
- * Design note
- * -----------
- * The single most important decision in this codebase lives here: the
- * `derived` block on `Resource`, and the `CAN_REACH` relationship.
+ * The most important decision in this codebase lives here: the `derived` block
+ * on `Resource`, and the `CAN_REACH` relationship. "Which buckets are public?"
+ * is security reasoning, not a lookup - it means combining a policy with its
+ * ACLs and access block - and that reasoning happens deterministically in code
+ * at projection time, never in the model.
  *
- * Questions like "which buckets are public?" or "what can reach the production
- * database?" are *security reasoning*, not data lookup. Answering them requires
- * combining a bucket policy with its ACLs and its public-access block, or
- * walking a chain of security-group references. That reasoning is done
- * deterministically, in code, at projection time - never by the language model.
- *
- * The LLM's job is to select the right query, read facts that were computed by
- * code, and explain them. It is not asked to evaluate an IAM policy document in
- * its head. This is what makes the agent's answers auditable: every claim it
- * makes traces back to a deterministic function we can unit-test.
+ * The model selects the query, reads computed facts and explains them. That is
+ * what makes its answers auditable: every claim traces to a unit-tested
+ * function.
  */
 
 /** Every kind of node that can appear in the resource graph. */
