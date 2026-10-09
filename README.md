@@ -1,11 +1,12 @@
-# Dave — AWS inventory, graph and agent
+# Sightline — AWS inventory, graph and agent
 
-A thin slice of the dave.io product: connect to a customer's AWS account with a
-read-only role, ingest what is there and how it fits together, and put an agent
-on top that answers questions a DevOps engineer would act on.
+Sightline connects to an AWS account with a read-only role, ingests what is
+there and how it fits together, and puts an agent on top that answers the
+questions a DevOps engineer would act on — what can reach the production
+database, who is effectively an administrator, what changed since yesterday.
 
-Built for the dave.io engineering assignment. It runs end to end against a
-mocked AWS account with no credentials and no cloud spend.
+It runs end to end against a mocked AWS account with no credentials and no
+cloud spend.
 
 ```
 AWS (real or mock) ──▶ scanner ──▶ Postgres ──▶ Neo4j ──▶ agent ──▶ React UI
@@ -51,7 +52,7 @@ That writes it and restarts the API. If you would rather not install Node for it
 [`docs/SETUP.md`](docs/SETUP.md) has the other way.
 
 4. **Ask** _"What can reach the production database?"_ — it is private and not
-   publicly accessible, and five distinct chains reach it. Every answer cites the
+   publicly accessible, and two chains reach it. Every answer cites the
    resources it used, and each citation is checked against what the tools returned.
 5. **Ask a trick question:** _"analytics-db has PubliclyAccessible set to true — is
    it actually exposed?"_ The answer is no, because its security group opens no
@@ -121,9 +122,9 @@ is public, whether a role is effectively admin, what can reach what — all of i
 deterministic, and each verdict carries the evidence it was derived from. The model
 chooses which question to ask and explains the answer; it does not decide the answer.
 
-**The agent gets a curated tool library rather than free-form Cypher.** Sixteen tools
-whose queries were written and reviewed in advance, plus one guarded escape hatch for
-questions nobody anticipated. After it answers, every identifier in its reply is
+**The agent gets a curated tool library rather than free-form Cypher.** Sixteen tools,
+fifteen of them queries written and reviewed in advance and one a guarded escape hatch
+for questions nobody anticipated. After it answers, every identifier in its reply is
 checked against what the tools actually returned, and anything unsupported is flagged
 to the user — because a confident, plausible, invented resource id is the failure a
 reader cannot catch themselves.
@@ -139,7 +140,7 @@ cites, with traps that a tool reading flags rather than evaluating them would fa
 into. The same checks run inside the product, under **Trust**.
 
 The reasoning behind each of these is in
-[**docs/ASSIGNMENT.md**](docs/ASSIGNMENT.md) and the fifteen ADRs in
+[**docs/ASSIGNMENT.md**](docs/ASSIGNMENT.md) and the eighteen ADRs in
 [**docs/DECISIONS.md**](docs/DECISIONS.md).
 
 ## Repository layout
@@ -148,9 +149,11 @@ The reasoning behind each of these is in
 apps/api            backend: scanner, analysers, graph, agent, HTTP API
   src/aws/          credentials, instrumented clients, region discovery
   src/scan/         collectors, analysers, orchestration
-  src/db/           Postgres schema and repository, Neo4j projection, queries
+  src/db/           Drizzle schema and migrations, repository, Neo4j projection
   src/agent/        tools, Cypher guard, citation validation, the loop
   src/evals/        tier-1 ground truth, tier-2 cases and grading
+  src/health/ graph/ scans/ chat/ connection/
+                    one NestJS module each: a controller over a service
 apps/web            React frontend: graph, chat, findings, UX states
 packages/shared     domain model shared by every package
 packages/mock-aws   the seeded customer account and its answer key
@@ -162,12 +165,14 @@ docs/               decisions, engineering log, commit log, walkthrough
 
 ## Documentation
 
-- **[docs/DECISIONS.md](docs/DECISIONS.md)** — fifteen ADRs: the stack, the
+- **[docs/DECISIONS.md](docs/DECISIONS.md)** — eighteen ADRs: the stack, the
   mock, the two-database split, deterministic analysis, the tool boundary,
   citation validation, the IAM role, the eval strategy, the read-only refusal in
   code, guided onboarding, evals shown in the product, public vs unprotected,
-  the runtime account toggle, remediation that is never applied, and onboarding
-  automated by a host script rather than a form.
+  the runtime account toggle, remediation that is never applied, onboarding
+  automated by a host script rather than a form, and the three that supersede
+  earlier ones — Drizzle, NestJS, and the agent loop moving onto the Vercel AI
+  SDK, each recording what the decision it replaces got right as well as wrong.
 - **[docs/ENGINEERING-LOG.md](docs/ENGINEERING-LOG.md)** — every non-obvious
   problem hit while building this, with diagnosis and fix. Includes a silent
   moto account-namespacing trap, two capability gaps in the mock recorded as

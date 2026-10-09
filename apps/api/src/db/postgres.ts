@@ -5,7 +5,7 @@ import { fileURLToPath } from "node:url";
 import { drizzle } from "drizzle-orm/node-postgres";
 import { migrate as runMigrations } from "drizzle-orm/node-postgres/migrator";
 import pg from "pg";
-import type { Resource } from "@daveio/shared";
+import type { Resource } from "@sightline/shared";
 
 import { cfg } from "../config.js";
 import * as schema from "./schema.js";

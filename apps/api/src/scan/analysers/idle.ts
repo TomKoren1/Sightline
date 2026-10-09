@@ -17,7 +17,7 @@
  * as estimates.
  */
 
-import type { Relationship, Resource } from "@daveio/shared";
+import type { Relationship, Resource } from "@sightline/shared";
 
 /** Monthly USD per GB of provisioned storage. */
 const EBS_PRICE_PER_GIB = { gp3: 0.08, gp2: 0.1, io1: 0.125, io2: 0.125, st1: 0.045, sc1: 0.015 };

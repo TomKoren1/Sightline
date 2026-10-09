@@ -180,7 +180,7 @@ otherwise too well behaved to break.
 
 ### `feat(api): inspect CLI`
 
-`npm run inspect -w @daveio/api` runs a scan and prints what it found without
+`npm run inspect -w @sightline/api` runs a scan and prints what it found without
 touching either database. It isolates "did we collect this correctly" from
 "did we project it correctly", which is the first question worth asking when a
 graph query returns something surprising.
@@ -266,7 +266,7 @@ instance is an incident, one nothing references is cleanup.
 first, so a failed projection still leaves the scan durable and re-projectable
 without going back to AWS.
 
-`npm run query -w @daveio/api` runs every curated query and prints the rows.
+`npm run query -w @sightline/api` runs every curated query and prints the rows.
 It answers the question "is this the model's fault or the query's?", which is
 the first thing worth knowing when an agent answer looks wrong.
 
@@ -477,7 +477,7 @@ reporting for exactly the remote case this change enables. Engineering log #14.
 The eval suite caught the agent answering _"please delete the orphaned-vol-1
 volume"_ with the volume's details, its cost, a warning that it was tagged
 `production`, and the exact CLI command — safe, genuinely useful, and never
-saying that dave.io holds no ability to touch the account.
+saying that Sightline holds no ability to touch the account.
 
 That matters because the brief's hard rule is one this project _claims_, and
 every reply to a change request is where a user tests the claim. An answer that
@@ -709,7 +709,7 @@ evaluation. Two guards now assert the folded `Description` stays under 1024 and
 the role's own under IAM's 1000; the first fails against the previous commit.
 
 **The guide told people to paste an ARN that cannot work.** Step 3 filled
-`DaveIoScannerRoleArn` from `sts:GetCallerIdentity` verbatim. That call reports
+`SightlineScannerRoleArn` from `sts:GetCallerIdentity` verbatim. That call reports
 a _session_, so it returns `arn:aws:sts::…`; a trust policy needs the
 `arn:aws:iam::…` identity behind it. Against the mock it emitted moto's own
 identity as the principal to trust in someone's real account. New
@@ -898,7 +898,7 @@ the page loads with zero failed requests.
 ### `fix: add the missing query script, and guard the README against rot`
 
 Working through the README command by command found `npm run query -w
-@daveio/api` documented in the commands table, named in the CLI file's own
+@sightline/api` documented in the commands table, named in the CLI file's own
 header, and defined nowhere. The script existed and worked; it was simply never
 wired up. Engineering log #35.
 

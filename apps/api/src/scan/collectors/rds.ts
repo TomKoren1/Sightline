@@ -10,7 +10,7 @@
  */
 
 import { paginateDescribeDBInstances, paginateDescribeDBSubnetGroups } from "@aws-sdk/client-rds";
-import type { Relationship, Resource } from "@daveio/shared";
+import type { Relationship, Resource } from "@sightline/shared";
 
 import { rdsClient } from "../../aws/clients.js";
 import { ec2Arn, regionArn, tagsToRecord } from "../../aws/arns.js";

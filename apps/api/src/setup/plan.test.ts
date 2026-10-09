@@ -7,7 +7,7 @@
  */
 
 import { describe, expect, it } from "vitest";
-import { CONNECTION_ENV_KEYS, OTHER_MANAGED_ENV_KEYS, readOnlyRoleArn } from "@daveio/shared";
+import { CONNECTION_ENV_KEYS, OTHER_MANAGED_ENV_KEYS, readOnlyRoleArn } from "@sightline/shared";
 
 import {
   chooseExternalId,
@@ -23,7 +23,7 @@ import {
 const input = {
   accountId: "672299759593",
   region: "us-east-1",
-  externalId: "daveio-JSPwaNtDbq9dA1HFtwzppjaG",
+  externalId: "sightline-JSPwaNtDbq9dA1HFtwzppjaG",
   scanRegions: "",
 };
 
@@ -32,7 +32,7 @@ describe("maskForDisplay", () => {
     const masked = maskForDisplay("AWS_EXTERNAL_ID", input.externalId);
     expect(masked).not.toBe(input.externalId);
     // Enough to tell two values apart, and no more.
-    expect(masked.startsWith("dave")).toBe(true);
+    expect(masked.startsWith("sigh")).toBe(true);
     expect(masked).toContain("•");
   });
 
@@ -94,32 +94,32 @@ describe("chooseExternalId", () => {
      * running --dry-run twice and seeing an ExternalId change on a deployment that
      * was already correct.
      */
-    const result = chooseExternalId(input.externalId, () => "daveio-NEW");
+    const result = chooseExternalId(input.externalId, () => "sightline-NEW");
     expect(result).toEqual({ value: input.externalId, reused: true });
   });
 
   it("generates when there is none", () => {
-    expect(chooseExternalId(null, () => "daveio-NEW")).toEqual({
-      value: "daveio-NEW",
+    expect(chooseExternalId(null, () => "sightline-NEW")).toEqual({
+      value: "sightline-NEW",
       reused: false,
     });
   });
 
   it("generates when the value is empty", () => {
-    expect(chooseExternalId("", () => "daveio-NEW").reused).toBe(false);
+    expect(chooseExternalId("", () => "sightline-NEW").reused).toBe(false);
   });
 
   it("does not reuse the shipped placeholder", () => {
     // It is documentation, not a secret anyone chose.
-    expect(chooseExternalId(PLACEHOLDER_EXTERNAL_ID, () => "daveio-NEW")).toEqual({
-      value: "daveio-NEW",
+    expect(chooseExternalId(PLACEHOLDER_EXTERNAL_ID, () => "sightline-NEW")).toEqual({
+      value: "sightline-NEW",
       reused: false,
     });
   });
 
   it("respects a value the user set themselves", () => {
     // Not everything starting without the prefix is a placeholder.
-    expect(chooseExternalId("my-own-shared-secret", () => "daveio-NEW").reused).toBe(true);
+    expect(chooseExternalId("my-own-shared-secret", () => "sightline-NEW").reused).toBe(true);
   });
 });
 

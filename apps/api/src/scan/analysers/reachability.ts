@@ -26,8 +26,8 @@
  * Every edge carries the rule that produced it, so any claim can be checked.
  */
 
-import { INTERNET_ARN, type Relationship, type Resource } from "@daveio/shared";
-import { formatPortRange } from "@daveio/shared";
+import { INTERNET_ARN, type Relationship, type Resource } from "@sightline/shared";
+import { formatPortRange } from "@sightline/shared";
 
 /** An ingress rule, flattened by the VPC collector. */
 interface IngressRule {

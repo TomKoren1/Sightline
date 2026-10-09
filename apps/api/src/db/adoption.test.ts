@@ -34,8 +34,8 @@ const HAS_INFRA = !process.env["SKIP_INTEGRATION"];
 const MIGRATIONS = fileURLToPath(new URL("../../drizzle", import.meta.url));
 const LEGACY_SQL = fileURLToPath(new URL("./legacySchema.sql", import.meta.url));
 
-const ADOPTED = "daveio_adoption_from_legacy";
-const FRESH = "daveio_adoption_from_scratch";
+const ADOPTED = "sightline_adoption_from_legacy";
+const FRESH = "sightline_adoption_from_scratch";
 
 /** The configured connection, pointed at a different database on the same server. */
 function urlFor(database: string): string {

@@ -1,6 +1,6 @@
 /** API client. Thin on purpose - the interesting logic lives server-side. */
 
-import type { AgentEvent, AgentMessage, ScanDiff, ScanEvent, ScanRun } from "@daveio/shared";
+import type { AgentEvent, AgentMessage, ScanDiff, ScanEvent, ScanRun } from "@sightline/shared";
 
 export interface GraphNode {
   arn: string;

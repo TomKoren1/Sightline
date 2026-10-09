@@ -1,7 +1,7 @@
 /**
  * Guards on the CloudFormation template.
  *
- * The template is the artefact that grants dave.io its access, and the README
+ * The template is the artefact that grants Sightline its access, and the README
  * and ADR-007 both argue in detail about what it permits. Nothing in this
  * repository executes it, so for a long time nothing checked that any of that
  * was true - and two separate things went wrong as a result.
@@ -123,7 +123,7 @@ describe("the permissions ADR-007 claims", () => {
 
 describe("the trust model ADR-007 claims", () => {
   it("scopes trust to a named principal rather than an account root", () => {
-    expect(template).toContain("AWS: !Ref DaveIoScannerRoleArn");
+    expect(template).toContain("AWS: !Ref SightlineScannerRoleArn");
     expect(template).not.toMatch(/:root"/);
     // The original trusted the whole account, which is what was changed.
     expect(original).toMatch(/:root"/);
@@ -202,7 +202,7 @@ describe("the limits CloudFormation enforces", () => {
 
 /**
  * `aws sts get-caller-identity` returns an `arn:aws:sts::...` session ARN, and
- * pasting that into DaveIoScannerRoleArn is the mistake this template's own
+ * pasting that into SightlineScannerRoleArn is the mistake this template's own
  * AllowedPattern rejects. Every ARN we show as an example must be the `iam`
  * principal form, or we are teaching the error.
  */
@@ -210,7 +210,7 @@ describe("the examples are principal ARNs, not session ARNs", () => {
   it("shows no arn:aws:sts:: ARN as a parameter value", () => {
     const badExamples = template
       .split("\n")
-      .filter((line) => /DaveIoScannerRoleArn=\s*arn:aws:sts::/.test(line));
+      .filter((line) => /SightlineScannerRoleArn=\s*arn:aws:sts::/.test(line));
     expect(badExamples).toEqual([]);
   });
 

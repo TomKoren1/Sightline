@@ -10,7 +10,7 @@
 import { useCallback, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { ReactFlowProvider } from "@xyflow/react";
-import type { ScanEvent, ScanUnit } from "@daveio/shared";
+import type { ScanEvent, ScanUnit } from "@sightline/shared";
 
 import { api, startScan } from "./api.js";
 import { DEFAULT_VISIBLE_KINDS, KIND_STYLES, styleFor } from "./kinds.js";
@@ -273,8 +273,8 @@ function EmptyState({ onScan }: { onScan: () => void }) {
     <div className="flex h-full flex-col items-center justify-center gap-3 px-6 text-center">
       <h2 className="text-[15px] font-semibold text-ink-100">No inventory yet</h2>
       <p className="max-w-sm text-[12px] leading-relaxed text-ink-400">
-        Dave connects to the customer account with a read-only role, discovers what is there, and
-        builds a graph of how it fits together. Nothing is ever modified.
+        Sightline connects to the customer account with a read-only role, discovers what is there,
+        and builds a graph of how it fits together. Nothing is ever modified.
       </p>
       <button
         onClick={onScan}

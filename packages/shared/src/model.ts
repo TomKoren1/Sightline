@@ -135,7 +135,7 @@ export interface Relationship {
 }
 
 /** Synthetic node representing the public internet, used as a path source. */
-export const INTERNET_ARN = "arn:aws:daveio:::internet";
+export const INTERNET_ARN = "arn:aws:sightline:::internet";
 
 /** A port range opened by a security group rule. */
 export interface PortRange {

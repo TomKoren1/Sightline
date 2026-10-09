@@ -1,5 +1,5 @@
 {
-  "name": "daveio-assignment",
+  "name": "sightline",
   "private": true,
   "version": "0.1.0",
   "type": "module",
@@ -16,13 +16,13 @@
     "test:watch": "node scripts/deps.mjs && vitest",
     "lint": "node scripts/deps.mjs && prettier --check .",
     "format": "node scripts/deps.mjs && prettier --write .",
-    "seed": "node scripts/deps.mjs && npm run seed -w @daveio/mock-aws",
-    "scan": "node scripts/deps.mjs && npm run scan -w @daveio/api",
-    "dev:api": "node scripts/deps.mjs && npm run dev -w @daveio/api",
-    "dev:web": "node scripts/deps.mjs && npm run dev -w @daveio/web",
-    "evals": "node scripts/deps.mjs && npm run evals -w @daveio/api",
-    "verify": "node scripts/deps.mjs && npm run typecheck && npm run lint && vitest run --exclude '**/evals/**' && npm run build -w @daveio/web",
-    "drift": "node scripts/deps.mjs && npm run drift -w @daveio/mock-aws",
+    "seed": "node scripts/deps.mjs && npm run seed -w @sightline/mock-aws",
+    "scan": "node scripts/deps.mjs && npm run scan -w @sightline/api",
+    "dev:api": "node scripts/deps.mjs && npm run dev -w @sightline/api",
+    "dev:web": "node scripts/deps.mjs && npm run dev -w @sightline/web",
+    "evals": "node scripts/deps.mjs && npm run evals -w @sightline/api",
+    "verify": "node scripts/deps.mjs && npm run typecheck && npm run lint && vitest run --exclude '**/evals/**' && npm run build -w @sightline/web",
+    "drift": "node scripts/deps.mjs && npm run drift -w @sightline/mock-aws",
     "setup": "node scripts/deps.mjs && tsx apps/api/src/cli/setup.ts"
   },
   "devDependencies": {

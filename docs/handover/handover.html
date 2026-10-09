@@ -2,7 +2,7 @@
 <html lang="en">
   <head>
     <meta charset="utf-8" />
-    <title>dave.io Engineering Assignment — Project Handover</title>
+    <title>Sightline Engineering Assignment — Project Handover</title>
     <style>
       /* Margins and the page number come from the print job (see render.js),
          not from @page — declaring a counter here as well renders it twice. */
@@ -367,7 +367,7 @@
       <div class="eyebrow">Project handover &amp; knowledge transfer</div>
       <h1>AWS Inventory, Graph&nbsp;&amp; Agent</h1>
       <div class="sub">
-        A thin slice of the dave.io product: connect to a customer's AWS account with a read-only
+        A thin slice of the Sightline product: connect to a customer's AWS account with a read-only
         role, ingest what is there and how it fits together, and put an agent on top that answers
         questions a DevOps engineer would act on.
       </div>
@@ -376,7 +376,7 @@
         <dt>Prepared for</dt>
         <dd>Tom Koren</dd>
         <dt>Purpose</dt>
-        <dd>dave.io engineering assignment — presentation &amp; defence</dd>
+        <dd>Sightline engineering assignment — presentation &amp; defence</dd>
         <dt>Repository</dt>
         <dd>github.com/TomKoren1/dave.io_home-assignment</dd>
         <dt>Stack</dt>
@@ -647,7 +647,7 @@ npm run dev:api &amp; npm run dev:web
         Relationships are explicit and typed — <code>IN_VPC</code>, <code>IN_SUBNET</code>,
         <code>HAS_POLICY</code>, <code>EXECUTES_AS</code>, <code>ATTACHED_TO</code>,
         <code>CAN_REACH</code> — and the internet is a first-class node
-        (<code>arn:aws:daveio:::internet</code>), so "reachable from the internet" is an ordinary
+        (<code>arn:aws:sightline:::internet</code>), so "reachable from the internet" is an ordinary
         graph traversal rather than a special case.
       </p>
     </div>
@@ -658,7 +658,8 @@ npm run dev:api &amp; npm run dev:web
 
       <h3>Cross-account access</h3>
       <p>
-        The customer deploys one CloudFormation stack creating one IAM role. dave.io assumes it with
+        The customer deploys one CloudFormation stack creating one IAM role. Sightline assumes it
+        with
         <code>sts:AssumeRole</code> plus a per-customer <strong>ExternalId</strong>, which is the
         documented mitigation for the confused-deputy problem: knowing the role's ARN is not
         sufficient to assume it. Sessions are cached and renewed; role chaining caps at one hour, so
@@ -682,7 +683,7 @@ npm run dev:api &amp; npm run dev:web
           <code>lambda:GetFunction</code> — which returns a presigned URL to the function's source.
           An inventory product needs to know that a bucket exists, who can reach it, and how it is
           configured. It never needs to read an object out of it. Granting the ability turns a
-          compromise of dave.io's platform account into a compromise of every customer's
+          compromise of Sightline's platform account into a compromise of every customer's
           <em>data</em>.
         </p>
         <p>
@@ -710,9 +711,9 @@ npm run dev:api &amp; npm run dev:web
         </li>
         <li>
           <strong>Attribution:</strong> <code>sts:SetSourceIdentity</code> constrained to
-          <code>daveio:*</code>, so the customer's own CloudTrail records which operator triggered a
-          scan, immutably for the life of the session. A customer granting a third party standing
-          access should not have to take our word for who did what.
+          <code>sightline:*</code>, so the customer's own CloudTrail records which operator
+          triggered a scan, immutably for the life of the session. A customer granting a third party
+          standing access should not have to take our word for who did what.
         </li>
       </ul>
       <p>
@@ -1989,7 +1990,7 @@ npm run dev:api &amp; npm run dev:web
         <dl class="row">
           <dt>Symptom</dt>
           <dd>
-            <code>npm run query -w @daveio/api</code>, documented in the README's command table,
+            <code>npm run query -w @sightline/api</code>, documented in the README's command table,
             failed: no such script.
           </dd>
           <dt>Cause</dt>
@@ -2426,9 +2427,9 @@ npm run dev:api &amp; npm run dev:web
             Because <code>ReadOnlyAccess</code> is not read-only in the sense an inventory product
             needs. It grants about 7,000 actions including <code>s3:GetObject</code>,
             <code>secretsmanager:GetSecretValue</code> and <code>lambda:GetFunction</code>, which
-            returns a presigned URL to function source. dave.io needs to know a bucket exists, who
+            returns a presigned URL to function source. Sightline needs to know a bucket exists, who
             can reach it, and how it is configured — never to read an object out of it. Granting
-            that turns a compromise of dave.io's platform account into a compromise of every
+            that turns a compromise of Sightline's platform account into a compromise of every
             customer's data.
           </p>
           <p>

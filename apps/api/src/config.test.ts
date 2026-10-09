@@ -23,13 +23,15 @@ const REAL_ACCOUNT = "672299759593";
 
 describe("accountOfArn", () => {
   it("extracts a twelve-digit account id", () => {
-    expect(accountOfArn(`arn:aws:iam::${REAL_ACCOUNT}:role/DaveIoReadOnlyRole`)).toBe(REAL_ACCOUNT);
+    expect(accountOfArn(`arn:aws:iam::${REAL_ACCOUNT}:role/SightlineReadOnlyRole`)).toBe(
+      REAL_ACCOUNT,
+    );
   });
 
   it.each([
     ["no account section", "arn:aws:s3:::northwind-public-assets"],
     ["not twelve digits", "arn:aws:iam::12345:role/Foo"],
-    ["not an ARN at all", "DaveIoReadOnlyRole"],
+    ["not an ARN at all", "SightlineReadOnlyRole"],
     ["empty", ""],
   ])("returns null for %s", (_label, arn) => {
     expect(accountOfArn(arn)).toBeNull();
@@ -42,7 +44,7 @@ describe("honoursConfiguredArnInMock", () => {
     expect(
       honoursConfiguredArnInMock(
         "mock",
-        `arn:aws:iam::${MOCK_ACCOUNT}:role/DaveIoReadOnlyRole`,
+        `arn:aws:iam::${MOCK_ACCOUNT}:role/SightlineReadOnlyRole`,
         MOCK_ACCOUNT,
       ),
     ).toBe(true);
@@ -57,7 +59,7 @@ describe("honoursConfiguredArnInMock", () => {
     expect(
       honoursConfiguredArnInMock(
         "mock",
-        `arn:aws:iam::${REAL_ACCOUNT}:role/DaveIoReadOnlyRole`,
+        `arn:aws:iam::${REAL_ACCOUNT}:role/SightlineReadOnlyRole`,
         MOCK_ACCOUNT,
       ),
       "a real account ARN must never label a scan of the mock",
@@ -78,7 +80,7 @@ describe("honoursConfiguredArnInMock", () => {
     expect(
       honoursConfiguredArnInMock(
         "real",
-        `arn:aws:iam::${MOCK_ACCOUNT}:role/DaveIoReadOnlyRole`,
+        `arn:aws:iam::${MOCK_ACCOUNT}:role/SightlineReadOnlyRole`,
         MOCK_ACCOUNT,
       ),
     ).toBe(false);

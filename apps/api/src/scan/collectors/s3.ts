@@ -21,7 +21,7 @@ import {
   GetBucketAclCommand,
   GetBucketTaggingCommand,
 } from "@aws-sdk/client-s3";
-import type { Relationship, Resource } from "@daveio/shared";
+import type { Relationship, Resource } from "@sightline/shared";
 
 import { s3Client } from "../../aws/clients.js";
 import { regionArn, s3Arn, tagsToRecord } from "../../aws/arns.js";

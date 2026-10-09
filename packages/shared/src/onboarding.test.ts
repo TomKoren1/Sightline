@@ -7,7 +7,7 @@
  *
  *   - a role name that disagreed with the template's `RoleName` default leaves
  *     the reader configuring a role that does not exist (#46)
- *   - a `daveio:` prefix cannot be sent as an `sts:SourceIdentity` at all,
+ *   - a `sightline:` prefix cannot be sent as an `sts:SourceIdentity` at all,
  *     because AWS rejects a colon in that value (#42)
  *   - a display command that differs from the executed one is two commands
  */
@@ -18,7 +18,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   CONNECTION_ENV_KEYS,
-  DAVEIO_PREFIX,
+  SIGHTLINE_PREFIX,
   OTHER_MANAGED_ENV_KEYS,
   READ_ONLY_ROLE_NAME,
   STACK_NAME,
@@ -33,7 +33,7 @@ const template = readFileSync(root + TEMPLATE_PATH, "utf8");
 
 const input = {
   scannerPrincipalArn: "arn:aws:iam::111122223333:user/terraform-bootstrap",
-  externalId: "daveio-abc123",
+  externalId: "sightline-abc123",
   region: "us-east-1",
 };
 
@@ -45,7 +45,7 @@ describe("the recipe agrees with the template", () => {
   it("points at a template that exists and declares the parameters it passes", () => {
     // Both parameter names are passed by the deploy command; if the template
     // renames one, AWS rejects the whole stack.
-    for (const name of ["DaveIoScannerRoleArn", "ExternalId"]) {
+    for (const name of ["SightlineScannerRoleArn", "ExternalId"]) {
       expect(template, `the template does not declare ${name}`).toMatch(
         new RegExp(`^  ${name}:$`, "m"),
       );
@@ -55,8 +55,8 @@ describe("the recipe agrees with the template", () => {
   it("uses a SourceIdentity prefix AWS will accept", () => {
     // AWS permits alphanumerics, underscore and +=,.@- only. A colon here makes
     // the trust policy's StringLike unsatisfiable.
-    expect(DAVEIO_PREFIX).toMatch(/^[A-Za-z0-9_+=,.@-]+$/);
-    expect(template).toContain(`sts:SourceIdentity: "${DAVEIO_PREFIX}*"`);
+    expect(SIGHTLINE_PREFIX).toMatch(/^[A-Za-z0-9_+=,.@-]+$/);
+    expect(template).toContain(`sts:SourceIdentity: "${SIGHTLINE_PREFIX}*"`);
   });
 
   it("builds the role ARN the template's output will report", () => {
@@ -82,8 +82,8 @@ describe("deployCommandArgs", () => {
       ...input,
       scannerPrincipalArn: `arn:aws:iam::1:user/a"; rm -rf /; echo "`,
     });
-    const override = args.find((a) => a.startsWith("DaveIoScannerRoleArn="));
-    expect(override).toBe(`DaveIoScannerRoleArn=arn:aws:iam::1:user/a"; rm -rf /; echo "`);
+    const override = args.find((a) => a.startsWith("SightlineScannerRoleArn="));
+    expect(override).toBe(`SightlineScannerRoleArn=arn:aws:iam::1:user/a"; rm -rf /; echo "`);
     // And it stays one argument rather than becoming several.
     expect(args.filter((a) => a.includes("rm -rf"))).toHaveLength(1);
   });
@@ -123,7 +123,7 @@ describe("formatDeployCommand", () => {
     // Readers edit the parameter overrides; they should not have to find them
     // inside a longer line.
     const display = formatDeployCommand(input);
-    expect(display).toMatch(/^ {6}DaveIoScannerRoleArn=.+ \\$/m);
+    expect(display).toMatch(/^ {6}SightlineScannerRoleArn=.+ \\$/m);
     expect(display).toMatch(/^ {6}ExternalId=.+$/m);
   });
 });

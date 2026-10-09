@@ -11,7 +11,7 @@
  * it means a bad scan can be discarded without corrupting history.
  */
 
-import type { Relationship, Resource, ScanStatus, ScanUnit } from "@daveio/shared";
+import type { Relationship, Resource, ScanStatus, ScanUnit } from "@sightline/shared";
 import { sql } from "drizzle-orm";
 import {
   check,

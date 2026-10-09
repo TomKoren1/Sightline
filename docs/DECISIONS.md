@@ -192,7 +192,7 @@ real identifiers_. The eval suite covers that second class.
 **Context.** The brief ships `infra/readonly-role.yaml`, invites us to change
 it, and asks us to say why if we do. Its evaluation criteria ask whether we
 understand "what 'read-only' really means". The original grants the AWS-managed
-`ReadOnlyAccess` policy to any principal in dave.io's account.
+`ReadOnlyAccess` policy to any principal in Sightline's account.
 
 **Decision.** Replaced. The original is kept as
 `infra/readonly-role.original.yaml` for comparison. Three changes, all
@@ -207,7 +207,7 @@ narrowing:
 
 An inventory product needs to know a bucket exists, how it is configured, and
 who can reach it. It never needs to read an object out of it. With
-`ReadOnlyAccess`, a compromise of dave.io's platform account becomes a
+`ReadOnlyAccess`, a compromise of Sightline's platform account becomes a
 compromise of every customer's _data_, not merely their inventory. That is a
 materially larger blast radius for capability the product does not use.
 
@@ -219,7 +219,7 @@ brief's hard rule through a permission nobody thought of as a write.
 
 The explicit `Deny` is the load-bearing part. Deny cannot be overridden by any
 Allow, including one a future AWS update to a managed policy might introduce.
-It turns "dave.io can see your infrastructure but not your data" from a
+It turns "Sightline can see your infrastructure but not your data" from a
 statement about which policies we attached today into a property of the role.
 
 **2. Trust scoped to the scanner role, not `:root`.**
@@ -228,14 +228,14 @@ statement about which policies we attached today into a property of the role.
 delegates to IAM in that account, so **every** principal there — every role,
 user and CI job — may assume the customer role if its own policy allows it.
 The ExternalId condition addresses the confused-deputy problem, which is a
-different threat: it stops a third party inducing dave.io to use its access,
+different threat: it stops a third party inducing Sightline to use its access,
 but places no limit on which internal principal does so. Naming the scanner
-role means a compromise of an unrelated dave.io workload does not reach
+role means a compromise of an unrelated Sightline workload does not reach
 customer accounts.
 
 **3. `sts:SourceIdentity` for attribution.**
 
-Lets the customer's own CloudTrail record which dave.io operator or system
+Lets the customer's own CloudTrail record which Sightline operator or system
 triggered a scan, immutably for the session's life and across chained roles. A
 customer granting a third party standing read access into their account should
 not have to take our word for who did what.
@@ -245,8 +245,8 @@ replaced at every hop of a role chain, so it attributes nothing the customer can
 rely on. The trust policy therefore _requires_ SourceIdentity via a `Null`
 condition rather than merely permitting it — permitting it alone lets a caller
 omit it and quietly lose the attribution the policy appears to guarantee — and
-constrains the prefix to `daveio-`. Hyphen, not colon: AWS restricts
-SourceIdentity to alphanumerics, underscore and `+=,.@-`, so the `daveio:*` this
+constrains the prefix to `sightline-`. Hyphen, not colon: AWS restricts
+SourceIdentity to alphanumerics, underscore and `+=,.@-`, so the `sightline:*` this
 originally specified was a pattern no legal value could satisfy (engineering log
 #42).
 
@@ -336,7 +336,7 @@ anything. Structurally it cannot: no tool can express a mutation, and the IAM
 role has no write permissions. But a user only learns that from what an answer
 _says_, and the eval suite caught the agent answering "please delete this
 volume" with the volume's details and a CLI command — safe, useful, and silent
-on the fact that dave.io holds no ability to touch their account.
+on the fact that Sightline holds no ability to touch their account.
 
 **Options.**
 
@@ -428,7 +428,7 @@ that spends it per click is a bad button.
 
 **Why it belongs in the product rather than only in CI.** "How much should I
 trust this?" is a real question from someone about to act on an answer about
-their production infrastructure, and dave.io's proposition is an AI system with
+their production infrastructure, and Sightline's proposition is an AI system with
 standing access to a customer's account. Answering it in the product is part of
 the product, not documentation.
 
@@ -645,7 +645,7 @@ script against their own AWS account.
   rotated. Deleting anything needs `--disconnect`.
 
 **Why the command lives in one place.** The stack name, role name, ExternalId
-prefix and the deploy command itself moved to `@daveio/shared`. The Connection
+prefix and the deploy command itself moved to `@sightline/shared`. The Connection
 screen renders it, the script executes it, and the API diagnoses what the reader
 ended up with. Three consumers of one definition, with the recipe checked against
 the template directly — because the alternative is the failure mode this log

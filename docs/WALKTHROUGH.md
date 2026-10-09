@@ -172,7 +172,7 @@ Header → **Trust**.
   ten milliseconds. Expand one to see what it guards against and what it found.
 - **Agent answer quality** shows the last recorded eval run — 21/21, mean F1
   1.0, no unsupported citations — with the model that produced it. If it says
-  "no run recorded", run `npm run evals -w @daveio/api` before recording; it
+  "no run recorded", run `npm run evals -w @sightline/api` before recording; it
   needs an API key and a few minutes.
 
 If drift has been applied, two data checks turn **amber with a `◆` and
@@ -356,7 +356,7 @@ not available — in production that would be Enterprise RBAC or a read replica.
 **"Why did you change the IAM role?"**
 `ReadOnlyAccess` grants ~7,000 actions including `s3:GetObject` and
 `secretsmanager:GetSecretValue`. An inventory product never needs to read an
-object out of a bucket, and granting it turns a compromise of dave.io's account
+object out of a bucket, and granting it turns a compromise of Sightline's account
 into a compromise of every customer's _data_. `sqs:ReceiveMessage` is the
 sharpest detail: it is not read-only even literally, because receiving a
 message starts its visibility timeout and can hide it from the consumer that
@@ -387,8 +387,8 @@ against a stub instead) and has no Resource Explorer.
 
 Diagnosing a wrong answer, in order:
 
-1. `npm run inspect -w @daveio/api` — is the **data** right?
-2. `npm run query -w @daveio/api` — is the **query** right?
+1. `npm run inspect -w @sightline/api` — is the **data** right?
+2. `npm run query -w @sightline/api` — is the **query** right?
 3. Expand tool calls in the UI — did it choose the right **tool**?
 
 That sequence isolates collection from projection from reasoning, and it is why

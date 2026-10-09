@@ -34,12 +34,12 @@ describe("assumablePrincipalArn", () => {
   });
 
   it("leaves a real IAM user ARN alone", () => {
-    const arn = "arn:aws:iam::672299759593:user/dave-home-assignment";
+    const arn = "arn:aws:iam::672299759593:user/sightline-home-assignment";
     expect(assumablePrincipalArn(arn)).toEqual({ ok: true, principalArn: arn, converted: false });
   });
 
   it("leaves a real IAM role ARN alone", () => {
-    const arn = "arn:aws:iam::672299759593:role/DaveIoScanner";
+    const arn = "arn:aws:iam::672299759593:role/SightlineScanner";
     expect(assumablePrincipalArn(arn)).toEqual({ ok: true, principalArn: arn, converted: false });
   });
 
@@ -86,7 +86,9 @@ describe("assumablePrincipalArn", () => {
 
 describe("validateAssumeRoleTarget", () => {
   it("accepts a role ARN", () => {
-    expect(validateAssumeRoleTarget("arn:aws:iam::672299759593:role/DaveIoReadOnlyRole")).toEqual({
+    expect(
+      validateAssumeRoleTarget("arn:aws:iam::672299759593:role/SightlineReadOnlyRole"),
+    ).toEqual({
       ok: true,
     });
   });
@@ -96,13 +98,15 @@ describe("validateAssumeRoleTarget", () => {
    * principal pasted into the target-role variable.
    */
   it("rejects a user ARN and names the two-role mix-up", () => {
-    const result = validateAssumeRoleTarget("arn:aws:iam::672299759593:user/dave-home-assignment");
+    const result = validateAssumeRoleTarget(
+      "arn:aws:iam::672299759593:user/sightline-home-assignment",
+    );
     expect(result.ok).toBe(false);
     expect(!result.ok && result.reason).toMatch(/can only assume a role/);
     expect(!result.ok && result.reason).toMatch(/RoleArn output/);
   });
 
   it("rejects anything that is not an IAM ARN", () => {
-    expect(validateAssumeRoleTarget("DaveIoReadOnlyRole").ok).toBe(false);
+    expect(validateAssumeRoleTarget("SightlineReadOnlyRole").ok).toBe(false);
   });
 });

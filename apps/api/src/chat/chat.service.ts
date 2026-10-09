@@ -9,7 +9,7 @@
 import { randomUUID } from "node:crypto";
 import { ConflictException, Injectable } from "@nestjs/common";
 import { asc, eq } from "drizzle-orm";
-import type { AgentEvent, AgentMessage } from "@daveio/shared";
+import type { AgentEvent, AgentMessage } from "@sightline/shared";
 
 import { ask } from "../agent/agent.js";
 import { db } from "../db/postgres.js";

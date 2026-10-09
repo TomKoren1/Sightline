@@ -45,7 +45,7 @@ them.
 **Fix.** Pin `MOTO_ACCOUNT_ID` in compose and require
 `AWS_TARGET_ROLE_ARN` to name the same account. The seeder uses static
 credentials (the "customer's administrator") while the scanner assumes the role
-(dave.io arriving later), and both therefore land in one account.
+(Sightline arriving later), and both therefore land in one account.
 
 **Why it matters.** This failure mode is silent — writes succeed, reads return
 empty. Anyone pointing this project at a differently-numbered mock account
@@ -564,14 +564,14 @@ no tests — documentation and infrastructure templates.
 
 **Symptom.** Following the guide against a real account produced
 `AccessDenied`, then `NoSuchEntity`: the configured role did not exist, and
-listing the account's roles found nothing matching `/dave/i` at all.
+listing the account's roles found nothing matching `/sightline/i` at all.
 
 **Diagnosis.** The template has two roles in it and the guide did not
-distinguish them clearly enough. `DaveIoScannerRoleArn` is an **input** — the
+distinguish them clearly enough. `SightlineScannerRoleArn` is an **input** — the
 principal permitted to assume — while the role the stack **creates** is
-`DaveIoReadOnlyRole`, and it is the created one that belongs in
+`SightlineReadOnlyRole`, and it is the created one that belongs in
 `AWS_TARGET_ROLE_ARN`. The guide said "the scanner role ARN from your onboarding
-email", which presumes a dave.io account that does not exist for someone running
+email", which presumes a Sightline account that does not exist for someone running
 the project themselves. Reasonably, the value from step 3 was carried into
 step 4.
 
@@ -952,7 +952,7 @@ wide.
 session, which is always `arn:aws:iam::…`. Against the mock the guide emitted
 
 ```
-DaveIoScannerRoleArn=arn:aws:sts::123456789012:user/moto
+SightlineScannerRoleArn=arn:aws:sts::123456789012:user/moto
 ```
 
 — moto's own identity, offered as the principal to trust in somebody's real AWS
@@ -972,7 +972,7 @@ satisfies the template's own `AllowedPattern`.
 
 ### 3. `AWS_TARGET_ROLE_ARN` held a user ARN, which can never be assumed
 
-`.env` had been set to `arn:aws:iam::<account>:user/dave-home-assignment`. That
+`.env` had been set to `arn:aws:iam::<account>:user/sightline-home-assignment`. That
 is a correct and useful ARN — it is the answer to the question asked two steps
 earlier, the principal the trust policy should name. It is not something
 `sts:AssumeRole` can assume; only a role is.
@@ -1006,7 +1006,7 @@ which would have been a worse bug than the one being fixed.
 ### And a fifth, which only a real account could reveal
 
 With all four fixed, the connection test still failed. The stack's trust policy
-named `user/dave-home-assignment`; the host's ambient credentials were
+named `user/sightline-home-assignment`; the host's ambient credentials were
 `user/terraform-bootstrap`. Both are real identities in the same account, and
 the mismatch is invisible from either side alone.
 
@@ -1018,9 +1018,9 @@ that shows what the policy actually names:
 ```
 This backend is authenticating as arn:aws:iam::…:user/terraform-bootstrap.
 The stack's trust policy has to name exactly that principal, so if it was
-deployed with a different one, redeploy with DaveIoScannerRoleArn=…, or give
+deployed with a different one, redeploy with SightlineScannerRoleArn=…, or give
 this host credentials for the principal it does name.
-Check with: aws iam get-role --role-name DaveIoReadOnlyRole …
+Check with: aws iam get-role --role-name SightlineReadOnlyRole …
 ```
 
 **What to take from the set.** The tests covered the components; all four bugs
@@ -1415,7 +1415,7 @@ produces overflow rather than compression, and it is worth reaching for
 ## #35 — A documented command that did not exist
 
 **Symptom.** Working through the README command by command, `npm run query -w
-@daveio/api` failed: no such script.
+@sightline/api` failed: no such script.
 
 **Diagnosis.** `apps/api/src/cli/query.ts` existed, worked, and its own header
 comment gave that exact invocation. The npm script was simply never added. So
@@ -1694,7 +1694,7 @@ copy-pasteable and looks finished, so a reader has no way to tell a value that
 was computed for them from a value that is a placeholder waiting for theirs.
 
 **What the page got right, and why that made it worse.** It already explained the
-two _roles_ — `DaveIoScannerRoleArn` is an input, the stack _creates_ a different
+two _roles_ — `SightlineScannerRoleArn` is an input, the stack _creates_ a different
 role, and the created one is what `.env` wants — under a heading calling that the
 usual mistake. Being right about the subtle confusion while silent on the plain
 one is the worst arrangement: the reader trusts the page and still gets it wrong.
@@ -1738,7 +1738,7 @@ value on the page carries it. A `Before you start` block above the numbered step
 names what you need, runs `aws sts get-caller-identity` with the two fields
 annotated (`Account` — the stack is created here; `Arn` — as this identity), and
 sets the two identities against each other explicitly. The placeholder is now
-shaped like a real ARN, `arn:aws:iam::<your-12-digit-account-id>:role/DaveIoReadOnlyRole`,
+shaped like a real ARN, `arn:aws:iam::<your-12-digit-account-id>:role/SightlineReadOnlyRole`,
 so the reader can see that only the account id is theirs. `EXTERNAL_ID_PENDING`
 replaces the loading word, and `--region ${c.homeRegion}` is pinned.
 
@@ -1973,7 +1973,7 @@ what `sts:SourceIdentity` does, and went to read what the code actually sent.
 **What was wrong.** Three things, each hiding the next.
 
 1. **Nothing sent a SourceIdentity.** `aws/credentials.ts` set `RoleSessionName`
-   and stopped. So the claim "the customer's CloudTrail records which dave.io
+   and stopped. So the claim "the customer's CloudTrail records which Sightline
    operator triggered a scan" was true of the template and false of the product.
 
 2. **The trust policy permitted it without requiring it.** The `AssumeRole`
@@ -1983,7 +1983,7 @@ what `sts:SourceIdentity` does, and went to read what the code actually sent.
    control is not applying it.
 
 3. **The constraint was unsatisfiable.** The condition was
-   `StringLike: sts:SourceIdentity: "daveio:*"`. AWS restricts SourceIdentity to
+   `StringLike: sts:SourceIdentity: "sightline:*"`. AWS restricts SourceIdentity to
    "upper- and lower-case alphanumeric characters with no spaces… underscores or
    any of the following characters: `+=,.@-`" — verified in the AWS SDK's own
    bundled API documentation, `@aws-sdk/client-sts` `models_0.d.ts`. **A colon is
@@ -1998,7 +1998,7 @@ documented in three places, enforced nowhere, and impossible as specified.
 `toSourceIdentity()` from a new `SCAN_OPERATOR` variable: sanitised to AWS's
 charset rather than validated-and-rejected, because an operator name with a space
 in it should not fail every scan, truncated to the 64-character limit, and never
-empty. The template's pattern is `daveio-*`, and the `AssumeRole` statement gains
+empty. The template's pattern is `sightline-*`, and the `AssumeRole` statement gains
 `Null: { sts:SourceIdentity: "false" }`, which makes attribution mandatory —
 omitting it now fails loudly rather than silently losing the audit trail.
 
@@ -2007,7 +2007,7 @@ bug lived in the gap between two artefacts that were each internally consistent.
 It asserts that the value the code sends matches AWS's documented charset and
 length, that it matches the prefix the deployed trust policy will enforce, that
 **the prefix is itself legal for AWS** — the assertion that catches the original
-directly, since `daveio:` satisfies a naive "does the code match the template"
+directly, since `sightline:` satisfies a naive "does the code match the template"
 check while being impossible to send — and that the template makes the key
 mandatory rather than optional. Seven sanitising cases cover a space, a colon,
 slashes, whitespace only, illegal characters only, an already-legal email, and an
@@ -2050,7 +2050,7 @@ reviewer needs no Node on the host. Opt-in on purpose — the default
 did, because a new path misbehaving on a platform I cannot test must not break
 the documented one.
 
-**Symptom.** `dependency failed to start: container daveio-api is unhealthy` —
+**Symptom.** `dependency failed to start: container sightline-api is unhealthy` —
 and `web` therefore refused to start at all. Meanwhile the API's own log said:
 
 ```
@@ -2175,13 +2175,13 @@ mounted, the assume got further and was refused: _"The role exists but refused t
 be assumed."_ Reading the deployed trust policy explained it:
 
 ```json
-"Sid": "AllowDaveIoScannerToSetSourceIdentity",
-"Condition": { "StringLike": { "sts:SourceIdentity": "daveio:*" } }
+"Sid": "AllowSightlineScannerToSetSourceIdentity",
+"Condition": { "StringLike": { "sts:SourceIdentity": "sightline:*" } }
 ```
 
 That role was deployed from the template **before** #42. Every `AssumeRole` now
-sends `SourceIdentity: daveio-system`, `sts:SetSourceIdentity` is a separately
-authorised action, and `daveio-system` does not match `daveio:*` — so the action
+sends `SourceIdentity: sightline-system`, `sts:SetSourceIdentity` is a separately
+authorised action, and `sightline-system` does not match `sightline:*` — so the action
 is denied and the whole assume fails.
 
 Which is also the cleanest possible proof that #42 was a real bug rather than a
@@ -2325,17 +2325,17 @@ pair come from a command that succeeds while doing less than its name suggests.
 **Symptom.** A real deployment, on a second machine:
 
 ```
-aws cloudformation deploy ... DaveIoScannerRoleArn=arn:aws:iam::672299759593:role/DaveIoScanner
+aws cloudformation deploy ... SightlineScannerRoleArn=arn:aws:iam::672299759593:role/SightlineScanner
 aws: [ERROR]: Failed to create/update the stack.
 ```
 
 `describe-stack-events` gave the reason:
 
 ```
-Invalid principal in policy: "AWS":"arn:aws:iam::672299759593:role/DaveIoScanner"
+Invalid principal in policy: "AWS":"arn:aws:iam::672299759593:role/SightlineScanner"
 ```
 
-`role/DaveIoScanner` does not exist in that account. The identity that does is
+`role/SightlineScanner` does not exist in that account. The identity that does is
 `user/terraform-bootstrap`. The stack rolled back cleanly, so nothing was damaged
 — but nothing about the error says _which half_ of the ARN was wrong, and a reader
 who supplied the account id themselves will reasonably assume the account id is
@@ -2346,7 +2346,7 @@ the part being rejected.
 **you replace**, because handing someone a command without saying which parts are
 theirs is how they deploy into the wrong place. Two defects in that work:
 
-1. **`DaveIoScannerRoleArn` was tagged `kind: "filled"` unconditionally**, with the
+1. **`SightlineScannerRoleArn` was tagged `kind: "filled"` unconditionally**, with the
    note _"the identity this backend runs as"_. But the value is
    `c.scannerPrincipal ?? <fallback>` — when the backend cannot resolve its own
    identity (no credentials, or a container without the profile mount) the command
@@ -2355,8 +2355,8 @@ theirs is how they deploy into the wrong place. Two defects in that work:
    was asserting the blank was real.
 
 2. **The fallback marked one blank and hid two.**
-   `arn:aws:iam::<account>:role/DaveIoScanner` invites exactly one substitution.
-   The account id is visibly a placeholder; `role/DaveIoScanner` is not — it reads
+   `arn:aws:iam::<account>:role/SightlineScanner` invites exactly one substitution.
+   The account id is visibly a placeholder; `role/SightlineScanner` is not — it reads
    like a name someone chose. Substitute the marked blank and you get a
    syntactically perfect ARN for a principal that does not exist, which passes the
    template's own `AllowedPattern` and fails in IAM.
@@ -3203,3 +3203,49 @@ intent at the time it was written, and nothing re-read it when `ask()` grew a
 database call. The repeatable version of the lesson is the command above: if a
 job claims to run without something, the only way to know is to take that thing
 away and run it.
+
+---
+
+## #57 — The contract tests had never seen an empty database
+
+Renaming the project meant renaming the Postgres user and database too, which
+meant dropping the volume. The first run after that failed one contract:
+
+```
+× every endpoint returns a declared shape > GET /api/evals/latest
+```
+
+**Cause.** That endpoint has two shapes, and they are not the same shape with a
+field missing:
+
+```ts
+if (!row) return { run: null, hint: "No agent evals recorded yet…" };
+return { run: {…}, currentModel: cfg.ANTHROPIC_MODEL };
+```
+
+No `currentModel` on the empty branch, and a `hint` that never appears on the
+other. The contract declared only the populated one, with `run` nullable —
+which is what you write if you assume the difference between "has data" and
+"has none" is a null.
+
+**Why the suite did not catch it when it was written.** The schemas were
+captured by calling every endpoint against a database that had been in use for
+days (log #52). That was the right call — a contract invented from reading the
+handlers pins what you believe, not what the API does — but it has a blind spot
+that follows directly from the method: **you can only capture the branches your
+data happens to take.** Every empty-state path was invisible, and empty state is
+the first thing a new user sees.
+
+Three endpoints had been written with the union already declared —
+`/api/scans/latest`, `/api/scans/diff`, `/api/health` — because their empty
+branches were obvious from reading them. `evals/latest` was not obvious, which
+is exactly why it was the one that broke.
+
+**Fix.** The union is declared. And the method now has a second step worth
+remembering: capture against real data, then **drop the volume and run the suite
+again**, because the second run is the only one that exercises the first-run
+state. It costs one command and it found a real gap the first time it was tried.
+
+**What to take from it.** **A captured contract is a contract over the data you
+captured it with.** The technique is still right; its weakness is specific and
+cheap to cover, and the fix is not more thinking but a second, emptier run.

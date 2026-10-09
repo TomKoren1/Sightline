@@ -2,7 +2,7 @@
 <html lang="en">
   <head>
     <meta charset="utf-8" />
-    <title>dave.io Engineering Assignment — Codebase Tour</title>
+    <title>Sightline Engineering Assignment — Codebase Tour</title>
     <style>
       /* Margins and the page number come from the print job (see render.js),
          not from @page — declaring a counter here as well renders it twice. */
@@ -443,7 +443,7 @@
   <body>
     <!-- =================== COVER =================== -->
     <div class="cover">
-      <div class="eyebrow">dave.io engineering assignment</div>
+      <div class="eyebrow">Sightline engineering assignment</div>
       <h1>Codebase Tour</h1>
       <div class="sub">
         A file-by-file guide to the project: what every source file is for, the four request paths
@@ -457,7 +457,7 @@
         <dt>Repository</dt>
         <dd>dave.io_home-assignment</dd>
         <dt>Companion to</dt>
-        <dd>dave-io-assignment-handover.pdf (the decisions and the problems)</dd>
+        <dd>sightline-handover.pdf (the decisions and the problems)</dd>
         <dt>Purpose</dt>
         <dd>Answering questions about the code with the code open</dd>
       </dl>
@@ -1370,9 +1370,9 @@
           <td><code>credentials.ts</code></td>
           <td>143</td>
           <td>
-            Cross-account assume-role with an external id. dave.io never holds customer keys. Caches
-            the session, shares one in-flight refresh between concurrent callers, and takes the
-            account id from the assumed session rather than from configuration.
+            Cross-account assume-role with an external id. Sightline never holds customer keys.
+            Caches the session, shares one in-flight refresh between concurrent callers, and takes
+            the account id from the assumed session rather than from configuration.
           </td>
         </tr>
         <tr>
@@ -1979,7 +1979,7 @@
           <td>
             Static credentials, deliberately not the scanner's assume-role path: conceptually the
             seeder
-            <em>is</em> the customer, not dave.io.
+            <em>is</em> the customer, not Sightline.
           </td>
         </tr>
       </table>
@@ -2202,7 +2202,7 @@
         <strong>Tier 2 — does the agent use it right?</strong> Twenty-one cases in
         <code>evals/cases.ts</code>, graded on cited ARNs with precision, recall and F1 rather than
         text similarity (<code>evals/grade.ts</code>). Needs a key; run with
-        <code>npm run evals -w @daveio/api</code>. Current state: 21/21, mean F1 1.0.
+        <code>npm run evals -w @sightline/api</code>. Current state: 21/21, mean F1 1.0.
       </p>
 
       <div class="box">

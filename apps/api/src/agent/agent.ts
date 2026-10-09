@@ -41,7 +41,7 @@ import {
   type LanguageModel,
   type ToolSet,
 } from "ai";
-import type { AgentEvent, AgentMessage, ToolCallTrace } from "@daveio/shared";
+import type { AgentEvent, AgentMessage, ToolCallTrace } from "@sightline/shared";
 
 import { cfg } from "../config.js";
 import { getLatestScan } from "../db/repository.js";

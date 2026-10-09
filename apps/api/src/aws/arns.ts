@@ -25,9 +25,9 @@ export const lambdaArn = (region: string, account: string, name: string) =>
 
 /** Region node identity - synthetic, but the graph needs to hang things off it. */
 export const regionArn = (account: string, region: string) =>
-  `arn:${PARTITION}:daveio:${region}:${account}:region/${region}`;
+  `arn:${PARTITION}:sightline:${region}:${account}:region/${region}`;
 
-export const accountArn = (account: string) => `arn:${PARTITION}:daveio:::account/${account}`;
+export const accountArn = (account: string) => `arn:${PARTITION}:sightline:::account/${account}`;
 
 /** AWS tag lists come in several shapes; normalise them all to a record. */
 export function tagsToRecord(

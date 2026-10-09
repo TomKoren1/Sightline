@@ -11,7 +11,7 @@
  * with whatever `GetCallerIdentity` returned, which against the mock is
  * `arn:aws:sts::123456789012:user/moto`. Copying that into the template gives
  *
- *   Parameter 'DaveIoScannerRoleArn' must match pattern
+ *   Parameter 'SightlineScannerRoleArn' must match pattern
  *   ^arn:aws:iam::[0-9]{12}:(role|user)/.+$
  *
  * which does at least name the parameter, but says nothing about the one
@@ -138,7 +138,7 @@ export function assumablePrincipalArn(callerIdentity: string | null): PrincipalR
 }
 
 /**
- * The pattern the CloudFormation template enforces on DaveIoScannerRoleArn.
+ * The pattern the CloudFormation template enforces on SightlineScannerRoleArn.
  * Kept here so the API can reject a bad value before the user discovers it as
  * a CloudFormation parameter error.
  */
@@ -168,8 +168,8 @@ export function validateAssumeRoleTarget(
       reason:
         `AWS_TARGET_ROLE_ARN is a user ARN ("${arn}"). sts:AssumeRole can only assume a role, so this can never work.\n` +
         "  This is almost always the two-role mix-up: a user ARN is what you give the CloudFormation template as\n" +
-        "  DaveIoScannerRoleArn (the principal allowed to assume), not what you put here (the role it assumes).\n" +
-        "  Use the stack's RoleArn output instead - typically arn:aws:iam::<account>:role/DaveIoReadOnlyRole.",
+        "  SightlineScannerRoleArn (the principal allowed to assume), not what you put here (the role it assumes).\n" +
+        "  Use the stack's RoleArn output instead - typically arn:aws:iam::<account>:role/SightlineReadOnlyRole.",
     };
   }
   return { ok: false, reason: `AWS_TARGET_ROLE_ARN must be a role ARN, got "${arn}"` };

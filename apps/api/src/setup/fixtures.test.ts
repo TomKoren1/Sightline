@@ -134,7 +134,7 @@ function scanLines(file: string, lines: string[], rules: Rule[]): string[] {
  */
 const PROBE = {
   anthropicKey: () => ["sk", "ant", "a".repeat(22)].join("-"),
-  externalId: () => `AWS_EXTERNAL_ID=${["daveio", "A".repeat(20)].join("-")}`,
+  externalId: () => `AWS_EXTERNAL_ID=${["sightline", "A".repeat(20)].join("-")}`,
 };
 
 describe("the scan detects what it should", () => {
@@ -157,7 +157,7 @@ describe("the scan detects what it should", () => {
 
   it("finds a planted ExternalId", () => {
     const found = scanLines("planted.env", [PROBE.externalId()], gitleaksRules());
-    expect(found.some((f) => f.includes("daveio-external-id"))).toBe(true);
+    expect(found.some((f) => f.includes("sightline-external-id"))).toBe(true);
   });
 
   it("honours the rule's own allowlist for documented placeholders", () => {

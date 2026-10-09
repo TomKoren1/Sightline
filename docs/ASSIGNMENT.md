@@ -126,16 +126,21 @@ There is still a `graph_query` escape hatch for genuinely novel questions. It
 runs behind a lexical write-clause validator **and** inside a Neo4j read
 transaction, because neither layer is trusted alone.
 
-No framework, including the suggested **Deep Agents** — which I read before
-deciding against it. Its value is planning, sub-agents and a filesystem for
-long-horizon work that outgrows a context window, and the questions here are
-one or two tool calls deep against a graph that is already summarised. What it
-would have cost is the part that matters: the two decisions that actually
-define this agent are the tool boundary and citation validation, and both live
-exactly where a framework puts its own abstractions. Validating that every ARN
-in an answer came from a tool result means holding the tool results, which means
-owning the loop. The result is one 250-line file, and I can say precisely what
-the model was given on every turn.
+**The loop runs on the Vercel AI SDK, and the argument for not using one was
+half wrong.** I originally wrote it by hand, reasoning that validating every ARN
+in an answer means holding the tool results, which means owning the loop.
+Holding them is necessary; owning the loop is not how you get it. A tool's
+`execute` is this codebase's own function — the SDK decides when to call it, and
+the rows pass through our hands before they reach anything else, including the
+model. The ledger records there, with nothing mediating. That is now asserted
+rather than argued: `agent/ledger.test.ts` drives the real loop with a scripted
+model that calls a tool and then names a resource it never returned.
+
+The suggested **Deep Agents** is still not used, and that part of the reasoning
+stands. Its value is planning, sub-agents and a filesystem for long-horizon work
+that outgrows a context window; the questions here are one or two tool calls
+deep against a graph that is already summarised. The full reasoning, including
+what the original decision got right, is in ADR-018.
 
 **"Never change anything" is enforced at four layers**, not asserted in a
 prompt: the IAM role has no write permissions and an explicit deny on data
@@ -312,7 +317,7 @@ criteria ask whether candidates understand "what read-only really means". It
 grants ~7,000 actions including `s3:GetObject`, `secretsmanager:GetSecretValue`
 and `lambda:GetFunction` (which returns a presigned URL to function source). An
 inventory product never needs to read an object out of a bucket, and granting
-the ability turns a compromise of dave.io's platform account into a compromise
+the ability turns a compromise of Sightline's platform account into a compromise
 of every customer's _data_.
 
 `sqs:ReceiveMessage` is the detail I would flag to a real customer: it is not

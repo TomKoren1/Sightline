@@ -17,7 +17,7 @@ import type {
   ScanRun,
   ScanStatus,
   ScanUnit,
-} from "@daveio/shared";
+} from "@sightline/shared";
 
 import { db, fingerprint } from "./postgres.js";
 import { relationshipSnapshots, resourceSnapshots, scanRuns, scanUnits } from "./schema.js";

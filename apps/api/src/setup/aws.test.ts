@@ -14,7 +14,7 @@ import { explainStackFailure, failureReasonsSince, type FailureEvent } from "./a
 /** Verbatim, from a failed deploy in a real account. */
 const INVALID_PRINCIPAL =
   'Resource handler returned message: "Invalid principal in policy: "AWS":' +
-  '"arn:aws:iam::672299759593:role/DaveIoScanner" (Service: Iam, Status Code: 400)"';
+  '"arn:aws:iam::672299759593:role/SightlineScanner" (Service: Iam, Status Code: 400)"';
 
 describe("explainStackFailure", () => {
   it("always includes the reason CloudFormation gave", () => {
@@ -32,7 +32,7 @@ describe("explainStackFailure", () => {
 
   it("explains a name collision as a role the stack does not own", () => {
     const out = explainStackFailure([
-      "Resource of type 'AWS::IAM::Role' with identifier 'DaveIoReadOnlyRole' already exists.",
+      "Resource of type 'AWS::IAM::Role' with identifier 'SightlineReadOnlyRole' already exists.",
     ]).join("\n");
     expect(out).toMatch(/already there but not owned/);
   });
@@ -69,7 +69,7 @@ describe("failureReasonsSince", () => {
    */
   const OLD: FailureEvent = [
     "2026-09-29T01:28:24.811000+00:00",
-    'Invalid principal in policy: "AWS":"arn:aws:iam::672299759593:role/DaveIoScanner"',
+    'Invalid principal in policy: "AWS":"arn:aws:iam::672299759593:role/SightlineScanner"',
   ];
   const attemptStarted = new Date("2026-09-29T13:00:00.000Z");
 

@@ -12,7 +12,7 @@
 
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
-import { deployCommandArgs, STACK_NAME, type DeployCommandInput } from "@daveio/shared";
+import { deployCommandArgs, STACK_NAME, type DeployCommandInput } from "@sightline/shared";
 
 const run = promisify(execFile);
 

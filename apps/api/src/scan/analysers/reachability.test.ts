@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { INTERNET_ARN, type Relationship, type Resource } from "@daveio/shared";
+import { INTERNET_ARN, type Relationship, type Resource } from "@sightline/shared";
 import { analyseReachability, transitiveFromInternet } from "./reachability.js";
 
 /** Terse builders, so each test reads as a topology rather than as plumbing. */

@@ -31,7 +31,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { MockLanguageModelV4, simulateReadableStream } from "ai/test";
 import type { LanguageModelV4StreamPart, LanguageModelV4Usage } from "@ai-sdk/provider";
-import type { AgentEvent } from "@daveio/shared";
+import type { AgentEvent } from "@sightline/shared";
 
 import { ask } from "./agent.js";
 import * as queries from "../db/queries.js";
@@ -237,7 +237,7 @@ describe("the read-only guard still runs on the way out", () => {
       expect(
         message.content.toLowerCase(),
         "the guard did not fire, so an answer to a destructive request went out without " +
-          "saying dave.io cannot act on the account",
+          "saying Sightline cannot act on the account",
       ).toMatch(/can.?t|cannot/);
     } finally {
       spy.mockRestore();

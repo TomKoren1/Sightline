@@ -8,7 +8,7 @@
  * Three attempts failed: stating it, stating it emphatically, and moving it
  * ahead of the style rules that were competing with it. The model kept
  * answering a request to delete a volume with the volume's details and the CLI
- * command - safe, genuinely useful, and never once saying that dave.io holds no
+ * command - safe, genuinely useful, and never once saying that Sightline holds no
  * ability to touch the account.
  *
  * That is the same argument as ADR-004, applied to safety rather than to

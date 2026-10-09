@@ -6,7 +6,7 @@
  * CloudFormation template was in before engineering log #20 and #22, where it
  * turned out to have never been deployed and not to work.
  *
- * It has already rotted twice. An audit found `npm run query -w @daveio/api`
+ * It has already rotted twice. An audit found `npm run query -w @sightline/api`
  * documented in the commands table with no such script defined: the CLI file
  * existed, its own header comment gave that exact invocation, and running it as
  * written failed. And separately the counts drifted — eight ADRs claimed where
@@ -43,14 +43,14 @@ const readme = ["README.md", "docs/SETUP.md", "docs/ASSIGNMENT.md"].map(read).jo
 
 const scripts = {
   root: readJson("package.json").scripts ?? {},
-  "@daveio/api": readJson("apps/api/package.json").scripts ?? {},
-  "@daveio/web": readJson("apps/web/package.json").scripts ?? {},
+  "@sightline/api": readJson("apps/api/package.json").scripts ?? {},
+  "@sightline/web": readJson("apps/web/package.json").scripts ?? {},
 };
 
 /** Every `npm run …` the README tells the reader to type. */
 function documentedCommands(): Array<{ raw: string; script: string; workspace: string }> {
   const found: Array<{ raw: string; script: string; workspace: string }> = [];
-  const pattern = /`npm run ([a-z:-]+)(?: -w (@daveio\/[a-z]+))?`/g;
+  const pattern = /`npm run ([a-z:-]+)(?: -w (@sightline\/[a-z]+))?`/g;
   for (const match of readme.matchAll(pattern)) {
     found.push({ raw: match[0], script: match[1]!, workspace: match[2] ?? "root" });
   }

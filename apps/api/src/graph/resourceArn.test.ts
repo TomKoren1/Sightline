@@ -145,7 +145,7 @@ describe("the router can carry a full-length ARN", () => {
  */
 describe("the fixture can express the shape that broke", () => {
   it("seeds at least one role whose encoded ARN exceeds Fastify's default cap", async () => {
-    const { GROUND_TRUTH } = await import("@daveio/mock-aws");
+    const { GROUND_TRUTH } = await import("@sightline/mock-aws");
     // Named in the fixture rather than discovered, so deleting it fails here.
     const arn = `arn:aws:iam::123456789012:role${GROUND_TRUTH.longArnRolePath}${GROUND_TRUTH.longArnRoleName}`;
     // Decoded, because that is the length Fastify actually measures.

@@ -23,7 +23,7 @@
  *                                                   grouped away from the rest
  *
  * Read-only by the scanner's standards, destructive by the customer's: this is
- * the customer's own administrator making changes, not dave.io.
+ * the customer's own administrator making changes, not Sightline.
  */
 
 import {

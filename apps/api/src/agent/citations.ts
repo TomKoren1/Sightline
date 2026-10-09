@@ -15,7 +15,7 @@
  * frontend highlights that node.
  */
 
-import type { Citation } from "@daveio/shared";
+import type { Citation } from "@sightline/shared";
 
 /**
  * Matches an AWS ARN.

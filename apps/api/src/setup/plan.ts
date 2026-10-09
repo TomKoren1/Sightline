@@ -6,7 +6,7 @@
  * ask, and then carry it out; everything judgemental lives here.
  */
 
-import { CONNECTION_ENV_KEYS, OTHER_MANAGED_ENV_KEYS, readOnlyRoleArn } from "@daveio/shared";
+import { CONNECTION_ENV_KEYS, OTHER_MANAGED_ENV_KEYS, readOnlyRoleArn } from "@sightline/shared";
 
 import type { EnvEdit } from "./envFile.js";
 

@@ -3,7 +3,7 @@
  *
  * The seeder deliberately uses plain static credentials rather than the
  * assume-role path the scanner uses. Conceptually the seeder is the customer's
- * own administrator setting their account up; dave.io only ever arrives later,
+ * own administrator setting their account up; Sightline only ever arrives later,
  * through the read-only role. Keeping them separate also keeps us out of a
  * moto trap: moto namespaces resources by the account id carried in the
  * credentials, so seeding and scanning must agree on the account.

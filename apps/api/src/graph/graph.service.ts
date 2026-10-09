@@ -50,7 +50,7 @@ export class GraphService {
     return {
       arn: resource.arn,
       remediations: remediationsFor(remediationInputFromGraph(resource as never)),
-      note: "Generated for you to review and run yourself. dave.io holds read-only access and will never apply these.",
+      note: "Generated for you to review and run yourself. Sightline holds read-only access and will never apply these.",
     };
   }
 

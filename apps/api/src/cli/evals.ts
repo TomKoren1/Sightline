@@ -2,7 +2,7 @@
 /**
  * Agent eval suite.
  *
- *   npm run evals -w @daveio/api
+ *   npm run evals -w @sightline/api
  *
  * Runs every case against the live agent, scores the answers, writes the run
  * to Postgres and prints a report. Exits non-zero if anything failed, so it

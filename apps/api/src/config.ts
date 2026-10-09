@@ -52,7 +52,9 @@ const blankAsUnset = <T extends z.ZodTypeAny>(inner: T) =>
   z.preprocess((value) => (value === "" ? undefined : value), inner);
 
 const schema = z.object({
-  DATABASE_URL: blankAsUnset(z.string().default("postgres://dave:dave@localhost:5432/dave")),
+  DATABASE_URL: blankAsUnset(
+    z.string().default("postgres://sightline:sightline@localhost:5432/sightline"),
+  ),
   NEO4J_URI: blankAsUnset(z.string().default("bolt://localhost:7687")),
   NEO4J_USER: blankAsUnset(z.string().default("neo4j")),
   NEO4J_PASSWORD: blankAsUnset(z.string().default("neo4jneo4j")),
@@ -65,7 +67,7 @@ const schema = z.object({
   AWS_MODE: blankAsUnset(z.enum(["mock", "real"]).default("mock")),
   AWS_ENDPOINT_URL: blankAsUnset(z.string().default("http://localhost:5000")),
   AWS_TARGET_ROLE_ARN: blankAsUnset(
-    z.string().default("arn:aws:iam::123456789012:role/DaveIoReadOnlyRole"),
+    z.string().default("arn:aws:iam::123456789012:role/SightlineReadOnlyRole"),
   ),
   AWS_EXTERNAL_ID: blankAsUnset(z.string().default("local-dev-external-id-0000")),
   AWS_REGION: blankAsUnset(z.string().default("us-east-1")),
@@ -231,7 +233,7 @@ export function activeConnection(): {
     }
 
     return {
-      roleArn: `arn:aws:iam::${account}:role/DaveIoReadOnlyRole`,
+      roleArn: `arn:aws:iam::${account}:role/SightlineReadOnlyRole`,
       externalId: "local-dev-external-id-0000",
       endpoint: cfg.AWS_ENDPOINT_URL,
     };
@@ -457,12 +459,12 @@ export function faultInjections(): ReadonlySet<string> {
  *
  * Hyphen, not colon. AWS restricts `SourceIdentity` to alphanumerics,
  * underscore and `+=,.@-` - a colon is rejected outright. The trust policy
- * originally matched `daveio:*`, a pattern no legal value can satisfy, and
+ * originally matched `sightline:*`, a pattern no legal value can satisfy, and
  * nothing caught it because no SourceIdentity was being sent at all. A
  * condition that can never match is indistinguishable from no condition until
  * the day you rely on it (engineering log #42).
  */
-export const SOURCE_IDENTITY_PREFIX = "daveio-";
+export const SOURCE_IDENTITY_PREFIX = "sightline-";
 
 /** Characters AWS permits in SourceIdentity, per the AssumeRole API reference. */
 const SOURCE_IDENTITY_ALLOWED = /[^A-Za-z0-9_+=,.@-]/g;

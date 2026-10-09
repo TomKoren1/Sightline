@@ -46,7 +46,7 @@ jobs:
         run: npx vitest run --exclude '**/evals/**'
 
       - name: Build frontend
-        run: npm run build -w @daveio/web
+        run: npm run build -w @sightline/web
 
   # The claim this project makes is that it runs end to end. This proves it,
   # through exactly the commands the README tells a reader to use.
@@ -163,7 +163,7 @@ jobs:
         # It runs as a one-shot service, so a non-zero exit here means the
         # account is empty and every later assertion would fail confusingly.
         run: |
-          code=$(docker inspect daveio-seed --format '{{.State.ExitCode}}')
+          code=$(docker inspect sightline-seed --format '{{.State.ExitCode}}')
           echo "seed exit code: $code"
           [ "$code" = "0" ] || { docker compose logs seed --tail 40; exit 1; }
 

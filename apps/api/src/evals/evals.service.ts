@@ -18,7 +18,7 @@ import { cfg, isMock } from "../config.js";
 import { db } from "../db/postgres.js";
 import { evalRuns } from "../db/schema.js";
 import { getLatestScan, loadRelationships, loadResources } from "../db/repository.js";
-import { DRIFT_EXPECTED_CHECK_FAILURES, DRIFT_MARKER_RESOURCES } from "@daveio/mock-aws";
+import { DRIFT_EXPECTED_CHECK_FAILURES, DRIFT_MARKER_RESOURCES } from "@sightline/mock-aws";
 
 import { CHECKS, runChecks } from "../evals/checks.js";
 
@@ -129,7 +129,7 @@ export class EvalsService {
     if (!row) {
       return {
         run: null,
-        hint: "No agent evals recorded yet. Run `npm run evals -w @daveio/api` with an API key set.",
+        hint: "No agent evals recorded yet. Run `npm run evals -w @sightline/api` with an API key set.",
       };
     }
 
