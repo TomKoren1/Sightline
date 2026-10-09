@@ -29,12 +29,10 @@ import { cfg } from "../config.js";
 let driver: Driver | null = null;
 
 export function getDriver(): Driver {
-  if (!driver) {
-    driver = neo4j.driver(cfg.NEO4J_URI, neo4j.auth.basic(cfg.NEO4J_USER, cfg.NEO4J_PASSWORD), {
-      maxConnectionPoolSize: 20,
-      disableLosslessIntegers: true,
-    });
-  }
+  driver ??= neo4j.driver(cfg.NEO4J_URI, neo4j.auth.basic(cfg.NEO4J_USER, cfg.NEO4J_PASSWORD), {
+    maxConnectionPoolSize: 20,
+    disableLosslessIntegers: true,
+  });
   return driver;
 }
 

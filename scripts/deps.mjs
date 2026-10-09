@@ -81,6 +81,7 @@ export function installArgv(env = process.env) {
   return { command: process.execPath, args: [cli, "install"] };
 }
 
+/** @param {string} why - the sentence explaining what went wrong, shown first. */
 const MANUAL = (why) =>
   `${why}\n\n  npm install\n\n` +
   "Then run the same command again. It writes only to node_modules/ in this folder.";
@@ -91,6 +92,27 @@ export const NOTICE =
   "to node_modules/ in this folder.\n";
 
 /**
+ * The narrow slice of `spawnSync` this file actually depends on.
+ *
+ * Declared rather than inherited from `typeof spawnSync` so the seam states its
+ * own contract: the only things read from the result are the exit status and the
+ * spawn error. A test can then pass a two-field stub instead of constructing a
+ * whole `SpawnSyncReturns` - which, in plain JavaScript, it cannot do at all.
+ *
+ * @typedef {(
+ *   command: string,
+ *   args: string[],
+ *   options: { cwd: string; stdio: "inherit" },
+ * ) => { status: number | null; error?: Error }} Spawn
+ */
+
+/**
+ * @param {{
+ *   root?: string,
+ *   env?: Record<string, string | undefined>,
+ *   log?: (message: string) => void,
+ *   spawn?: Spawn,
+ * }} [options]
  * @returns the process exit code. 0 means the dependencies are present.
  */
 export function main({

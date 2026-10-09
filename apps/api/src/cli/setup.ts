@@ -95,7 +95,7 @@ function parseArgs(argv: string[]): Options {
     const value = () => {
       const v = argv[++i];
       if (v === undefined) fail(`${arg} needs a value`);
-      return v!;
+      return v;
     };
     switch (arg) {
       case "--dry-run":
@@ -127,6 +127,7 @@ function parseArgs(argv: string[]): Options {
       case "-h":
         usage();
         process.exit(0);
+      // eslint-disable-next-line no-fallthrough -- process.exit returns never
       default:
         fail(`unknown option ${arg}. Try --help.`);
     }

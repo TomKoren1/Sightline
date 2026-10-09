@@ -30,6 +30,7 @@ import { ListIndexesCommand, paginateSearch } from "@aws-sdk/client-resource-exp
 
 import { cfg } from "../config.js";
 import { resourceExplorerClient } from "./clients.js";
+import { errorMessage } from "@sightline/shared";
 
 export interface FastPathResult {
   /** Whether an aggregator index was found and searched successfully. */
@@ -98,7 +99,7 @@ export async function discoverActiveRegions(maxPages = 20): Promise<FastPathResu
     // permission, service not available in the partition, or a mock that does
     // not implement it. None is worth failing a scan over.
     const name = err instanceof Error ? err.name : "UnknownError";
-    const message = err instanceof Error ? err.message : String(err);
+    const message = errorMessage(err);
 
     // An endpoint that answers HTML rather than JSON is not implementing the
     // service at all. Reporting that as a JSON parse error is technically true

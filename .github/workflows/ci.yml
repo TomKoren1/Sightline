@@ -32,7 +32,10 @@ jobs:
       - name: Typecheck every workspace
         run: npm run typecheck
 
-      - name: Check formatting
+      - name: Lint and formatting
+        # Prettier for formatting, ESLint for correctness. The type-aware rules
+        # need the tsconfigs, which is why this runs after `npm ci` rather than
+        # as a standalone action.
         run: npm run lint
 
       - name: Unit tests
@@ -41,9 +44,16 @@ jobs:
         # also switches off the suites that issue real HTTP requests, which
         # would otherwise spend thirty seconds per request timing out against
         # databases that are not here (engineering log #37).
+        #
+        # The exclusion names one file rather than the whole `evals/` directory.
+        # `**/evals/**` also excluded `readme.test.ts` and `summarise.test.ts`,
+        # which need no databases and no API key - so thirty-two assertions,
+        # including all twenty-five guarding the documentation against rot, ran
+        # nowhere at all. `groundTruth.test.ts` is the only one that needs the
+        # stack, and the integration job runs it explicitly.
         env:
           SKIP_INTEGRATION: "1"
-        run: npx vitest run --exclude '**/evals/**'
+        run: npx vitest run --exclude '**/evals/groundTruth.test.ts'
 
       - name: Build frontend
         run: npm run build -w @sightline/web

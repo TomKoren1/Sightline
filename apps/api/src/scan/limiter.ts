@@ -10,7 +10,7 @@
  * unit outcomes rather than thrown - so there is no rejection handling here.
  */
 export async function runWithConcurrency<T>(
-  tasks: Array<() => Promise<T>>,
+  tasks: (() => Promise<T>)[],
   limit: number,
 ): Promise<T[]> {
   const results = new Array<T>(tasks.length);

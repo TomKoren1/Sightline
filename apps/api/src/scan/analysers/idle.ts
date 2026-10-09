@@ -18,6 +18,7 @@
  */
 
 import type { Relationship, Resource } from "@sightline/shared";
+import { asText } from "@sightline/shared";
 
 /** Monthly USD per GB of provisioned storage. */
 const EBS_PRICE_PER_GIB = { gp3: 0.08, gp2: 0.1, io1: 0.125, io2: 0.125, st1: 0.045, sc1: 0.015 };
@@ -54,7 +55,7 @@ export function analyseIdleResources(resources: Resource[], relationships: Relat
     switch (resource.kind) {
       case "EbsVolume": {
         const size = Number(resource.properties["sizeGib"] ?? 0);
-        const type = String(resource.properties["volumeType"] ?? "gp3");
+        const type = asText(resource.properties["volumeType"] ?? "gp3");
         const cost = ebsMonthlyCost(size, type);
         if (!attachedTo.has(resource.arn) && resource.properties["attachedTo"] === null) {
           resource.derived.isIdle = true;

@@ -37,6 +37,7 @@ import {
 import { assumablePrincipalArn } from "../aws/principal.js";
 import { accountIdFromArn, getSession, resetSession } from "../aws/credentials.js";
 import { getLatestScan } from "../db/repository.js";
+import { errorMessage } from "@sightline/shared";
 
 /** Show enough of a secret to confirm which one is configured, and no more. */
 function mask(value: string): string {
@@ -55,7 +56,7 @@ function diagnose(
   callerIdentity?: string | null,
 ): { code: string; problem: string; fix: string } {
   const name = err instanceof Error ? err.name : "UnknownError";
-  const message = err instanceof Error ? err.message : String(err);
+  const message = errorMessage(err);
 
   if (name === "AccessDenied" || message.includes("not authorized to perform: sts:AssumeRole")) {
     /**
@@ -285,7 +286,7 @@ export class ConnectionService {
    * The cached STS session is dropped, so the next call assumes the right role
    * rather than reusing credentials for the account we just left.
    */
-  async setMode(body: { mode?: string } | undefined) {
+  setMode(body: { mode?: string } | undefined) {
     const mode = body?.mode;
     if (mode !== "mock" && mode !== "real") {
       throw new BadRequestException({ error: 'mode must be "mock" or "real"' });

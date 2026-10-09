@@ -20,11 +20,27 @@ try {
 }
 
 for (const signal of ["SIGINT", "SIGTERM"] as const) {
-  process.on(signal, async () => {
+  /**
+   * The handler is sync, and the async work is launched inside it.
+   *
+   * `process.on` expects a void return, so passing an `async` function meant a
+   * failure in any of the three closes surfaced as an unhandled rejection -
+   * and because nothing then reached `process.exit`, the process hung instead
+   * of shutting down. Exiting non-zero on a failed shutdown is the honest
+   * outcome, and it is what a container's stop timeout is waiting for.
+   */
+  process.on(signal, () => {
     log.info(`${signal} received, shutting down`);
-    await app.close();
-    await closeDriver();
-    await closePool();
-    process.exit(0);
+    void (async () => {
+      try {
+        await app.close();
+        await closeDriver();
+        await closePool();
+        process.exit(0);
+      } catch (err) {
+        log.error(err);
+        process.exit(1);
+      }
+    })();
   });
 }

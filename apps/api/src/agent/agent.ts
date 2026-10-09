@@ -32,15 +32,7 @@
 
 import { randomUUID } from "node:crypto";
 import { createAnthropic } from "@ai-sdk/anthropic";
-import {
-  jsonSchema,
-  stepCountIs,
-  streamText,
-  tool,
-  type JSONSchema7,
-  type LanguageModel,
-  type ToolSet,
-} from "ai";
+import { jsonSchema, stepCountIs, streamText, tool, type LanguageModel, type ToolSet } from "ai";
 import type { AgentEvent, AgentMessage, ToolCallTrace } from "@sightline/shared";
 
 import { cfg } from "../config.js";
@@ -50,6 +42,7 @@ import { CitationTracker, validateCitations } from "./citations.js";
 import { buildSystemPrompt } from "./prompt.js";
 import { TOOL_DEFINITIONS, runTool } from "./tools.js";
 import { enforceReadOnlyNotice } from "./readOnlyGuard.js";
+import { errorMessage } from "@sightline/shared";
 
 /**
  * Cap the loop. Every step is a model call, so a model that keeps asking for
@@ -73,7 +66,7 @@ function configuredModel(): LanguageModel {
 export interface AskOptions {
   question: string;
   /** Prior turns, so follow-up questions work. */
-  history?: Array<{ role: "user" | "assistant"; content: string }>;
+  history?: { role: "user" | "assistant"; content: string }[];
   onEvent?: (event: AgentEvent) => void;
   /**
    * The language model, defaulting to the configured one.
@@ -160,7 +153,7 @@ function buildTools(ctx: {
             // Returned rather than thrown: the model can often recover by
             // trying a different tool, and failing the step would end the turn
             // with nothing to show the user.
-            const message = err instanceof Error ? err.message : String(err);
+            const message = errorMessage(err);
             const durationMs = Date.now() - startedAt;
             ctx.traces.push({
               id: toolCallId,

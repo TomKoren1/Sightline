@@ -31,7 +31,7 @@ export const accountArn = (account: string) => `arn:${PARTITION}:sightline:::acc
 
 /** AWS tag lists come in several shapes; normalise them all to a record. */
 export function tagsToRecord(
-  tags: Array<{ Key?: string; Value?: string }> | undefined,
+  tags: { Key?: string; Value?: string }[] | undefined,
 ): Record<string, string> {
   const out: Record<string, string> = {};
   for (const t of tags ?? []) {

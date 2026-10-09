@@ -87,7 +87,7 @@ export interface ResourceDiff {
   name: string;
   change: "added" | "removed" | "modified";
   /** For "modified": the fields that differ, with both values. */
-  changedFields?: Array<{ field: string; before: unknown; after: unknown }>;
+  changedFields?: { field: string; before: unknown; after: unknown }[];
 }
 
 export interface ScanDiff {

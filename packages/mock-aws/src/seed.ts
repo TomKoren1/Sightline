@@ -32,7 +32,6 @@ import {
   PutBucketPolicyCommand,
   PutBucketTaggingCommand,
   PutPublicAccessBlockCommand,
-  type S3Client,
 } from "@aws-sdk/client-s3";
 import {
   AddRoleToInstanceProfileCommand,
@@ -673,7 +672,7 @@ async function seedProduction(appProfileName: string) {
       VpcConfig: { SubnetIds: [net.privateSubnetAId], SecurityGroupIds: [appSg] },
       Timeout: 30,
       MemorySize: 512,
-      Tags: TAGS.prod as unknown as Record<string, string>,
+      Tags: TAGS.prod,
     }),
   );
   await lambdaClient.send(

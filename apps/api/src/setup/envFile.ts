@@ -40,7 +40,7 @@ export interface EnvDiffEntry {
 export function readEnvValue(content: string, key: string): string | null {
   for (const line of content.split("\n")) {
     const m = matchAssignment(line);
-    if (m && m.key === key) return m.value;
+    if (m?.key === key) return m.value;
   }
   return null;
 }

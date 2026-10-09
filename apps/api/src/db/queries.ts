@@ -150,8 +150,8 @@ export async function findNetworkPaths(params: {
 }) {
   const maxHops = Math.min(Math.max(1, params.maxHops ?? 5), 8);
   return readQuery<{
-    hops: Array<{ arn: string; name: string; kind: string }>;
-    edges: Array<{ ports: string[]; reason: string; via: string }>;
+    hops: { arn: string; name: string; kind: string }[];
+    edges: { ports: string[]; reason: string; via: string }[];
     length: number;
   }>(
     // The hop bound is interpolated because Cypher does not allow a parameter

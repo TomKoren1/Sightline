@@ -61,12 +61,12 @@ export interface GraphResourceRow {
   name: string;
   region: string | null;
   props?: Record<string, unknown>;
-  incoming?: Array<{
+  incoming?: {
     type: string | null;
     arn: string | null;
     name: string | null;
     kind: string | null;
-  }>;
+  }[];
   [key: string]: unknown;
 }
 

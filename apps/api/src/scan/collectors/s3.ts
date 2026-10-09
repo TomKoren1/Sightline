@@ -27,6 +27,7 @@ import { s3Client } from "../../aws/clients.js";
 import { regionArn, s3Arn, tagsToRecord } from "../../aws/arns.js";
 import { cfg } from "../../config.js";
 import type { CollectorContext, CollectorOutput } from "./types.js";
+import { errorMessage } from "@sightline/shared";
 
 /**
  * Run a call that is allowed to come back empty.
@@ -42,9 +43,7 @@ async function optional<T>(fn: () => Promise<T>, expectedErrors: string[]): Prom
     if (expectedErrors.includes(name)) return null;
     // An unexpected error is worth knowing about, but must not abort the
     // bucket: an AccessDenied on one call still leaves the rest usable.
-    console.warn(
-      `  s3: unexpected ${name || "error"} - ${err instanceof Error ? err.message : err}`,
-    );
+    console.warn(`  s3: unexpected ${name || "error"} - ${errorMessage(err)}`);
     return null;
   }
 }

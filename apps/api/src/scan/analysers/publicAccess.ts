@@ -71,7 +71,7 @@ export interface PublicVerdict {
  * explicitly cleared, have no bucket-level block at all.
  */
 export function disabledBlockSettings(pab: PublicAccessBlock | null): string[] {
-  const settings: Array<[keyof PublicAccessBlock, string]> = [
+  const settings: [keyof PublicAccessBlock, string][] = [
     ["BlockPublicAcls", "BlockPublicAcls"],
     ["IgnorePublicAcls", "IgnorePublicAcls"],
     ["BlockPublicPolicy", "BlockPublicPolicy"],
@@ -85,11 +85,11 @@ export function policyAllowsWildcardPrincipal(policyJson: string | null): boolea
   if (!policyJson) return false;
   try {
     const doc = JSON.parse(policyJson) as {
-      Statement?: Array<{
+      Statement?: {
         Effect?: string;
         Principal?: unknown;
         Condition?: Record<string, unknown>;
-      }>;
+      }[];
     };
     for (const stmt of doc.Statement ?? []) {
       if (stmt.Effect !== "Allow") continue;

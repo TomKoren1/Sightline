@@ -92,7 +92,7 @@ export function ModeToggle({ onSwitched }: { onSwitched: (note: string) => void 
         </span>
       )}
       {switchMode.isError && (
-        <span className="text-[10px] text-danger" title={(switchMode.error as Error).message}>
+        <span className="text-[10px] text-danger" title={switchMode.error.message}>
           failed
         </span>
       )}

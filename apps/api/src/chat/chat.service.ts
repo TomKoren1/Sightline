@@ -38,7 +38,7 @@ export class ChatService {
 
   answer(params: {
     question: string;
-    history?: Array<{ role: "user" | "assistant"; content: string }>;
+    history?: { role: "user" | "assistant"; content: string }[];
     onEvent: (event: AgentEvent) => void;
   }) {
     return ask({

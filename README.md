@@ -140,7 +140,7 @@ cites, with traps that a tool reading flags rather than evaluating them would fa
 into. The same checks run inside the product, under **Trust**.
 
 The reasoning behind each of these is in
-the eighteen ADRs in
+the nineteen ADRs in
 [**docs/DECISIONS.md**](docs/DECISIONS.md).
 
 ## Repository layout
@@ -159,20 +159,23 @@ packages/shared     domain model shared by every package
 packages/mock-aws   the seeded customer account and its answer key
 infra/              the replacement read-only role, and the original
 deploy/             nginx config for the containerised frontend
+eslint.config.mjs   lint rules, with the reason for each exception
+tsconfig.tools.json type-checking for everything outside a workspace
 Dockerfile          API and frontend images, used only by the `app` profile
 docs/               decisions, engineering log, commit log, walkthrough
 ```
 
 ## Documentation
 
-- **[docs/DECISIONS.md](docs/DECISIONS.md)** — eighteen ADRs: the stack, the
+- **[docs/DECISIONS.md](docs/DECISIONS.md)** — nineteen ADRs: the stack, the
   mock, the two-database split, deterministic analysis, the tool boundary,
   citation validation, the IAM role, the eval strategy, the read-only refusal in
   code, guided onboarding, evals shown in the product, public vs unprotected,
   the runtime account toggle, remediation that is never applied, onboarding
-  automated by a host script rather than a form, and the three that supersede
-  earlier ones — Drizzle, NestJS, and the agent loop moving onto the Vercel AI
-  SDK, each recording what the decision it replaces got right as well as wrong.
+  automated by a host script rather than a form, type-aware linting and what its
+  first run found, and the three that supersede earlier ones — Drizzle, NestJS,
+  and the agent loop moving onto the Vercel AI SDK, each recording what the
+  decision it replaces got right as well as wrong.
 - **[docs/ENGINEERING-LOG.md](docs/ENGINEERING-LOG.md)** — every non-obvious
   problem hit while building this, with diagnosis and fix. Includes a silent
   moto account-namespacing trap, two capability gaps in the mock recorded as
@@ -181,6 +184,10 @@ docs/               decisions, engineering log, commit log, walkthrough
 - **[docs/ROADMAP.md](docs/ROADMAP.md)** — where this breaks as an account gets
   large, in the order it would actually happen, and what I would build next.
   Every limit is one I can point at in the code.
+- **[SECURITY.md](SECURITY.md)** — what the project holds and does not hold,
+  why the role template refuses `ReadOnlyAccess`, what the ExternalId is for,
+  and the limitations worth knowing before pointing this at an account you care
+  about.
 - **[docs/SETUP.md](docs/SETUP.md)** — configuration, the host development path,
   connecting AWS by hand, troubleshooting and every command. Nothing in it is
   needed to run the project.

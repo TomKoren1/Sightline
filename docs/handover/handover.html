@@ -1053,11 +1053,22 @@ npm run dev:api &amp; npm run dev:web
 
       <h3>CI</h3>
       <p>
-        Three jobs: a static job (format, typecheck, 176 unit tests), an integration job that stands
-        up Postgres, Neo4j and moto and runs the tier-1 suite, and a secret scan. The secret scan
-        pairs gitleaks with a deterministic <code>git ls-files</code> check that no environment file
-        is ever tracked — because a probabilistic check that silently matches nothing is worse than
-        no check at all, which is exactly what happened in log #27.
+        Five jobs. A static job (Prettier, ESLint, typecheck, 436 unit tests needing no services);
+        an integration job that stands up Postgres, Neo4j and moto and runs the tier-1 suite; a
+        containerised job that drives the product through nginx, because a documented path CI does
+        not exercise is a claim nobody has checked; a job asserting the setup script
+        <em>refuses</em> safely and writes nothing when it cannot proceed; and a secret scan. The
+        secret scan pairs gitleaks with a deterministic <code>git ls-files</code> check that no
+        environment file is ever tracked — because a probabilistic check that silently matches
+        nothing is worse than no check at all, which is exactly what happened in log #27.
+      </p>
+
+      <p>
+        The exclusion on the static job names one file rather than the whole
+        <code>evals/</code> directory. As <code>**/evals/**</code> it also hid
+        <code>readme.test.ts</code> and <code>summarise.test.ts</code>, which need no databases and
+        no API key — so thirty-two assertions, including all twenty-five guarding the documentation
+        against rot, ran in no job at all.
       </p>
     </div>
 

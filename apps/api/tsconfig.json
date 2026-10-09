@@ -8,5 +8,5 @@
     // injection in this package names its token explicitly. See ADR-017.
     "experimentalDecorators": true
   },
-  "include": ["src/**/*.ts"]
+  "include": ["src/**/*.ts", "drizzle.config.ts"]
 }

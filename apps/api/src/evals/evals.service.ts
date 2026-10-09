@@ -133,7 +133,7 @@ export class EvalsService {
       };
     }
 
-    type StoredCase = {
+    interface StoredCase {
       id: string;
       question: string;
       passed: boolean;
@@ -143,7 +143,7 @@ export class EvalsService {
       unsupportedCitations: string[];
       durationMs: number;
       errored?: string;
-    };
+    }
 
     /**
      * A case that never reached the model, as opposed to one that answered badly.

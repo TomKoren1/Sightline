@@ -210,7 +210,10 @@ the Vite dev server solves in development.
 | `npm run drift`                                | Change the mock account, so a second scan has a diff         |
 | `npm run inspect -w @sightline/api`            | Scan and print findings without touching the databases       |
 | `npm run query -w @sightline/api`              | Run every curated query against the graph                    |
-| `npm test`                                     | 408 unit tests                                               |
+| `npm test`                                     | 485 unit tests                                               |
+| `npm run lint`                                 | Prettier and ESLint, both in check mode                      |
+| `npm run format`                               | Fix everything those two can fix automatically               |
+| `npm run typecheck`                            | `tsc` over every workspace, and over `infra/` and `scripts/` |
 | `npm run verify`                               | Everything CI's static job runs — use before pushing         |
 | `npm run evals:ground-truth -w @sightline/api` | Tier-1 evals — no API key needed                             |
 | `npm run evals -w @sightline/api`              | Tier-2 agent evals — needs a key                             |

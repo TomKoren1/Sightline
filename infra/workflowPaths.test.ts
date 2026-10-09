@@ -34,6 +34,27 @@ const workflowDir = `${root}.github/workflows`;
 const PATH_PATTERN =
   /\b(?:apps|packages|infra|scripts|deploy|evals)\/[A-Za-z0-9_./-]+\.[a-z]{2,4}\b/g;
 
+/**
+ * Glob patterns are not paths, and must not be checked as if they were.
+ *
+ * The CI exclusion for `groundTruth.test.ts` is written as a double-star glob,
+ * and the pattern it contains is the substring
+ * `evals/groundTruth.test.ts`, which `PATH_PATTERN` happily matches and which
+ * does not exist at the repository root - the real file is four directories
+ * down. Reported as a missing path, that is a false failure on a correct
+ * workflow, and the fix people reach for is deleting the check.
+ *
+ * Whole tokens are dropped rather than the `*` characters trimmed: a pattern is
+ * a pattern wherever the wildcard sits in it, and a partially de-globbed string
+ * is exactly the kind of near-path that produced the false failure.
+ */
+function withoutGlobs(text: string): string {
+  return text
+    .split(/\s+/)
+    .filter((token) => !token.includes("*"))
+    .join(" ");
+}
+
 interface Reference {
   workflow: string;
   line: number;
@@ -45,7 +66,7 @@ function references(): Reference[] {
   for (const file of readdirSync(workflowDir).filter((f) => f.endsWith(".yml"))) {
     const lines = readFileSync(`${workflowDir}/${file}`, "utf8").split("\n");
     lines.forEach((text, i) => {
-      for (const match of text.matchAll(PATH_PATTERN)) {
+      for (const match of withoutGlobs(text).matchAll(PATH_PATTERN)) {
         found.push({ workflow: file, line: i + 1, path: match[0] });
       }
     });
@@ -61,6 +82,18 @@ describe("paths named in the GitHub workflows", () => {
     const found = references();
     expect(found.length, "no repository paths parsed out of the workflows").toBeGreaterThan(1);
     expect(found.map((r) => r.path)).toContain("apps/api/src/server.ts");
+  });
+
+  it("ignores glob patterns, which are not paths", () => {
+    // Both halves matter: the glob must be dropped, and a real path on the same
+    // line must survive - otherwise the fix for the false failure would be to
+    // stop checking that line at all.
+    expect(
+      withoutGlobs("run: npx vitest run --exclude '**/evals/groundTruth.test.ts'"),
+    ).not.toContain("evals/groundTruth.test.ts");
+    expect(withoutGlobs("run: npx tsx apps/api/src/server.ts --exclude '**/x/y.ts'")).toContain(
+      "apps/api/src/server.ts",
+    );
   });
 
   it("all exist", () => {

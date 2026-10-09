@@ -28,6 +28,7 @@ import { sql } from "drizzle-orm";
 import pg from "pg";
 
 import { cfg } from "../config.js";
+import { errorMessage } from "@sightline/shared";
 
 const HAS_INFRA = !process.env["SKIP_INTEGRATION"];
 
@@ -87,7 +88,7 @@ beforeAll(async () => {
   try {
     await admin.query("SELECT 1");
   } catch (err) {
-    skipReason = `Postgres was not reachable: ${err instanceof Error ? err.message : err}`;
+    skipReason = `Postgres was not reachable: ${errorMessage(err)}`;
     return;
   }
 

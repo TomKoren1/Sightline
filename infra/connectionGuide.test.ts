@@ -32,7 +32,6 @@ const root = fileURLToPath(new URL("../", import.meta.url));
 const read = (path: string) => readFileSync(root + path, "utf8");
 
 const guide = read("apps/web/src/components/ConnectionGuide.tsx");
-const template = read("infra/readonly-role.yaml");
 
 /**
  * The guide with comments stripped, for any assertion about what the page *says*.

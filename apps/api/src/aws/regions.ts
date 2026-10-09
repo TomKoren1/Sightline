@@ -10,6 +10,7 @@
 import { DescribeRegionsCommand } from "@aws-sdk/client-ec2";
 import { ec2Client } from "./clients.js";
 import { cfg, configuredRegions } from "../config.js";
+import { errorMessage } from "@sightline/shared";
 
 /**
  * Regions to scan.
@@ -33,10 +34,7 @@ export async function resolveRegions(): Promise<{ regions: string[]; discovered:
       .sort();
     if (regions.length > 0) return { regions, discovered: true };
   } catch (err) {
-    console.warn(
-      `Region discovery failed, falling back to ${cfg.AWS_REGION}:`,
-      err instanceof Error ? err.message : err,
-    );
+    console.warn(`Region discovery failed, falling back to ${cfg.AWS_REGION}:`, errorMessage(err));
   }
 
   return { regions: [cfg.AWS_REGION], discovered: false };

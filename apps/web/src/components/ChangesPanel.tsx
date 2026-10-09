@@ -19,6 +19,7 @@ import {
   SIGNIFICANT_CHANGE_FIELDS,
   sortFieldsBySignificance,
   type ResourceDiff,
+  asText,
 } from "@sightline/shared";
 
 import { api } from "../api.js";
@@ -44,7 +45,7 @@ export function ChangesPanel({ onHighlight }: { onHighlight: (arns: string[]) =>
   if (error) {
     return (
       <div className="space-y-2 py-3 text-center">
-        <p className="text-[11px] text-danger">{(error as Error).message}</p>
+        <p className="text-[11px] text-danger">{error.message}</p>
         <button
           onClick={() => void refetch()}
           className="rounded border border-ink-700 px-2 py-0.5 text-[11px] text-ink-300 hover:border-ink-600"
@@ -229,12 +230,9 @@ function DiffRow({
 
 /** Keep values short: a diff row is a summary, and the detail panel has the rest. */
 function format(value: unknown): string {
+  // An em dash, not the empty string `asText` returns: in a diff row the
+  // difference between "absent" and "empty" is the whole point.
   if (value === null || value === undefined) return "—";
-  if (typeof value === "boolean") return value ? "true" : "false";
-  if (typeof value === "object") {
-    const json = JSON.stringify(value);
-    return json.length > 40 ? `${json.slice(0, 40)}…` : json;
-  }
-  const text = String(value);
+  const text = asText(value);
   return text.length > 40 ? `${text.slice(0, 40)}…` : text;
 }

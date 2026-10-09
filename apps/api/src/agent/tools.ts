@@ -300,7 +300,7 @@ export async function runTool(name: string, input: ToolInput): Promise<ToolResul
     case "suggest_remediation": {
       const row = await q.getResource(String(input["arnOrName"] ?? ""));
       if (!row) return wrap([], { note: "No resource matched that ARN or name." });
-      const remediations = remediationsFor(remediationInputFromGraph(row as never));
+      const remediations = remediationsFor(remediationInputFromGraph(row));
       return wrap(remediations.length > 0 ? [{ arn: row.arn, remediations }] : [], {
         note:
           remediations.length === 0

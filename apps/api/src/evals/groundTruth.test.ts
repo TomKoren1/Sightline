@@ -24,6 +24,7 @@ import type { Relationship, Resource } from "@sightline/shared";
 import { isMock } from "../config.js";
 import { runScan } from "../scan/runner.js";
 import { CHECKS, runChecks, type CheckResult } from "./checks.js";
+import { errorMessage } from "@sightline/shared";
 
 let resources: Resource[] = [];
 let relationships: Relationship[] = [];
@@ -65,7 +66,7 @@ beforeAll(async () => {
     results = runChecks({ resources, relationships });
     available = true;
   } catch (err) {
-    console.warn("Ground-truth suite skipped:", err instanceof Error ? err.message : err);
+    console.warn("Ground-truth suite skipped:", errorMessage(err));
   }
 }, 180_000);
 

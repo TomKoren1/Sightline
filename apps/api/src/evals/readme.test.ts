@@ -48,8 +48,8 @@ const scripts = {
 };
 
 /** Every `npm run …` the README tells the reader to type. */
-function documentedCommands(): Array<{ raw: string; script: string; workspace: string }> {
-  const found: Array<{ raw: string; script: string; workspace: string }> = [];
+function documentedCommands(): { raw: string; script: string; workspace: string }[] {
+  const found: { raw: string; script: string; workspace: string }[] = [];
   const pattern = /`npm run ([a-z:-]+)(?: -w (@sightline\/[a-z]+))?`/g;
   for (const match of readme.matchAll(pattern)) {
     found.push({ raw: match[0], script: match[1]!, workspace: match[2] ?? "root" });

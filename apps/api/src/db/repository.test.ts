@@ -69,7 +69,7 @@ let available = false;
 
 beforeAll(async () => {
   try {
-    await db.execute("SELECT 1" as never);
+    await db.execute("SELECT 1");
   } catch {
     return;
   }
