@@ -9,11 +9,13 @@
 
 import type { FastifyInstance } from "fastify";
 import { randomUUID } from "node:crypto";
+import { asc, eq } from "drizzle-orm";
 import { z } from "zod";
 import type { AgentEvent } from "@daveio/shared";
 
 import { ask } from "../agent/agent.js";
-import { pool } from "../db/postgres.js";
+import { db } from "../db/postgres.js";
+import { conversations, messages } from "../db/schema.js";
 import { getLatestScan } from "../db/repository.js";
 
 const askSchema = z.object({
@@ -60,27 +62,29 @@ export function registerChatRoutes(app: FastifyInstance): void {
       // Persisted after the fact, including the full audit trail. A failure to
       // persist must not lose the answer the user is already reading.
       try {
-        await pool.query(
-          `INSERT INTO conversations (id, account_id) VALUES ($1, $2) ON CONFLICT DO NOTHING`,
-          [conversationId, latest.accountId],
-        );
-        await pool.query(
-          `INSERT INTO messages (id, conversation_id, role, content, scan_id) VALUES ($1,$2,'user',$3,$4)`,
-          [randomUUID(), conversationId, question, latest.id],
-        );
-        await pool.query(
-          `INSERT INTO messages (id, conversation_id, role, content, tool_calls, citations, warnings, scan_id)
-           VALUES ($1,$2,'assistant',$3,$4,$5,$6,$7)`,
-          [
-            message.id,
+        await db
+          .insert(conversations)
+          .values({ id: conversationId, accountId: latest.accountId })
+          .onConflictDoNothing();
+        await db.insert(messages).values([
+          {
+            id: randomUUID(),
             conversationId,
-            message.content,
-            JSON.stringify(message.toolCalls ?? []),
-            JSON.stringify(message.citations ?? []),
-            JSON.stringify(message.warnings ?? []),
-            latest.id,
-          ],
-        );
+            role: "user",
+            content: question,
+            scanId: latest.id,
+          },
+          {
+            id: message.id,
+            conversationId,
+            role: "assistant",
+            content: message.content,
+            toolCalls: message.toolCalls ?? [],
+            citations: message.citations ?? [],
+            warnings: message.warnings ?? [],
+            scanId: latest.id,
+          },
+        ]);
       } catch (err) {
         req.log.error({ err }, "failed to persist conversation");
       }
@@ -94,21 +98,22 @@ export function registerChatRoutes(app: FastifyInstance): void {
   });
 
   app.get<{ Params: { id: string } }>("/api/conversations/:id", async (req) => {
-    const { rows } = await pool.query(
-      `SELECT id, role, content, tool_calls, citations, warnings, created_at
-         FROM messages WHERE conversation_id = $1 ORDER BY created_at`,
-      [req.params.id],
-    );
+    const rows = await db
+      .select({
+        id: messages.id,
+        role: messages.role,
+        content: messages.content,
+        toolCalls: messages.toolCalls,
+        citations: messages.citations,
+        warnings: messages.warnings,
+        createdAt: messages.createdAt,
+      })
+      .from(messages)
+      .where(eq(messages.conversationId, req.params.id))
+      .orderBy(asc(messages.createdAt));
+
     return {
-      messages: rows.map((r) => ({
-        id: r.id,
-        role: r.role,
-        content: r.content,
-        toolCalls: r.tool_calls,
-        citations: r.citations,
-        warnings: r.warnings,
-        createdAt: r.created_at.toISOString(),
-      })),
+      messages: rows.map((r) => ({ ...r, createdAt: r.createdAt.toISOString() })),
     };
   });
 }

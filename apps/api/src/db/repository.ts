@@ -7,6 +7,8 @@
  */
 
 import { randomUUID } from "node:crypto";
+import { and, asc, desc, eq, inArray, ne, notExists, sql } from "drizzle-orm";
+import { alias } from "drizzle-orm/pg-core";
 import type {
   Relationship,
   Resource,
@@ -17,28 +19,37 @@ import type {
   ScanUnit,
 } from "@daveio/shared";
 
-import { fingerprint, pool } from "./postgres.js";
+import { db, fingerprint } from "./postgres.js";
+import { relationshipSnapshots, resourceSnapshots, scanRuns, scanUnits } from "./schema.js";
 
-/** Rows per INSERT. Postgres caps parameters at 65535; this stays well under. */
+/**
+ * Rows per INSERT.
+ *
+ * Drizzle builds one multi-row `INSERT` from the array it is given, so the
+ * parameter cap is still ours to respect: Postgres allows 65535 and a resource
+ * contributes ten. This stays well under.
+ */
 const BATCH_SIZE = 500;
 
 const GLOBAL = "global";
 
 export async function createScanRun(accountId: string, regions: string[]): Promise<string> {
   const id = randomUUID();
-  await pool.query(
-    `INSERT INTO scan_runs (id, account_id, status, started_at, regions)
-     VALUES ($1, $2, 'running', now(), $3)`,
-    [id, accountId, regions],
-  );
+  await db.insert(scanRuns).values({
+    id,
+    accountId,
+    status: "running",
+    startedAt: new Date(),
+    regions,
+  });
   return id;
 }
 
 export async function failScanRun(scanId: string, error: string): Promise<void> {
-  await pool.query(
-    `UPDATE scan_runs SET status = 'failed', finished_at = now(), error = $2 WHERE id = $1`,
-    [scanId, error],
-  );
+  await db
+    .update(scanRuns)
+    .set({ status: "failed", finishedAt: new Date(), error })
+    .where(eq(scanRuns.id, scanId));
 }
 
 /** Persist a completed scan: units, resources and relationships, atomically. */
@@ -52,165 +63,137 @@ export async function saveScanResult(
     apiCalls: number;
   },
 ): Promise<void> {
-  const client = await pool.connect();
-  try {
-    await client.query("BEGIN");
-
+  await db.transaction(async (tx) => {
     for (const unit of params.units) {
-      await client.query(
-        `INSERT INTO scan_units
-           (scan_id, service, region, status, resource_count, api_calls, duration_ms, error, error_code, started_at, finished_at)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
-         ON CONFLICT (scan_id, service, region) DO UPDATE SET
-           status = EXCLUDED.status, resource_count = EXCLUDED.resource_count,
-           api_calls = EXCLUDED.api_calls, duration_ms = EXCLUDED.duration_ms,
-           error = EXCLUDED.error, error_code = EXCLUDED.error_code`,
-        [
+      await tx
+        .insert(scanUnits)
+        .values({
           scanId,
-          unit.service,
-          unit.region ?? GLOBAL,
-          unit.status,
-          unit.resourceCount,
-          unit.apiCalls,
-          unit.durationMs,
-          unit.error ?? null,
-          unit.errorCode ?? null,
-          unit.startedAt ?? null,
-          unit.finishedAt ?? null,
-        ],
-      );
+          service: unit.service,
+          // 'global' rather than NULL, so a non-regional service can take part
+          // in the primary key.
+          region: unit.region ?? GLOBAL,
+          status: unit.status,
+          resourceCount: unit.resourceCount,
+          apiCalls: unit.apiCalls,
+          durationMs: unit.durationMs,
+          error: unit.error ?? null,
+          errorCode: unit.errorCode ?? null,
+          startedAt: unit.startedAt ? new Date(unit.startedAt) : null,
+          finishedAt: unit.finishedAt ? new Date(unit.finishedAt) : null,
+        })
+        .onConflictDoUpdate({
+          target: [scanUnits.scanId, scanUnits.service, scanUnits.region],
+          set: {
+            status: sql`excluded.status`,
+            resourceCount: sql`excluded.resource_count`,
+            apiCalls: sql`excluded.api_calls`,
+            durationMs: sql`excluded.duration_ms`,
+            error: sql`excluded.error`,
+            errorCode: sql`excluded.error_code`,
+          },
+        });
     }
 
     for (let i = 0; i < params.resources.length; i += BATCH_SIZE) {
       const batch = params.resources.slice(i, i + BATCH_SIZE);
-      const values: unknown[] = [];
-      const tuples = batch.map((r, n) => {
-        const b = n * 10;
-        values.push(
-          scanId,
-          r.arn,
-          r.kind,
-          r.name,
-          r.region,
-          r.accountId,
-          JSON.stringify(r.tags),
-          JSON.stringify(r.properties),
-          JSON.stringify(r.derived),
-          fingerprint(r),
-        );
-        return `($${b + 1},$${b + 2},$${b + 3},$${b + 4},$${b + 5},$${b + 6},$${b + 7},$${b + 8},$${b + 9},$${b + 10})`;
-      });
-      await client.query(
-        `INSERT INTO resource_snapshots
-           (scan_id, arn, kind, name, region, account_id, tags, properties, derived, fingerprint)
-         VALUES ${tuples.join(",")}
-         ON CONFLICT (scan_id, arn) DO NOTHING`,
-        values,
-      );
+      await tx
+        .insert(resourceSnapshots)
+        .values(
+          batch.map((r) => ({
+            scanId,
+            arn: r.arn,
+            kind: r.kind,
+            name: r.name,
+            region: r.region,
+            accountId: r.accountId,
+            tags: r.tags,
+            properties: r.properties,
+            derived: r.derived,
+            fingerprint: fingerprint(r),
+          })),
+        )
+        .onConflictDoNothing({ target: [resourceSnapshots.scanId, resourceSnapshots.arn] });
     }
 
     for (let i = 0; i < params.relationships.length; i += BATCH_SIZE) {
       const batch = params.relationships.slice(i, i + BATCH_SIZE);
-      const values: unknown[] = [];
-      const tuples = batch.map((rel, n) => {
-        const b = n * 5;
-        values.push(scanId, rel.from, rel.to, rel.type, JSON.stringify(rel.properties ?? {}));
-        return `($${b + 1},$${b + 2},$${b + 3},$${b + 4},$${b + 5})`;
-      });
-      await client.query(
-        `INSERT INTO relationship_snapshots (scan_id, from_arn, to_arn, rel_type, properties)
-         VALUES ${tuples.join(",")}`,
-        values,
+      await tx.insert(relationshipSnapshots).values(
+        batch.map((rel) => ({
+          scanId,
+          fromArn: rel.from,
+          toArn: rel.to,
+          relType: rel.type,
+          properties: rel.properties ?? {},
+        })),
       );
     }
 
-    await client.query(
-      `UPDATE scan_runs
-         SET status = $2, finished_at = now(), resource_count = $3,
-             relationship_count = $4, api_calls = $5
-       WHERE id = $1`,
-      [
-        scanId,
-        params.status,
-        params.resources.length,
-        params.relationships.length,
-        params.apiCalls,
-      ],
-    );
-
-    await client.query("COMMIT");
-  } catch (err) {
-    await client.query("ROLLBACK");
-    throw err;
-  } finally {
-    client.release();
-  }
+    await tx
+      .update(scanRuns)
+      .set({
+        status: params.status,
+        finishedAt: new Date(),
+        resourceCount: params.resources.length,
+        relationshipCount: params.relationships.length,
+        apiCalls: params.apiCalls,
+      })
+      .where(eq(scanRuns.id, scanId));
+  });
 }
 
-interface ScanRow {
-  id: string;
-  account_id: string;
-  status: ScanStatus;
-  started_at: Date;
-  finished_at: Date | null;
-  regions: string[];
-  resource_count: number;
-  relationship_count: number;
-  error: string | null;
-}
+type ScanRow = typeof scanRuns.$inferSelect;
 
 function toScanRun(row: ScanRow, units: ScanUnit[]): ScanRun {
   return {
     id: row.id,
-    accountId: row.account_id,
+    accountId: row.accountId,
     status: row.status,
-    startedAt: row.started_at.toISOString(),
-    finishedAt: row.finished_at?.toISOString() ?? null,
+    startedAt: row.startedAt.toISOString(),
+    finishedAt: row.finishedAt?.toISOString() ?? null,
     regions: row.regions,
     units,
-    resourceCount: row.resource_count,
-    relationshipCount: row.relationship_count,
+    resourceCount: row.resourceCount,
+    relationshipCount: row.relationshipCount,
     ...(row.error ? { error: row.error } : {}),
   };
 }
 
 async function unitsFor(scanIds: string[]): Promise<Map<string, ScanUnit[]>> {
   if (scanIds.length === 0) return new Map();
-  const { rows } = await pool.query(
-    `SELECT * FROM scan_units WHERE scan_id = ANY($1) ORDER BY service, region`,
-    [scanIds],
-  );
+  const rows = await db
+    .select()
+    .from(scanUnits)
+    .where(inArray(scanUnits.scanId, scanIds))
+    .orderBy(asc(scanUnits.service), asc(scanUnits.region));
+
   const map = new Map<string, ScanUnit[]>();
   for (const row of rows) {
     const unit: ScanUnit = {
       service: row.service,
       region: row.region === GLOBAL ? null : row.region,
       status: row.status,
-      resourceCount: row.resource_count,
-      apiCalls: row.api_calls,
-      durationMs: row.duration_ms,
+      resourceCount: row.resourceCount,
+      apiCalls: row.apiCalls,
+      durationMs: row.durationMs,
       ...(row.error ? { error: row.error } : {}),
-      ...(row.error_code ? { errorCode: row.error_code } : {}),
-      ...(row.started_at ? { startedAt: row.started_at.toISOString() } : {}),
-      ...(row.finished_at ? { finishedAt: row.finished_at.toISOString() } : {}),
+      ...(row.errorCode ? { errorCode: row.errorCode } : {}),
+      ...(row.startedAt ? { startedAt: row.startedAt.toISOString() } : {}),
+      ...(row.finishedAt ? { finishedAt: row.finishedAt.toISOString() } : {}),
     };
-    (map.get(row.scan_id) ?? map.set(row.scan_id, []).get(row.scan_id)!).push(unit);
+    (map.get(row.scanId) ?? map.set(row.scanId, []).get(row.scanId)!).push(unit);
   }
   return map;
 }
 
 export async function listScans(limit = 20): Promise<ScanRun[]> {
-  const { rows } = await pool.query<ScanRow>(
-    `SELECT * FROM scan_runs ORDER BY started_at DESC LIMIT $1`,
-    [limit],
-  );
+  const rows = await db.select().from(scanRuns).orderBy(desc(scanRuns.startedAt)).limit(limit);
   const units = await unitsFor(rows.map((r) => r.id));
   return rows.map((row) => toScanRun(row, units.get(row.id) ?? []));
 }
 
 export async function getScan(scanId: string): Promise<ScanRun | null> {
-  const { rows } = await pool.query<ScanRow>(`SELECT * FROM scan_runs WHERE id = $1`, [scanId]);
-  const row = rows[0];
+  const [row] = await db.select().from(scanRuns).where(eq(scanRuns.id, scanId));
   if (!row) return null;
   const units = await unitsFor([row.id]);
   return toScanRun(row, units.get(row.id) ?? []);
@@ -218,46 +201,45 @@ export async function getScan(scanId: string): Promise<ScanRun | null> {
 
 /** The most recent scan that produced usable data. */
 export async function getLatestScan(): Promise<ScanRun | null> {
-  const { rows } = await pool.query<ScanRow>(
-    `SELECT * FROM scan_runs
-      WHERE status IN ('succeeded','partial')
-      ORDER BY started_at DESC LIMIT 1`,
-  );
-  const row = rows[0];
+  const [row] = await db
+    .select()
+    .from(scanRuns)
+    .where(inArray(scanRuns.status, ["succeeded", "partial"]))
+    .orderBy(desc(scanRuns.startedAt))
+    .limit(1);
   if (!row) return null;
   const units = await unitsFor([row.id]);
   return toScanRun(row, units.get(row.id) ?? []);
 }
 
 export async function loadResources(scanId: string): Promise<Resource[]> {
-  const { rows } = await pool.query(
-    `SELECT arn, kind, name, region, account_id, tags, properties, derived
-       FROM resource_snapshots WHERE scan_id = $1`,
-    [scanId],
-  );
-  return rows.map((r) => ({
-    arn: r.arn,
-    kind: r.kind,
-    name: r.name,
-    region: r.region,
-    accountId: r.account_id,
-    tags: r.tags,
-    properties: r.properties,
-    derived: r.derived,
-  }));
+  const rows = await db
+    .select({
+      arn: resourceSnapshots.arn,
+      kind: resourceSnapshots.kind,
+      name: resourceSnapshots.name,
+      region: resourceSnapshots.region,
+      accountId: resourceSnapshots.accountId,
+      tags: resourceSnapshots.tags,
+      properties: resourceSnapshots.properties,
+      derived: resourceSnapshots.derived,
+    })
+    .from(resourceSnapshots)
+    .where(eq(resourceSnapshots.scanId, scanId));
+  return rows;
 }
 
 export async function loadRelationships(scanId: string): Promise<Relationship[]> {
-  const { rows } = await pool.query(
-    `SELECT from_arn, to_arn, rel_type, properties FROM relationship_snapshots WHERE scan_id = $1`,
-    [scanId],
-  );
-  return rows.map((r) => ({
-    from: r.from_arn,
-    to: r.to_arn,
-    type: r.rel_type,
-    properties: r.properties,
-  }));
+  const rows = await db
+    .select({
+      from: relationshipSnapshots.fromArn,
+      to: relationshipSnapshots.toArn,
+      type: relationshipSnapshots.relType,
+      properties: relationshipSnapshots.properties,
+    })
+    .from(relationshipSnapshots)
+    .where(eq(relationshipSnapshots.scanId, scanId));
+  return rows;
 }
 
 /**
@@ -272,32 +254,56 @@ export async function diffScans(fromScanId: string, toScanId: string): Promise<S
   const [fromRun, toRun] = await Promise.all([getScan(fromScanId), getScan(toScanId)]);
   if (!fromRun || !toRun) throw new Error("One or both scans do not exist");
 
-  const { rows: added } = await pool.query(
-    `SELECT arn, kind, name FROM resource_snapshots t
-      WHERE t.scan_id = $2
-        AND NOT EXISTS (SELECT 1 FROM resource_snapshots f WHERE f.scan_id = $1 AND f.arn = t.arn)
-      ORDER BY kind, name`,
-    [fromScanId, toScanId],
-  );
+  // The table is joined to itself, so each side needs its own name.
+  const before = alias(resourceSnapshots, "f");
+  const after = alias(resourceSnapshots, "t");
 
-  const { rows: removed } = await pool.query(
-    `SELECT arn, kind, name FROM resource_snapshots f
-      WHERE f.scan_id = $1
-        AND NOT EXISTS (SELECT 1 FROM resource_snapshots t WHERE t.scan_id = $2 AND t.arn = f.arn)
-      ORDER BY kind, name`,
-    [fromScanId, toScanId],
-  );
+  const added = await db
+    .select({ arn: after.arn, kind: after.kind, name: after.name })
+    .from(after)
+    .where(
+      and(
+        eq(after.scanId, toScanId),
+        notExists(
+          db
+            .select({ one: sql`1` })
+            .from(before)
+            .where(and(eq(before.scanId, fromScanId), eq(before.arn, after.arn))),
+        ),
+      ),
+    )
+    .orderBy(asc(after.kind), asc(after.name));
 
-  const { rows: changed } = await pool.query(
-    `SELECT f.arn, t.kind, t.name,
-            f.properties AS before_props, t.properties AS after_props,
-            f.derived    AS before_derived, t.derived    AS after_derived
-       FROM resource_snapshots f
-       JOIN resource_snapshots t ON t.arn = f.arn AND t.scan_id = $2
-      WHERE f.scan_id = $1 AND f.fingerprint <> t.fingerprint
-      ORDER BY t.kind, t.name`,
-    [fromScanId, toScanId],
-  );
+  const removed = await db
+    .select({ arn: before.arn, kind: before.kind, name: before.name })
+    .from(before)
+    .where(
+      and(
+        eq(before.scanId, fromScanId),
+        notExists(
+          db
+            .select({ one: sql`1` })
+            .from(after)
+            .where(and(eq(after.scanId, toScanId), eq(after.arn, before.arn))),
+        ),
+      ),
+    )
+    .orderBy(asc(before.kind), asc(before.name));
+
+  const changed = await db
+    .select({
+      arn: before.arn,
+      kind: after.kind,
+      name: after.name,
+      beforeProps: before.properties,
+      afterProps: after.properties,
+      beforeDerived: before.derived,
+      afterDerived: after.derived,
+    })
+    .from(before)
+    .innerJoin(after, and(eq(after.arn, before.arn), eq(after.scanId, toScanId)))
+    .where(and(eq(before.scanId, fromScanId), ne(before.fingerprint, after.fingerprint)))
+    .orderBy(asc(after.kind), asc(after.name));
 
   const modified: ResourceDiff[] = changed.map((row) => ({
     arn: row.arn,
@@ -305,8 +311,8 @@ export async function diffScans(fromScanId: string, toScanId: string): Promise<S
     name: row.name,
     change: "modified" as const,
     changedFields: [
-      ...changedFields(row.before_props, row.after_props, ""),
-      ...changedFields(row.before_derived, row.after_derived, "derived."),
+      ...changedFields(row.beforeProps, row.afterProps, ""),
+      ...changedFields(row.beforeDerived, row.afterDerived, "derived."),
     ],
   }));
 
@@ -323,15 +329,21 @@ export async function diffScans(fromScanId: string, toScanId: string): Promise<S
 
 /** Top-level field comparison. Nested objects are compared as wholes. */
 function changedFields(
-  before: Record<string, unknown>,
-  after: Record<string, unknown>,
+  // `object`, not `Record<string, unknown>`: `derived` is now typed as
+  // `DerivedFacts` rather than arriving as `any` from the driver, and a named
+  // interface has no index signature. Widening here keeps the call sites clean
+  // and keeps the typed column, which is the point of the ORM.
+  beforeValue: object,
+  afterValue: object,
   prefix: string,
 ): Array<{ field: string; before: unknown; after: unknown }> {
+  const before = (beforeValue ?? {}) as Record<string, unknown>;
+  const after = (afterValue ?? {}) as Record<string, unknown>;
   const fields: Array<{ field: string; before: unknown; after: unknown }> = [];
-  const keys = new Set([...Object.keys(before ?? {}), ...Object.keys(after ?? {})]);
+  const keys = new Set([...Object.keys(before), ...Object.keys(after)]);
   for (const key of keys) {
-    const a = before?.[key];
-    const b = after?.[key];
+    const a = before[key];
+    const b = after[key];
     if (JSON.stringify(a) !== JSON.stringify(b)) {
       // `undefined` is dropped entirely by JSON.stringify, so a field that
       // only appeared in the newer scan would serialise with no `before` key

@@ -2895,3 +2895,84 @@ a refactor breaks.** 424 tests sounds like protection; one HTTP request is what 
 actually was, because the suite had grown by testing each new function rather than
 each new surface. The useful question before a refactor is not "how many tests are
 there" but "which of them would fail if the output changed".
+
+---
+
+## #53 — Adopting an ORM added every foreign key a second time
+
+**Symptom.** None. That is the entry.
+
+The baseline migration applied cleanly to a database with 14 scans and 1414
+resource snapshots in it. Nothing errored, no data moved, every test passed, and
+the API served the same payloads. The database then had **ten** foreign keys where
+it should have had five.
+
+**Cause.** `drizzle-kit` emits plain `CREATE TABLE`, which is correct for a
+database that does not exist and fails on the first statement against one that
+does. So the baseline was hand-edited to be idempotent: `IF NOT EXISTS` on tables
+and indexes, and on the foreign keys the wrapper drizzle-kit itself used to
+generate —
+
+```sql
+DO $$ BEGIN
+  ALTER TABLE "scan_units" ADD CONSTRAINT "scan_units_scan_id_scan_runs_id_fk" ...;
+EXCEPTION
+  WHEN duplicate_object THEN null;
+END $$;
+```
+
+That reads as "add it unless it is already there". It is not what it does. It
+catches a collision of **names**, and Drizzle names constraints differently from
+the names Postgres generates for one declared inline: `scan_units_scan_id_fkey`
+against `scan_units_scan_id_scan_runs_id_fk`. Same columns, same target, same
+cascade — different name, no collision, so Postgres added a second one. Every
+insert now validated the same foreign key twice.
+
+**How it surfaced.** Not from a test, because no test compared the two paths. I
+dumped the catalogue of the migrated database and of one created from scratch and
+diffed them, on the general principle that the two ought to be identical. Five
+lines of difference, all foreign keys.
+
+**And the first diff lied.** The query used `contype` without a cast, Postgres
+rejected it with `operator is not unique: text || "char"`, both dumps came back
+empty, and `diff` reported them identical. A comparison of two failures is a pass.
+That is the same shape as the migration bug directly above it: something that
+reads like a check, succeeding without checking.
+
+**Fix.** The baseline _adopts_ rather than adds. Before the `ADD CONSTRAINT`
+statements it renames each constraint an older database already carries to the
+name this schema uses — nine of them, including the two primary keys and the two
+`CHECK`s, whose names also differed. `undefined_object` is caught, which is the
+normal case on a new database. Renamed rather than dropped and re-added, because
+re-adding a foreign key takes a lock and revalidates every row while a rename is a
+catalogue update.
+
+**The guard.** `src/db/adoption.test.ts` creates two scratch databases, builds one
+with the pre-ORM `schema.sql` — kept as a fixture for exactly this — migrates
+both, and diffs the full catalogue including constraint names. Names are compared
+deliberately: a name is what the next migration will have to say to drop or alter
+something, so two databases differing only in names are not interchangeable, and a
+name is precisely what this bug got wrong.
+
+Proven by breaking it three ways: remove the foreign-key renames (both the
+equality assertion and the dedicated duplicate check fail), remove the primary-key
+and check renames (the equality assertion fails), and make the catalogue query
+return nothing — which fails the canary that exists because an empty comparison is
+how the original diff lied.
+
+**Also worth recording: the write path had no test at all.** `saveScanResult` is a
+transaction over three kinds of write, two of them chunked by hand against
+Postgres's 65535-parameter cap, and nothing read a scan back and compared it. The
+port was the moment to notice. `repository.test.ts` now writes 1200 resources —
+past the 500-row boundary, so a bug in the second chunk is in scope — reads them
+back and compares by content rather than by count, and asserts the transaction
+actually rolls back by failing a row in the second batch. Verified by breaking the
+transaction, the chunking, the `'global'` sentinel that stands in for a null
+region, and the fingerprint comparison in the diff.
+
+**What to take from it.** **An idempotent migration is not the same as an
+adopting one.** "Run this safely twice" and "arrive at the same database from two
+different starting points" sound like one requirement and are two, and only the
+second is what you actually need when a schema definition changes hands. The
+cheap test for it is to build both and diff the catalogue — which is also the only
+reason this was ever visible, since the symptom was nothing at all.

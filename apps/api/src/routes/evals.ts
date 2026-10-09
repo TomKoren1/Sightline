@@ -11,10 +11,12 @@
  *     produce, so it is displayed rather than re-run from a web request.
  */
 
+import { desc } from "drizzle-orm";
 import type { FastifyInstance } from "fastify";
 
 import { cfg, isMock } from "../config.js";
-import { pool } from "../db/postgres.js";
+import { db } from "../db/postgres.js";
+import { evalRuns } from "../db/schema.js";
 import { getLatestScan, loadRelationships, loadResources } from "../db/repository.js";
 import { DRIFT_EXPECTED_CHECK_FAILURES, DRIFT_MARKER_RESOURCES } from "@daveio/mock-aws";
 
@@ -120,11 +122,7 @@ export function registerEvalRoutes(app: FastifyInstance): void {
 
   /** The most recent agent eval run, if one has been recorded. */
   app.get("/api/evals/latest", async () => {
-    const { rows } = await pool.query(
-      `SELECT id, started_at, model, total, passed, mean_f1, results
-         FROM eval_runs ORDER BY started_at DESC LIMIT 1`,
-    );
-    const row = rows[0];
+    const [row] = await db.select().from(evalRuns).orderBy(desc(evalRuns.startedAt)).limit(1);
     if (!row) {
       return {
         run: null,
@@ -180,7 +178,7 @@ export function registerEvalRoutes(app: FastifyInstance): void {
     return {
       run: {
         id: row.id,
-        startedAt: row.started_at.toISOString(),
+        startedAt: row.startedAt.toISOString(),
         model: row.model,
         total: row.total,
         passed: row.passed,

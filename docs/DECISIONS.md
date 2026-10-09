@@ -663,3 +663,50 @@ CI cannot test the AWS path, because it has no credentials and faking them would
 test the fake. What it does test is the half that must never be wrong: that the
 script refuses, explains, and changes nothing when it cannot proceed — and, so
 those assertions mean something, that `--mock` really does write and back up.
+
+---
+
+## ADR-016 — Drizzle as the data layer, superseding hand-written SQL
+
+**Context.** The original decision was no ORM: seven tables, eighteen query sites,
+and queries whose interesting parts — a self-join on fingerprint, two `NOT EXISTS`
+set differences, a batched insert sized against Postgres's parameter cap — are
+relational enough that an ORM would have been a layer to argue with rather than a
+help.
+
+Reviewed, that read as a legibility problem rather than a correctness one: an
+engineer picking up `repository.ts` meets placeholder arithmetic (`$${b + 1}`)
+before they meet the domain. The criticism is fair, and it is about the reader
+rather than about the code being wrong.
+
+**Decision.** Drizzle, not Prisma.
+
+Drizzle is SQL-shaped, so every query ported roughly one-for-one and the ones
+worth reading got shorter: thirty lines of placeholder arithmetic became
+`.values(batch.map(...))`, and the diff's self-join became an `alias()` and an
+`innerJoin` that says what it does. Prisma would have owned the migration layer
+and then handed the three interesting queries back through `$queryRaw` — half
+ORM, half raw, which reads worse than consistent raw SQL.
+
+The schema is now TypeScript, in `src/db/schema.ts`, and `drizzle-kit` generates
+migrations from it. The server still applies them on boot, so nothing about how
+the project starts changed.
+
+**What the ORM found that the driver had hidden.** `pg` returns `any`. Typed
+columns immediately surfaced three places where that mattered: `scan_units.status`
+and `.service` were being narrowed by a cast rather than by the schema, `derived`
+was `any` rather than `DerivedFacts`, and a test fixture carried `kind: "ec2"` —
+not a `ResourceKind` at all — behind an `as Resource` that silenced it. None were
+live bugs. All were checks that were not happening.
+
+**What stayed as SQL.** The health probe's `SELECT 1`, because it is a liveness
+check rather than a question about the domain, and `excluded.*` inside the upsert,
+which is the dialect's own word for "the row that was being inserted".
+
+**The cost, and it is the real one.** Introducing migrations to a database that
+already holds rows is the awkward part, and the first attempt got it wrong in a way
+that passed: see engineering log #53. The baseline migration is hand-edited to be
+idempotent _and_ to rename the constraints an older database already carries, so a
+migrated database and a fresh one end up with identical catalogues. That
+equivalence is asserted on every run by `src/db/adoption.test.ts`, which builds
+both and diffs them.
