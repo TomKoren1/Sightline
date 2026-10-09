@@ -14,7 +14,7 @@
  *
  * This is a lexical check, not a parser. It is deliberately strict: a query it
  * wrongly rejects costs the user one retry, while one it wrongly accepts
- * breaks the single hard rule in the brief.
+ * breaks the one hard rule.
  */
 
 /** Clauses that mutate the graph or the database. */

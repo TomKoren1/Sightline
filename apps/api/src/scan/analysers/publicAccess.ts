@@ -1,7 +1,7 @@
 /**
  * Is an S3 bucket reachable by an anonymous principal?
  *
- * This is the question the brief opens with, and it is a good example of why
+ * This is the question this opens with, and it is a good example of why
  * the model is not allowed to answer it. Four inputs interact:
  *
  *   1. the bucket policy - does it allow a wildcard principal?

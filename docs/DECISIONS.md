@@ -36,7 +36,7 @@ advantage — see ADR-002.
 
 ## ADR-002 — moto in Docker as the mock AWS control plane
 
-**Context.** The brief allows a real AWS account or a mock. A mock had to be
+**Context.** A real AWS account or a mock were both options. A mock had to be
 convincing enough that the scanner's real behaviour — assume-role, region
 fan-out, pagination, retries — is genuinely exercised rather than stubbed out.
 
@@ -50,7 +50,7 @@ fan-out, pagination, retries — is genuinely exercised rather than stubbed out.
   handling — which is a third of what is being assessed.
 - _LocalStack (community)._ Real AWS API surface. **Cannot do RDS** in the
   community edition, and the production database is the centre of the most
-  interesting question in the brief.
+  interesting question here.
 - _moto in server mode._ Real AWS API over HTTP. Verified by probe to support
   STS assume-role, EC2/VPC, S3 (including bucket policy and public access
   block), IAM, **RDS**, and Lambda.
@@ -72,13 +72,13 @@ and stated honestly rather than papered over.
 
 ## ADR-003 — Postgres as the system of record, Neo4j as a derived projection
 
-**Context.** The brief supplies both databases and invites using either, both,
+**Context.** Both databases were on the table — either, both,
 or neither. Using both because both were offered is not a reason.
 
 **Decision.** Both, with a strict hierarchy: **Postgres is authoritative,
 Neo4j is a rebuildable projection of it.**
 
-**Why Neo4j at all.** The questions in the brief are overwhelmingly about
+**Why Neo4j at all.** The questions this answers are overwhelmingly about
 _relationships_, and one of them — "what can reach the production RDS
 instance?" — is a variable-length path query over security group references.
 In Cypher that is one `MATCH` with a `*1..n` hop. In SQL it is a recursive CTE
@@ -152,7 +152,7 @@ transaction.
 
 **Why.**
 
-- _Safety._ The brief's one hard rule is that the agent must never change
+- _Safety._ The one hard rule is that the agent must never change
   anything. A curated tool cannot express a mutation.
 - _Correctness._ Hand-written Cypher for "find every path from the internet to
   this resource" is reviewable, testable, and identical on every run.
@@ -170,7 +170,7 @@ answer beats a broad unreliable one.
 ## ADR-006 — Citations are validated mechanically
 
 **Context.** "How do you know the agent's answers are right?" is one of the
-five questions the brief asks the README to answer.
+five design questions the README answers.
 
 **Decision.** Every tool result records the set of ARNs it returned. After the
 model produces an answer, every ARN in that answer is checked against the union
@@ -189,7 +189,7 @@ real identifiers_. The eval suite covers that second class.
 
 ## ADR-007 — Replacing the supplied read-only role
 
-**Context.** The brief ships `infra/readonly-role.yaml`, invites us to change
+**Context.** The starting point was `infra/readonly-role.original.yaml`, with an invitation to change
 it, and asks us to say why if we do. Its evaluation criteria ask whether we
 understand "what 'read-only' really means". The original grants the AWS-managed
 `ReadOnlyAccess` policy to any principal in Sightline's account.
@@ -215,7 +215,7 @@ materially larger blast radius for capability the product does not use.
 literally: receiving a message starts its visibility timeout and can hide it
 from the consumer that should have processed it. A scanner holding that
 permission can disrupt a production queue by accident — which would breach the
-brief's hard rule through a permission nobody thought of as a write.
+read-only rule through a permission nobody thought of as a write.
 
 The explicit `Deny` is the load-bearing part. Deny cannot be overridden by any
 Allow, including one a future AWS update to a managed policy might introduce.
@@ -264,7 +264,7 @@ may need a line added. That is the right direction for the friction to run.
 
 ## ADR-008 — Two tiers of evaluation
 
-**Context.** The brief asks how we know the agent's answers are right, and how
+**Context.** "How do we know the agent's answers are right, and how
 we would know if a change made them worse. A single end-to-end suite answers
 neither well: it needs an API key, it is slow and non-deterministic, and when
 it fails it does not say whether the data or the reasoning was wrong.
@@ -331,7 +331,7 @@ exposed, not merely mention it.
 
 ## ADR-009 — The read-only refusal is enforced in code, not prompted
 
-**Context.** The brief's one hard rule is that the agent must never change
+**Context.** The one hard rule is that the agent must never change
 anything. Structurally it cannot: no tool can express a mutation, and the IAM
 role has no write permissions. But a user only learns that from what an answer
 _says_, and the eval suite caught the agent answering "please delete this

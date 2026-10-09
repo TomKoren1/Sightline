@@ -3,7 +3,7 @@
  *
  * Each one wraps a curated query (ADR-005). The model chooses which to call
  * and with what arguments; it never writes the Cypher, and none of these can
- * express a mutation - the brief's hard rule is enforced by construction
+ * express a mutation - the read-only rule is enforced by construction
  * rather than by instruction.
  *
  * Descriptions matter more than they look. They are the only thing the model

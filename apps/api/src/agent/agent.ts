@@ -26,7 +26,7 @@
  *
  * Everything the loop does is emitted as an event, so the UI can show which
  * tool is running rather than a spinner - "what is the agent doing while it
- * works" is one of the things the brief asks for, and a tool name is a far
+ * works" is one of the things users need, and a tool name is a far
  * better answer than "Thinking...".
  */
 

@@ -1,7 +1,7 @@
 /**
  * AWS Resource Explorer, used as an optional fast path.
  *
- * The brief suggests Resource Explorer for pulling a bulk inventory across
+ * Resource Explorer is suggested for pulling a bulk inventory across
  * services and regions in a few calls, and on a large real account it is the
  * right first move. Two things constrain how far it can be taken:
  *

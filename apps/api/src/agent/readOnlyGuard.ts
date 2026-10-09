@@ -15,7 +15,7 @@
  * security analysis: a property that must hold is computed in code, and the
  * model is left to do the part it is good at. The agent was never *able* to
  * make a change - no tool can express a mutation - but a user learns that from
- * what the answer says, and "the agent cannot write" is a claim the brief asks
+ * what the answer says, and "the agent cannot write" is a claim this project makes
  * us to make.
  *
  * Deliberately conservative. It fires on a request *directed at the agent*, not

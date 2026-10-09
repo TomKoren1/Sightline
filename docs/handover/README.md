@@ -6,7 +6,7 @@ the codebase. They answer different questions and are deliberately not merged.
 **`sightline-handover.pdf`** — the project: what was asked and built,
 the architecture, the fifteen decisions, all fifty logged problems with
 their lessons, the recurring failure patterns, the known limits, and likely
-interview questions with answers grounded in the code.
+likely questions with answers grounded in the code.
 
 **`sightline-codebase-tour.pdf`** — the code: what every source file is
 for, the four request paths traced hop by hop with line numbers, the data model,

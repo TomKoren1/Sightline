@@ -1,4 +1,4 @@
-# Local development stack for the Sightline engineering assignment.
+# Local development stack for Sightline.
 #
 #   docker compose up -d                  dependencies only (the documented path)
 #   docker compose --profile app up -d    the whole thing, including the app

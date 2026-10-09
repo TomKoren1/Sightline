@@ -14,7 +14,7 @@
  *
  * So the cheapest possible check: every command the documentation tells you to run
  * must exist, and the numbers it quotes must match what is actually there. "The
- * documentation" is the README plus `docs/SETUP.md` and `docs/ASSIGNMENT.md`,
+ * documentation" is the README plus `docs/SETUP.md` and `docs/ROADMAP.md`,
  * since the detail was moved there and a guard reading one file could be defeated
  * by moving a line.
  * These would look eccentric in most repositories. Here they are cheaper than
@@ -33,13 +33,13 @@ const readJson = (path: string) => JSON.parse(read(path)) as { scripts?: Record<
  *
  * The README was deliberately shortened to read like a product page: the
  * configuration detail, the command table and the troubleshooting moved into
- * `docs/SETUP.md`, and the engineering write-up into `docs/ASSIGNMENT.md`. These
+ * `docs/SETUP.md`, and the limits and roadmap into `docs/ROADMAP.md`. These
  * guards exist to stop documented commands and quoted numbers from rotting, and
  * which of the three files a given fact sits in does not change that — so all
  * three are checked, and moving a line between them is not a way to escape the
  * check.
  */
-const readme = ["README.md", "docs/SETUP.md", "docs/ASSIGNMENT.md"].map(read).join("\n\n");
+const readme = ["README.md", "docs/SETUP.md", "docs/ROADMAP.md"].map(read).join("\n\n");
 
 const scripts = {
   root: readJson("package.json").scripts ?? {},
@@ -140,17 +140,18 @@ describe("the numbers the README quotes are true", () => {
     const tools = read("apps/api/src/agent/tools.ts");
     // Tool definitions only: the dispatch switch repeats every name.
     const actual = (tools.match(/^ {4}name: "/gm) ?? []).length;
-    expect(quoted(/\*\*([a-z-]+) curated, parameterised tools\*\*/)).toBe(actual);
+    // The README's wording, since this claim used to live in a file that is gone.
+    expect(quoted(/free-form Cypher\.\*\* ([A-Za-z-]+) tools/)).toBe(actual);
   });
 
   it("states the real number of tier-2 eval cases", () => {
     const actual = (read("apps/api/src/evals/cases.ts").match(/^ {4}id: "/gm) ?? []).length;
-    expect(quoted(/\*\*Tier 2 — answer quality\.\*\* ([A-Za-z-]+) cases/)).toBe(actual);
+    expect(quoted(/\*\*([a-z-]+) cases\*\* against the live agent/)).toBe(actual);
   });
 
   it("states the real number of tier-1 checks", () => {
     const actual = (read("apps/api/src/evals/checks.ts").match(/^ {4}id: "/gm) ?? []).length;
-    expect(quoted(/on every commit\. ([A-Za-z-]+)\s*\n?checks/)).toBe(actual);
+    expect(quoted(/\*\*([a-z-]+) ground-truth checks\*\*/)).toBe(actual);
   });
 
   /**

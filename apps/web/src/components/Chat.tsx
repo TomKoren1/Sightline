@@ -3,7 +3,7 @@
  *
  * Two things here are deliberate. While the agent works, the panel names the
  * tool that is running rather than showing a spinner - "what is the agent
- * doing" is a question the brief asks us to answer, and a tool name answers it
+ * doing" is a question users ask, and a tool name answers it
  * honestly. And every answer carries an expandable trail of the tool calls
  * behind it, because a DevOps engineer about to act on a finding should be
  * able to see where it came from.

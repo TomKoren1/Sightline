@@ -68,7 +68,7 @@ internet on the left, what it can touch to the right, the database at the end.
   property dump.
 - `analytics-db` is _not_ red, even though it is flagged publicly accessible.
 
-### Ask the agent the question the brief asks
+### Ask the agent the question this exists for
 
 > What can reach the production RDS instance?
 
@@ -324,7 +324,7 @@ get worse.
 
 **"Why not text-to-Cypher? It's more flexible."**
 Safety, correctness, cost and auditability. A curated tool cannot express a
-mutation, which is the brief's hard rule. Hand-written path queries are
+mutation, which is the read-only rule. Hand-written path queries are
 reviewable and identical every run. And because each tool records exactly which
 ARNs it returned, citations can be validated — which text-to-Cypher makes much
 harder. The escape hatch exists for genuinely novel questions, behind a
@@ -360,7 +360,7 @@ object out of a bucket, and granting it turns a compromise of Sightline's accoun
 into a compromise of every customer's _data_. `sqs:ReceiveMessage` is the
 sharpest detail: it is not read-only even literally, because receiving a
 message starts its visibility timeout and can hide it from the consumer that
-should have processed it — a scanner could breach the brief's hard rule through
+should have processed it — a scanner could breach the read-only rule through
 a permission nobody thinks of as a write.
 
 **"Why moto rather than a real account?"**

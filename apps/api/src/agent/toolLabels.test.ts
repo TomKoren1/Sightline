@@ -2,7 +2,7 @@
  * Every tool the model can call has user-facing copy.
  *
  * The chat header answers "what is the agent doing" by naming the running tool
- * in plain language, which the brief asks for and a spinner does not do. That
+ * in plain language, which users need and a spinner does not do. That
  * only holds if the label map keeps up with the tool library, and it had already
  * fallen behind: `find_unprotected_buckets` (ADR-012) and `suggest_remediation`
  * (ADR-014) were both added after the map was written, so both fell through to

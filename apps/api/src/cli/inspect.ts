@@ -81,7 +81,7 @@ for (const edge of canReach.filter((e) => e.to === db?.arn)) {
   );
 }
 
-// Full paths, not just the last hop. This is the question the brief asks, and
+// Full paths, not just the last hop. This is the question, and
 // the answer is only useful if it shows how an attacker would actually arrive.
 if (db) {
   const outgoing = new Map<string, string[]>();

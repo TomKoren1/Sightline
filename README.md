@@ -84,8 +84,8 @@ Full detail, and how to do it by hand: [`docs/SETUP.md`](docs/SETUP.md).
 
 ## What is in the mock account
 
-The brief asks for mock data whose questions have non-obvious answers, so the
-account is built around traps that defeat a naive lookup:
+The mock account is built around traps that defeat a naive lookup, because a
+fixture whose questions have obvious answers proves nothing:
 
 |                                         |                                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
 | --------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -140,7 +140,7 @@ cites, with traps that a tool reading flags rather than evaluating them would fa
 into. The same checks run inside the product, under **Trust**.
 
 The reasoning behind each of these is in
-[**docs/ASSIGNMENT.md**](docs/ASSIGNMENT.md) and the eighteen ADRs in
+the eighteen ADRs in
 [**docs/DECISIONS.md**](docs/DECISIONS.md).
 
 ## Repository layout
@@ -178,10 +178,9 @@ docs/               decisions, engineering log, commit log, walkthrough
   moto account-namespacing trap, two capability gaps in the mock recorded as
   gaps rather than hidden, and an SDK type that degraded to `any` behind
   `skipLibCheck`.
-- **[docs/ASSIGNMENT.md](docs/ASSIGNMENT.md)** — the engineering write-up: what the
-  brief asked for and where each piece lives, the storage model, how the agent
-  works, how I know the answers are right, what breaks first at scale, and what I
-  would build next.
+- **[docs/ROADMAP.md](docs/ROADMAP.md)** — where this breaks as an account gets
+  large, in the order it would actually happen, and what I would build next.
+  Every limit is one I can point at in the code.
 - **[docs/SETUP.md](docs/SETUP.md)** — configuration, the host development path,
   connecting AWS by hand, troubleshooting and every command. Nothing in it is
   needed to run the project.

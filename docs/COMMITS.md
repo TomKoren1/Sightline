@@ -19,7 +19,7 @@ documented in engineering log #2.
 
 `.env.example` grew an `AWS_MODE` switch (`mock` | `real`) and an Anthropic
 section. The AWS onboarding variables are deliberately unchanged in shape from
-the ones the brief shipped: the same role ARN and external id drive both mock
+the ones the original template shipped: the same role ARN and external id drive both mock
 and real runs.
 
 npm workspaces rather than pnpm, so a reviewer needs nothing beyond the Node
@@ -50,7 +50,7 @@ computed fact rather than something a code path remembers to set.
 
 A three-region fictional estate built through the real AWS SDK against moto.
 
-The brief asks for mock data whose questions have non-obvious answers, so every
+The goal is mock data whose questions have non-obvious answers, so every
 element is chosen to defeat a naive lookup:
 
 - `northwind-public-assets` is public via bucket policy.
@@ -274,14 +274,14 @@ the first thing worth knowing when an agent answer looks wrong.
 
 ### `feat(api): the agent - tools, Cypher guard, citation validation`
 
-Part 2 of the brief.
+Part 2.
 
 **`cypherGuard.ts`** guards the raw-Cypher escape hatch: an allowlist of
 opening clauses plus a denylist of write keywords, applied _after_ string
 literals and comments are stripped — so a node named `"DELETE ME"` cannot trip
 it, and more importantly a write cannot hide inside a string. It is lexical,
 not a parser, and deliberately strict: a wrongly-rejected query costs one
-retry, a wrongly-accepted one breaks the brief's hard rule. It is the second
+retry, a wrongly-accepted one breaks the read-only rule. It is the second
 of two layers; the query also runs inside a Neo4j read transaction.
 
 **`tools.ts`** defines thirteen tools over the curated queries. The
@@ -342,7 +342,7 @@ empty graph, which produces confident nonsense.
 
 ---
 
-### `feat(web): graph, chat and the UX states the brief asks for`
+### `feat(web): graph, chat and the UX states`
 
 React, React Flow, TanStack Query, Tailwind v4.
 
@@ -358,7 +358,7 @@ nodes highlight, everything else dims, and the view re-frames onto them. The
 findings sidebar highlights through the same mechanism, so a standing finding
 and an agent answer feel like one feature rather than two.
 
-Every state the brief lists is handled explicitly: empty (never scanned), live
+Every state is handled explicitly: empty (never scanned), live
 scan progress with a per-service plan rendered up front, stale (amber, past an
 hour), **partial failure** (a loud banner naming each failed service, region
 and reason), graph load error with retry, and an agent-thinking state that
@@ -401,15 +401,15 @@ cost money and need a key.
 
 ### `docs: README design note, walkthrough, and the IAM analysis`
 
-The README answers the brief's five design-note questions directly, including
+The README answers the five design questions directly, including
 the two that are easy to hand-wave: how I know the answers are right (two eval
 tiers, and what neither catches), and what breaks first at scale (five limits
 in the order they would actually happen, each with the fix and why the
 groundwork for it already exists).
 
-It also takes up the brief's invitation to say what could have been clearer,
+It also takes up the invitation to say what could have been clearer,
 leading with the `ReadOnlyAccess` analysis and the `sqs:ReceiveMessage` detail
-— a permission that would let a scanner breach the brief's own hard rule
+— a permission that would let a scanner breach the read-only rule
 without anyone calling it a write.
 
 `docs/WALKTHROUGH.md` is a tour of the running system: a seven-minute demo
@@ -479,7 +479,7 @@ volume"_ with the volume's details, its cost, a warning that it was tagged
 `production`, and the exact CLI command — safe, genuinely useful, and never
 saying that Sightline holds no ability to touch the account.
 
-That matters because the brief's hard rule is one this project _claims_, and
+That matters because the read-only rule is one this project _claims_, and
 every reply to a change request is where a user tests the claim. An answer that
 quietly declines by handing over a command reads like a missing feature.
 
@@ -512,7 +512,7 @@ being read. Eight unit tests pin both halves.
 
 ### `feat(api): implement the Resource Explorer fast path, and close an eval gap`
 
-Both changes came from auditing the repository against the original brief and
+Both changes came from auditing the repository against its own goals and
 against its own README, rather than from a failing test.
 
 **The Resource Explorer fast path did not exist.** The README claimed it was
@@ -533,7 +533,7 @@ erroring. Verified live: against moto it prints `endpoint does not implement
 Resource Explorer, using per-service enumeration` and the scan proceeds intact.
 
 **"What changed since the last scan?" had no eval case** — one of the six
-questions the brief names by example. The capability worked; nothing verified
+headline questions. The capability worked; nothing verified
 it. Added, and it asserts the agent reaches for `diff_scans` rather than
 answering from current state, without pinning specific resources since what
 changed depends on the environment.
@@ -976,9 +976,9 @@ restoring the cap to 100 and watching four cases go red.
 
 248 unit tests.
 
-### `docs: map the brief's seven items, and fix the UX claim that turned out to be false`
+### `docs: map the seven goals, and fix the UX claim that turned out to be false`
 
-The README argued its design decisions well but left a grader doing clerical
+The README argued its design decisions well but left a reader doing clerical
 work. The definition of done asks that the seven numbered items in "The problem"
 are addressed; nothing in the README said where each one lived. And item 7 —
 communicate scan progress, freshness, refresh, empty, partial-failure and
@@ -1001,7 +1001,7 @@ and `agent/toolLabels.test.ts` now compares definitions to labels in both
 directions so the next added tool cannot ship unlabelled. Engineering log #38.
 
 Also in here: the suggested **Deep Agents** framework is now named and argued
-with rather than silently passed over — the brief offers it, and "no framework"
+with rather than silently passed over — the pattern is well known, and "no framework"
 is a more convincing answer when it is visibly a choice. And `render.js` becomes
 `render.cjs`, because the repository root declares `"type": "module"` and the
 handover README's own regeneration command failed with

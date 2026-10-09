@@ -1,7 +1,7 @@
 /**
  * The fictional customer account that the scanner discovers.
  *
- * The brief asks for mock data "interesting enough that the agent's questions
+ * The mock data has to be "interesting enough that the agent's questions
  * have non-obvious answers". Every element below exists to make some question
  * require reasoning rather than a field lookup. The traps are deliberate:
  *
