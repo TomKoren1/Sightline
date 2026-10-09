@@ -9,7 +9,7 @@
 
 import { randomUUID } from "node:crypto";
 import { Inject, Injectable, NotFoundException } from "@nestjs/common";
-import { rollUpStatus, type ScanEvent } from "@daveio/shared";
+import { rollUpStatus, type ScanEvent } from "@sightline/shared";
 
 import { callCounter } from "../aws/clients.js";
 import { projectGraph } from "../db/neo4j.js";

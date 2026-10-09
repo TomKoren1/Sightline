@@ -248,7 +248,7 @@ export const TOOL_DEFINITIONS: ToolDefinition[] = [
       "These are computed from the same evidence as the verdict, not written by you - quote them " +
       "verbatim rather than composing your own commands, and always pass on the `caution`, " +
       "because a command without its blast radius is the dangerous half of the advice. " +
-      "dave.io cannot run any of them; say so if the user seems to expect otherwise.",
+      "Sightline cannot run any of them; say so if the user seems to expect otherwise.",
     input_schema: {
       type: "object",
       properties: { arnOrName: { type: "string" } },
@@ -305,7 +305,7 @@ export async function runTool(name: string, input: ToolInput): Promise<ToolResul
         note:
           remediations.length === 0
             ? `${row.name} has no findings that this can suggest a fix for. Say so plainly rather than inventing advice.`
-            : "dave.io cannot apply these. Present them as commands for the user to run, with the caution attached to each.",
+            : "Sightline cannot apply these. Present them as commands for the user to run, with the caution attached to each.",
       });
     }
 

@@ -10,7 +10,7 @@
  */
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { AgentEvent, Citation, ToolCallTrace } from "@daveio/shared";
+import type { AgentEvent, Citation, ToolCallTrace } from "@sightline/shared";
 
 import { askAgent } from "../api.js";
 
@@ -166,7 +166,7 @@ export function Chat({ ready, onCitations }: ChatProps) {
     <div className="flex h-full flex-col bg-ink-900">
       <header className="flex items-center justify-between border-b border-ink-800 px-3 py-2">
         <h2 className="text-[11px] font-semibold uppercase tracking-wider text-ink-400">
-          Ask Dave
+          Ask Sightline
         </h2>
         {messages.length > 0 && (
           <button

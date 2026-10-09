@@ -1,5 +1,5 @@
 # =============================================================================
-# dave.io read-only inventory role.
+# Sightline read-only inventory role.
 #
 # Everything below the comment block is the template. Everything inside it is
 # reasoning, and it lives in `#` comments rather than in `Description:` for a
@@ -31,9 +31,9 @@
 #    returns a presigned URL to the function's source), `kinesis:GetRecords`
 #    and more.
 #
-#    dave.io needs to know that a bucket exists, who can reach it, and how it
+#    Sightline needs to know that a bucket exists, who can reach it, and how it
 #    is configured. It never needs to read an object out of it. Granting the
-#    ability to do so means a compromise of dave.io's platform account becomes
+#    ability to do so means a compromise of Sightline's platform account becomes
 #    a compromise of every customer's *data*, not just their inventory. That
 #    is a materially different blast radius, and it is not one the product
 #    needs to accept.
@@ -43,22 +43,22 @@
 #    hiding it from the consumer that should have processed it. A scanner
 #    holding that permission can disrupt a production queue by accident.
 #
-# 2. Trusting `:root` trusts every principal in dave.io's account.
+# 2. Trusting `:root` trusts every principal in Sightline's account.
 #
-#    `Principal: arn:aws:iam::<dave.io>:root` does not mean "the root user". It
+#    `Principal: arn:aws:iam::<Sightline>:root` does not mean "the root user". It
 #    means "any principal in that account that IAM permits to call AssumeRole"
 #    - every role, every user, every CI job. The ExternalId condition prevents
-#    a third party from tricking dave.io into using its access (the
+#    a third party from tricking Sightline into using its access (the
 #    confused-deputy problem it is designed for), but it does nothing to limit
 #    which *internal* principal can assume the role.
 #
 #    This version names the scanner role directly, so a compromise of some
-#    unrelated workload inside dave.io does not reach customer accounts.
+#    unrelated workload inside Sightline does not reach customer accounts.
 #
 # 3. There was no way for a customer to attribute activity to a person.
 #
 #    Adding `sts:SourceIdentity` to the trust policy means the customer's own
-#    CloudTrail records which dave.io operator or system triggered a scan, and
+#    CloudTrail records which Sightline operator or system triggered a scan, and
 #    that value cannot be changed for the life of the session. Customers
 #    auditing a third party with standing access should not have to take our
 #    word for who did what.
@@ -69,13 +69,13 @@
 #
 #   aws cloudformation deploy \
 #     --template-file infra/readonly-role.yaml \
-#     --stack-name daveio-readonly \
+#     --stack-name sightline-readonly \
 #     --capabilities CAPABILITY_NAMED_IAM \
 #     --parameter-overrides \
-#         DaveIoScannerRoleArn=arn:aws:iam::123456789012:role/DaveIoScanner \
+#         SightlineScannerRoleArn=arn:aws:iam::123456789012:role/SightlineScanner \
 #         ExternalId=<the value from your onboarding email>
 #
-# Then send dave.io the RoleArn output. Nothing else is required.
+# Then send Sightline the RoleArn output. Nothing else is required.
 #
 # Note the `iam` in that ARN. `aws sts get-caller-identity` reports the
 # *session* you are using, so it returns an `arn:aws:sts::...` ARN - either
@@ -86,7 +86,7 @@
 #
 # TWO ROLES ARE INVOLVED AND CONFUSING THEM IS THE USUAL MISTAKE:
 #
-#   DaveIoScannerRoleArn  an INPUT. The principal permitted to assume this
+#   SightlineScannerRoleArn  an INPUT. The principal permitted to assume this
 #                         role. It already exists; this template does not
 #                         create it.
 #
@@ -101,7 +101,7 @@
 # refuses to start on one rather than failing later with a vaguer error.
 #
 # Running the project against your own account, both live in one account: the
-# scanner principal is your own identity, and the created DaveIoReadOnlyRole is
+# scanner principal is your own identity, and the created SightlineReadOnlyRole is
 # what the scanner assumes.
 # =============================================================================
 
@@ -110,24 +110,24 @@ AWSTemplateFormatVersion: "2010-09-09"
 # Kept short deliberately: CloudFormation rejects a Description over 1024
 # characters. The full reasoning is in the comment block above.
 Description: >
-  dave.io read-only inventory role. Grants metadata and configuration reads for
+  Sightline read-only inventory role. Grants metadata and configuration reads for
   inventory, visualisation and security analysis; grants no writes and, by
   default, explicitly denies reading the contents of objects, records,
   parameters and secrets. Trusts one named principal rather than an account
   root. Reasoning: docs/DECISIONS.md (ADR-007) and the comments in this file.
 
 Parameters:
-  DaveIoScannerRoleArn:
+  SightlineScannerRoleArn:
     Type: String
     Description: >
       The ARN of the principal allowed to assume this role. Deliberately not an
       account id: this role should be assumable by one principal, not by
       everything in the calling account.
 
-      In production that is dave.io's scanner role, e.g.
-      arn:aws:iam::123456789012:role/DaveIoScanner.
+      In production that is Sightline's scanner role, e.g.
+      arn:aws:iam::123456789012:role/SightlineScanner.
 
-      Running the project against your own account there is no separate dave.io
+      Running the project against your own account there is no separate Sightline
       account, so this is whatever identity the backend runs as. A user ARN is
       accepted for exactly this case - on a workstation the identity is commonly
       an IAM user rather than a role.
@@ -145,8 +145,8 @@ Parameters:
   ExternalId:
     Type: String
     Description: >
-      A unique, per-customer secret shared between dave.io and this account.
-      dave.io issues this at onboarding. Treat it as a credential.
+      A unique, per-customer secret shared between Sightline and this account.
+      Sightline issues this at onboarding. Treat it as a credential.
     NoEcho: true
     MinLength: 16
     MaxLength: 128
@@ -154,12 +154,12 @@ Parameters:
   RoleName:
     Type: String
     Description: Name of the IAM role to create.
-    Default: "DaveIoReadOnlyRole"
+    Default: "SightlineReadOnlyRole"
 
   AllowDataPlaneReads:
     Type: String
     Description: >
-      Leave as "false". Set to "true" only if a specific dave.io feature is
+      Leave as "false". Set to "true" only if a specific Sightline feature is
       agreed to require reading object or record contents, and only for as
       long as that feature is in use.
     Default: "false"
@@ -169,12 +169,12 @@ Conditions:
   DenyDataPlane: !Equals [!Ref AllowDataPlaneReads, "false"]
 
 Resources:
-  DaveIoReadOnlyRole:
+  SightlineReadOnlyRole:
     Type: AWS::IAM::Role
     Properties:
       RoleName: !Ref RoleName
       Description: >
-        Allows dave.io to read AWS resource metadata and configuration for
+        Allows Sightline to read AWS resource metadata and configuration for
         inventory, visualisation and security analysis. Grants no write
         permissions and, by default, no access to the contents of objects,
         records, parameters or secrets.
@@ -186,11 +186,11 @@ Resources:
       AssumeRolePolicyDocument:
         Version: "2012-10-17"
         Statement:
-          - Sid: AllowDaveIoScannerToAssume
+          - Sid: AllowSightlineScannerToAssume
             Effect: Allow
             Principal:
               # The scanner role specifically - not the whole account.
-              AWS: !Ref DaveIoScannerRoleArn
+              AWS: !Ref SightlineScannerRoleArn
             Action: sts:AssumeRole
             Condition:
               StringEquals:
@@ -205,10 +205,10 @@ Resources:
                 # guarantee.
                 sts:SourceIdentity: "false"
 
-          - Sid: AllowDaveIoScannerToSetSourceIdentity
+          - Sid: AllowSightlineScannerToSetSourceIdentity
             Effect: Allow
             Principal:
-              AWS: !Ref DaveIoScannerRoleArn
+              AWS: !Ref SightlineScannerRoleArn
             Action: sts:SetSourceIdentity
             # No sts:ExternalId condition here. That key is only in the request
             # context of sts:AssumeRole, so on this action it is absent and a
@@ -218,15 +218,15 @@ Resources:
             # AssumeRole, which the statement above gates on it.
             Condition:
               StringLike:
-                # Attributes every session to a named dave.io operator or
+                # Attributes every session to a named Sightline operator or
                 # system, immutably, in this account's own CloudTrail.
                 #
                 # Hyphen, not colon. AWS restricts SourceIdentity to
                 # alphanumerics, underscore and +=,.@- so a colon is rejected
-                # outright: `daveio:*` was a pattern no legal value could ever
+                # outright: `sightline:*` was a pattern no legal value could ever
                 # match, and nothing caught it because nothing was sending a
                 # SourceIdentity at all (engineering log #42).
-                sts:SourceIdentity: "daveio-*"
+                sts:SourceIdentity: "sightline-*"
 
       ManagedPolicyArns:
         # SecurityAudit grants the configuration and policy reads that security
@@ -244,7 +244,7 @@ Resources:
         - arn:aws:iam::aws:policy/job-function/ViewOnlyAccess
 
       Policies:
-        - PolicyName: DaveIoInventoryGaps
+        - PolicyName: SightlineInventoryGaps
           PolicyDocument:
             Version: "2012-10-17"
             Statement:
@@ -267,13 +267,13 @@ Resources:
 
         - !If
           - DenyDataPlane
-          - PolicyName: DaveIoDenyDataPlaneReads
+          - PolicyName: SightlineDenyDataPlaneReads
             PolicyDocument:
               Version: "2012-10-17"
               Statement:
                 # An explicit Deny cannot be overridden by any Allow, including
                 # one a future managed-policy update might introduce. This is
-                # the load-bearing control: it is what makes "dave.io can see
+                # the load-bearing control: it is what makes "Sightline can see
                 # your infrastructure but not your data" a guarantee rather
                 # than a promise about which policies we attached today.
                 - Sid: NeverReadCustomerData
@@ -314,7 +314,7 @@ Resources:
 
       Tags:
         - Key: ManagedBy
-          Value: dave.io
+          Value: Sightline
         - Key: Purpose
           Value: read-only-inventory
         - Key: DataAccess
@@ -322,8 +322,8 @@ Resources:
 
 Outputs:
   RoleArn:
-    Description: ARN of the role dave.io should assume. Share this with onboarding.
-    Value: !GetAtt DaveIoReadOnlyRole.Arn
+    Description: ARN of the role Sightline should assume. Share this with onboarding.
+    Value: !GetAtt SightlineReadOnlyRole.Arn
     Export:
       Name: !Sub "${AWS::StackName}-RoleArn"
 
@@ -338,6 +338,6 @@ Outputs:
     Description: Confirm the deny actually works, from this account.
     Value: !Sub >-
       aws iam simulate-principal-policy
-      --policy-source-arn ${DaveIoReadOnlyRole.Arn}
+      --policy-source-arn ${SightlineReadOnlyRole.Arn}
       --action-names s3:GetObject s3:ListBucket
       --query 'EvaluationResults[].{Action:EvalActionName,Decision:EvalDecision}'

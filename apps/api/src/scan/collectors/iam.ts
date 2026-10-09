@@ -30,7 +30,7 @@ import {
   GetPolicyCommand,
   GetPolicyVersionCommand,
 } from "@aws-sdk/client-iam";
-import type { Relationship, Resource } from "@daveio/shared";
+import type { Relationship, Resource } from "@sightline/shared";
 
 import { iamClient } from "../../aws/clients.js";
 import { iamArn, tagsToRecord } from "../../aws/arns.js";

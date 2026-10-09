@@ -26,7 +26,7 @@
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { useState } from "react";
 
-import { formatDeployCommand, readOnlyRoleArn } from "@daveio/shared";
+import { formatDeployCommand, readOnlyRoleArn } from "@sightline/shared";
 
 import { api, type Connection, type ConnectionTest } from "../api.js";
 import { Copyable } from "./Copyable.js";
@@ -163,7 +163,7 @@ export function ConnectionGuide() {
    * The principal to trust, converted from the session ARN on the server.
    *
    * Every unknown segment of the fallback is marked. It was
-   * `arn:aws:iam::<account>:role/DaveIoScanner`, which marks one blank and hides
+   * `arn:aws:iam::<account>:role/SightlineScanner`, which marks one blank and hides
    * two — a reader substitutes the account id and leaves a role name that does
    * not exist, and CloudFormation answers `Invalid principal in policy` without
    * saying which half was wrong (engineering log #46).
@@ -263,9 +263,9 @@ export function ConnectionGuide() {
           ▸ Or do it by hand — five steps, about five minutes
         </summary>
         <p className="mt-2 text-[12px] leading-relaxed text-ink-300">
-          Connecting a real account takes five steps and about five minutes. dave.io never receives
-          your AWS keys — it assumes a role you create, in your account, which you can delete at any
-          time.
+          Connecting a real account takes five steps and about five minutes. Sightline never
+          receives your AWS keys — it assumes a role you create, in your account, which you can
+          delete at any time.
         </p>
 
         <div className="mt-3 space-y-3.5">
@@ -307,7 +307,7 @@ export function ConnectionGuide() {
             <Why>
               <p>
                 Those two policies are for <em>you</em>, to create the role once. They are not what
-                dave.io ends up with — the role this creates grants{" "}
+                Sightline ends up with — the role this creates grants{" "}
                 <strong className="text-ink-300">SecurityAudit</strong> and{" "}
                 <strong className="text-ink-300">ViewOnlyAccess</strong> plus an explicit{" "}
                 <strong className="text-ink-300">Deny</strong> on reading your data: no{" "}
@@ -326,7 +326,7 @@ export function ConnectionGuide() {
               <p>
                 Read <code className="text-ink-300">infra/readonly-role.yaml</code> before deploying
                 it. ADR-007 in <code>docs/DECISIONS.md</code> explains every change made to the
-                template dave.io supplied.
+                template Sightline supplied.
               </p>
             </Why>
           </Step>
@@ -341,12 +341,12 @@ export function ConnectionGuide() {
               rows={[
                 principalUnresolved
                   ? {
-                      name: "DaveIoScannerRoleArn",
+                      name: "SightlineScannerRoleArn",
                       kind: "replace" as const,
                       note: "NOT filled in — every angle-bracketed part is a placeholder, the role name included. Use the Arn from `aws sts get-caller-identity`, converting assumed-role/Foo/session to role/Foo.",
                     }
                   : {
-                      name: "DaveIoScannerRoleArn",
+                      name: "SightlineScannerRoleArn",
                       kind: "filled" as const,
                       note: "the identity this backend runs as. Not the role being created — see below.",
                     },
@@ -373,10 +373,10 @@ export function ConnectionGuide() {
             )}
             <Why label="Two roles are involved, and confusing them is the usual mistake">
               <p>
-                <code>DaveIoScannerRoleArn</code> is an <em>input</em> — the principal permitted to
-                assume the new role. The stack then <em>creates</em> a different role,{" "}
-                <code>DaveIoReadOnlyRole</code>, and its <code>RoleArn</code> output is what step 3
-                wants. Pointing <code>AWS_TARGET_ROLE_ARN</code> at the scanner principal instead
+                <code>SightlineScannerRoleArn</code> is an <em>input</em> — the principal permitted
+                to assume the new role. The stack then <em>creates</em> a different role,{" "}
+                <code>SightlineReadOnlyRole</code>, and its <code>RoleArn</code> output is what step
+                3 wants. Pointing <code>AWS_TARGET_ROLE_ARN</code> at the scanner principal instead
                 gives <code>AccessDenied</code>, or <code>NoSuchEntity</code> if it does not exist.
               </p>
               {c.scannerPrincipalConverted && c.callerIdentity && (
@@ -392,11 +392,11 @@ export function ConnectionGuide() {
               <p>
                 The ExternalId is a secret unique to you. The trust policy requires it, so knowing
                 the role&apos;s ARN is not enough to assume it — this is what stops a third party
-                tricking dave.io into using its access against your account.
+                tricking Sightline into using its access against your account.
               </p>
               <p>
                 The trust policy names <em>one principal</em>, not the whole account. In production
-                dave.io would host this template at a stable URL and give you a one-click
+                Sightline would host this template at a stable URL and give you a one-click
                 CloudFormation link; the CLI form is used here because the template lives in this
                 repository.
               </p>
@@ -536,7 +536,7 @@ export function ConnectionGuide() {
             </p>
             <p>
               <strong className="text-ink-300">To revoke:</strong> delete the CloudFormation stack.
-              dave.io holds no credentials of yours, so removing the role removes all access
+              Sightline holds no credentials of yours, so removing the role removes all access
               immediately.
             </p>
           </div>

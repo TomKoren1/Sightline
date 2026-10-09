@@ -8,7 +8,7 @@
  */
 
 import { paginateListFunctions } from "@aws-sdk/client-lambda";
-import type { Relationship, Resource } from "@daveio/shared";
+import type { Relationship, Resource } from "@sightline/shared";
 
 import { lambdaClient } from "../../aws/clients.js";
 import { ec2Arn, lambdaArn, regionArn } from "../../aws/arns.js";

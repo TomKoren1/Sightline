@@ -15,7 +15,7 @@
  */
 
 import { describe, expect, it } from "vitest";
-import { shellQuote } from "@daveio/shared";
+import { shellQuote } from "@sightline/shared";
 
 import { remediationsFor, type RemediationInput } from "./remediation.js";
 

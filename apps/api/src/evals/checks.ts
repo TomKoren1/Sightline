@@ -15,8 +15,8 @@
  * its evidence. Nothing here calls AWS, so running them is free and instant.
  */
 
-import { GROUND_TRUTH } from "@daveio/mock-aws";
-import { INTERNET_ARN, type Relationship, type Resource } from "@daveio/shared";
+import { GROUND_TRUTH } from "@sightline/mock-aws";
+import { INTERNET_ARN, type Relationship, type Resource } from "@sightline/shared";
 
 export interface CheckResult {
   id: string;

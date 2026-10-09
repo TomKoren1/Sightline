@@ -14,7 +14,7 @@
  */
 
 import { describe, expect, it } from "vitest";
-import type { Resource } from "@daveio/shared";
+import type { Resource } from "@sightline/shared";
 
 import { analyseIdleResources } from "./idle.js";
 

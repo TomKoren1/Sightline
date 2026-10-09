@@ -22,7 +22,7 @@ import {
   RESOURCE_KINDS,
   type Relationship,
   type Resource,
-} from "@daveio/shared";
+} from "@sightline/shared";
 
 import { cfg } from "../config.js";
 

@@ -20,7 +20,7 @@
  */
 
 /** The CloudFormation stack the customer deploys. */
-export const STACK_NAME = "daveio-readonly";
+export const STACK_NAME = "sightline-readonly";
 
 /**
  * The role the stack creates, matching `RoleName`'s default in
@@ -28,7 +28,7 @@ export const STACK_NAME = "daveio-readonly";
  * means the reader configures a role that does not exist and the connection test
  * reports `NoSuchEntity` (engineering log #46).
  */
-export const READ_ONLY_ROLE_NAME = "DaveIoReadOnlyRole";
+export const READ_ONLY_ROLE_NAME = "SightlineReadOnlyRole";
 
 /** Where the template lives, relative to the repository root. */
 export const TEMPLATE_PATH = "infra/readonly-role.yaml";
@@ -38,7 +38,7 @@ export const TEMPLATE_PATH = "infra/readonly-role.yaml";
  * sends. Hyphen, not colon: AWS rejects a colon in a SourceIdentity, and the
  * trust policy's `StringLike` has to be satisfiable (engineering log #42).
  */
-export const DAVEIO_PREFIX = "daveio-";
+export const SIGHTLINE_PREFIX = "sightline-";
 
 /** The placeholder `.env.example` ships for the mock's access key. */
 export const MOCK_ACCESS_KEY_PLACEHOLDER = "mock";
@@ -87,7 +87,7 @@ export function deployCommandArgs(input: DeployCommandInput): string[] {
     "--capabilities",
     "CAPABILITY_NAMED_IAM",
     "--parameter-overrides",
-    `DaveIoScannerRoleArn=${input.scannerPrincipalArn}`,
+    `SightlineScannerRoleArn=${input.scannerPrincipalArn}`,
     `ExternalId=${input.externalId}`,
   ];
   if (input.profile) args.push("--profile", input.profile);

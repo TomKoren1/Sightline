@@ -71,8 +71,8 @@ function diagnose(
     const identity = callerIdentity
       ? `\n  This backend is authenticating as ${callerIdentity}. The stack's trust policy has to name exactly that principal, ` +
         "so if it was deployed with a different one, redeploy with " +
-        `DaveIoScannerRoleArn=${callerIdentity}, or give this host credentials for the principal it does name. ` +
-        "Check with: aws iam get-role --role-name DaveIoReadOnlyRole --query 'Role.AssumeRolePolicyDocument'"
+        `SightlineScannerRoleArn=${callerIdentity}, or give this host credentials for the principal it does name. ` +
+        "Check with: aws iam get-role --role-name SightlineReadOnlyRole --query 'Role.AssumeRolePolicyDocument'"
       : "";
 
     /**
@@ -80,7 +80,7 @@ function diagnose(
      *
      * Every AssumeRole sets `sts:SourceIdentity` (ADR-007). A stack deployed
      * before that became mandatory carries `StringLike sts:SourceIdentity:
-     * "daveio:*"` - a pattern no legal value can match, because AWS forbids a
+     * "sightline:*"` - a pattern no legal value can match, because AWS forbids a
      * colon in SourceIdentity - so `sts:SetSourceIdentity` is denied and the
      * whole AssumeRole fails. The denial says nothing about SourceIdentity, and
      * the obvious reading is that the ExternalId or the principal is wrong, so
@@ -88,7 +88,7 @@ function diagnose(
      */
     const sourceIdentityHint =
       "\n  If this role was deployed before SourceIdentity became mandatory, its trust policy still matches " +
-      `"daveio:*" while the scanner now sends "${sourceIdentity()}" - a colon is not legal in a SourceIdentity, ` +
+      `"sightline:*" while the scanner now sends "${sourceIdentity()}" - a colon is not legal in a SourceIdentity, ` +
       "so that condition can never match and the assume is refused. Redeploy the stack from the current " +
       "infra/readonly-role.yaml to fix it; the Connection screen shows the exact command.";
     return {
@@ -260,7 +260,7 @@ export class ConnectionService {
       configuredMode,
       /** Whether a real account is configured at all; the toggle needs it. */
       realAccountConfigured:
-        cfg.AWS_TARGET_ROLE_ARN !== "arn:aws:iam::123456789012:role/DaveIoReadOnlyRole" &&
+        cfg.AWS_TARGET_ROLE_ARN !== "arn:aws:iam::123456789012:role/SightlineReadOnlyRole" &&
         !cfg.AWS_TARGET_ROLE_ARN.includes("000000000000"),
       roleArn: connection.roleArn,
       accountId,
@@ -324,7 +324,7 @@ export class ConnectionService {
    */
   newExternalId() {
     return {
-      externalId: `daveio-${randomBytes(18).toString("base64url")}`,
+      externalId: `sightline-${randomBytes(18).toString("base64url")}`,
       note: "Generated for you to use. It is not stored — put it in the CloudFormation stack and in AWS_EXTERNAL_ID.",
     };
   }

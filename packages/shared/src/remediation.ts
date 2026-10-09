@@ -3,7 +3,7 @@
  *
  * The product tells you exactly what to change and will not change it. That is
  * not a limitation worked around — it is the same position the rest of the
- * system takes, carried to its conclusion. dave.io holds read-only access by
+ * system takes, carried to its conclusion. Sightline holds read-only access by
  * design (ADR-007), the agent cannot express a mutation (ADR-005), and a
  * request to alter the account is refused in code (ADR-009). A remediation is
  * therefore a **document**, not an action: a string an engineer reads, checks

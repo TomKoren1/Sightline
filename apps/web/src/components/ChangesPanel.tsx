@@ -19,7 +19,7 @@ import {
   SIGNIFICANT_CHANGE_FIELDS,
   sortFieldsBySignificance,
   type ResourceDiff,
-} from "@daveio/shared";
+} from "@sightline/shared";
 
 import { api } from "../api.js";
 import { styleFor } from "../kinds.js";

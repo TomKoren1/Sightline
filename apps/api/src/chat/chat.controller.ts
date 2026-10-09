@@ -20,7 +20,7 @@ import {
 } from "@nestjs/common";
 import type { FastifyReply, FastifyRequest } from "fastify";
 import { randomUUID } from "node:crypto";
-import type { AgentEvent } from "@daveio/shared";
+import type { AgentEvent } from "@sightline/shared";
 
 import { askSchema } from "./chat.dto.js";
 import { ChatService } from "./chat.service.js";

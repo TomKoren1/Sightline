@@ -7,10 +7,10 @@
  *     permits alphanumerics, underscore and `+=,.@-` — and nothing else. A colon
  *     is rejected.
  *  2. **The customer's trust policy**, which constrains the value with
- *     `StringLike: sts:SourceIdentity: "daveio-*"` and, via a `Null` condition,
+ *     `StringLike: sts:SourceIdentity: "sightline-*"` and, via a `Null` condition,
  *     requires it to be present at all.
  *
- * The template originally matched `daveio:*` — a pattern **no legal value can
+ * The template originally matched `sightline:*` — a pattern **no legal value can
  * ever satisfy**, because of (1). It went unnoticed because `credentials.ts` was
  * not sending a SourceIdentity, so the condition was never evaluated: a control
  * that was documented in an ADR, described in the onboarding UI, and dead.
@@ -64,7 +64,7 @@ describe("sts:SourceIdentity", () => {
   });
 
   it("uses a prefix that is itself legal for AWS", () => {
-    // Guards the original bug directly. `daveio:` passes a naive "does the code
+    // Guards the original bug directly. `sightline:` passes a naive "does the code
     // start with the template prefix" check while being impossible to send.
     expect(templatePrefix()).toMatch(AWS_ALLOWED);
     expect(SOURCE_IDENTITY_PREFIX).toMatch(AWS_ALLOWED);
@@ -86,7 +86,7 @@ describe("sts:SourceIdentity", () => {
     ["slashes", "a/b\\c"],
     ["only whitespace", "   "],
     ["only illegal characters", "!!!"],
-    ["an email, which is already legal", "alice@dave.io"],
+    ["an email, which is already legal", "alice@Sightline"],
     ["something far too long", "x".repeat(200)],
   ])("sanitises %s into a value AWS accepts", (_label, operator) => {
     const value = toSourceIdentity(operator);

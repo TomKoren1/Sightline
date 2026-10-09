@@ -7,10 +7,10 @@
  * something surprising - it isolates "did we collect it correctly" from "did
  * we project it correctly".
  *
- *   npm run inspect -w @daveio/api
+ *   npm run inspect -w @sightline/api
  */
 
-import { INTERNET_ARN, rollUpStatus } from "@daveio/shared";
+import { INTERNET_ARN, rollUpStatus } from "@sightline/shared";
 import { runScan } from "../scan/runner.js";
 import { callCounter } from "../aws/clients.js";
 

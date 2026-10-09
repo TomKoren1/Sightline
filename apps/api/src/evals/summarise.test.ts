@@ -17,7 +17,7 @@
 
 import { describe, expect, it } from "vitest";
 
-import { DRIFT_EXPECTED_CHECK_FAILURES } from "@daveio/mock-aws";
+import { DRIFT_EXPECTED_CHECK_FAILURES } from "@sightline/mock-aws";
 
 import { CHECKS } from "./checks.js";
 import { summarise, type CaseResult } from "./grade.js";

@@ -31,7 +31,7 @@ import { fileURLToPath } from "node:url";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 
-import { DAVEIO_PREFIX, formatDeployCommand, READ_ONLY_ROLE_NAME } from "@daveio/shared";
+import { SIGHTLINE_PREFIX, formatDeployCommand, READ_ONLY_ROLE_NAME } from "@sightline/shared";
 
 import { assumablePrincipalArn } from "../aws/principal.js";
 import { apiReachable } from "../setup/reachable.js";
@@ -278,7 +278,7 @@ async function apiContainerRunning(): Promise<boolean> {
   try {
     const { stdout } = await exec(
       "docker",
-      ["ps", "--filter", "name=daveio-api", "--format", "{{.Names}}"],
+      ["ps", "--filter", "name=sightline-api", "--format", "{{.Names}}"],
       {
         timeout: 15_000,
       },
@@ -399,7 +399,9 @@ async function runMock(current: string, opts: Options, extra: EnvEdit[]): Promis
 async function runDisconnect(current: string, opts: Options): Promise<void> {
   const region = opts.region ?? readEnvValue(current, "AWS_REGION") ?? "us-east-1";
   console.log(`\n${bold("Disconnect")}`);
-  console.log(`  This deletes the CloudFormation stack ${bold("daveio-readonly")} in ${region},`);
+  console.log(
+    `  This deletes the CloudFormation stack ${bold("sightline-readonly")} in ${region},`,
+  );
   console.log(`  removing the ${READ_ONLY_ROLE_NAME} role and therefore all access.`);
   console.log(dim("  Your inventory data in Postgres and Neo4j is not touched."));
 
@@ -459,7 +461,7 @@ async function runReal(current: string, opts: Options, extra: EnvEdit[]): Promis
   const region = opts.region ?? readEnvValue(current, "AWS_REGION") ?? "us-east-1";
   const { value: externalId, reused } = chooseExternalId(
     readEnvValue(current, "AWS_EXTERNAL_ID"),
-    () => `${DAVEIO_PREFIX}${randomBytes(18).toString("base64url")}`,
+    () => `${SIGHTLINE_PREFIX}${randomBytes(18).toString("base64url")}`,
   );
   const scanRegions = opts.scanRegions ?? readEnvValue(current, "AWS_SCAN_REGIONS") ?? "";
   // Needed before the `.env` edits are built, so the profile mount is part of the
@@ -565,7 +567,7 @@ async function runReal(current: string, opts: Options, extra: EnvEdit[]): Promis
   if (!roleArn) {
     fail(
       "the stack deployed but its RoleArn output could not be read. " +
-        `Check with: aws cloudformation describe-stacks --stack-name daveio-readonly --region ${region}`,
+        `Check with: aws cloudformation describe-stacks --stack-name sightline-readonly --region ${region}`,
     );
   }
   console.log(dim(`  role: ${roleArn}`));
@@ -602,7 +604,7 @@ try {
   const opts = parseArgs(process.argv.slice(2));
 
   console.log(
-    `\n${bold("dave.io setup")}${opts.dryRun ? dim("  (dry run — nothing will change)") : ""}`,
+    `\n${bold("Sightline setup")}${opts.dryRun ? dim("  (dry run — nothing will change)") : ""}`,
   );
 
   if (!existsSync(envPath)) {

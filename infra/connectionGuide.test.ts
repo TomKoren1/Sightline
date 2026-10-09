@@ -50,7 +50,7 @@ describe("connection guide and role template agree", () => {
   /**
    * The command is no longer composed in this component.
    *
-   * It comes from `@daveio/shared`'s `formatDeployCommand`, which
+   * It comes from `@sightline/shared`'s `formatDeployCommand`, which
    * `npm run setup` also executes, and which is checked against the template
    * directly in `packages/shared/src/onboarding.test.ts`. So the assertion here
    * is not "the parameters match the template" - that moved somewhere stronger -
@@ -82,7 +82,9 @@ describe("connection guide and role template agree", () => {
      * so what matters here is that this component does not hardcode it again.
      */
     expect(guide).toContain("readOnlyRoleArn(");
-    expect(copy, "the role name is hardcoded here again").not.toContain("role/DaveIoReadOnlyRole");
+    expect(copy, "the role name is hardcoded here again").not.toContain(
+      "role/SightlineReadOnlyRole",
+    );
   });
 });
 
@@ -170,7 +172,7 @@ describe("the guide's own claims about itself", () => {
      * means something there.
      *
      * Scoped to that block rather than counted across the file: step 3's
-     * `DaveIoScannerRoleArn` is *conditionally* the reader's - marked "filled in"
+     * `SightlineScannerRoleArn` is *conditionally* the reader's - marked "filled in"
      * when the backend resolved its own identity and "you replace" when it could
      * not - so a file-wide count of 1 was only ever true by accident, and broke
      * the moment that honesty was added.
@@ -185,22 +187,22 @@ describe("a placeholder is never labelled as filled in", () => {
   /**
    * The failure this exists to prevent, which happened on a real account.
    *
-   * `DaveIoScannerRoleArn` was labelled `kind: "filled"` unconditionally, with
+   * `SightlineScannerRoleArn` was labelled `kind: "filled"` unconditionally, with
    * the note "the identity this backend runs as". When the backend *could not*
    * resolve its identity, the command carried a placeholder and the legend still
    * said the value was filled in - the legend lying in the one place a reader
    * trusts it to be right.
    *
-   * The placeholder compounded it: `arn:aws:iam::<account>:role/DaveIoScanner`
+   * The placeholder compounded it: `arn:aws:iam::<account>:role/SightlineScanner`
    * marks one blank and hides two. A reader substitutes the account id they
-   * know, leaves `role/DaveIoScanner` because it reads like a real name, and
+   * know, leaves `role/SightlineScanner` because it reads like a real name, and
    * deploys a trust policy naming a principal that does not exist.
    * CloudFormation answers `Invalid principal in policy` without saying which
    * half was wrong (engineering log #46).
    */
   it("marks the scanner principal as the reader's when it could not be resolved", () => {
-    const at = guide.indexOf('name: "DaveIoScannerRoleArn"');
-    expect(at, "the DaveIoScannerRoleArn legend is gone").toBeGreaterThan(-1);
+    const at = guide.indexOf('name: "SightlineScannerRoleArn"');
+    expect(at, "the SightlineScannerRoleArn legend is gone").toBeGreaterThan(-1);
     // The label has to depend on whether resolution succeeded.
     const region = guide.slice(Math.max(0, at - 700), at + 700);
     expect(region, "the label must branch on principalUnresolved").toContain("principalUnresolved");

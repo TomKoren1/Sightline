@@ -13,8 +13,8 @@
  * computed.
  */
 
-import type { Remediation } from "@daveio/shared";
-import { formatPortRange, shellQuote } from "@daveio/shared";
+import type { Remediation } from "@sightline/shared";
+import { formatPortRange, shellQuote } from "@sightline/shared";
 
 import type { PublicAccessBlock } from "../scan/analysers/publicAccess.js";
 import { disabledBlockSettings } from "../scan/analysers/publicAccess.js";

@@ -5,7 +5,7 @@
  * This is the fastest way to tell whether a wrong agent answer is the model's
  * fault or the query's.
  *
- *   npm run query -w @daveio/api
+ *   npm run query -w @sightline/api
  */
 
 import { closeDriver } from "../db/neo4j.js";

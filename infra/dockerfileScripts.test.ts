@@ -168,7 +168,7 @@ describe("images that run root npm scripts", () => {
 
   it("ignores workspace-scoped commands, which never reach a root script", () => {
     expect(runsRootScript(["npm", "run", "seed"])).toBe("seed");
-    expect(runsRootScript(["npm", "run", "seed", "-w", "@daveio/mock-aws"])).toBeNull();
+    expect(runsRootScript(["npm", "run", "seed", "-w", "@sightline/mock-aws"])).toBeNull();
     expect(runsRootScript(["npm", "ci"])).toBeNull();
     expect(runsRootScript(["npm", "run", "not-a-root-script"])).toBeNull();
   });

@@ -90,7 +90,7 @@ function instrument<T extends object>(client: T, key: string): T {
       callCounter.record(key);
       return next(args);
     },
-    { step: "deserialize", name: "daveioCallCounter", override: true },
+    { step: "deserialize", name: "sightlineCallCounter", override: true },
   );
   return client;
 }

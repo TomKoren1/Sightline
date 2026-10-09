@@ -1,6 +1,6 @@
 /** The contract every service collector implements. */
 
-import type { Relationship, Resource } from "@daveio/shared";
+import type { Relationship, Resource } from "@sightline/shared";
 
 export interface CollectorContext {
   /** `null` for global services. */

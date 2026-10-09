@@ -1,4 +1,4 @@
-# Local development stack for the dave.io engineering assignment.
+# Local development stack for the Sightline engineering assignment.
 #
 #   docker compose up -d                  dependencies only (the documented path)
 #   docker compose --profile app up -d    the whole thing, including the app
@@ -23,25 +23,25 @@
 services:
   postgres:
     image: postgres:16-alpine
-    container_name: daveio-postgres
+    container_name: sightline-postgres
     restart: unless-stopped
     environment:
-      POSTGRES_USER: ${POSTGRES_USER:-dave}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-dave}
-      POSTGRES_DB: ${POSTGRES_DB:-dave}
+      POSTGRES_USER: ${POSTGRES_USER:-sightline}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-sightline}
+      POSTGRES_DB: ${POSTGRES_DB:-sightline}
     ports:
       - "${POSTGRES_PORT:-5432}:5432"
     volumes:
       - postgres-data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-dave}"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-sightline}"]
       interval: 5s
       timeout: 5s
       retries: 10
 
   neo4j:
     image: neo4j:5-community
-    container_name: daveio-neo4j
+    container_name: sightline-neo4j
     restart: unless-stopped
     environment:
       # Format is user/password. Neo4j requires the password to be 8+ chars.
@@ -71,7 +71,7 @@ services:
   # mismatch silently writes into a different account. See ENGINEERING-LOG #2.
   moto:
     image: motoserver/moto:latest
-    container_name: daveio-moto
+    container_name: sightline-moto
     restart: unless-stopped
     environment:
       MOTO_ACCOUNT_ID: ${MOCK_AWS_ACCOUNT_ID:-123456789012}
@@ -113,7 +113,7 @@ services:
     build:
       context: .
       target: api
-    container_name: daveio-seed
+    container_name: sightline-seed
     restart: "no"
     # Optional, so `docker compose --profile app up` works on a fresh clone with
     # no setup step at all. Every value it would supply has a default here or in
@@ -135,7 +135,7 @@ services:
     build:
       context: .
       target: api
-    container_name: daveio-api
+    container_name: sightline-api
     restart: unless-stopped
     # Optional, so `docker compose --profile app up` works on a fresh clone with
     # no setup step at all. Every value it would supply has a default here or in
@@ -144,7 +144,7 @@ services:
       - path: .env
         required: false
     environment:
-      DATABASE_URL: postgres://${POSTGRES_USER:-dave}:${POSTGRES_PASSWORD:-dave}@postgres:5432/${POSTGRES_DB:-dave}
+      DATABASE_URL: postgres://${POSTGRES_USER:-sightline}:${POSTGRES_PASSWORD:-sightline}@postgres:5432/${POSTGRES_DB:-sightline}
       NEO4J_URI: bolt://neo4j:7687
       AWS_ENDPOINT_URL: http://moto:5000
       # Loopback would accept nothing from the nginx container.
@@ -176,7 +176,7 @@ services:
     build:
       context: .
       target: web
-    container_name: daveio-web
+    container_name: sightline-web
     restart: unless-stopped
     ports:
       - "${APP_PORT:-8080}:80"

@@ -18,8 +18,8 @@
  */
 
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { DRIFT_EXPECTED_CHECK_FAILURES, drift, seed } from "@daveio/mock-aws";
-import type { Relationship, Resource } from "@daveio/shared";
+import { DRIFT_EXPECTED_CHECK_FAILURES, drift, seed } from "@sightline/mock-aws";
+import type { Relationship, Resource } from "@sightline/shared";
 
 import { isMock } from "../config.js";
 import { runScan } from "../scan/runner.js";

@@ -6,7 +6,7 @@
  * question from the user's point of view: can I trust what I am looking at?
  */
 
-import type { ScanRun, ScanUnit } from "@daveio/shared";
+import type { ScanRun, ScanUnit } from "@sightline/shared";
 
 import { ModeToggle } from "./ModeToggle.js";
 
@@ -56,7 +56,7 @@ export function ScanBanner({
     <div className="border-b border-ink-800 bg-ink-900">
       <div className="flex items-center gap-3 px-3 py-2">
         <div className="flex items-center gap-2">
-          <span className="text-[13px] font-semibold text-ink-100">Dave</span>
+          <span className="text-[13px] font-semibold text-ink-100">Sightline</span>
           <span className="text-[11px] text-ink-400">AWS inventory</span>
         </div>
 

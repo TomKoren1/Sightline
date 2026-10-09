@@ -3,12 +3,12 @@
 Two print documents, written to be read on their own by someone who has not seen
 the codebase. They answer different questions and are deliberately not merged.
 
-**`dave-io-assignment-handover.pdf`** — the project: what was asked and built,
+**`sightline-handover.pdf`** — the project: what was asked and built,
 the architecture, the fifteen decisions, all fifty logged problems with
 their lessons, the recurring failure patterns, the known limits, and likely
 interview questions with answers grounded in the code.
 
-**`dave-io-assignment-codebase-tour.pdf`** — the code: what every source file is
+**`sightline-codebase-tour.pdf`** — the code: what every source file is
 for, the four request paths traced hop by hop with line numbers, the data model,
 the test suite file by file, and an index from "what someone might ask" to "the
 file to open". Written to be open on a second screen while answering questions.
@@ -22,8 +22,8 @@ headless Chrome. They share one stylesheet by copy, since neither is served.
 ```bash
 npm install puppeteer            # in a scratch directory, not this repo
 npx puppeteer browsers install chrome
-node render.cjs handover.html dave-io-assignment-handover.pdf
-node render.cjs codebase-tour.html dave-io-assignment-codebase-tour.pdf
+node render.cjs handover.html sightline-handover.pdf
+node render.cjs codebase-tour.html sightline-codebase-tour.pdf
 ```
 
 The footer label defaults to each document's own `<title>`; pass a third

@@ -9,7 +9,7 @@
  * re-projected without going back to AWS.
  */
 
-import { rollUpStatus } from "@daveio/shared";
+import { rollUpStatus } from "@sightline/shared";
 
 import { callCounter } from "../aws/clients.js";
 import { closePool, migrate } from "../db/postgres.js";

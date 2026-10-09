@@ -3,7 +3,7 @@
  *
  * Lives in this workspace rather than at the repository root because the schema
  * and the database client do: drizzle-kit resolves `drizzle-orm` from where it
- * runs, and from the root it cannot see a dependency of `@daveio/api`.
+ * runs, and from the root it cannot see a dependency of `@sightline/api`.
  *
  * `DATABASE_URL` is read straight from the environment rather than through the
  * app's config module, because drizzle-kit is its own process and importing
@@ -21,6 +21,6 @@ export default defineConfig({
   out: "./drizzle",
   dialect: "postgresql",
   dbCredentials: {
-    url: process.env["DATABASE_URL"] ?? "postgres://dave:dave@localhost:5432/dave",
+    url: process.env["DATABASE_URL"] ?? "postgres://sightline:sightline@localhost:5432/sightline",
   },
 });

@@ -19,7 +19,7 @@ import {
   type ScannableService,
   type ScanResult,
   type ScanUnit,
-} from "@daveio/shared";
+} from "@sightline/shared";
 
 import { cfg, faultInjections } from "../config.js";
 import { callCounter } from "../aws/clients.js";

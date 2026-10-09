@@ -7,7 +7,7 @@
  * role only matters once you know what uses it.
  */
 
-import { INTERNET_ARN, type Relationship, type Resource, type ScanResult } from "@daveio/shared";
+import { INTERNET_ARN, type Relationship, type Resource, type ScanResult } from "@sightline/shared";
 
 import { accountArn, regionArn } from "../aws/arns.js";
 import { evaluateAdmin, type PolicyRef } from "./analysers/policy.js";

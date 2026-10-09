@@ -22,12 +22,12 @@ import {
 
 const sample = [
   "# Databases",
-  "DATABASE_URL=postgres://dave:dave@localhost:5432/dave",
+  "DATABASE_URL=postgres://sightline:sightline@localhost:5432/sightline",
   "NEO4J_URI=bolt://localhost:7687",
   "",
   "# AWS",
   "AWS_MODE=mock",
-  "AWS_TARGET_ROLE_ARN=arn:aws:iam::123456789012:role/DaveIoReadOnlyRole",
+  "AWS_TARGET_ROLE_ARN=arn:aws:iam::123456789012:role/SightlineReadOnlyRole",
   "# AWS_PROFILE_DIR=C:/Users/you/.aws",
   "",
   "ANTHROPIC_API_KEY=",

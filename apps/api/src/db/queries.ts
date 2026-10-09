@@ -11,7 +11,7 @@
  */
 
 import neo4j from "neo4j-driver";
-import { INTERNET_ARN } from "@daveio/shared";
+import { INTERNET_ARN } from "@sightline/shared";
 import { readQuery } from "./neo4j.js";
 
 /** Cap every query, so one bad question cannot drag the whole estate back. */

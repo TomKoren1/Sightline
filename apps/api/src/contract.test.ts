@@ -347,25 +347,32 @@ const CONTRACTS: Contract[] = [
     route: "/api/evals/latest",
     url: "/api/evals/latest",
     responses: {
-      200: z
-        .object({
-          run: z
-            .object({
-              id: z.string(),
-              startedAt: z.string(),
-              model: z.string(),
-              total: z.number(),
-              passed: z.number(),
-              graded: z.number(),
-              errored: z.number(),
-              meanF1: z.number(),
-              unsupportedCitations: z.number(),
-              cases: z.array(z.unknown()),
-            })
-            .nullable(),
-          currentModel: z.string(),
-        })
-        .strict(),
+      // Two shapes, not one with an optional field: with no run recorded the
+      // response carries a `hint` and no `currentModel`. Captured from a
+      // populated database, this branch was missed until the volume was
+      // dropped for the rename — see engineering log #57.
+      200: z.union([
+        z.object({ run: z.null(), hint: z.string() }).strict(),
+        z
+          .object({
+            run: z
+              .object({
+                id: z.string(),
+                startedAt: z.string(),
+                model: z.string(),
+                total: z.number(),
+                passed: z.number(),
+                graded: z.number(),
+                errored: z.number(),
+                meanF1: z.number(),
+                unsupportedCitations: z.number(),
+                cases: z.array(z.unknown()),
+              })
+              .nullable(),
+            currentModel: z.string(),
+          })
+          .strict(),
+      ]),
     },
   },
 ];
@@ -387,7 +394,7 @@ const EXCLUDED = new Map<string, string>([
       "calling it would scan whichever AWS account the deployment is pointed at and " +
       "overwrite the graph. The scan itself is covered by the tier-1 ground-truth " +
       "suite, which drives `runScan()` directly, and the SSE payloads are typed as " +
-      "`ScanEvent` in @daveio/shared, so a port that changes them fails typecheck.",
+      "`ScanEvent` in @sightline/shared, so a port that changes them fails typecheck.",
   ],
 ]);
 

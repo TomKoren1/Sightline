@@ -7,7 +7,7 @@
  * scoreable, which is what makes "did this change make it worse?" answerable.
  */
 
-import type { AgentMessage } from "@daveio/shared";
+import type { AgentMessage } from "@sightline/shared";
 import type { EvalCase } from "./cases.js";
 
 export interface CaseResult {

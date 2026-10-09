@@ -79,7 +79,7 @@ Deploy [`infra/readonly-role.yaml`](../infra/readonly-role.yaml) and set:
 
 ```bash
 AWS_MODE=real                 # drops the endpoint override
-AWS_TARGET_ROLE_ARN=arn:aws:iam::<customer>:role/DaveIoReadOnlyRole
+AWS_TARGET_ROLE_ARN=arn:aws:iam::<customer>:role/SightlineReadOnlyRole
 AWS_EXTERNAL_ID=<the per-customer secret>
 AWS_SCAN_REGIONS=             # empty = discover every enabled region
 ```
@@ -94,7 +94,7 @@ one of only two variables where blank is meaningful rather than unset.
 (engineering logs #28, #46):
 
 - **Two ARNs are involved and each looks like a valid value for the other.**
-  `DaveIoScannerRoleArn` is an _input_ — the principal allowed to assume.
+  `SightlineScannerRoleArn` is an _input_ — the principal allowed to assume.
   `AWS_TARGET_ROLE_ARN` is the stack's `RoleArn` _output_ — the role that gets
   assumed. `sts:AssumeRole` can only assume a role, so a user ARN in the second can
   never work; the API refuses it by name at startup rather than failing later with
@@ -199,20 +199,23 @@ the Vite dev server solves in development.
 
 ## Every command
 
-| Command                                      | What it does                                           |
-| -------------------------------------------- | ------------------------------------------------------ |
-| `docker compose up -d`                       | Postgres, Neo4j and moto — just the dependencies       |
-| `docker compose --profile app up -d --build` | The whole thing in Docker, served on `:8080`           |
-| `docker compose --profile app down -v`       | Tear it all down, volumes included                     |
-| `npm run setup`                              | Connect an AWS account, or switch back to the demo one |
-| `npm run seed`                               | Rebuild the mock account from scratch                  |
-| `npm run scan`                               | Scan, persist, project the graph                       |
-| `npm run drift`                              | Change the mock account, so a second scan has a diff   |
-| `npm run inspect -w @daveio/api`             | Scan and print findings without touching the databases |
-| `npm run query -w @daveio/api`               | Run every curated query against the graph              |
-| `npm test`                                   | 408 unit tests                                         |
-| `npm run verify`                             | Everything CI's static job runs — use before pushing   |
-| `npm run evals:ground-truth -w @daveio/api`  | Tier-1 evals — no API key needed                       |
-| `npm run evals -w @daveio/api`               | Tier-2 agent evals — needs a key                       |
+| Command                                        | What it does                                                 |
+| ---------------------------------------------- | ------------------------------------------------------------ |
+| `docker compose up -d`                         | Postgres, Neo4j and moto — just the dependencies             |
+| `docker compose --profile app up -d --build`   | The whole thing in Docker, served on `:8080`                 |
+| `docker compose --profile app down -v`         | Tear it all down, volumes included                           |
+| `npm run setup`                                | Connect an AWS account, or switch back to the demo one       |
+| `npm run seed`                                 | Rebuild the mock account from scratch                        |
+| `npm run scan`                                 | Scan, persist, project the graph                             |
+| `npm run drift`                                | Change the mock account, so a second scan has a diff         |
+| `npm run inspect -w @sightline/api`            | Scan and print findings without touching the databases       |
+| `npm run query -w @sightline/api`              | Run every curated query against the graph                    |
+| `npm test`                                     | 408 unit tests                                               |
+| `npm run verify`                               | Everything CI's static job runs — use before pushing         |
+| `npm run evals:ground-truth -w @sightline/api` | Tier-1 evals — no API key needed                             |
+| `npm run evals -w @sightline/api`              | Tier-2 agent evals — needs a key                             |
+| `npm run db:generate -w @sightline/api`        | Generate a migration after editing `src/db/schema.ts`        |
+| `npm run db:migrate -w @sightline/api`         | Apply pending migrations — the server also does this on boot |
+| `npm run db:studio -w @sightline/api`          | Browse the database in Drizzle Studio                        |
 
 ---

@@ -1,5 +1,5 @@
 {
-  "name": "@daveio/mock-aws",
+  "name": "@sightline/mock-aws",
   "version": "0.1.0",
   "private": true,
   "type": "module",
@@ -19,7 +19,7 @@
     "@aws-sdk/client-rds": "^3.716.0",
     "@aws-sdk/client-s3": "^3.716.0",
     "@aws-sdk/client-sts": "^3.716.0",
-    "@daveio/shared": "*",
+    "@sightline/shared": "*",
     "dotenv": "^16.4.7"
   }
 }

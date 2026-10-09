@@ -11,7 +11,7 @@ import {
   paginateDescribeVolumes,
   DescribeAddressesCommand,
 } from "@aws-sdk/client-ec2";
-import type { Relationship, Resource } from "@daveio/shared";
+import type { Relationship, Resource } from "@sightline/shared";
 
 import { ec2Client } from "../../aws/clients.js";
 import { ec2Arn, iamArn, nameFromTags, regionArn, tagsToRecord } from "../../aws/arns.js";

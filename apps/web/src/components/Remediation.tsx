@@ -2,7 +2,7 @@
  * The fix, written out, with a copy button and no way to apply it.
  *
  * The absence of an "Apply" button is the feature. Everything else in this
- * product argues that dave.io holds read-only access by design; a panel that
+ * product argues that Sightline holds read-only access by design; a panel that
  * offered to run these would undo that argument in one click, and the honest
  * version — telling you precisely what to change and refusing to change it — is
  * both safer and more useful, because the person who understands the blast
@@ -122,7 +122,7 @@ export function Remediation({ arn, hasFindings }: { arn: string; hasFindings: bo
         <div className="text-[10px] font-semibold uppercase tracking-wider text-ink-400">
           How to fix
         </div>
-        <span className="text-[9px] text-ink-400">dave.io will never run these</span>
+        <span className="text-[9px] text-ink-400">Sightline will never run these</span>
       </div>
       <div className="space-y-2">
         {data.remediations.map((r) => (

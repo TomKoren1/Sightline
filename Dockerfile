@@ -47,7 +47,7 @@ COPY apps/api/ apps/api/
 ENV BACKEND_HOST=0.0.0.0
 EXPOSE 3000
 # The server applies the Postgres schema on boot, so no migrate step is needed.
-CMD ["npm", "run", "start", "-w", "@daveio/api"]
+CMD ["npm", "run", "start", "-w", "@sightline/api"]
 
 # --- frontend build --------------------------------------------------------
 FROM deps AS webbuild
@@ -55,7 +55,7 @@ WORKDIR /app
 COPY tsconfig.base.json ./
 COPY packages/ packages/
 COPY apps/web/ apps/web/
-RUN npm run build -w @daveio/web
+RUN npm run build -w @sightline/web
 
 # --- frontend runtime ------------------------------------------------------
 FROM nginx:alpine AS web

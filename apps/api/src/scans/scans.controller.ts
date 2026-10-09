@@ -1,6 +1,6 @@
 import { Controller, Get, Inject, Param, Post, Query, Req, Res } from "@nestjs/common";
 import type { FastifyReply, FastifyRequest } from "fastify";
-import type { ScanEvent } from "@daveio/shared";
+import type { ScanEvent } from "@sightline/shared";
 
 import { ScansService } from "./scans.service.js";
 

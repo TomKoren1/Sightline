@@ -20,7 +20,7 @@ regex = '''sk-ant-[a-zA-Z0-9_\-]{20,}'''
 keywords = ["sk-ant-"]
 
 [[rules]]
-id = "daveio-external-id"
+id = "sightline-external-id"
 description = "Per-customer AWS ExternalId, which the role template treats as a credential"
 regex = '''(?i)aws_external_id\s*=\s*[^\s"'#]{12,}'''
 keywords = ["aws_external_id"]

@@ -1,11 +1,11 @@
 /**
  * Cross-account credentials.
  *
- * dave.io never holds a customer's keys. It assumes a role *in the customer's
+ * Sightline never holds a customer's keys. It assumes a role *in the customer's
  * account*, presenting an external id that is unique to that customer. The
  * external id is what stops the confused-deputy attack: knowing the role ARN
  * is not enough, because the role's trust policy also requires a secret that
- * only dave.io and that customer share.
+ * only Sightline and that customer share.
  *
  * The sessions AWS hands back are short-lived - the role template caps them at
  * one hour. A scan of a large estate can outlive that, so credentials are
@@ -42,7 +42,7 @@ function stsClient(): STSClient {
     ...(activeConnection().endpoint ? { endpoint: activeConnection().endpoint! } : {}),
     // Omitted entirely in `real` mode unless genuine keys were configured, so
     // the SDK falls back to its standard chain: environment, shared config,
-    // container role, instance role. In production that is dave.io's own task
+    // container role, instance role. In production that is Sightline's own task
     // role, the only identity the customer's trust policy names.
     //
     // `sourceCredentials()` is what decides, because a placeholder left in .env
@@ -65,8 +65,8 @@ async function assume(): Promise<AssumedSession> {
     new AssumeRoleCommand({
       RoleArn: connection.roleArn,
       // Surfaces in the customer's own CloudTrail, so they can see exactly
-      // which dave.io process touched their account and when.
-      RoleSessionName: "daveio-inventory-scanner",
+      // which Sightline process touched their account and when.
+      RoleSessionName: "sightline-inventory-scanner",
       /**
        * Who triggered this scan, as opposed to which role ran it.
        *
@@ -75,7 +75,7 @@ async function assume(): Promise<AssumedSession> {
        * rely on. `SourceIdentity` cannot be changed for the life of the session
        * and persists across chained roles, and the trust policy both requires it
        * and constrains its prefix - so this is the value the customer's own
-       * CloudTrail records, whether or not dave.io wants it there.
+       * CloudTrail records, whether or not Sightline wants it there.
        *
        * The trust policy's `Null` condition makes this mandatory, so omitting it
        * fails every scan loudly rather than silently losing attribution.
