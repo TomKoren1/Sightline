@@ -12,7 +12,7 @@
  * mistake, not a reasoning one.
  */
 
-import type Anthropic from "@anthropic-ai/sdk";
+import type { JSONSchema7 } from "ai";
 
 import * as q from "../db/queries.js";
 import { remediationInputFromGraph } from "../remediation/fromGraph.js";
@@ -51,7 +51,21 @@ const wrap = (rows: unknown[], extra: Partial<ToolResult> = {}): ToolResult => {
   return { rows, arns: [...arns], ...extra };
 };
 
-export const TOOL_DEFINITIONS: Anthropic.Tool[] = [
+/**
+ * A tool as the model sees it: a name, the description it chooses on, and a
+ * JSON Schema for the arguments.
+ *
+ * Declared here rather than borrowed from a provider's SDK types, because this
+ * list is the tool boundary (ADR-005) and should not be shaped by whichever
+ * client happens to deliver it. `agent.ts` hands these to the AI SDK verbatim.
+ */
+export interface ToolDefinition {
+  name: string;
+  description: string;
+  input_schema: JSONSchema7;
+}
+
+export const TOOL_DEFINITIONS: ToolDefinition[] = [
   {
     name: "summarise_account",
     description:

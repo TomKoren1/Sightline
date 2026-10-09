@@ -18,7 +18,7 @@
     "db:studio": "drizzle-kit studio"
   },
   "dependencies": {
-    "@anthropic-ai/sdk": "^0.128.0",
+    "@ai-sdk/anthropic": "^4.0.78",
     "@aws-sdk/client-ec2": "^3.716.0",
     "@aws-sdk/client-iam": "^3.716.0",
     "@aws-sdk/client-lambda": "^3.716.0",
@@ -30,6 +30,7 @@
     "@daveio/mock-aws": "*",
     "@daveio/shared": "*",
     "@fastify/cors": "^10.0.1",
+    "ai": "^7.0.136",
     "dotenv": "^16.4.7",
     "drizzle-orm": "^0.45.4",
     "fastify": "^5.2.0",
@@ -38,6 +39,7 @@
     "zod": "^3.24.1"
   },
   "devDependencies": {
+    "@ai-sdk/provider": "^4.0.26",
     "@types/pg": "^8.11.10",
     "drizzle-kit": "^0.31.11"
   }

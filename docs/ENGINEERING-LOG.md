@@ -2976,3 +2976,82 @@ different starting points" sound like one requirement and are two, and only the
 second is what you actually need when a schema definition changes hands. The
 cheap test for it is to build both and diff the catalogue — which is also the only
 reason this was ever visible, since the symptom was nothing at all.
+
+---
+
+## #54 — The SDK declined to run a tool, and said nothing at all
+
+**Context.** Porting the agent loop onto the Vercel AI SDK. The port itself was
+straightforward — `streamText`, `stopWhen: stepCountIs(8)`, the sixteen existing
+JSON schemas handed over through `jsonSchema()` untouched. The work was in the
+test, because the whole point of the port was proving that the citation ledger
+survives it.
+
+**Symptom.** A scripted model, a stubbed tool, and five failing assertions. The
+agent answered `"I wasn't able to reach a conclusion within the tool-call
+limit"` — its own fallback for an empty answer. The tool had not run.
+
+**What made it slow to find.** Nothing was wrong. The stream carried a
+`tool-call` part, the step reported one tool call, `onError` never fired, and
+there was no `tool-error` part. The SDK had looked at the tool call and quietly
+decided not to execute it.
+
+Tracing the execution path in `node_modules` found the gate:
+
+```js
+case "model-call-end":
+  if (!isToolExecutionAllowedFinishReason(chunk.finishReason)) return;
+  await Promise.all(toolCallsToExecute.map(...))
+```
+
+Tools run when the model call ends, and only if the finish reason permits it.
+My mock emitted `finishReason: "tool-calls"` — a string, the shape every earlier
+version of this API used. In the v4 provider spec it is an object:
+`{ unified: "tool-calls", raw: "tool_use" }`. A bare string is not `"stop"` and
+not `"tool-calls"`, so the check said no, the queued calls were dropped, and the
+turn ended with nothing.
+
+**Fix.** One line in the fixture. The entry is not about the fix.
+
+**Why it is worth recording.** This is the exact failure mode the original
+no-framework argument was about, arriving from the direction I had not
+considered. I had worried that a framework would mediate tool _results_ and
+produce an incomplete ledger. It did not. What it did instead was decline to
+produce a result at all, silently, because a field three layers down had changed
+shape — and the only reason that surfaced in seconds rather than in production
+is that the test asserts on the _answer_, not on the plumbing. A test that
+checked "a tool-call part was emitted" would have passed.
+
+**What the test now does.** `ledger.test.ts` drives the real `ask()` with a
+scripted model that calls a tool and then names a resource that tool never
+returned — behaviour no prompt reliably produces, which is why it has to be
+scripted. It asserts the invented ARN is flagged and the real one is not. The
+model is injected through `AskOptions`, which is also the seam a DI container
+will want later.
+
+Proven by breaking it four ways: never record into the ledger, record the rows
+but lose the ARNs, skip the read-only guard, and drop the tool trace. The first
+two fail the assertion that a **real** ARN is accepted — which is the right
+alarm, because the dangerous version of a broken ledger is not that invention
+goes unflagged, it is that genuine resources get flagged and users stop reading
+the warnings.
+
+**Also worth recording: the port removed a dependency.** `@anthropic-ai/sdk` is
+gone, and `TOOL_DEFINITIONS` is now typed by an interface declared in
+`tools.ts` rather than borrowed from a provider's SDK. The tool boundary is the
+project's most load-bearing design decision; it should not be shaped by whichever
+client happens to deliver it.
+
+**And the thing the mock cannot prove.** A stub proves the wiring, not the
+provider. One live question — "how many resources, and in which regions?" —
+confirmed the real path: one tool call, a correct answer, every event emitted,
+and the model volunteering that the inventory was nine days old, which is the
+system prompt doing its job. The twenty-one scored cases remain the end-to-end
+measure and still cost money to run, so they are run deliberately rather than on
+every commit.
+
+**What to take from it.** **"It emitted the right thing" is not "it did the
+right thing".** Every observable signal said the tool call happened. The only
+assertion that could tell the difference was one about the user-visible outcome,
+which is an argument for testing the answer rather than the mechanism — and, for
+a third time in this log, for not trusting a check that cannot fail loudly.

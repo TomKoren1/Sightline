@@ -710,3 +710,58 @@ idempotent _and_ to rename the constraints an older database already carries, so
 migrated database and a fresh one end up with identical catalogues. That
 equivalence is asserted on every run by `src/db/adoption.test.ts`, which builds
 both and diffs them.
+
+---
+
+## ADR-018 — The Vercel AI SDK, superseding the hand-written agent loop
+
+**Context.** ADR-005 chose a curated tool library over text-to-Cypher, and the
+loop that drove it was written by hand. The argument for writing it was specific
+and, I thought, decisive:
+
+> Validating that every ARN in an answer came from a tool result means holding
+> the tool results, which means owning the loop.
+
+Reviewed, the absence of a framework was read as not knowing the conventional
+option. That is worth taking seriously even where the reasoning was sound,
+because an unconventional choice costs the reader time whether or not it was
+right — and this one was only half right.
+
+**What the argument got wrong.** Holding the tool results is necessary. Owning
+the loop is not how you get it. In the AI SDK a tool's `execute` is _our_
+function: the SDK decides when to call it and with what arguments, and the rows
+it returns pass through our hands before they reach anything else, including the
+model. The ledger records there. No framework callback mediates it, so the
+failure the original argument feared — an incomplete ledger flagging a real
+resource as invented — is not reachable by the route it feared.
+
+What was genuinely correct in the argument is the _stakes_: a ledger that misses
+one tool's output marks a real ARN unsupported, the user sees the product cry
+wolf once, and the warnings stop being read. That is why the property is now
+asserted rather than reasoned about — see below.
+
+**Decision.** `ai` with `@ai-sdk/anthropic`. `streamText`, `stopWhen:
+stepCountIs(8)`, tools built from the existing `TOOL_DEFINITIONS` and handed over
+through `jsonSchema()` so not one of the sixteen schemas was rewritten. The
+direct `@anthropic-ai/sdk` dependency is gone; the tool-definition type is
+declared in `tools.ts`, because the tool boundary should not be shaped by
+whichever client happens to deliver it.
+
+**What is unchanged, deliberately.** `CitationTracker`, `validateCitations`,
+`enforceReadOnlyNotice`, the sixteen tools, the Cypher write-guard, and the
+events the UI renders. The guard still runs on the single exit path after the
+model has finished, so nothing reaches a user without passing it.
+
+**The test that makes this a decision rather than a hope.**
+`agent/ledger.test.ts` drives `ask()` with a scripted model that does what no
+prompt reliably produces: calls a tool, then answers naming a resource that tool
+never returned. It asserts the invented ARN is flagged and a real one is not, and
+it runs with no network and no API key, so it is in the suite on every commit.
+Verified by breaking it four ways — never record, record without the ARNs, skip
+the read-only guard, drop the trace — each failing its own assertion.
+
+**What I would still hand-write.** The loop is now worth about ten lines of
+configuration, which is the correct amount of code to own for something that
+standard. If this needed sub-agents, planning, or work that outlives a context
+window, that is where a heavier framework starts earning its keep; it does not
+here, and that was never the question.
