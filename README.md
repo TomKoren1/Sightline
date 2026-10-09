@@ -1,5 +1,8 @@
 # Sightline — AWS inventory, graph and agent
 
+[![CI](https://github.com/TomKoren1/Sightline/actions/workflows/ci.yml/badge.svg)](https://github.com/TomKoren1/Sightline/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+
 Sightline connects to an AWS account with a read-only role, ingests what is
 there and how it fits together, and puts an agent on top that answers the
 questions a DevOps engineer would act on — what can reach the production

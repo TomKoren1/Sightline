@@ -1,0 +1,22 @@
+# Keeps indentation and line endings consistent while typing. Prettier settles
+# the same questions on save and in CI, but only for files it parses - this also
+# covers the YAML it is told to leave alone, the SQL migrations and the
+# Dockerfile.
+root = true
+
+[*]
+charset = utf-8
+end_of_line = lf
+indent_style = space
+indent_size = 2
+insert_final_newline = true
+trim_trailing_whitespace = true
+max_line_length = 100
+
+# Markdown uses two trailing spaces as a hard line break.
+[*.md]
+trim_trailing_whitespace = false
+
+# Tab-indented by format, not by preference.
+[Makefile]
+indent_style = tab
