@@ -765,3 +765,61 @@ configuration, which is the correct amount of code to own for something that
 standard. If this needed sub-agents, planning, or work that outlives a context
 window, that is where a heavier framework starts earning its keep; it does not
 here, and that was never the question.
+
+---
+
+## ADR-017 — NestJS, superseding the Fastify route modules
+
+**Context.** The HTTP layer was five `registerXRoutes(app)` functions holding
+their handlers inline. That is a clean enough shape, and it was read as the
+absence of a backend framework — which in a Node team means NestJS: modules,
+controllers, services, dependency injection. Fastify is an HTTP server; it was
+never the thing being asked for.
+
+The criticism is about the reader, not the code. Under time pressure an
+unfamiliar structure costs more than an untidy familiar one, and a reviewer
+arrives knowing where a Nest controller lives.
+
+**Decision.** NestJS on the **Fastify** adapter, not Express. The HTTP behaviour
+underneath stays the one this project already had: the SSE endpoints write to
+the raw socket, and `maxParamLength: 2048` is a Fastify router setting that a
+whole class of IAM ARNs depends on (engineering log #37). Changing the server as
+well as the framework would have made every behavioural difference ambiguous.
+
+Six feature modules — `health`, `graph`, `scans`, `chat`, `evals`, `connection`
+— each a controller over a service, listed in `app.module.ts`.
+
+**The constraint that shapes every file.** Nest normally infers what to inject
+from a constructor parameter's type, which needs `emitDecoratorMetadata`.
+esbuild cannot emit it — it requires type information a transpiler does not
+have — and esbuild is what both `tsx` and `vitest` use here. Nest does not fail
+loudly on that: it injects `undefined`, and the handler throws at request time.
+
+So every injection in this package names its token:
+
+```ts
+constructor(@Inject(GraphService) private readonly graph: GraphService) {}
+```
+
+The alternative was moving the whole package onto SWC — in the runtime, in the
+Docker image, and in the test runner that 406 tests depend on. Three places to
+keep in step, to delete one redundant-looking argument per constructor. The
+token is the cheaper honesty.
+
+**What the framework actually bought, beyond familiarity.** `scanInProgress` was
+a module-level `let` in the route file. It is now `ScanStateService`, and that
+is not ceremony: a module-level mutable is shared by everything in the process
+with no way to scope it, whereas a provider can be given a narrower lifetime
+without touching a caller. It is one of exactly two things standing between this
+and multi-tenancy — the other is the cached AWS session — and both now have a
+seam.
+
+**What was deliberately not adopted.** `@Sse()`. It serialises an Observable
+into its own wire format, and the frontend already parses this one. Both
+streaming endpoints take `@Res()` and write to the raw socket exactly as before,
+which is what a hand-managed stream wants and what kept the port invisible to
+clients.
+
+**The cost.** More files for the same behaviour, decorators, and a DI container
+to understand. Worth it for a team; it would not be worth it for a service with
+three endpoints.

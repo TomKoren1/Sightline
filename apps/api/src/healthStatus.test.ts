@@ -16,7 +16,10 @@ import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 
-const source = readFileSync(fileURLToPath(new URL("./app.ts", import.meta.url)), "utf8");
+const source = readFileSync(
+  fileURLToPath(new URL("./health/health.service.ts", import.meta.url)),
+  "utf8",
+);
 
 /** Mirrors the route's rule, so the cases below describe real behaviour. */
 function overallStatus(checks: Record<string, string>): "ok" | "degraded" {
@@ -56,8 +59,11 @@ describe("health status", () => {
      * Pins the route to the rule above. Without this the mirror could drift from
      * the implementation and these cases would describe nothing.
      */
-    const match = /const required = \[([^\]]*)\] as const;/.exec(source);
-    expect(match, "the required-checks list was renamed or restructured").toBeTruthy();
+    const match = /const REQUIRED = \[([^\]]*)\] as const;/.exec(source);
+    expect(
+      match,
+      "the required-checks list was renamed, restructured, or moved out of " + "health.service.ts",
+    ).toBeTruthy();
     // [a-z0-9]: "neo4j" has a digit in it, and [a-z]+ silently matched nothing.
     const keys = [...match![1]!.matchAll(/"([a-z0-9]+)"/g)].map((m) => m[1]);
     expect(keys.sort()).toEqual(["neo4j", "postgres"]);

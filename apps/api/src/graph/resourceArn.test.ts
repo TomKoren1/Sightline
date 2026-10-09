@@ -24,15 +24,14 @@
  */
 
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import type { FastifyInstance } from "fastify";
+import type { NestFastifyApplication } from "@nestjs/platform-fastify";
 
 import { buildApp } from "../app.js";
 
-let app: FastifyInstance;
+let app: NestFastifyApplication;
 
 beforeAll(async () => {
   app = await buildApp();
-  await app.ready();
 });
 
 afterAll(async () => {
@@ -118,16 +117,24 @@ describe.runIf(HAS_INFRA)("a long ARN routes rather than being rejected", () => 
  * nothing, because no request is issued.
  */
 describe("the router can carry a full-length ARN", () => {
+  /**
+   * Read off the Fastify instance rather than the Nest app: `maxParamLength`
+   * is a router setting, and the adapter is where it is configured. Asserting
+   * it through the adapter also proves the Nest app is really carrying the
+   * Fastify options rather than defaults of its own.
+   */
+  const config = () => app.getHttpAdapter().getInstance().initialConfig;
+
   it("configures maxParamLength above the longest legitimate IAM ARN", () => {
     // IAM: path <= 512, role name <= 64, plus the arn:aws:iam::<12>:role/
     // prefix. Fastify measures the decoded parameter, so this is the bound.
     const longestLegitimateArn = 512 + 64 + "arn:aws:iam::123456789012:role/".length;
-    expect(app.initialConfig.maxParamLength ?? 100).toBeGreaterThan(longestLegitimateArn);
+    expect(config().maxParamLength ?? 100).toBeGreaterThan(longestLegitimateArn);
   });
 
   it("is not left on the default, which broke every service-linked role", () => {
-    expect(app.initialConfig.maxParamLength).not.toBe(100);
-    expect(app.initialConfig.maxParamLength ?? 100).toBeGreaterThan(SERVICE_LINKED.length);
+    expect(config().maxParamLength).not.toBe(100);
+    expect(config().maxParamLength ?? 100).toBeGreaterThan(SERVICE_LINKED.length);
   });
 });
 

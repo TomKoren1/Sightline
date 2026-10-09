@@ -32,16 +32,18 @@
  */
 
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import type { FastifyInstance } from "fastify";
+import type { NestFastifyApplication } from "@nestjs/platform-fastify";
 import { randomUUID } from "node:crypto";
+import { readFileSync, readdirSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 import { z } from "zod";
 
-import { buildApp } from "../app.js";
+import { buildApp } from "./app.js";
 
 /**
  * Issuing a request runs the real handler against Postgres and Neo4j - a
  * contract test that stubbed them would not prove the route is reachable in the
- * product. Same gate, and the same reasoning, as `resourceArn.test.ts`.
+ * product. Same gate, and the same reasoning, as `graph/resourceArn.test.ts`.
  */
 const HAS_INFRA = !process.env["SKIP_INTEGRATION"];
 
@@ -389,11 +391,10 @@ const EXCLUDED = new Map<string, string>([
   ],
 ]);
 
-let app: FastifyInstance;
+let app: NestFastifyApplication;
 
 beforeAll(async () => {
   app = await buildApp();
-  await app.ready();
 });
 
 afterAll(async () => {
@@ -462,7 +463,9 @@ describe("the contract list is complete", () => {
   it("parses the router, so the comparison below is comparing something", () => {
     // Without this, a change to Fastify's tree format would silently produce an
     // empty set and make both assertions below pass by finding nothing.
-    const routes = registeredRoutes(app.printRoutes({ commonPrefix: false }));
+    const routes = registeredRoutes(
+      app.getHttpAdapter().getInstance().printRoutes({ commonPrefix: false }),
+    );
     expect(
       routes.size,
       "no routes parsed out of printRoutes — has the format changed?",
@@ -472,7 +475,9 @@ describe("the contract list is complete", () => {
   });
 
   it("covers every registered route, and lists none that do not exist", () => {
-    const routes = registeredRoutes(app.printRoutes({ commonPrefix: false }));
+    const routes = registeredRoutes(
+      app.getHttpAdapter().getInstance().printRoutes({ commonPrefix: false }),
+    );
     const covered = new Set([
       ...CONTRACTS.map((c) => `${c.method} ${c.route}`),
       ...EXCLUDED.keys(),
@@ -499,5 +504,58 @@ describe("the contract list is complete", () => {
     // EXCLUDED and move on, which converts the guard into a formality.
     const unexplained = [...EXCLUDED].filter(([, why]) => why.trim().length < 40).map(([r]) => r);
     expect(unexplained, "every excluded route needs a reason, not a placeholder").toEqual([]);
+  });
+});
+
+/**
+ * Every POST answers the status it answered before the framework arrived.
+ *
+ * Nest replies 201 to a POST unless told otherwise. Three endpoints here used
+ * to answer 200, and moving them into controllers silently changed all three.
+ * The contract above caught exactly one — `POST /api/connection/test`, the only
+ * one whose success path it is safe to exercise. The other two are pinned on
+ * their refusal path, so a changed success status sailed straight past.
+ *
+ * Reading the source closes that gap for the whole class rather than for the
+ * two instances: a POST either declares its status, or hands the response to
+ * Fastify through `@Res()` and sets it on the raw socket itself.
+ */
+describe("POST handlers declare their status code", () => {
+  const SRC = fileURLToPath(new URL("./", import.meta.url));
+
+  function controllerFiles(): string[] {
+    const found: string[] = [];
+    const walk = (dir: string) => {
+      for (const entry of readdirSync(dir, { withFileTypes: true })) {
+        const path = `${dir}/${entry.name}`;
+        if (entry.isDirectory()) walk(path);
+        else if (entry.name.endsWith(".controller.ts")) found.push(path);
+      }
+    };
+    walk(SRC);
+    return found;
+  }
+
+  it("finds the controllers, so the check below has something to read", () => {
+    expect(controllerFiles().length, "no *.controller.ts found").toBeGreaterThan(3);
+  });
+
+  it("gives every POST an explicit status or a raw reply", () => {
+    const undeclared: string[] = [];
+    for (const file of controllerFiles()) {
+      const source = readFileSync(file, "utf8");
+      // Each @Post and everything up to the end of its signature.
+      for (const match of source.matchAll(/@Post\([^)]*\)([\s\S]*?)\)\s*\{/g)) {
+        const block = match[0];
+        if (block.includes("@HttpCode(") || block.includes("@Res(")) continue;
+        undeclared.push(`${file.split("/src/")[1]}: ${block.split("\n")[0]}`);
+      }
+    }
+    expect(
+      undeclared,
+      "these POST handlers will answer Nest's default 201. If that is what the " +
+        "frontend expects, say so with @HttpCode(201); if it expects 200, add " +
+        "@HttpCode(200). A raw @Res() handler sets its own status and is exempt.",
+    ).toEqual([]);
   });
 });

@@ -1,1 +1,12 @@
-{ "extends": "../../tsconfig.base.json", "include": ["src/**/*.ts"] }
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    // NestJS's decorators. `emitDecoratorMetadata` is deliberately NOT set:
+    // tsx and vitest both transpile with esbuild, which cannot emit it because
+    // it needs type information. Nest does not fail loudly on that — it
+    // injects `undefined` and the handler throws at request time — so every
+    // injection in this package names its token explicitly. See ADR-017.
+    "experimentalDecorators": true
+  },
+  "include": ["src/**/*.ts"]
+}

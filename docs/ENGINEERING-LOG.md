@@ -3055,3 +3055,75 @@ right thing".** Every observable signal said the tool call happened. The only
 assertion that could tell the difference was one about the user-visible outcome,
 which is an argument for testing the answer rather than the mechanism — and, for
 a third time in this log, for not trusting a check that cannot fail loudly.
+
+---
+
+## #55 — Three silent failures in one framework port
+
+Moving the HTTP layer to NestJS produced one bug worth the name and two
+configuration traps, and all three share a shape: the thing that was wrong
+reported nothing.
+
+**One: dependency injection resolves to `undefined`.**
+
+A minimal Nest app, one service, one controller, injected by type. Routes
+registered, app started, no error at boot. The request returned 500:
+`Cannot read properties of undefined (reading 'value')`.
+
+Nest infers the token from the parameter's type, which needs
+`emitDecoratorMetadata`. esbuild cannot emit it — the information is in the type
+system, not the syntax — and esbuild is what `tsx` uses. Nest treats the missing
+metadata as "nothing to inject" rather than as an error, so the failure arrives
+at request time, in a handler, in production.
+
+**And `vitest` transpiles with esbuild too**, which is what decided the fix.
+The idiomatic repair is SWC, which does emit the metadata — but then SWC has to
+be in the runtime, in the Docker image, _and_ in the test runner that 406 tests
+depend on. Three places to keep in step. Naming the token explicitly —
+`@Inject(GraphService)` — costs one redundant-looking argument per constructor
+and works identically everywhere. Verified both ways in a scratch project before
+choosing, because "esbuild cannot do decorator metadata" is the kind of claim
+that is easy to assert and worth checking.
+
+**Two: Nest answers 201 to a POST.**
+
+Three endpoints answered 200 before the port. Moving them into controllers
+changed all three to Nest's default 201, silently.
+
+`contract.test.ts` caught **one** — `POST /api/connection/test`, which is the
+only one whose success path is safe to exercise. The other two are pinned on
+their _refusal_ path, because one re-seeds the account and the other switches
+the running deployment between AWS accounts. A changed success status went
+straight past them.
+
+That is a gap in the contract, not a bug in it, and the fix is for the class
+rather than the two instances: a test now reads every controller and requires
+each `@Post` to either declare `@HttpCode` or take `@Res()` and set the status
+on the raw socket itself. Proven by removing one `@HttpCode(200)` and watching
+it fail, and by pointing the file-finder at a suffix that matches nothing — the
+canary that exists because a check reading zero files passes.
+
+**Three: a config fix that worked, appeared not to, then appeared to for the
+wrong reason.**
+
+`tsx` hands esbuild one tsconfig resolved from the working directory rather than
+looking one up per file, so running anything from the repository root missed
+`apps/api/tsconfig.json` and the decorators were refused. Adding a root
+`tsconfig.json` fixed it — and the next run failed identically, because **tsx
+caches transforms** and was serving the failure back. With the cache disabled it
+passed. I then removed `"files": []` on a hunch, it passed again, and I nearly
+recorded the hunch as the cause.
+
+It was both. With a cold cache and `"files": []` present, it fails: esbuild
+treats every source as outside the config's scope and ignores the options in
+it. Two causes, one symptom, and a cache that made each test of either one
+unreliable. The only reason the right answer came out is that the last check
+cleared the cache _and_ changed one thing.
+
+**What to take from it.** **A silent default is worse than a wrong one.** Nest
+injecting `undefined` rather than refusing to start, Nest answering 201 rather
+than asking, esbuild ignoring options rather than warning that nothing is in
+scope — each is a library doing something defensible, and each produced a defect
+that only a test about observable behaviour could see. The corollary, for the
+third one: **when a cache sits between you and the thing you are testing, every
+experiment is worthless until you clear it.**
