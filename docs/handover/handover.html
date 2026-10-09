@@ -378,9 +378,11 @@
         <dt>Purpose</dt>
         <dd>Sightline engineering assignment — presentation &amp; defence</dd>
         <dt>Repository</dt>
-        <dd>github.com/TomKoren1/dave.io_home-assignment</dd>
+        <dd>github.com/TomKoren1/Sightline</dd>
         <dt>Stack</dt>
-        <dd>TypeScript · Fastify · Postgres · Neo4j · React Flow · Anthropic</dd>
+        <dd>
+          TypeScript · NestJS on Fastify · Drizzle · Postgres · Neo4j · React Flow · Vercel AI SDK
+        </dd>
         <dt>Verified against</dt>
         <dd>A real AWS account (672299759593) and a mocked one (moto)</dd>
       </dl>
@@ -536,7 +538,7 @@
       </div>
 
       <h3>Demo in ten minutes</h3>
-      <pre><code>git clone &lt;repo&gt; &amp;&amp; cd dave.io_home-assignment
+      <pre><code>git clone &lt;repo&gt; &amp;&amp; cd Sightline
 cp .env.example .env            # add ANTHROPIC_API_KEY for the chat
 docker compose up -d            # Postgres, Neo4j, moto
 npm install
@@ -878,9 +880,13 @@ npm run dev:api &amp; npm run dev:web
         "Thinking…".
       </p>
       <p>
-        No framework, because the two decisions that actually define this agent — the tool boundary
-        and citation validation — are precisely what a framework would hide behind its own
-        abstractions, without removing any of the real work.
+        The loop runs on the Vercel AI SDK. It was hand-written first, on the argument that
+        validating every ARN in an answer means holding the tool results, which means owning the
+        loop. Holding them is necessary; owning the loop is not how you get it — a tool's
+        <code>execute</code> is this codebase's own function, and the rows pass through it before
+        they reach anything else, the model included. The ledger records there, and
+        <code>agent/ledger.test.ts</code> proves it by driving the real loop with a scripted model
+        that names a resource no tool returned.
       </p>
 
       <h3>Sixteen curated tools, not text-to-Cypher</h3>
