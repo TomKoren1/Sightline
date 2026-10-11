@@ -36,7 +36,7 @@ advantage — see ADR-002.
 
 ## ADR-002 — moto in Docker as the mock AWS control plane
 
-**Context.** The brief allows a real AWS account or a mock. A mock had to be
+**Context.** A real AWS account or a mock were both options. A mock had to be
 convincing enough that the scanner's real behaviour — assume-role, region
 fan-out, pagination, retries — is genuinely exercised rather than stubbed out.
 
@@ -50,7 +50,7 @@ fan-out, pagination, retries — is genuinely exercised rather than stubbed out.
   handling — which is a third of what is being assessed.
 - _LocalStack (community)._ Real AWS API surface. **Cannot do RDS** in the
   community edition, and the production database is the centre of the most
-  interesting question in the brief.
+  interesting question here.
 - _moto in server mode._ Real AWS API over HTTP. Verified by probe to support
   STS assume-role, EC2/VPC, S3 (including bucket policy and public access
   block), IAM, **RDS**, and Lambda.
@@ -72,13 +72,13 @@ and stated honestly rather than papered over.
 
 ## ADR-003 — Postgres as the system of record, Neo4j as a derived projection
 
-**Context.** The brief supplies both databases and invites using either, both,
+**Context.** Both databases were on the table — either, both,
 or neither. Using both because both were offered is not a reason.
 
 **Decision.** Both, with a strict hierarchy: **Postgres is authoritative,
 Neo4j is a rebuildable projection of it.**
 
-**Why Neo4j at all.** The questions in the brief are overwhelmingly about
+**Why Neo4j at all.** The questions this answers are overwhelmingly about
 _relationships_, and one of them — "what can reach the production RDS
 instance?" — is a variable-length path query over security group references.
 In Cypher that is one `MATCH` with a `*1..n` hop. In SQL it is a recursive CTE
@@ -152,7 +152,7 @@ transaction.
 
 **Why.**
 
-- _Safety._ The brief's one hard rule is that the agent must never change
+- _Safety._ The one hard rule is that the agent must never change
   anything. A curated tool cannot express a mutation.
 - _Correctness._ Hand-written Cypher for "find every path from the internet to
   this resource" is reviewable, testable, and identical on every run.
@@ -170,7 +170,7 @@ answer beats a broad unreliable one.
 ## ADR-006 — Citations are validated mechanically
 
 **Context.** "How do you know the agent's answers are right?" is one of the
-five questions the brief asks the README to answer.
+five design questions the README answers.
 
 **Decision.** Every tool result records the set of ARNs it returned. After the
 model produces an answer, every ARN in that answer is checked against the union
@@ -189,7 +189,7 @@ real identifiers_. The eval suite covers that second class.
 
 ## ADR-007 — Replacing the supplied read-only role
 
-**Context.** The brief ships `infra/readonly-role.yaml`, invites us to change
+**Context.** The starting point was `infra/readonly-role.original.yaml`, with an invitation to change
 it, and asks us to say why if we do. Its evaluation criteria ask whether we
 understand "what 'read-only' really means". The original grants the AWS-managed
 `ReadOnlyAccess` policy to any principal in Sightline's account.
@@ -215,7 +215,7 @@ materially larger blast radius for capability the product does not use.
 literally: receiving a message starts its visibility timeout and can hide it
 from the consumer that should have processed it. A scanner holding that
 permission can disrupt a production queue by accident — which would breach the
-brief's hard rule through a permission nobody thought of as a write.
+read-only rule through a permission nobody thought of as a write.
 
 The explicit `Deny` is the load-bearing part. Deny cannot be overridden by any
 Allow, including one a future AWS update to a managed policy might introduce.
@@ -264,7 +264,7 @@ may need a line added. That is the right direction for the friction to run.
 
 ## ADR-008 — Two tiers of evaluation
 
-**Context.** The brief asks how we know the agent's answers are right, and how
+**Context.** "How do we know the agent's answers are right, and how
 we would know if a change made them worse. A single end-to-end suite answers
 neither well: it needs an API key, it is slow and non-deterministic, and when
 it fails it does not say whether the data or the reasoning was wrong.
@@ -331,7 +331,7 @@ exposed, not merely mention it.
 
 ## ADR-009 — The read-only refusal is enforced in code, not prompted
 
-**Context.** The brief's one hard rule is that the agent must never change
+**Context.** The one hard rule is that the agent must never change
 anything. Structurally it cannot: no tool can express a mutation, and the IAM
 role has no write permissions. But a user only learns that from what an answer
 _says_, and the eval suite caught the agent answering "please delete this
@@ -713,61 +713,6 @@ both and diffs them.
 
 ---
 
-## ADR-018 — The Vercel AI SDK, superseding the hand-written agent loop
-
-**Context.** ADR-005 chose a curated tool library over text-to-Cypher, and the
-loop that drove it was written by hand. The argument for writing it was specific
-and, I thought, decisive:
-
-> Validating that every ARN in an answer came from a tool result means holding
-> the tool results, which means owning the loop.
-
-Reviewed, the absence of a framework was read as not knowing the conventional
-option. That is worth taking seriously even where the reasoning was sound,
-because an unconventional choice costs the reader time whether or not it was
-right — and this one was only half right.
-
-**What the argument got wrong.** Holding the tool results is necessary. Owning
-the loop is not how you get it. In the AI SDK a tool's `execute` is _our_
-function: the SDK decides when to call it and with what arguments, and the rows
-it returns pass through our hands before they reach anything else, including the
-model. The ledger records there. No framework callback mediates it, so the
-failure the original argument feared — an incomplete ledger flagging a real
-resource as invented — is not reachable by the route it feared.
-
-What was genuinely correct in the argument is the _stakes_: a ledger that misses
-one tool's output marks a real ARN unsupported, the user sees the product cry
-wolf once, and the warnings stop being read. That is why the property is now
-asserted rather than reasoned about — see below.
-
-**Decision.** `ai` with `@ai-sdk/anthropic`. `streamText`, `stopWhen:
-stepCountIs(8)`, tools built from the existing `TOOL_DEFINITIONS` and handed over
-through `jsonSchema()` so not one of the sixteen schemas was rewritten. The
-direct `@anthropic-ai/sdk` dependency is gone; the tool-definition type is
-declared in `tools.ts`, because the tool boundary should not be shaped by
-whichever client happens to deliver it.
-
-**What is unchanged, deliberately.** `CitationTracker`, `validateCitations`,
-`enforceReadOnlyNotice`, the sixteen tools, the Cypher write-guard, and the
-events the UI renders. The guard still runs on the single exit path after the
-model has finished, so nothing reaches a user without passing it.
-
-**The test that makes this a decision rather than a hope.**
-`agent/ledger.test.ts` drives `ask()` with a scripted model that does what no
-prompt reliably produces: calls a tool, then answers naming a resource that tool
-never returned. It asserts the invented ARN is flagged and a real one is not, and
-it runs with no network and no API key, so it is in the suite on every commit.
-Verified by breaking it four ways — never record, record without the ARNs, skip
-the read-only guard, drop the trace — each failing its own assertion.
-
-**What I would still hand-write.** The loop is now worth about ten lines of
-configuration, which is the correct amount of code to own for something that
-standard. If this needed sub-agents, planning, or work that outlives a context
-window, that is where a heavier framework starts earning its keep; it does not
-here, and that was never the question.
-
----
-
 ## ADR-017 — NestJS, superseding the Fastify route modules
 
 **Context.** The HTTP layer was five `registerXRoutes(app)` functions holding
@@ -823,3 +768,134 @@ clients.
 **The cost.** More files for the same behaviour, decorators, and a DI container
 to understand. Worth it for a team; it would not be worth it for a service with
 three endpoints.
+
+---
+
+## ADR-018 — The Vercel AI SDK, superseding the hand-written agent loop
+
+**Context.** ADR-005 chose a curated tool library over text-to-Cypher, and the
+loop that drove it was written by hand. The argument for writing it was specific
+and, I thought, decisive:
+
+> Validating that every ARN in an answer came from a tool result means holding
+> the tool results, which means owning the loop.
+
+Reviewed, the absence of a framework was read as not knowing the conventional
+option. That is worth taking seriously even where the reasoning was sound,
+because an unconventional choice costs the reader time whether or not it was
+right — and this one was only half right.
+
+**What the argument got wrong.** Holding the tool results is necessary. Owning
+the loop is not how you get it. In the AI SDK a tool's `execute` is _our_
+function: the SDK decides when to call it and with what arguments, and the rows
+it returns pass through our hands before they reach anything else, including the
+model. The ledger records there. No framework callback mediates it, so the
+failure the original argument feared — an incomplete ledger flagging a real
+resource as invented — is not reachable by the route it feared.
+
+What was genuinely correct in the argument is the _stakes_: a ledger that misses
+one tool's output marks a real ARN unsupported, the user sees the product cry
+wolf once, and the warnings stop being read. That is why the property is now
+asserted rather than reasoned about — see below.
+
+**Decision.** `ai` with `@ai-sdk/anthropic`. `streamText`, `stopWhen:
+stepCountIs(8)`, tools built from the existing `TOOL_DEFINITIONS` and handed over
+through `jsonSchema()` so not one of the sixteen schemas was rewritten. The
+direct `@anthropic-ai/sdk` dependency is gone; the tool-definition type is
+declared in `tools.ts`, because the tool boundary should not be shaped by
+whichever client happens to deliver it.
+
+**What is unchanged, deliberately.** `CitationTracker`, `validateCitations`,
+`enforceReadOnlyNotice`, the sixteen tools, the Cypher write-guard, and the
+events the UI renders. The guard still runs on the single exit path after the
+model has finished, so nothing reaches a user without passing it.
+
+**The test that makes this a decision rather than a hope.**
+`agent/ledger.test.ts` drives `ask()` with a scripted model that does what no
+prompt reliably produces: calls a tool, then answers naming a resource that tool
+never returned. It asserts the invented ARN is flagged and a real one is not, and
+it runs with no network and no API key, so it is in the suite on every commit.
+Verified by breaking it four ways — never record, record without the ARNs, skip
+the read-only guard, drop the trace — each failing its own assertion.
+
+**What I would still hand-write.** The loop is now worth about ten lines of
+configuration, which is the correct amount of code to own for something that
+standard. If this needed sub-agents, planning, or work that outlives a context
+window, that is where a heavier framework starts earning its keep; it does not
+here, and that was never the question.
+
+---
+
+---
+
+## ADR-019 — Type-aware ESLint, and type-checking the code that was outside every project
+
+**Context.** `npm run lint` was `prettier --check .`, and nothing else. That
+checks whether the code is _formatted_; it says nothing about whether it is
+_correct_. A strict TypeScript monorepo with no linter will still compile a
+floating promise, a `catch` that discards an error, a dead import, and an
+`async` function with nothing to await — and all four pass review and pass CI.
+
+Separately, `npm run typecheck` runs `--workspaces`. `infra/` is not a
+workspace, so its six guard tests — including the ones asserting the Dockerfile
+copies `scripts/` and that the workflows name paths that exist — were
+type-checked by nothing at all. vitest transpiles them with esbuild, which
+strips types without reading them, so they could have been type-broken and
+still have run green.
+
+**Decision.** ESLint 9 flat config with `typescript-eslint`, including the
+**type-aware** rule sets, plus a `tsconfig.tools.json` covering `infra/`,
+`scripts/` and the root config files, wired into `npm run typecheck`.
+
+The type-aware rules are the reason to bother. `no-floating-promises`,
+`no-misused-promises` and `no-base-to-string` cannot work from syntax alone —
+they need to know that an expression is a `Promise`, or that a value's runtime
+type has no useful `toString`. Those are the mistakes that have actually cost
+time in this repository. The price is that every linted file must belong to a
+TypeScript project, which is the same constraint that closed the `infra/` hole,
+so the two halves of this decision are really one.
+
+**What the first run found,** in 215 problems over 45 files:
+
+- **A shutdown handler that could not shut down.** `process.on(signal, async
+() => …)` passes a promise-returning function where a `void` return is
+  expected. A failure in any of the three `close()` calls surfaced as an
+  unhandled rejection, and because nothing then reached `process.exit`, the
+  process hung instead of exiting. Now the handler is synchronous, the async
+  work is launched inside it, and a failed shutdown exits non-zero — which is
+  what a container's stop timeout is waiting for.
+- **`[object Object]` in fourteen places.** `String(bag["key"])` over a
+  `Record<string, unknown>` is one object away from rendering nothing a reader
+  can use. One of the six sites in the resource detail panel was already doing
+  it correctly, inline; that correct version became `asText` in
+  `packages/shared`.
+- **The same idiom spelled five ways.** `err instanceof Error ? err.message :
+String(err)` appeared 22 times, and three of them had lost the `String(…)` —
+  so those three interpolated a raw `unknown` and printed `[object Object]` for
+  anything thrown that was not an `Error`. Now one `errorMessage` helper, which
+  renders a thrown object as JSON rather than as nothing.
+- **Seven dead imports**, one of them a `template` in
+  `infra/connectionGuide.test.ts` left behind when the assertion that used it
+  moved somewhere stronger. Dead code in a test is worse than dead code
+  anywhere else: it reads as coverage.
+
+**What was deliberately turned off,** because a gate nobody can pass is a gate
+people delete:
+
+- **`dot-notation`.** 106 of the 215 were this rule objecting to
+  `properties["publiclyAccessible"]`. It cannot tell an index signature from a
+  property access, and with `noUncheckedIndexedAccess` on, brackets are the
+  form that says "this key may not be there".
+- **`prefer-nullish-coalescing` over strings.** Every string case flagged was a
+  deliberate chain: `e.stderr || e.message || ""` wants an _empty_ stderr to
+  fall through, and `??` would keep the empty string and hide the only text
+  there was. ENOENT has exactly that shape.
+- **The `no-unsafe-*` family is `warn`, not `error`.** They are load-bearing at
+  the AWS SDK and Neo4j boundaries, where responses are genuinely dynamic.
+  Making them errors would buy a suppression comment on every boundary.
+
+**The cost.** A lint step that needs `npm ci` before it can run, because the
+type-aware rules need the tsconfigs; roughly fifteen seconds in CI. And a
+config file with opinions in it, each of which is now a thing to argue with —
+which is why each one above says what it cost to turn off rather than just
+that it is off.

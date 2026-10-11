@@ -165,10 +165,9 @@ export function GraphView({
   // instead of somewhere off the current viewport.
   useEffect(() => {
     if (citedArns.length === 0) return;
-    const timer = setTimeout(
-      () => fitView({ nodes: citedArns.map((id) => ({ id })), duration: 600, padding: 0.35 }),
-      80,
-    );
+    const timer = setTimeout(() => {
+      void fitView({ nodes: citedArns.map((id) => ({ id })), duration: 600, padding: 0.35 });
+    }, 80);
     return () => clearTimeout(timer);
   }, [citedArns, fitView]);
 

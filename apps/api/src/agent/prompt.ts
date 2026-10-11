@@ -19,7 +19,7 @@ export interface PromptContext {
   regions: string[];
   scannedAt: string | null;
   scanStatus: string | null;
-  failedUnits: Array<{ service: string; region: string | null; error?: string }>;
+  failedUnits: { service: string; region: string | null; error?: string }[];
   resourceCount: number;
 }
 

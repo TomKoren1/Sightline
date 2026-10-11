@@ -13,6 +13,7 @@
  * declaring both renders the number twice.
  */
 
+const path = require("node:path");
 const puppeteer = require("puppeteer");
 
 (async () => {
@@ -25,7 +26,9 @@ const puppeteer = require("puppeteer");
     args: ["--no-sandbox", "--disable-dev-shm-usage"],
   });
   const page = await browser.newPage();
-  await page.goto("file://" + src, { waitUntil: "networkidle0" });
+  // Absolute: `"file://" + src` with the relative argument the README documents
+  // gives `file://handover.html`, which Chrome rejects as ERR_INVALID_URL.
+  await page.goto(`file://${path.resolve(src)}`, { waitUntil: "networkidle0" });
 
   const footer = label ?? (await page.title());
   const escaped = footer.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");

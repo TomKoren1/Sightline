@@ -63,8 +63,7 @@ in the compose comments for that reason.
 whole collections in a single response. There is no `NextToken` to follow.
 
 **Consequence.** Pagination correctness **cannot be demonstrated against the
-mock**. Since "do you handle pagination?" is explicitly part of how this
-assignment is judged, absence of evidence here is a real gap.
+mock**. Since "do you handle pagination?" is a question this project claims to answer, absence of evidence here is a real gap.
 
 **Fix.** Pagination is exercised by unit tests against a stub client that does
 return `NextToken`, rather than against moto. The production code always uses
@@ -160,7 +159,7 @@ constructed.
 
 ## #7 — Neo4j Community cannot enforce a read-only database user
 
-**Context.** The brief's one hard rule is that the agent must never change
+**Context.** The one hard rule is that the agent must never change
 anything. Defence in depth for that ends at the database: even if every other
 layer were bypassed, the connection the agent's queries run on should be
 incapable of writing.
@@ -181,7 +180,7 @@ that user is an administrator. There is no `GRANT MATCH` to hand out.
 some other code path used them. In production this would be an Enterprise
 read-only role, or a read replica the agent talks to exclusively. Recorded
 here rather than glossed over, because "the agent cannot write" is a claim
-the brief asks us to make and it deserves an honest boundary.
+this project makes and it deserves an honest boundary.
 
 ---
 
@@ -394,7 +393,7 @@ it could not make the change.
 
 It had passed the run before. So the instruction was borderline, not absent.
 
-**Why this is not a style nitpick.** The brief's one hard rule is that the agent
+**Why this is not a style nitpick.** The one hard rule is that the agent
 must never change anything, and the system genuinely cannot — no tool can
 express a mutation. But a DevOps engineer learns that from what the answer
 _says_. An answer that quietly declines by handing over a CLI command reads like
@@ -752,9 +751,9 @@ and engineering log #17, arrived at from a third direction.
 
 ## #24 — The toggle quietly disabled the project's own onboarding variables
 
-**Symptom.** Found by auditing the repository against the brief rather than by
+**Symptom.** Found by auditing the repository against its own claims rather than by
 any failure. `AWS_TARGET_ROLE_ARN` and `AWS_EXTERNAL_ID` — the two AWS
-onboarding variables the assignment itself ships, and the ones `.env.example`
+onboarding variables the role template itself needs, and the ones `.env.example`
 documents — had stopped having any effect in mock mode. Editing either appeared
 to do nothing.
 
@@ -972,7 +971,7 @@ satisfies the template's own `AllowedPattern`.
 
 ### 3. `AWS_TARGET_ROLE_ARN` held a user ARN, which can never be assumed
 
-`.env` had been set to `arn:aws:iam::<account>:user/sightline-home-assignment`. That
+`.env` had been set to `arn:aws:iam::<account>:user/sightline-operator`. That
 is a correct and useful ARN — it is the answer to the question asked two steps
 earlier, the principal the trust policy should name. It is not something
 `sts:AssumeRole` can assume; only a role is.
@@ -1006,7 +1005,7 @@ which would have been a worse bug than the one being fixed.
 ### And a fifth, which only a real account could reveal
 
 With all four fixed, the connection test still failed. The stack's trust policy
-named `user/sightline-home-assignment`; the host's ambient credentials were
+named `user/sightline-operator`; the host's ambient credentials were
 `user/terraform-bootstrap`. Both are real identities in the same account, and
 the mismatch is invisible from either side alone.
 
@@ -1062,7 +1061,7 @@ for (const resource of resources) {
 ```
 
 The comment asks about principals. The code filters to roles. That gap had
-survived every review, including two full audits against the brief, because
+survived every review, including two full audits against its own goals, because
 the mock account contains no IAM users at all — so no test could have caught
 it, and the reason no test caught it is that the fixture shared the blind spot.
 
@@ -1658,7 +1657,7 @@ design. Every ingredient of an invisible defect.
 
 I did not find it by looking at the UI. I found it while checking a sentence I
 had just written in the README — that the product names tools in plain language —
-against the code, because the README makes claims a grader will test. The audit
+against the code, because the README makes claims a reader will test. The audit
 of the prose found the bug in the product.
 
 **Fix.** Both labels added, and `agent/toolLabels.test.ts` now compares the tool
@@ -1822,7 +1821,7 @@ defects, and the third is the serious one.
    table is what the Trust panel reads and what the next run is diffed against.
    So an outage silently overwrote the last real measurement — and because the
    number it produced was _plausible_, nothing announced that the reference point
-   was gone. The brief asks "how would you know if a change made it worse?" The
+   was gone. The question "how would you know if a change made it worse?" The
    honest answer, before this fix, was _you wouldn't: a billing event and a
    regression are indistinguishable, and the billing event destroys the evidence._
 
@@ -3249,3 +3248,132 @@ state. It costs one command and it found a real gap the first time it was tried.
 **What to take from it.** **A captured contract is a contract over the data you
 captured it with.** The technique is still right; its weakness is specific and
 cheap to cover, and the fix is not more thinking but a second, emptier run.
+
+---
+
+## #58 — Deleting a document silently disarmed three assertions, and my fix disarmed a fourth
+
+**Context.** Dropping the assignment framing: `docs/ASSIGNMENT.md` deleted, every
+reference to a brief, a grader or an interview rewritten, the project left as
+its own thing.
+
+**One: the guard read the file that was deleted.**
+`evals/readme.test.ts` checks that the numbers the documentation quotes are
+true — tools, eval cases, ground-truth checks, ADRs — by reading README,
+`SETUP.md` and `ASSIGNMENT.md` as one string. Three of those claims lived only
+in `ASSIGNMENT.md`. With the file gone the regexes matched nothing, `quoted()`
+returned null, and the assertions failed loudly.
+
+Loudly is the good case, and it was luck: `quoted()` returns `null` on no match
+and `expect(null).toBe(16)` fails. Had it defaulted to the real count on a miss
+— a reasonable-looking thing to write — the suite would have gone green while
+checking nothing.
+
+**They were not in `npm run verify` either.** That command runs
+`vitest run --exclude '**/evals/**'`, so the file is outside the gate used
+before pushing. The failures only appeared because the suite was run directly.
+The exclusion is right — tier-2 costs money — but it means this file's guards
+are CI-only, and worth running by name after touching documentation.
+
+**Two, and worse: the repair commented the assertion out.** Repointing the
+regexes at the README's own wording, the replacement text was built in a Python
+raw string, so its `\n` stayed two literal characters instead of becoming a
+newline. The result:
+
+```ts
+// The README's wording, since this claim used to live in a file…\n    expect(quoted(…)).toBe(actual);
+```
+
+One line. The `expect` is inside the comment. The test computed `actual` and
+asserted nothing, and it passed — including when the README was edited to claim
+twelve tools instead of sixteen.
+
+It was caught by the habit rather than by review: after repointing all three, I
+changed each number in the README to a wrong one to watch the guards fail. Two
+failed. The third passed, which is the only reason anyone looked at it.
+
+**What to take from it.** **A test that passes after you sabotage the thing it
+checks is not a test.** Both halves of this entry are the same shape as the
+failure they were guarding against — the documentation drifting from the code —
+and neither would have been visible from reading the diff, which showed a
+plausible comment and a plausible assertion on what looked like two lines.
+
+The narrow lesson: deleting a document is a code change when something reads it.
+The general one is the habit: a guard is worth exactly as much as the last time
+you watched it fail.
+
+---
+
+## #59 — The linter found a shutdown that could not shut down, and my own sabotage lied to me twice
+
+**What happened.** Adding ESLint to a project that had only ever run Prettier
+turned up 215 problems. Most were style. Four were bugs, and one of those was
+the kind that only shows up on the day you need it.
+
+**The shutdown handler.** `server.ts` registered
+`process.on(signal, async () => { await app.close(); … process.exit(0) })`.
+`process.on` expects a `void` return, so the promise was discarded. If any of
+the three `close()` calls rejected, the rejection was unhandled **and**
+`process.exit` was never reached — so the process did not exit at all. The
+container would sit through its stop timeout and be killed. A clean shutdown
+path that fails by hanging is worse than not having one, because the deploy
+looks fine until the first time a database connection is already gone.
+
+The rule is `no-misused-promises`, and it is type-aware: there is no way to see
+this from syntax, because the mistake is entirely about what the callback
+returns. That single finding is the argument for the type-checked rule sets
+over the cheap ones.
+
+**`[object Object]`, fourteen times.** `String(bag["key"])` where `bag` is
+`Record<string, unknown>`. The resource detail panel had six of them, and
+directly below them, one line doing it correctly —
+`typeof value === "object" ? JSON.stringify(value) : String(value)`. The
+correct version became `asText` in `packages/shared` and the other six now call
+it.
+
+The related find was `err instanceof Error ? err.message : String(err)`, which
+appeared 22 times, in five spellings. Three had lost the `String(…)` and
+interpolated a raw `unknown`, so anything thrown that was not an `Error`
+reached the log as `[object Object]` — the one rendering that costs the reader
+the entire incident. The AWS SDK does throw plain objects in some paths.
+
+**The part worth recording,** because it is the same mistake twice in one
+afternoon.
+
+I wrote a new guard — every tsconfig must be inside ESLint's `project` list, so
+a future directory cannot silently escape linting the way `infra/` had silently
+escaped type-checking — and then tried to break it four ways to prove it
+worked. Three sabotages failed the test. The fourth, removing a glob from the
+config, **passed**.
+
+For a moment that read as a weak assertion. It was not: Prettier had collapsed
+the `project` array onto one line, and my sabotage string still had the
+newline and ten spaces of the multi-line version. The edit matched nothing. The
+guard had never been tested at all, and the green run was the green run of an
+unmodified repository.
+
+This is log #58's lesson arriving by a different road. There, a Python raw
+string put an assertion inside a comment. Here, a Python replacement silently
+matched nothing. Both times the tool reported success, both times the thing I
+believed I had verified was untouched, and both times the only reason I found
+out is that I was expecting a specific failure and did not get it.
+
+**So the rule earns a sharper form.** It is not enough to watch a guard fail.
+The sabotage itself has to be verified — assert that the edit landed, print the
+file back, and only then believe the test result. A no-op sabotage and a working
+guard produce the identical output, and that output is "pass".
+
+Afterwards I checked the second new guard the same way and found the same class
+of problem waiting: removing the `project` array entirely made the test file
+throw during collection, so vitest reported `no tests` rather than a named
+failure. Technically not a silent pass — but "no tests" is a line you skim.
+Moving the lookup inside each `it` turned it into three named failures.
+
+**And the guard immediately caught me.** Narrowing CI's test exclusion from
+`**/evals/**` to the one file that needs databases — which it turned out was
+hiding 32 assertions, including all 25 that guard the documentation against
+rot, from every CI run — made `workflowPaths.test.ts` fail. It had parsed the
+tail of my new `--exclude '**/evals/groundTruth.test.ts'` as a repository path,
+found no such file at the root, and reported it missing. A correct change, a
+real failure, and a false positive: the file's own header says it checks paths
+rather than globs, and it had no code enforcing that. It does now.

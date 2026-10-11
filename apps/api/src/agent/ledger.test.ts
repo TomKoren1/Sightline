@@ -1,31 +1,16 @@
 /**
  * The citation ledger survives the framework.
  *
- * The agent loop used to be hand-written, and the argument for that was that
- * validating every ARN in an answer means holding the tool results, which
- * means owning the loop. Moving to the AI SDK is a bet that the argument was
- * about *holding* the results rather than about owning the loop — `execute` is
- * this codebase's function, and it records into the tracker at the point the
- * rows are produced.
+ * Moving to the AI SDK bet that the ledger needs the tool *results*, not
+ * ownership of the loop. This settles the bet: a scripted model calls a tool,
+ * then names a resource that tool never returned. If the ledger is intact the
+ * invented ARN is flagged; if a result is missed, a real one is - and crying
+ * wolf about genuine resources is worse than having no check.
  *
- * A bet is not a guarantee, so this is the test that settles it. It drives
- * `ask()` with a scripted model that does exactly what no prompt reliably
- * produces: calls a tool, then answers naming a resource that tool never
- * returned. If the ledger is intact the invented ARN is flagged; if anything
- * about the framework's tool handling means a result is missed, a real ARN is
- * flagged instead — and that is the failure that matters, because a product
- * that cries wolf about genuine resources is worse than one with no check.
- *
- * No network, no API key and no databases. The model is a stub and the two
- * reads `ask()` makes for the system prompt are stubbed too, so this runs in
- * the dependency-free job on every commit — which is where a guard on a safety
- * property belongs, and is the reason it is worth stubbing them rather than
- * gating the file behind a database.
- *
- * It did not start that way. The header claimed exactly the above while
- * `getLatestScan()` opened a Postgres connection on the first line of `ask()`,
- * which is invisible on a laptop with the stack running and `ECONNREFUSED` in
- * CI. See engineering log #56.
+ * No network, key or databases: the model and the two prompt reads are stubbed,
+ * so a guard on a safety property runs on every commit. The header claimed that
+ * while `getLatestScan()` still opened Postgres - invisible locally,
+ * `ECONNREFUSED` in CI (engineering log #56).
  */
 
 import { describe, expect, it, vi } from "vitest";

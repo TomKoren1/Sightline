@@ -1,20 +1,15 @@
 /**
- * No source file may carry a credential-shaped string.
+ * No source file may carry a credential-shaped string, judged by the
+ * repository's own gitleaks rules.
  *
- * The repository's own gitleaks rules are the authority on what "looks real", and a
- * fixture that matches one fails the secret scan — which happened twice while
- * writing this. First on a fake Anthropic key in a masking test, where the shape
- * was irrelevant to the assertion. Then on **this file's own positive controls**,
- * which is the more interesting failure: a test that proves it detects
- * credential-shaped strings needs one to detect.
+ * That fired twice while writing this: on a fake Anthropic key in a masking
+ * test, and then on **this file's own positive controls** - a test proving it
+ * detects credential-shaped strings needs one to detect. Both fixed by
+ * assembling probes at run time, noted beside them because a literal reads as
+ * simpler and would be restored by the next person tidying up.
  *
- * Both are fixed the same way — assemble probes at run time — and the reason is
- * recorded beside them, because a literal reads as simpler and would be restored by
- * the next person to tidy this up.
- *
- * This is the fast half of the secret scan, not a replacement: gitleaks reads git
- * history and carries far more rules. What this adds is feedback while the fixture
- * is being written rather than minutes later in CI.
+ * The fast half of the secret scan, not a replacement: gitleaks reads history
+ * and carries far more rules. This gives feedback while the fixture is written.
  */
 
 import { execFileSync } from "node:child_process";

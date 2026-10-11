@@ -1,34 +1,18 @@
 /**
  * HTTP contract tests: the shape of every response this API can produce.
  *
- * Written as the safety net for a refactor, not as unit tests of the handlers.
- * The data layer is moving to an ORM and the HTTP layer to a structured
- * framework, and the one property that must survive both is that the frontend
- * sees byte-compatible payloads. Nothing asserted that before: the suite had
- * 424 tests and exactly one of them issued an HTTP request.
+ * A safety net for the ORM and framework ports, not unit tests of the handlers.
+ * Three decisions worth knowing before changing this file:
  *
- * Three decisions worth knowing before changing this file.
- *
- * **The schemas were captured, not written.** Every endpoint was called against
- * a populated database and its real response recorded; the schemas below
- * describe what came back. A contract invented from reading the handlers would
- * pin what I believed the API returned, which is the same source of error the
- * refactor is trying to protect against.
- *
- * **Top level is `.strict()`, nested shapes are not.** A rename or a dropped
- * field at the top level is exactly the regression a port introduces, so an
- * unexpected key there is a failure. Inside arrays the entries are only checked
- * for the keys that are known to matter, because pinning every nested field
- * would make this fail on changes nobody cares about and it would then be
- * deleted rather than fixed.
- *
- * **Every status an endpoint can return is declared, and any of them passes.**
- * A contract test has to be deterministic, and these responses legitimately
- * differ with the state of the database and with `AWS_MODE` - a scan exists or
- * does not, the mock is active or is not. Asserting one status would make the
- * suite a function of the machine it runs on. Asserting "one of these, and it
- * matches that one's schema" keeps it honest and still catches a port that
- * changes a payload.
+ * - **Schemas were captured, not written.** Each endpoint was called against a
+ *   populated database and its real response recorded. A contract invented from
+ *   reading the handlers would pin what I *believed* it returned.
+ * - **Top level is `.strict()`, nested shapes are not.** A dropped top-level
+ *   field is the regression a port introduces; pinning every nested field would
+ *   fail on changes nobody cares about, and then be deleted rather than fixed.
+ * - **Every status an endpoint can return is declared, and any passes.** These
+ *   legitimately vary with database state and `AWS_MODE`, so asserting one
+ *   would make the suite a function of the machine it runs on.
  */
 
 import { afterAll, beforeAll, describe, expect, it } from "vitest";

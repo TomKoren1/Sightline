@@ -14,9 +14,8 @@
  */
 
 import type { Remediation } from "@sightline/shared";
-import { formatPortRange, shellQuote } from "@sightline/shared";
+import { asText, formatPortRange, shellQuote } from "@sightline/shared";
 
-import type { PublicAccessBlock } from "../scan/analysers/publicAccess.js";
 import { disabledBlockSettings } from "../scan/analysers/publicAccess.js";
 
 /** The resource shape these generators need — properties plus derived facts. */
@@ -38,7 +37,7 @@ export interface RemediationInput {
     estimatedMonthlyCostUsd?: number;
   };
   /** Resources that use this one, when known. Used to size the caution. */
-  usedBy?: Array<{ name: string; kind: string }>;
+  usedBy?: { name: string; kind: string }[];
 }
 
 const ALL_BLOCK_SETTINGS = [
@@ -65,7 +64,7 @@ function s3Remediations(input: RemediationInput): Remediation[] {
   const bucket = shellQuote(input.name);
   const out: Remediation[] = [];
 
-  const pab = (input.properties["publicAccessBlock"] ?? null) as PublicAccessBlock | null;
+  const pab = input.properties["publicAccessBlock"] ?? null;
   const policy = (input.properties["policy"] ?? null) as string | null;
 
   if (input.derived.isPublic) {
@@ -364,7 +363,7 @@ function idleRemediations(input: RemediationInput): Remediation[] {
 
   switch (input.kind) {
     case "EbsVolume": {
-      const volumeId = String(input.properties["volumeId"] ?? input.name);
+      const volumeId = asText(input.properties["volumeId"] ?? input.name);
       return [
         {
           id: "ebs-snapshot-then-delete",
@@ -409,7 +408,7 @@ function idleRemediations(input: RemediationInput): Remediation[] {
     }
 
     case "NatGateway": {
-      const natId = String(input.properties["natGatewayId"] ?? input.name);
+      const natId = asText(input.properties["natGatewayId"] ?? input.name);
       return [
         {
           id: "nat-delete",
@@ -434,7 +433,7 @@ function idleRemediations(input: RemediationInput): Remediation[] {
     }
 
     case "Ec2Instance": {
-      const instanceId = String(input.properties["instanceId"] ?? input.name);
+      const instanceId = asText(input.properties["instanceId"] ?? input.name);
       return [
         {
           id: "ec2-stopped-review",
@@ -476,7 +475,7 @@ function rdsRemediations(input: RemediationInput): Remediation[] {
   if (input.kind !== "RdsInstance") return [];
   if (input.properties["publiclyAccessible"] !== true) return [];
 
-  const id = String(input.properties["dbInstanceIdentifier"] ?? input.name);
+  const id = asText(input.properties["dbInstanceIdentifier"] ?? input.name);
   const region = regionFlag(input.region);
 
   /**

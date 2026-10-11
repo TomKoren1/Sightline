@@ -1,7 +1,7 @@
 /**
  * Scan state.
  *
- * The brief asks the UI to communicate freshness, progress, partial failure
+ * The UI has to communicate freshness, progress, partial failure
  * and empty states. They are all one component, because they are all the same
  * question from the user's point of view: can I trust what I am looking at?
  */

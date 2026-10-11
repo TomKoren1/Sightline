@@ -2,7 +2,7 @@
 <html lang="en">
   <head>
     <meta charset="utf-8" />
-    <title>Sightline Engineering Assignment — Project Handover</title>
+    <title>Sightline — Project Handover</title>
     <style>
       /* Margins and the page number come from the print job (see render.js),
          not from @page — declaring a counter here as well renders it twice. */
@@ -376,11 +376,13 @@
         <dt>Prepared for</dt>
         <dd>Tom Koren</dd>
         <dt>Purpose</dt>
-        <dd>Sightline engineering assignment — presentation &amp; defence</dd>
+        <dd>Sightline — design decisions and the problems hit along the way</dd>
         <dt>Repository</dt>
-        <dd>github.com/TomKoren1/dave.io_home-assignment</dd>
+        <dd>github.com/TomKoren1/Sightline</dd>
         <dt>Stack</dt>
-        <dd>TypeScript · Fastify · Postgres · Neo4j · React Flow · Anthropic</dd>
+        <dd>
+          TypeScript · NestJS on Fastify · Drizzle · Postgres · Neo4j · React Flow · Vercel AI SDK
+        </dd>
         <dt>Verified against</dt>
         <dd>A real AWS account (672299759593) and a mocked one (moto)</dd>
       </dl>
@@ -400,7 +402,7 @@
         <li>
           <span>1</span>What was asked, and what was built
           <ul>
-            <li>The brief · Scope delivered · How to demo it in ten minutes</li>
+            <li>Goals · Scope delivered · How to demo it in ten minutes</li>
           </ul>
         </li>
         <li>
@@ -460,7 +462,7 @@
           </ul>
         </li>
         <li>
-          <span>11</span>Interview preparation
+          <span>11</span>Questions and answers
           <ul>
             <li>Likely questions, with answers grounded in the code</li>
           </ul>
@@ -472,7 +474,7 @@
     <div class="section">
       <h2><span class="num">1</span>What was asked, and what was built</h2>
 
-      <h3>The brief</h3>
+      <h3>Goals</h3>
       <p>
         Connect to a customer's AWS account using a read-only role, ingest the resources and the
         relationships between them into a store, put an LLM agent on top that answers questions
@@ -536,7 +538,7 @@
       </div>
 
       <h3>Demo in ten minutes</h3>
-      <pre><code>git clone &lt;repo&gt; &amp;&amp; cd dave.io_home-assignment
+      <pre><code>git clone &lt;repo&gt; &amp;&amp; cd Sightline
 cp .env.example .env            # add ANTHROPIC_API_KEY for the chat
 docker compose up -d            # Postgres, Neo4j, moto
 npm install
@@ -599,9 +601,9 @@ npm run dev:api &amp; npm run dev:web
         writer, one direction of flow.
       </p>
       <p>
-        <strong>Neo4j earns its place</strong> because the brief's questions are overwhelmingly
-        about relationships, and one of them — <em>what can reach the production database?</em> — is
-        a variable-length path query. In Cypher that is one <code>MATCH</code> with a
+        <strong>Neo4j earns its place</strong> because the questions are overwhelmingly about
+        relationships, and one of them — <em>what can reach the production database?</em> — is a
+        variable-length path query. In Cypher that is one <code>MATCH</code> with a
         <code>*1..n</code> hop. In SQL it is a recursive CTE over a junction table that nobody will
         enjoy maintaining. The graph is the shape of the problem, not decoration.
       </p>
@@ -668,9 +670,9 @@ npm run dev:api &amp; npm run dev:web
 
       <h3>Why the supplied role was replaced</h3>
       <p>
-        This is the sharpest thing in the brief, and probably deliberately so: the supplied template
-        grants <code>ReadOnlyAccess</code> while the evaluation criteria ask whether candidates
-        understand what read-only really means.
+        This is the sharpest thing in the original template, and probably deliberately so: the
+        supplied template grants <code>ReadOnlyAccess</code> while the evaluation criteria ask
+        whether candidates understand what read-only really means.
       </p>
       <div class="box warn">
         <h4>
@@ -689,9 +691,9 @@ npm run dev:api &amp; npm run dev:web
         <p>
           <strong>And <code>sqs:ReceiveMessage</code> is not even read-only literally.</strong>
           Receiving a message starts its visibility timeout and can hide it from the consumer that
-          should have processed it. A scanner holding that permission can breach the brief's own
-          hard rule through a permission nobody thinks of as a write. This is the detail to raise in
-          the interview.
+          should have processed it. A scanner holding that permission can breach the read-only hard
+          rule through a permission nobody thinks of as a write. This is the detail worth raising
+          first.
         </p>
       </div>
       <p>The replacement grants strictly less, and three things changed:</p>
@@ -707,7 +709,7 @@ npm run dev:api &amp; npm run dev:web
           <strong>Trust:</strong> the scanner principal is named directly rather than
           <code>Principal: …:root</code>. That <code>:root</code> does not mean "the root user" — it
           means every principal in the account that IAM permits to call AssumeRole. It is a common
-          misreading, and worth flagging in the brief itself.
+          misreading, and worth flagging in the template itself.
         </li>
         <li>
           <strong>Attribution:</strong> <code>sts:SetSourceIdentity</code> constrained to
@@ -878,9 +880,13 @@ npm run dev:api &amp; npm run dev:web
         "Thinking…".
       </p>
       <p>
-        No framework, because the two decisions that actually define this agent — the tool boundary
-        and citation validation — are precisely what a framework would hide behind its own
-        abstractions, without removing any of the real work.
+        The loop runs on the Vercel AI SDK. It was hand-written first, on the argument that
+        validating every ARN in an answer means holding the tool results, which means owning the
+        loop. Holding them is necessary; owning the loop is not how you get it — a tool's
+        <code>execute</code> is this codebase's own function, and the rows pass through it before
+        they reach anything else, the model included. The ledger records there, and
+        <code>agent/ledger.test.ts</code> proves it by driving the real loop with a scripted model
+        that names a resource no tool returned.
       </p>
 
       <h3>Sixteen curated tools, not text-to-Cypher</h3>
@@ -890,7 +896,7 @@ npm run dev:api &amp; npm run dev:web
       </p>
       <ul>
         <li>
-          <strong>Safety.</strong> A curated tool cannot express a mutation. The brief's hard rule
+          <strong>Safety.</strong> A curated tool cannot express a mutation. The read-only rule
           becomes structural.
         </li>
         <li>
@@ -972,8 +978,8 @@ npm run dev:api &amp; npm run dev:web
         <strong>Neo4j Community has no role-based access control</strong>, so a genuinely read-only
         database <em>user</em> is not available. The read transaction is enforced at the driver, not
         the database. In production this would be an Enterprise read-only role or a read replica.
-        Recorded in log #7 rather than glossed over — and worth volunteering in the interview, since
-        it is the kind of thing a good reviewer will find.
+        Recorded in log #7 rather than glossed over — and worth volunteering, since it is the kind
+        of thing a good reviewer will find.
       </p>
     </div>
 
@@ -1047,11 +1053,22 @@ npm run dev:api &amp; npm run dev:web
 
       <h3>CI</h3>
       <p>
-        Three jobs: a static job (format, typecheck, 176 unit tests), an integration job that stands
-        up Postgres, Neo4j and moto and runs the tier-1 suite, and a secret scan. The secret scan
-        pairs gitleaks with a deterministic <code>git ls-files</code> check that no environment file
-        is ever tracked — because a probabilistic check that silently matches nothing is worse than
-        no check at all, which is exactly what happened in log #27.
+        Five jobs. A static job (Prettier, ESLint, typecheck, 436 unit tests needing no services);
+        an integration job that stands up Postgres, Neo4j and moto and runs the tier-1 suite; a
+        containerised job that drives the product through nginx, because a documented path CI does
+        not exercise is a claim nobody has checked; a job asserting the setup script
+        <em>refuses</em> safely and writes nothing when it cannot proceed; and a secret scan. The
+        secret scan pairs gitleaks with a deterministic <code>git ls-files</code> check that no
+        environment file is ever tracked — because a probabilistic check that silently matches
+        nothing is worse than no check at all, which is exactly what happened in log #27.
+      </p>
+
+      <p>
+        The exclusion on the static job names one file rather than the whole
+        <code>evals/</code> directory. As <code>**/evals/**</code> it also hid
+        <code>readme.test.ts</code> and <code>summarise.test.ts</code>, which need no databases and
+        no API key — so thirty-two assertions, including all twenty-five guarding the documentation
+        against rot, ran in no job at all.
       </p>
     </div>
 
@@ -1259,7 +1276,8 @@ npm run dev:api &amp; npm run dev:web
           <dt>Lesson</dt>
           <dd>
             It also cannot be relied on in production: the index must be created in the customer
-            account, which a read-only role cannot do. Worth raising as feedback on the brief.
+            account, which a read-only role cannot do. Worth raising as a note on the original
+            template.
           </dd>
         </dl>
       </div>
@@ -1388,7 +1406,7 @@ npm run dev:api &amp; npm run dev:web
           <dt>Lesson</dt>
           <dd>
             When you cannot have the guarantee you want, name the one you actually have. Volunteer
-            this in the interview.
+            it.
           </dd>
         </dl>
       </div>
@@ -2143,7 +2161,7 @@ npm run dev:api &amp; npm run dev:web
           <dt>How it was found</dt>
           <dd>
             Not by looking at the UI. By checking a sentence in the README — "names the running tool
-            in plain language" — against the code, because the README makes claims a grader will
+            in plain language" — against the code, because the README makes claims a reader will
             test. The audit of the prose found the bug in the product.
           </dd>
           <dt>Fix</dt>
@@ -2358,10 +2376,10 @@ npm run dev:api &amp; npm run dev:web
 
     <!-- =================== 11 =================== -->
     <div class="section">
-      <h2><span class="num">11</span>Interview preparation</h2>
+      <h2><span class="num">11</span>Questions and answers</h2>
       <p class="muted small">
         Answers grounded in things the code actually does. Where an answer concedes something, the
-        concession is the strongest part — say it before you are asked.
+        concession is the strongest part — it is worth saying before anyone asks.
       </p>
 
       <div class="qa">
@@ -2387,7 +2405,7 @@ npm run dev:api &amp; npm run dev:web
         <div class="a">
           <p>
             Four reasons, and the fourth is the one that decided it. Safety: a curated tool cannot
-            express a mutation, so the brief's hard rule becomes structural rather than asserted.
+            express a mutation, so the read-only rule becomes structural rather than asserted.
             Correctness: hand-written Cypher for reachability is reviewable and identical every run.
             Cost: a tool call returns rows; text-to-Cypher tends to return a schema, a failed query,
             an error and a retry. <strong>Auditability:</strong> because every tool records exactly

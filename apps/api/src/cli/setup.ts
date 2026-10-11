@@ -7,21 +7,18 @@
  *   npm run setup -- --mock          configure the demo account and stop
  *   npm run setup -- --disconnect    delete the role and go back to the demo account
  *
- * Replaces the part of onboarding that was hand-editing `.env` and copying a
- * CloudFormation command. It runs on the host deliberately: the API runs in a
- * container with no AWS CLI, no write permissions and no access to `.env`, so an
- * in-product form could not have done the step that actually takes effort.
+ * Runs on the host deliberately: the API is in a container with no AWS CLI, no
+ * write permissions and no access to `.env`, so an in-product form could not
+ * have done the step that takes effort.
  *
- * **Safety rules this file keeps, in order of importance:**
+ * Safety rules, in order of importance:
  *
- *  1. Nothing that writes runs before the plan is shown and accepted. `--dry-run`
- *     performs read-only AWS calls and no mutations at all.
- *  2. `.env` is backed up, then rewritten touching only declared keys - verified
- *     against the produced content, not merely intended.
- *  3. Credentials are never printed. The ExternalId is masked in the diff; the
- *     script never asks for an access key and cannot write one.
- *  4. Every AWS call passes an argument vector, so no user value is shell syntax.
- *  5. Re-running is safe, and deleting anything needs an explicit flag.
+ *  1. Nothing that writes runs before the plan is shown and accepted.
+ *  2. `.env` is backed up, then rewritten touching only declared keys -
+ *     verified against the produced content, not merely intended.
+ *  3. Credentials are never printed, and no access key can be written.
+ *  4. Every AWS call passes an argument vector, so no value is shell syntax.
+ *  5. Re-running is safe; deleting anything needs an explicit flag.
  */
 
 import { randomBytes } from "node:crypto";
@@ -95,7 +92,7 @@ function parseArgs(argv: string[]): Options {
     const value = () => {
       const v = argv[++i];
       if (v === undefined) fail(`${arg} needs a value`);
-      return v!;
+      return v;
     };
     switch (arg) {
       case "--dry-run":
@@ -127,6 +124,7 @@ function parseArgs(argv: string[]): Options {
       case "-h":
         usage();
         process.exit(0);
+      // eslint-disable-next-line no-fallthrough -- process.exit returns never
       default:
         fail(`unknown option ${arg}. Try --help.`);
     }

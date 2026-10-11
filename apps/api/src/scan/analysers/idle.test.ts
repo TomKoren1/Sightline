@@ -29,7 +29,7 @@ function elasticIp(properties: Record<string, unknown>): Resource {
     properties: { allocationId: "eipalloc-1", publicIp: "203.0.113.7", ...properties },
     derived: {},
     raw: {},
-  } as Resource;
+  };
 }
 
 describe("idle Elastic IPs", () => {

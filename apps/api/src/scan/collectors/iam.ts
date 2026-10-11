@@ -1,20 +1,15 @@
 /**
  * IAM roles, their policies, and instance profiles.
  *
- * This collector does more work per resource than any other, because the
- * question it has to serve - "which roles have admin access?" - cannot be
- * answered from a listing. A role's effective permissions are the union of its
- * attached managed policies and its inline policies, and the *name* of a
- * policy tells you nothing: the mock account contains a role called
- * `LegacyDeployRole` whose inline policy grants `*` on `*`.
+ * More work per resource than any other collector, because "which roles have
+ * admin access?" cannot be answered from a listing: effective permissions are
+ * the union of attached and inline policies, and a policy's *name* tells you
+ * nothing - the mock holds a `LegacyDeployRole` whose inline policy grants `*`
+ * on `*`. So every document is fetched and the verdict computed by a unit-
+ * testable analyser.
  *
- * So every policy document is fetched and kept, and the admin verdict is
- * computed from the documents by an analyser that can be unit tested.
- *
- * Managed policy documents are fetched once and cached. `AdministratorAccess`
- * is attached to several roles, and on a real account a handful of managed
- * policies are attached to hundreds - re-fetching each time is the difference
- * between one API call and several hundred.
+ * Managed documents are cached: on a real account a handful of policies are
+ * attached to hundreds of roles, which is one API call rather than hundreds.
  */
 
 import {
@@ -35,18 +30,19 @@ import type { Relationship, Resource } from "@sightline/shared";
 import { iamClient } from "../../aws/clients.js";
 import { iamArn, tagsToRecord } from "../../aws/arns.js";
 import type { CollectorContext, CollectorOutput } from "./types.js";
+import { errorMessage } from "@sightline/shared";
 
 /** A policy document, decoded. AWS returns these URL-encoded. */
 export interface PolicyDocument {
   Version?: string;
-  Statement?: Array<{
+  Statement?: {
     Sid?: string;
     Effect?: string;
     Action?: string | string[];
     NotAction?: string | string[];
     Resource?: string | string[];
     Condition?: Record<string, unknown>;
-  }>;
+  }[];
 }
 
 export function decodePolicyDocument(doc: string | undefined): PolicyDocument | null {
@@ -80,14 +76,12 @@ export async function collectIam(ctx: CollectorContext): Promise<CollectorOutput
         const version = await client.send(
           new GetPolicyVersionCommand({ PolicyArn: policyArn, VersionId: versionId }),
         );
-        document = decodePolicyDocument(version.PolicyVersion?.Document as string | undefined);
+        document = decodePolicyDocument(version.PolicyVersion?.Document);
       }
     } catch (err) {
       // A policy we cannot read is recorded as unreadable rather than absent,
       // so the admin analyser can say "unknown" instead of silently "no".
-      console.warn(
-        `  iam: could not read ${policyArn}: ${err instanceof Error ? err.message : err}`,
-      );
+      console.warn(`  iam: could not read ${policyArn}: ${errorMessage(err)}`);
     }
 
     managedPolicyCache.set(policyArn, document);
@@ -105,11 +99,11 @@ export async function collectIam(ctx: CollectorContext): Promise<CollectorOutput
         .send(new ListAttachedRolePoliciesCommand({ RoleName: roleName }))
         .catch(() => null);
 
-      const attachedPolicies: Array<{
+      const attachedPolicies: {
         policyArn: string;
         policyName: string;
         document: PolicyDocument | null;
-      }> = [];
+      }[] = [];
       for (const p of attached?.AttachedPolicies ?? []) {
         if (!p.PolicyArn) continue;
         attachedPolicies.push({
@@ -123,14 +117,14 @@ export async function collectIam(ctx: CollectorContext): Promise<CollectorOutput
         .send(new ListRolePoliciesCommand({ RoleName: roleName }))
         .catch(() => null);
 
-      const inlinePolicies: Array<{ policyName: string; document: PolicyDocument | null }> = [];
+      const inlinePolicies: { policyName: string; document: PolicyDocument | null }[] = [];
       for (const policyName of inlineNames?.PolicyNames ?? []) {
         const inline = await client
           .send(new GetRolePolicyCommand({ RoleName: roleName, PolicyName: policyName }))
           .catch(() => null);
         inlinePolicies.push({
           policyName,
-          document: decodePolicyDocument(inline?.PolicyDocument as string | undefined),
+          document: decodePolicyDocument(inline?.PolicyDocument),
         });
       }
 
@@ -257,11 +251,11 @@ export async function collectIam(ctx: CollectorContext): Promise<CollectorOutput
         .send(new ListAttachedUserPoliciesCommand({ UserName: userName }))
         .catch(() => null);
 
-      const attachedPolicies: Array<{
+      const attachedPolicies: {
         policyArn: string;
         policyName: string;
         document: PolicyDocument | null;
-      }> = [];
+      }[] = [];
       for (const p of attached?.AttachedPolicies ?? []) {
         if (!p.PolicyArn) continue;
         attachedPolicies.push({
@@ -277,14 +271,14 @@ export async function collectIam(ctx: CollectorContext): Promise<CollectorOutput
         .send(new ListUserPoliciesCommand({ UserName: userName }))
         .catch(() => null);
 
-      const inlinePolicies: Array<{ policyName: string; document: PolicyDocument | null }> = [];
+      const inlinePolicies: { policyName: string; document: PolicyDocument | null }[] = [];
       for (const policyName of inlineNames?.PolicyNames ?? []) {
         const inline = await client
           .send(new GetUserPolicyCommand({ UserName: userName, PolicyName: policyName }))
           .catch(() => null);
         inlinePolicies.push({
           policyName,
-          document: decodePolicyDocument(inline?.PolicyDocument as string | undefined),
+          document: decodePolicyDocument(inline?.PolicyDocument),
         });
       }
 

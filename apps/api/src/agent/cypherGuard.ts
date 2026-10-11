@@ -1,20 +1,15 @@
 /**
- * The guard on the agent's raw-Cypher escape hatch.
+ * The guard on `graph_query`, the agent's raw-Cypher escape hatch. The curated
+ * tools cannot express a mutation, so they need no guard. This is the second of
+ * two layers - the query also runs in a Neo4j read transaction, which rejects
+ * writes on its own - and neither is trusted alone.
  *
- * The curated tools cannot express a mutation, so they need no guard. This
- * exists only for `graph_query`, which lets the model ask something nobody
- * anticipated. It is the second of two layers - the query also runs inside a
- * Neo4j read transaction, which rejects writes on its own (see
- * `readQuery`). Neither layer is trusted alone.
+ * An allowlist of opening clauses plus a denylist of write keywords, applied
+ * after literals and comments are stripped, so a node named "DELETE ME" cannot
+ * trip it and a write cannot hide inside a string.
  *
- * The approach is an allowlist of opening clauses plus a denylist of write
- * keywords, applied after string literals and comments have been stripped so
- * that a node named "DELETE ME" cannot trip it and, more importantly, a write
- * cannot hide inside a string.
- *
- * This is a lexical check, not a parser. It is deliberately strict: a query it
- * wrongly rejects costs the user one retry, while one it wrongly accepts
- * breaks the single hard rule in the brief.
+ * Lexical, not a parser, and deliberately strict: a wrong rejection costs one
+ * retry, a wrong acceptance breaks the one hard rule.
  */
 
 /** Clauses that mutate the graph or the database. */

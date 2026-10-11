@@ -14,7 +14,7 @@ const sg = (id: string, ingress: unknown[]): Resource => ({
   derived: {},
 });
 
-const host = (name: string, subnet: string): Resource => ({
+const host = (name: string, _subnet: string): Resource => ({
   arn: `host:${name}`,
   kind: "Ec2Instance",
   name,

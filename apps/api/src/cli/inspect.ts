@@ -10,7 +10,7 @@
  *   npm run inspect -w @sightline/api
  */
 
-import { INTERNET_ARN, rollUpStatus } from "@sightline/shared";
+import { INTERNET_ARN, asText, rollUpStatus } from "@sightline/shared";
 import { runScan } from "../scan/runner.js";
 import { callCounter } from "../aws/clients.js";
 
@@ -69,7 +69,7 @@ console.log(`\n${bold("Reachable from the internet")}`);
 const canReach = result.relationships.filter((e) => e.type === "CAN_REACH");
 for (const edge of canReach.filter((e) => e.from === INTERNET_ARN)) {
   const target = result.resources.find((r) => r.arn === edge.to);
-  console.log(`  Internet -> ${target?.name}  ${dim(String(edge.properties?.["ports"] ?? ""))}`);
+  console.log(`  Internet -> ${target?.name}  ${dim(asText(edge.properties?.["ports"]))}`);
 }
 
 console.log(`\n${bold("Who can reach the production database")}`);
@@ -77,11 +77,11 @@ const db = result.resources.find((r) => r.name === "northwind-prod-db");
 for (const edge of canReach.filter((e) => e.to === db?.arn)) {
   const source = result.resources.find((r) => r.arn === edge.from);
   console.log(
-    `  ${source?.name} -> northwind-prod-db\n     ${dim(String(edge.properties?.["reason"] ?? ""))}`,
+    `  ${source?.name} -> northwind-prod-db\n     ${dim(asText(edge.properties?.["reason"]))}`,
   );
 }
 
-// Full paths, not just the last hop. This is the question the brief asks, and
+// Full paths, not just the last hop. This is the question, and
 // the answer is only useful if it shows how an attacker would actually arrive.
 if (db) {
   const outgoing = new Map<string, string[]>();
@@ -109,7 +109,7 @@ if (db) {
 const analytics = result.resources.find((r) => r.name === "analytics-db");
 console.log(
   `\n${bold("analytics-db")} ${dim("(publicly accessible, but is it reachable?)")}\n` +
-    `  PubliclyAccessible=${analytics?.properties["publiclyAccessible"]}  ` +
+    `  PubliclyAccessible=${asText(analytics?.properties["publiclyAccessible"])}  ` +
     `reachable from internet: ${analytics?.derived.isPublic ? red("yes") : green("no")}`,
 );
 

@@ -336,10 +336,10 @@ function changedFields(
   beforeValue: object,
   afterValue: object,
   prefix: string,
-): Array<{ field: string; before: unknown; after: unknown }> {
+): { field: string; before: unknown; after: unknown }[] {
   const before = (beforeValue ?? {}) as Record<string, unknown>;
   const after = (afterValue ?? {}) as Record<string, unknown>;
-  const fields: Array<{ field: string; before: unknown; after: unknown }> = [];
+  const fields: { field: string; before: unknown; after: unknown }[] = [];
   const keys = new Set([...Object.keys(before), ...Object.keys(after)]);
   for (const key of keys) {
     const a = before[key];

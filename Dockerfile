@@ -8,10 +8,9 @@
 # Used only by the optional `app` profile in docker-compose.yml. The documented
 # local-development path does not build these, so nothing here can break it.
 #
-# Deliberately not a hot-reload dev container: a reviewer wants to see the
-# product run, not develop inside it, and a production-shaped image avoids
-# mounting node_modules into a container, which is where containerised Node
-# setups usually rot.
+# Deliberately not a hot-reload dev container: this is for running the product,
+# not developing inside it, and a production-shaped image avoids mounting
+# node_modules into a container, which is where containerised Node setups rot.
 
 # --- dependencies ----------------------------------------------------------
 # Workspace manifests are copied before the source so `npm ci` is cached and a
@@ -46,6 +45,10 @@ COPY apps/api/ apps/api/
 # Fastify must accept connections from the nginx container, not just loopback.
 ENV BACKEND_HOST=0.0.0.0
 EXPOSE 3000
+# Non-root. The `node` user ships with the image, `/app` only needs to be read,
+# and the server writes nothing at runtime - the two CLIs that do write run on
+# the host. tsx caches transforms under the system temp directory, not the tree.
+USER node
 # The server applies the Postgres schema on boot, so no migrate step is needed.
 CMD ["npm", "run", "start", "-w", "@sightline/api"]
 

@@ -1,22 +1,13 @@
 /**
- * The SourceIdentity the scanner sends must satisfy the trust policy it is sent to.
+ * The SourceIdentity the scanner sends must satisfy the trust policy it reaches.
+ * Two constraints had to agree and nothing connected them: AWS permits only
+ * alphanumerics, underscore and `+=,.@-`, while the trust policy matches
+ * `sightline-*` and requires the key present.
  *
- * Two independent constraints have to agree, and nothing connected them:
- *
- *  1. **AWS's own charset.** Per the AssumeRole API reference, SourceIdentity
- *     permits alphanumerics, underscore and `+=,.@-` — and nothing else. A colon
- *     is rejected.
- *  2. **The customer's trust policy**, which constrains the value with
- *     `StringLike: sts:SourceIdentity: "sightline-*"` and, via a `Null` condition,
- *     requires it to be present at all.
- *
- * The template originally matched `sightline:*` — a pattern **no legal value can
- * ever satisfy**, because of (1). It went unnoticed because `credentials.ts` was
- * not sending a SourceIdentity, so the condition was never evaluated: a control
- * that was documented in an ADR, described in the onboarding UI, and dead.
- *
- * These assertions make the two artefacts fail together instead of drifting
- * apart silently.
+ * The template originally matched `sightline:*`, which no legal value can
+ * satisfy - unnoticed because nothing was sending a SourceIdentity, so the
+ * condition was never evaluated. A control documented in an ADR, shown in the
+ * UI, and dead.
  */
 
 import { describe, expect, it } from "vitest";

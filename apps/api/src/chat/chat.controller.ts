@@ -24,6 +24,7 @@ import type { AgentEvent } from "@sightline/shared";
 
 import { askSchema } from "./chat.dto.js";
 import { ChatService } from "./chat.service.js";
+import { errorMessage } from "@sightline/shared";
 
 @Controller("api")
 export class ChatController {
@@ -74,7 +75,7 @@ export class ChatController {
         req.log.error({ err }, "failed to persist conversation");
       }
     } catch (err) {
-      const text = err instanceof Error ? err.message : String(err);
+      const text = errorMessage(err);
       req.log.error({ err }, "agent failed");
       send({ type: "agent.failed", error: text });
     } finally {

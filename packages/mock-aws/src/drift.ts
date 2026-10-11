@@ -1,29 +1,20 @@
 /**
  * Simulate a day passing in the customer account.
  *
- * Change detection is only demonstrable if something has actually changed
- * between two scans, and re-running the seeder is the wrong way to get there:
- * moto assigns fresh random ids, so every resource looks removed and re-added
- * and the diff is 73 additions of noise. This applies a handful of targeted
- * changes to the *existing* account instead, leaving identities intact.
+ * Re-seeding is the wrong way to get a diff: moto assigns fresh ids, so every
+ * resource looks removed and re-added. This changes the *existing* account,
+ * leaving identities intact.
  *
- * The changes are chosen so the diff exercises the distinction the UI makes
- * between a security event and bookkeeping:
+ *   - bucket with no access block gets a wildcard policy -> isPublic flips
+ *   - bucket *with* a block gets the same policy         -> verdict does NOT
+ *     flip. Both on purpose: side by side they show the verdict is computed
+ *     rather than read off the policy.
+ *   - a security group opens Postgres to the world       -> reachability
+ *   - an instance is stopped                             -> isIdle
+ *   - a volume appears                                   -> plain addition
+ *   - a tag changes                                      -> routine
  *
- *   - a bucket with no access block gets a wildcard policy -> derived.isPublic
- *     flips to true, a real incident
- *   - a bucket *with* an access block gets the same policy -> the verdict does
- *     NOT flip, because the block neutralises it. Both are applied on purpose:
- *     side by side they show why the verdict is computed rather than read off
- *     the policy.
- *   - a security group opens Postgres to the world -> ingress and reachability
- *   - an instance is stopped                     -> state and derived.isIdle
- *   - a volume appears                           -> a plain addition
- *   - a tag changes                              -> routine, and should be
- *                                                   grouped away from the rest
- *
- * Read-only by the scanner's standards, destructive by the customer's: this is
- * the customer's own administrator making changes, not Sightline.
+ * This is the customer's own administrator making changes, not Sightline.
  */
 
 import {

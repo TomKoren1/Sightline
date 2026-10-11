@@ -40,7 +40,7 @@ export function Findings({ summary, findings, loading, onHighlight }: FindingsPr
     );
   }
 
-  const tabs: Array<{ id: Tab; label: string; count?: number; tone?: string }> = [
+  const tabs: { id: Tab; label: string; count?: number; tone?: string }[] = [
     { id: "overview", label: "Overview" },
     { id: "exposed", label: "Exposed", count: summary.publicCount, tone: "text-danger" },
     { id: "admin", label: "Admin", count: summary.adminCount, tone: "text-warn" },
@@ -212,7 +212,7 @@ function FindingList({
   onHighlight,
   extra,
 }: {
-  items: Array<GraphNode & { reason?: string | null }>;
+  items: (GraphNode & { reason?: string | null })[];
   empty: string;
   onHighlight: (arns: string[]) => void;
   extra?: (item: GraphNode & { reason?: string | null }) => string | undefined;

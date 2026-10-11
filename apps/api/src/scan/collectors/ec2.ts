@@ -3,7 +3,7 @@
  *
  * Volumes and addresses are collected even when attached to nothing - in fact
  * *especially* then, since an unattached volume is the clearest example of the
- * "costing money but not being used" question the brief asks about.
+ * "costing money but not being used" question.
  */
 
 import {

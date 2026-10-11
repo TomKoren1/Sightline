@@ -23,8 +23,8 @@ export interface GraphEdge {
 }
 
 export interface Summary {
-  byKind: Array<{ kind: string; count: number }>;
-  byRegion: Array<{ region: string; count: number }>;
+  byKind: { kind: string; count: number }[];
+  byRegion: { region: string; count: number }[];
   publicCount: number;
   adminCount: number;
   idleCount: number;
@@ -36,9 +36,9 @@ export interface Findings {
   publicResources: GraphNode[];
   /** Not public, but nothing would stop them becoming public. */
   unprotected: GraphNode[];
-  adminPrincipals: Array<GraphNode & { reason?: string; usedBy?: GraphNode[]; useCount?: number }>;
+  adminPrincipals: (GraphNode & { reason?: string; usedBy?: GraphNode[]; useCount?: number })[];
   idle: GraphNode[];
-  exposed: Array<GraphNode & { ports?: string[]; securityGroup?: string }>;
+  exposed: (GraphNode & { ports?: string[]; securityGroup?: string })[];
 }
 
 export interface CheckResult {
@@ -174,7 +174,7 @@ export const api = {
   },
   diff: () => get<{ diff: ScanDiff | null; reason?: string }>("/api/scans/diff"),
 
-  checks: () => get<{ checks: Array<Omit<CheckResult, "passed" | "detail">> }>("/api/evals/checks"),
+  checks: () => get<{ checks: Omit<CheckResult, "passed" | "detail">[] }>("/api/evals/checks"),
   latestEvalRun: () =>
     get<{ run: AgentEvalRun | null; hint?: string; currentModel?: string }>("/api/evals/latest"),
   runGroundTruth: async (): Promise<GroundTruthRun> => {
@@ -268,7 +268,7 @@ export const startScan = (onEvent: (event: ScanEvent) => void, signal?: AbortSig
 
 export const askAgent = (
   question: string,
-  history: Array<{ role: "user" | "assistant"; content: string }>,
+  history: { role: "user" | "assistant"; content: string }[],
   onEvent: (event: AgentEvent) => void,
   signal?: AbortSignal,
 ) => streamPost<AgentEvent>("/api/chat", { question, history }, onEvent, signal);

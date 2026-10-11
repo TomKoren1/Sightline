@@ -11,11 +11,7 @@ import { INTERNET_ARN, type Relationship, type Resource, type ScanResult } from 
 
 import { accountArn, regionArn } from "../aws/arns.js";
 import { evaluateAdmin, type PolicyRef } from "./analysers/policy.js";
-import {
-  evaluateBucketPublicAccess,
-  type AclGrant,
-  type PublicAccessBlock,
-} from "./analysers/publicAccess.js";
+import { evaluateBucketPublicAccess, type AclGrant } from "./analysers/publicAccess.js";
 import { analyseIdleResources } from "./analysers/idle.js";
 import { analyseReachability } from "./analysers/reachability.js";
 
@@ -92,14 +88,14 @@ export function annotate(
    */
   for (const resource of resources) {
     if (resource.kind !== "IamRole" && resource.kind !== "IamUser") continue;
-    const attached = (resource.properties["attachedPolicies"] ?? []) as Array<{
+    const attached = (resource.properties["attachedPolicies"] ?? []) as {
       policyName: string;
       document: unknown;
-    }>;
-    const inline = (resource.properties["inlinePolicies"] ?? []) as Array<{
+    }[];
+    const inline = (resource.properties["inlinePolicies"] ?? []) as {
       policyName: string;
       document: unknown;
-    }>;
+    }[];
 
     const refs: PolicyRef[] = [
       ...attached.map((p) => ({
@@ -126,8 +122,7 @@ export function annotate(
       bucketName: resource.name,
       policy: (resource.properties["policy"] ?? null) as string | null,
       policyIsPublic: (resource.properties["policyIsPublic"] ?? null) as boolean | null,
-      publicAccessBlock: (resource.properties["publicAccessBlock"] ??
-        null) as PublicAccessBlock | null,
+      publicAccessBlock: resource.properties["publicAccessBlock"] ?? null,
       aclGrants: (resource.properties["aclGrants"] ?? []) as AclGrant[],
     });
     resource.derived.isPublic = verdict.isPublic;

@@ -1,26 +1,17 @@
 /**
  * ARNs as path parameters.
  *
- * Fastify caps a path parameter at 100 characters by default, which is a
- * routing-performance guard rather than a security control — and far too low
- * for a route whose parameter is a percent-encoded ARN, where every `:` costs
- * three characters and every `/` costs three more.
+ * Fastify caps a path parameter at 100 characters, which is far too low for a
+ * percent-encoded ARN. Against a real account, clicking a service-linked IAM
+ * role returned 414 and an empty panel - those ARNs carry a path and encode to
+ * 136 characters - so "How to fix" was broken for exactly the admin roles it
+ * matters most for (engineering log #37).
  *
- * Against a real account, clicking an IAM role returned HTTP 414 and the detail
- * panel showed nothing: service-linked roles carry an IAM path, so
- * `arn:aws:iam::…:role/aws-service-role/elasticloadbalancing.amazonaws.com/AWSServiceRoleForElasticLoadBalancing`
- * encodes to 136 characters. The remediation route has the same shape, so "How
- * to fix" was broken for exactly the admin roles it matters most for
- * (engineering log #37).
+ * Nothing caught it because every fixture role was short and path-less, and
+ * because importing the server bound a port so no test could issue a request.
  *
- * Nothing caught it because every fixture role had a short, path-less name —
- * the longest fixture ARN encoded to 61 — and because importing the server also
- * bound a port, so no test could issue a request at all. Both are now fixed:
- * the fixture has a service-linked role, and `buildApp()` can be injected into.
- *
- * These tests exercise the **router**, not the handlers. A 404 from a resource
- * that is not in the database is a pass; a 414 is the failure being guarded
- * against.
+ * These exercise the **router**, not the handlers: a 404 for an absent resource
+ * is a pass, a 414 is the failure being guarded against.
  */
 
 import { afterAll, beforeAll, describe, expect, it } from "vitest";

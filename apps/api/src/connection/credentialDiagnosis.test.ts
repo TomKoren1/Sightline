@@ -153,6 +153,6 @@ describe("looksLikeRealAccessKey", () => {
     ["lowercase, so not an AWS key id", "akiaiosfodnn7example", false],
     ["the right prefix but too short", "AKIA123", false],
   ])("%s", (_label, value, expected) => {
-    expect(looksLikeRealAccessKey(value as string | undefined)).toBe(expected);
+    expect(looksLikeRealAccessKey(value)).toBe(expected);
   });
 });

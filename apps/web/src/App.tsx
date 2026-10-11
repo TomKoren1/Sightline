@@ -22,6 +22,7 @@ import { Findings } from "./components/Findings.js";
 import { GraphView } from "./components/GraphView.js";
 import { ResourceDetail } from "./components/ResourceDetail.js";
 import { ScanBanner } from "./components/ScanBanner.js";
+import { errorMessage } from "@sightline/shared";
 
 export function App() {
   const queryClient = useQueryClient();
@@ -89,7 +90,7 @@ export function App() {
         queryClient.invalidateQueries({ queryKey: ["findings"] }),
       ]);
     } catch (err) {
-      setScanError(err instanceof Error ? err.message : String(err));
+      setScanError(errorMessage(err));
     } finally {
       setScanning(false);
     }
@@ -158,7 +159,7 @@ export function App() {
           ) : graph.error ? (
             <div className="flex h-full flex-col items-center justify-center gap-2">
               <p className="text-[12px] text-danger">
-                Could not load the graph: {(graph.error as Error).message}
+                Could not load the graph: {graph.error.message}
               </p>
               <button
                 onClick={() => void graph.refetch()}

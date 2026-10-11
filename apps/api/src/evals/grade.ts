@@ -40,10 +40,8 @@ export interface CaseResult {
   errored?: string;
 }
 
-export interface NameResolver {
-  /** Resolve a resource name to its ARN, or null if it does not exist. */
-  (name: string): string | null;
-}
+/** Resolve a resource name to its ARN, or null if it does not exist. */
+export type NameResolver = (name: string) => string | null;
 
 export function gradeCase(
   testCase: EvalCase,

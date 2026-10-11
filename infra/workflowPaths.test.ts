@@ -1,20 +1,14 @@
 /**
- * Every repository path a workflow names has to exist.
+ * Every repository path a workflow names has to exist. CI runs some suites by
+ * path, and a path is a reference the type system cannot see.
  *
- * CI runs some suites by path rather than by pattern, because they need the
- * compose stack and the rest must not. A path is a reference the type system
- * cannot see, so moving a file leaves the workflow pointing at nothing.
+ * `resourceArn.test.ts` moved during the NestJS port and its step reported
+ * `No test files found, exiting with code 1` - the lucky, loud version. The
+ * quiet version is a step that tolerates a missing file, where the suite stops
+ * running and nothing says so (engineering log #56).
  *
- * That happened: `resourceArn.test.ts` moved from `routes/` into `graph/`
- * during the NestJS port, and the step that ran it reported `No test files
- * found, exiting with code 1`. The loud version is the lucky one — vitest
- * treats an empty filter as an error. The quiet version is the same mistake in
- * a step that tolerates a missing file, where the suite simply stops running
- * and nothing says so (engineering log #56).
- *
- * Paths rather than globs: a glob that matches nothing is indistinguishable
- * from a glob that matches nothing *yet*, and this only needs to catch the case
- * where a specific named file was moved or deleted.
+ * Paths rather than globs: a glob matching nothing is indistinguishable from
+ * one that matches nothing *yet*.
  */
 
 import { existsSync, readFileSync, readdirSync } from "node:fs";
@@ -34,6 +28,20 @@ const workflowDir = `${root}.github/workflows`;
 const PATH_PATTERN =
   /\b(?:apps|packages|infra|scripts|deploy|evals)\/[A-Za-z0-9_./-]+\.[a-z]{2,4}\b/g;
 
+/**
+ * Glob patterns are not paths. CI's exclusion glob contains the substring
+ * `evals/groundTruth.test.ts`, which does not exist at the root - the real file
+ * is four directories down - so it was reported as missing on a correct
+ * workflow. Whole tokens are dropped, not just the `*`: a partially de-globbed
+ * string is the same near-path that caused the false failure.
+ */
+function withoutGlobs(text: string): string {
+  return text
+    .split(/\s+/)
+    .filter((token) => !token.includes("*"))
+    .join(" ");
+}
+
 interface Reference {
   workflow: string;
   line: number;
@@ -45,7 +53,7 @@ function references(): Reference[] {
   for (const file of readdirSync(workflowDir).filter((f) => f.endsWith(".yml"))) {
     const lines = readFileSync(`${workflowDir}/${file}`, "utf8").split("\n");
     lines.forEach((text, i) => {
-      for (const match of text.matchAll(PATH_PATTERN)) {
+      for (const match of withoutGlobs(text).matchAll(PATH_PATTERN)) {
         found.push({ workflow: file, line: i + 1, path: match[0] });
       }
     });
@@ -61,6 +69,18 @@ describe("paths named in the GitHub workflows", () => {
     const found = references();
     expect(found.length, "no repository paths parsed out of the workflows").toBeGreaterThan(1);
     expect(found.map((r) => r.path)).toContain("apps/api/src/server.ts");
+  });
+
+  it("ignores glob patterns, which are not paths", () => {
+    // Both halves matter: the glob must be dropped, and a real path on the same
+    // line must survive - otherwise the fix for the false failure would be to
+    // stop checking that line at all.
+    expect(
+      withoutGlobs("run: npx vitest run --exclude '**/evals/groundTruth.test.ts'"),
+    ).not.toContain("evals/groundTruth.test.ts");
+    expect(withoutGlobs("run: npx tsx apps/api/src/server.ts --exclude '**/x/y.ts'")).toContain(
+      "apps/api/src/server.ts",
+    );
   });
 
   it("all exist", () => {

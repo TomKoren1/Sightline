@@ -5,6 +5,7 @@ import { fileURLToPath } from "node:url";
 
 import { config } from "dotenv";
 import { seed } from "./seed.js";
+import { errorMessage } from "@sightline/shared";
 
 // fileURLToPath, not URL.pathname: the latter is a URL path and cannot address
 // the filesystem on Windows or through any directory needing escaping. See
@@ -17,6 +18,6 @@ seed()
     console.log("Run `npm run scan` to ingest it.");
   })
   .catch((err) => {
-    console.error("\nSeed failed:", err instanceof Error ? err.message : err);
+    console.error("\nSeed failed:", errorMessage(err));
     process.exitCode = 1;
   });

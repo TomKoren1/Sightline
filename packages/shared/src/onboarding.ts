@@ -1,22 +1,16 @@
 /**
- * The connection recipe: one definition of what a customer has to run.
+ * The connection recipe: one definition of what a customer has to run, because
+ * three things need it and must never disagree - the Connection screen that
+ * renders the command, `npm run setup` that executes it, and the API that
+ * diagnoses what the reader ended up with.
  *
- * The CloudFormation stack name, the role name, the ExternalId format and the
- * exact deploy command live here because **three** things need them and must
- * never disagree:
+ * It lived in the React component alone, so a setup script would have been a
+ * second drifting copy. Every cross-artefact defect in this project's log is
+ * that shape: two places that had to agree, with nothing checking (logs #39,
+ * #42, #45, #47).
  *
- *   - the Connection screen, which renders the command for a reader to copy
- *   - `npm run setup`, which executes it
- *   - the API, which validates and diagnoses what the reader ended up with
- *
- * They were previously in the React component alone, which meant adding a setup
- * script would have created a second, drifting copy of the same command. Every
- * cross-artefact defect in this project's log is a variant of that: two places
- * that had to agree, with nothing checking they did (engineering logs #39, #42,
- * #45, #47).
- *
- * Nothing here calls AWS or reads configuration. It builds strings, so it is
- * cheap to test exhaustively and safe to import from a browser bundle.
+ * Builds strings only - no AWS, no configuration - so it is cheap to test and
+ * safe in a browser bundle.
  */
 
 /** The CloudFormation stack the customer deploys. */

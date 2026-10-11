@@ -67,6 +67,7 @@ describe("installArgv", () => {
     // is what this avoids. Asserted as a property rather than a comment: every
     // element must be one literal argument.
     const argv = installArgv({ npm_execpath: "C:\\Program Files\\npm\\npm-cli.js" });
+    if (!argv) throw new Error("expected an argv vector for a path containing a space");
     for (const part of [argv.command, ...argv.args]) {
       expect(part).not.toMatch(/[&|;><`$]/);
     }
@@ -79,8 +80,9 @@ describe("installArgv", () => {
 
 describe("main", () => {
   const capture = () => {
+    /** @type {string[]} */
     const lines = [];
-    return { lines, log: (line) => lines.push(String(line)) };
+    return { lines, log: (/** @type {string} */ line) => lines.push(String(line)) };
   };
 
   it("does nothing, and spawns nothing, when the tree is already installed", () => {
@@ -185,6 +187,7 @@ describe("main", () => {
  */
 describe("root package.json", () => {
   it("guards every script", () => {
+    /** @type {{ scripts: Record<string, string> }} */
     const pkg = JSON.parse(readFileSync(join(ROOT, "package.json"), "utf8"));
     const unguarded = Object.entries(pkg.scripts)
       .filter(([, command]) => !command.startsWith("node scripts/deps.mjs && "))

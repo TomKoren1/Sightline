@@ -20,11 +20,21 @@ try {
 }
 
 for (const signal of ["SIGINT", "SIGTERM"] as const) {
-  process.on(signal, async () => {
+  // Sync handler, async work launched inside it: `process.on` expects a void
+  // return, so an `async` handler turned a failed close into an unhandled
+  // rejection that never reached `process.exit` - the process hung.
+  process.on(signal, () => {
     log.info(`${signal} received, shutting down`);
-    await app.close();
-    await closeDriver();
-    await closePool();
-    process.exit(0);
+    void (async () => {
+      try {
+        await app.close();
+        await closeDriver();
+        await closePool();
+        process.exit(0);
+      } catch (err) {
+        log.error(err);
+        process.exit(1);
+      }
+    })();
   });
 }

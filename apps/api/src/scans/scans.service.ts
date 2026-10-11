@@ -9,7 +9,7 @@
 
 import { randomUUID } from "node:crypto";
 import { Inject, Injectable, NotFoundException } from "@nestjs/common";
-import { rollUpStatus, type ScanEvent } from "@sightline/shared";
+import { rollUpStatus, type ScanEvent, errorMessage } from "@sightline/shared";
 
 import { callCounter } from "../aws/clients.js";
 import { projectGraph } from "../db/neo4j.js";
@@ -88,7 +88,7 @@ export class ScansService {
       const run = await getScan(scanId);
       if (run) send({ type: "scan.finished", scanId, run });
     } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
+      const message = errorMessage(err);
       logError(err);
       if (scanId) await failScanRun(scanId, message);
       send({ type: "scan.failed", scanId: scanId ?? streamId, error: message });

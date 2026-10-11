@@ -3,7 +3,7 @@
  *
  * Each one wraps a curated query (ADR-005). The model chooses which to call
  * and with what arguments; it never writes the Cypher, and none of these can
- * express a mutation - the brief's hard rule is enforced by construction
+ * express a mutation - the read-only rule is enforced by construction
  * rather than by instruction.
  *
  * Descriptions matter more than they look. They are the only thing the model
@@ -300,7 +300,7 @@ export async function runTool(name: string, input: ToolInput): Promise<ToolResul
     case "suggest_remediation": {
       const row = await q.getResource(String(input["arnOrName"] ?? ""));
       if (!row) return wrap([], { note: "No resource matched that ARN or name." });
-      const remediations = remediationsFor(remediationInputFromGraph(row as never));
+      const remediations = remediationsFor(remediationInputFromGraph(row));
       return wrap(remediations.length > 0 ? [{ arn: row.arn, remediations }] : [], {
         note:
           remediations.length === 0

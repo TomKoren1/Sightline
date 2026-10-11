@@ -2,7 +2,7 @@
 <html lang="en">
   <head>
     <meta charset="utf-8" />
-    <title>Sightline Engineering Assignment — Codebase Tour</title>
+    <title>Sightline — Codebase Tour</title>
     <style>
       /* Margins and the page number come from the print job (see render.js),
          not from @page — declaring a counter here as well renders it twice. */
@@ -443,7 +443,7 @@
   <body>
     <!-- =================== COVER =================== -->
     <div class="cover">
-      <div class="eyebrow">Sightline engineering assignment</div>
+      <div class="eyebrow">Sightline project</div>
       <h1>Codebase Tour</h1>
       <div class="sub">
         A file-by-file guide to the project: what every source file is for, the four request paths
@@ -455,7 +455,7 @@
         <dt>Author</dt>
         <dd>Tom</dd>
         <dt>Repository</dt>
-        <dd>dave.io_home-assignment</dd>
+        <dd>github.com/TomKoren1/Sightline</dd>
         <dt>Companion to</dt>
         <dd>sightline-handover.pdf (the decisions and the problems)</dd>
         <dt>Purpose</dt>
@@ -501,7 +501,10 @@
         <li>
           <span>8</span>File reference — apps/api
           <ul>
-            <li>aws/ · scan/ · db/ · agent/ · remediation/ · routes/ · evals/ · cli/</li>
+            <li>
+              aws/ · scan/ · db/ · agent/ · remediation/ · evals/ · cli/ · health/ graph/ scans/
+              chat/ connection/
+            </li>
           </ul>
         </li>
         <li><span>9</span>File reference — apps/web</li>
@@ -634,7 +637,7 @@
         scanner, the API, the agent and the React components (ADR-001).
       </p>
 
-      <pre><code>dave.io_home-assignment
+      <pre><code>Sightline
 ├── apps/
 │   ├── api/                 backend: scan, store, agent, HTTP   (~8.1k lines)
 │   │   └── src/
@@ -643,7 +646,8 @@
 │   │       ├── db/          Postgres schema + repo, Neo4j projection, queries
 │   │       ├── agent/       tools, guards, citations, the loop
 │   │       ├── remediation/ verdict → the command that would fix it
-│   │       ├── routes/      the HTTP surface
+│   │       ├── graph/       one NestJS module each: controller + service
+│   │       ├── scans/       (health/ chat/ connection/ evals/ alongside)
 │   │       ├── evals/       ground-truth checks, agent cases, grading
 │   │       └── cli/         scan, inspect, query, evals, migrate
 │   └── web/                 React + Vite frontend                (~3.1k lines)
@@ -653,7 +657,7 @@
 │   └── mock-aws/            the seeded customer account + answer key (~1.2k lines)
 ├── infra/
 │   ├── readonly-role.yaml   the replacement role (deployed, tested)
-│   └── readonly-role.original.yaml   the brief's original, kept for comparison
+│   └── readonly-role.original.yaml   the original, kept for comparison
 └── docs/                    decisions, engineering log, commits, walkthrough</code></pre>
 
       <h3>Why the boundaries fall where they do</h3>
@@ -717,7 +721,7 @@
       <div class="trace">
         <div class="hop">
           <div>
-            <div class="where">cli/scan.ts:26 · routes/scans.ts:75</div>
+            <div class="where">cli/scan.ts:26 · scans/scans.controller.ts:75</div>
             <div class="what">
               Entry. <code>migrate()</code> first, so the schema exists, then
               <code>runScan()</code>.
@@ -868,7 +872,7 @@
         </div>
         <div class="hop">
           <div>
-            <div class="where">routes/chat.ts:29</div>
+            <div class="where">chat/chat.controller.ts:29</div>
             <div class="what">
               Opens the stream, then calls <code>ask()</code> with an <code>emit</code> callback.
               Every event the agent produces is forwarded to the browser as it happens; the final
@@ -1007,7 +1011,7 @@
         </div>
         <div class="hop">
           <div>
-            <div class="where">routes/connection.ts:243</div>
+            <div class="where">connection/connection.service.ts:243</div>
             <div class="what">
               <code>GET /api/connection/external-id</code> generates a per-customer external id.
               <em
@@ -1019,7 +1023,7 @@
         </div>
         <div class="hop">
           <div>
-            <div class="where">routes/connection.ts:120 → aws/principal.ts:49</div>
+            <div class="where">connection/connection.service.ts:120 → aws/principal.ts:49</div>
             <div class="what">
               <code>GET /api/connection</code> reports who this backend runs as, converted for a
               trust policy. <code>assumablePrincipalArn()</code> exists because
@@ -1045,7 +1049,7 @@
         </div>
         <div class="hop">
           <div>
-            <div class="where">routes/connection.ts:254</div>
+            <div class="where">connection/connection.service.ts:254</div>
             <div class="what">
               <code>POST /api/connection/test</code> attempts the assume-role and
               <em>diagnoses</em> the failure: trust policy names a different principal, external id
@@ -1056,7 +1060,7 @@
         </div>
         <div class="hop">
           <div>
-            <div class="where">routes/connection.ts:206</div>
+            <div class="where">connection/connection.service.ts:206</div>
             <div class="what">
               <code>POST /api/connection/mode</code> switches between the demo account and the real
               one at runtime.
@@ -1113,7 +1117,7 @@
         </div>
         <div class="hop">
           <div>
-            <div class="where">routes/graph.ts:37</div>
+            <div class="where">graph/graph.controller.ts:37</div>
             <div class="what">
               <code>GET /api/resources/:arn/remediation</code>.
               <em
@@ -1289,9 +1293,9 @@
 
       <h3>Postgres tables</h3>
       <p>
-        In <code>apps/api/src/db/schema.sql</code>. Everything is append-only per scan — a scan
-        never updates a previous scan's rows, which is what makes change detection answerable and
-        lets a bad scan be discarded without corrupting history.
+        In <code>apps/api/src/db/schema.ts</code>. Everything is append-only per scan — a scan never
+        updates a previous scan's rows, which is what makes change detection answerable and lets a
+        bad scan be discarded without corrupting history.
       </p>
       <table>
         <tr>
@@ -1413,9 +1417,8 @@
           <td><code>resourceExplorer.ts</code></td>
           <td>144</td>
           <td>
-            The brief's suggested fast path, used as one. Needs an index that only exists if the
-            customer created it — and a read-only role cannot create one — so SDK enumeration stays
-            the tested default.
+            A fast path, used as one. Needs an index that only exists if the customer created it —
+            and a read-only role cannot create one — so SDK enumeration stays the tested default.
           </td>
         </tr>
       </table>
@@ -1546,9 +1549,13 @@
           <th>What it is for</th>
         </tr>
         <tr>
-          <td><code>schema.sql</code></td>
-          <td>110</td>
-          <td>Six tables, append-only per scan, with the reasoning in comments.</td>
+          <td><code>schema.ts</code></td>
+          <td>160</td>
+          <td>
+            Seven tables as Drizzle definitions, append-only per scan, with the reasoning in
+            comments. <code>drizzle/</code> holds the generated migrations; the baseline one also
+            adopts a database built by the SQL schema it replaced.
+          </td>
         </tr>
         <tr>
           <td><code>postgres.ts</code></td>
@@ -1591,7 +1598,11 @@
         <tr>
           <td><code>agent.ts</code></td>
           <td>251</td>
-          <td>The tool-calling loop. No framework. Streams tokens, tool calls and tool results.</td>
+          <td>
+            The tool-calling loop, on the Vercel AI SDK. Streams tokens, tool calls and tool
+            results. Each tool's <code>execute</code> records into the citation ledger before the
+            rows reach the model.
+          </td>
         </tr>
         <tr>
           <td><code>tools.ts</code></td>
@@ -1617,7 +1628,7 @@
             literals and comments are stripped — so a node named "DELETE ME" cannot trip it and,
             more importantly, a write cannot hide inside a string. Lexical, not a parser, and
             deliberately strict: a wrong rejection costs one retry, a wrong acceptance breaks the
-            brief's hard rule.
+            read-only rule.
           </td>
         </tr>
         <tr>
@@ -1639,7 +1650,7 @@
       </table>
 
       <h3>
-        <code>src/remediation/</code>, <code>src/routes/</code>, <code>src/evals/</code>,
+        <code>src/remediation/</code>, <code>src/evals/</code>,
         <code>src/cli/</code>
       </h3>
       <table class="files">
@@ -1668,9 +1679,9 @@
           <td><code>app.ts</code></td>
           <td>124</td>
           <td>
-            The Fastify app with no listener, so tests can <code>inject()</code>. Carries
-            <code>maxParamLength: 2048</code> and the health endpoint that explains a missing API
-            key.
+            The NestJS app on a Fastify adapter, with no listener, so tests can
+            <code>inject()</code>. Carries <code>maxParamLength: 2048</code>; the health endpoint
+            that explains a missing API key is now <code>health/health.service.ts</code>.
           </td>
         </tr>
         <tr>
@@ -1688,12 +1699,12 @@
           </td>
         </tr>
         <tr>
-          <td><code>routes/scans.ts</code></td>
+          <td><code>scans/scans.controller.ts</code></td>
           <td>126</td>
           <td>Scan history, the diff, and the streaming <code>POST /api/scans</code>.</td>
         </tr>
         <tr>
-          <td><code>routes/graph.ts</code></td>
+          <td><code>graph/graph.controller.ts</code></td>
           <td>63</td>
           <td>
             Graph, summary, resource detail, remediation, search, findings — all over curated
@@ -1701,12 +1712,12 @@
           </td>
         </tr>
         <tr>
-          <td><code>routes/chat.ts</code></td>
+          <td><code>chat/chat.controller.ts</code></td>
           <td>114</td>
           <td>The agent's event stream, and conversation persistence.</td>
         </tr>
         <tr>
-          <td><code>routes/evals.ts</code></td>
+          <td><code>evals/evals.controller.ts</code></td>
           <td>141</td>
           <td>
             Runs the ground-truth checks on demand and reports the last agent eval run — the Trust
@@ -1714,7 +1725,7 @@
           </td>
         </tr>
         <tr>
-          <td><code>routes/connection.ts</code></td>
+          <td><code>connection/connection.service.ts</code></td>
           <td>307</td>
           <td>
             Onboarding: identity, external id, connection test with diagnosis, runtime mode switch.
@@ -1731,9 +1742,7 @@
         <tr>
           <td><code>evals/cases.ts</code></td>
           <td>269</td>
-          <td>
-            Twenty-one agent eval cases, including the brief's six example questions verbatim.
-          </td>
+          <td>Twenty-one agent eval cases, including the six headline questions verbatim.</td>
         </tr>
         <tr>
           <td><code>evals/grade.ts</code></td>
@@ -2006,7 +2015,7 @@
         <tr>
           <td><code>readonly-role.original.yaml</code></td>
           <td>83</td>
-          <td>The brief's original, kept for side-by-side comparison.</td>
+          <td>The original template, kept for side-by-side comparison.</td>
         </tr>
         <tr>
           <td><code>template.test.ts</code></td>
@@ -2024,7 +2033,7 @@
       <h2><span class="num">11</span>The test suite, file by file</h2>
 
       <p>
-        253 tests across 21 files. Two tiers plus a set of guards. What is unusual here is not the
+        485 tests across 43 files. Two tiers plus a set of guards. What is unusual here is not the
         count — it is that several of these tests exist to catch a <em>class</em> of mistake that
         was actually made, rather than to cover a line.
       </p>
@@ -2128,7 +2137,7 @@
           </td>
         </tr>
         <tr>
-          <td><code>routes/resourceArn.test.ts</code></td>
+          <td><code>graph/resourceArn.test.ts</code></td>
           <td>8</td>
           <td>
             That the router carries a full-length IAM ARN. Split deliberately: a config assertion
@@ -2268,7 +2277,7 @@
         <tr>
           <td>Why Neo4j <em>and</em> Postgres?</td>
           <td>
-            <code>db/schema.sql</code> next to
+            <code>db/schema.ts</code> next to
             <code>db/queries.ts:145</code> (<code>findNetworkPaths</code>)
           </td>
         </tr>
@@ -2308,7 +2317,8 @@
           <td>What breaks on 10,000 resources?</td>
           <td>
             <code>db/neo4j.ts:139</code> (whole-graph rebuild) and
-            <code>routes/graph.ts</code> (unpaginated graph fetch) — both named in the README
+            <code>graph/graph.controller.ts</code> (unpaginated graph fetch) — both named in the
+            README
           </td>
         </tr>
         <tr>

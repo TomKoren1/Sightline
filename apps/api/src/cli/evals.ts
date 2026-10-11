@@ -26,6 +26,7 @@ import { closeDriver } from "../db/neo4j.js";
 import { closePool, db } from "../db/postgres.js";
 import { evalRuns } from "../db/schema.js";
 import { getLatestScan } from "../db/repository.js";
+import { errorMessage } from "@sightline/shared";
 
 const bold = (s: string) => `\x1b[1m${s}\x1b[0m`;
 const dim = (s: string) => `\x1b[2m${s}\x1b[0m`;
@@ -96,7 +97,7 @@ try {
       for (const failure of result.failures) console.log(`      ${red("·")} ${failure}`);
       if (!result.passed) console.log(dim(`      why it matters: ${testCase.rationale}`));
     } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
+      const message = errorMessage(err);
       console.log(red(`ERROR ${message}`));
       results.push({
         id: testCase.id,
