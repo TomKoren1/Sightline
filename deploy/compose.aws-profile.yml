@@ -33,4 +33,10 @@ services:
       # USERPROFILE covers that without a hardcoded path in .env, which matters:
       # a `C:/...` value there breaks the same .env when Compose runs from WSL,
       # whose Linux CLI rejects it as an "invalid volume specification".
-      - ${AWS_PROFILE_DIR:-${HOME:-${USERPROFILE}}/.aws}:/root/.aws:ro
+      #
+      # The target is `/home/node`, not `/root`, because the api image runs as
+      # `USER node`. Mounted at /root/.aws the credentials were never read - the
+      # SDK resolves `~` from HOME, which is /home/node - and could not have
+      # been, since /root is 0700 and node cannot traverse it. That shipped, and
+      # the failure read as "no profile was mounted" (engineering log #60).
+      - ${AWS_PROFILE_DIR:-${HOME:-${USERPROFILE}}/.aws}:/home/node/.aws:ro

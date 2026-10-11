@@ -160,7 +160,7 @@ function diagnose(
           "path - on Windows that is an unset HOME, so set AWS_PROFILE_DIR",
       );
     } else {
-      checked.push("no ~/.aws profile directory at all, so no profile was mounted");
+      checked.push(`no profile directory at ${src.profileDir}, so no profile was mounted there`);
     }
 
     const fix = src.containerised
@@ -168,7 +168,9 @@ function diagnose(
         "Mount your ~/.aws profile by adding these two lines to .env: " +
         "COMPOSE_PATH_SEPARATOR=: and COMPOSE_FILE=docker-compose.yml:deploy/compose.aws-profile.yml " +
         "(or set real values for AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY instead). " +
-        "Then recreate it with `docker compose --profile app up -d api` - `restart` reuses the old environment."
+        "Then recreate it with `docker compose --profile app up -d api` - `restart` reuses the old " +
+        `environment. If those lines are already set, the mount is landing somewhere this container ` +
+        `does not read: it runs as the \`node\` user, so the profile must arrive at ${src.profileDir}.`
       : "In AWS_MODE=real the standard AWS credential chain is used. Set AWS_ACCESS_KEY_ID and " +
         "AWS_SECRET_ACCESS_KEY, configure a CLI profile, or run somewhere with an instance or task role.";
 

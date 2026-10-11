@@ -1196,3 +1196,34 @@ knows the difference. `LICENSE`, `SECURITY.md`, `.nvmrc` and a grouped
 Dependabot config, and `npm audit --omit=dev` reports zero. Engineering log #59.
 
 **488 unit tests.**
+
+---
+
+### `fix(deploy): mount the host AWS profile where the non-root container reads it`
+
+A regression from the previous commit, found by running `npm run setup` against
+a real account on Windows. Adding `USER node` to the api image moved `HOME` from
+`/root` to `/home/node`, so the SDK resolves `~/.aws` to `/home/node/.aws` —
+while `deploy/compose.aws-profile.yml` kept mounting the host profile at
+`/root/.aws`. The credentials were in the container and unreachable twice over:
+nothing reads that path, and `/root` is `0700` so the `node` user cannot
+traverse it even given the absolute path.
+
+The setup script therefore completed every step and then failed its own
+connection test with "No source credentials were found", advising the reader to
+add the two `COMPOSE_FILE` lines it had just written.
+
+**The guard existed and passed.** `composeAwsProfile.test.ts` asserted the
+literal `/root/.aws` and called it the invariant, so it checked that nobody
+edited that line rather than that two artefacts agreed. It now derives the
+target from the Dockerfile's `USER` and cross-checks `CONTAINER_HOME` in
+`config.ts`; verified by three sabotages, each with the edit asserted to have
+landed first.
+
+Also: the diagnosis now names the path it actually read instead of the
+ambiguous `~/.aws`. A check for a stale `/root/.aws` was written and then
+deleted — `existsSync` returns false there whether or not anything is mounted,
+because traversing `/root` fails with EACCES first, so the clause could never
+fire. Engineering log #60.
+
+**490 unit tests.**

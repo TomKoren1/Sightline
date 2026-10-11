@@ -3377,3 +3377,70 @@ tail of my new `--exclude '**/evals/groundTruth.test.ts'` as a repository path,
 found no such file at the root, and reported it missing. A correct change, a
 real failure, and a false positive: the file's own header says it checks paths
 rather than globs, and it had no code enforcing that. It does now.
+
+---
+
+## #60 — Hardening the container broke the thing the container was for, and the guard watched it happen
+
+**What happened.** Running `npm run setup` against a real AWS account on
+Windows got all the way through — role created, `.env` written, container
+recreated — and then failed the connection test with _"No source credentials
+were found"_, advising the reader to add the two `COMPOSE_FILE` lines that the
+script had written sixty seconds earlier.
+
+**The cause was the previous commit.** Adding `USER node` to the api image
+moved `HOME` from `/root` to `/home/node`, so the AWS SDK resolves `~/.aws` to
+`/home/node/.aws` — while `deploy/compose.aws-profile.yml` went on mounting the
+host profile at `/root/.aws`. The credentials were present in the container and
+unreachable twice over: nothing looks at that path, and `/root` is `0700`, so
+the `node` user cannot traverse it even when told the absolute path.
+
+Reproduced directly, which is the only reason the second half is known:
+
+```
+$ docker run --rm -v fake:/root/.aws:ro api sh -c 'ls ~/.aws; cat /root/.aws/credentials'
+ls: /home/node/.aws: No such file or directory
+cat: can't open '/root/.aws/credentials': Permission denied
+```
+
+**The guard existed and passed.** `composeAwsProfile.test.ts` opens by saying
+"three artefacts must agree and nothing connected them", and then asserted
+`expect(override).toMatch(/:\/root\/\.aws:ro/)` — a **literal**. Its own comment
+called `/root/.aws` the invariant. So the check was pinned to a constant rather
+than tied to the other artefact, and changing the container's user left it
+green. A guard that encodes one side of an agreement as a constant is not
+checking an agreement; it is checking that nobody edited that line.
+
+It now derives the expected target from the Dockerfile's `USER` and
+cross-checks it against `CONTAINER_HOME` in `config.ts`. Verified by three
+sabotages — mount back at `/root/.aws`, remove `USER`, drift
+`CONTAINER_HOME` — each with the edit asserted to have landed first, per #59.
+
+**CI could not have caught this.** The containerised job runs the mock account,
+which needs no credentials; the real path needs a profile CI does not have.
+What was testable, and is now tested, is the agreement between the artefacts
+rather than the behaviour.
+
+**A fix I wrote and then deleted.** The diagnosis should say "your credentials
+are mounted somewhere I cannot read" instead of "no profile was mounted", so I
+added a check for a directory at `/root/.aws`. It cannot work:
+
+```
+existsSync("/root/.aws")  with the mount -> false
+existsSync("/root/.aws")  with no mount  -> false   (EACCES either way)
+```
+
+Traversing `/root` fails before the lookup, so `EACCES` is indistinguishable
+from absence and the clause could never fire. That is log #42's lesson —
+a condition that can never match is indistinguishable from no condition — and
+I had written it into a diagnosis whose entire job is to be trustworthy.
+
+So the honest version: the message **names the path it actually reads**
+(`/home/node/.aws`) rather than the ambiguous `~/.aws`, and says that if the
+`.env` lines are already set then the mount is landing somewhere else. Tom's
+report would have been self-diagnosing against that sentence.
+
+**The shape of it.** A security improvement that shipped green, broke the
+feature it was protecting, and was waved through by the one test written to
+prevent exactly that class of mistake — because the test knew the answer
+instead of knowing where to look it up.
