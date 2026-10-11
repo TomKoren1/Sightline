@@ -15,7 +15,7 @@
 # --- dependencies ----------------------------------------------------------
 # Workspace manifests are copied before the source so `npm ci` is cached and a
 # code change does not reinstall the tree.
-FROM node:22-alpine AS deps
+FROM node:25-alpine AS deps
 WORKDIR /app
 COPY package.json package-lock.json ./
 COPY packages/shared/package.json packages/shared/
