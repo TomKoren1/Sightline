@@ -1,5 +1,15 @@
 # Grouped so a week's patches arrive as one reviewable PR. The AWS SDK alone
 # publishes most days, and this project depends on six of its clients.
+#
+# Two rules learned from the first batch this config produced:
+#
+#   - React's four packages move together. Split across groups, `react-dom` went
+#     to 19 while `react` stayed on 18, which gives two copies of
+#     `@types/react` and a wall of "cannot be used as a JSX component" because
+#     v19 adds `bigint` to `ReactNode`. Neither PR was mergeable alone.
+#   - Groups take minor and patch only. A dev-tooling group that swept up ESLint
+#     10 and TypeScript 7 together was one unreviewable PR failing every job.
+#     Majors now arrive individually, which is the only way to judge them.
 version: 2
 updates:
   - package-ecosystem: npm
@@ -8,13 +18,19 @@ updates:
       interval: weekly
     open-pull-requests-limit: 5
     groups:
+      react:
+        patterns: ["react", "react-dom", "@types/react", "@types/react-dom"]
+        update-types: ["minor", "patch"]
       aws-sdk:
         patterns: ["@aws-sdk/*"]
+        update-types: ["minor", "patch"]
       nest:
         patterns: ["@nestjs/*"]
+        update-types: ["minor", "patch"]
       dev-tooling:
         patterns:
           ["eslint*", "@eslint/*", "typescript-eslint", "prettier", "vitest", "tsx", "typescript"]
+        update-types: ["minor", "patch"]
       production:
         dependency-type: production
         update-types: ["minor", "patch"]

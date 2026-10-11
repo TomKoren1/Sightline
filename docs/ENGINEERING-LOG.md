@@ -3444,3 +3444,48 @@ report would have been self-diagnosing against that sentence.
 feature it was protecting, and was waved through by the one test written to
 prevent exactly that class of mistake — because the test knew the answer
 instead of knowing where to look it up.
+
+---
+
+## #61 — The Dependabot config I added produced two unmergeable pull requests
+
+**What happened.** The grouped Dependabot config opened ten PRs on its first
+run. Two failed, and both failures were the config's fault rather than the
+dependency's.
+
+**React split across groups.** `react` and `react-dom` were in no group
+together, so they were bumped in separate PRs. `react-dom` went to 19 while
+`react` stayed on 18, which resolves **two copies of `@types/react`** — and
+since v19 adds `bigint` to `ReactNode`, the two `ReactNode` types are not
+assignable:
+
+```
+error TS2786: 'Handle' cannot be used as a JSX component.
+  Type '…/node_modules/@types/react/index").ReactNode' is not assignable to
+  type 'React.ReactNode'.  Type 'bigint' is not assignable to type 'ReactNode'.
+```
+
+Twelve of those, from a bump nobody wrote. Neither PR was mergeable alone, and
+each looked like a React incompatibility rather than a grouping mistake.
+
+**A group that swept up two majors.** `dev-tooling` matched `eslint*`,
+`typescript` and the rest without restricting update types, so one PR carried
+ESLint 9 → 10 **and** TypeScript 5 → 7. It failed all four jobs, and there is
+no way to review or bisect it: the only honest response to that PR is to close
+it.
+
+**Both fixed in the config.** The four React packages are one group, and every
+group now takes `["minor", "patch"]` only — so majors arrive individually,
+which is the only form in which they can be judged. `infra/dependabot.test.ts`
+asserts both properties, verified by splitting the React group and by removing
+a group's `update-types`.
+
+**Worth recording** because the config was added as hygiene, in a commit whose
+own description called it "grouped so a week's patches arrive as one reviewable
+pull request". It did group them. It grouped the wrong things, and the way I
+found out was two red pull requests whose diffs blamed the dependencies.
+
+**And one to decline rather than fix:** the `docker` ecosystem offered
+`node:22-alpine` → `node:25-alpine`, which passes CI and should not be taken.
+25 is an odd-numbered Node release and therefore never becomes LTS. Green CI
+answers "does it work today", not "is this a runtime to ship on".
