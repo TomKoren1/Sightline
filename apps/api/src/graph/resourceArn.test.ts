@@ -5,7 +5,7 @@
  * percent-encoded ARN. Against a real account, clicking a service-linked IAM
  * role returned 414 and an empty panel - those ARNs carry a path and encode to
  * 136 characters - so "How to fix" was broken for exactly the admin roles it
- * matters most for (engineering log #37).
+ * matters most for.
  *
  * Nothing caught it because every fixture role was short and path-less, and
  * because importing the server bound a port so no test could issue a request.

@@ -2,7 +2,7 @@
  * The curated query library.
  *
  * Every question the agent can ask the graph is answered by one of these,
- * written by hand and reviewed (ADR-005). The model chooses which to call and
+ * written by hand and reviewed. The model chooses which to call and
  * with what arguments; it does not write the Cypher.
  *
  * Each function returns rows that always carry an `arn`, because ARNs are what
@@ -105,8 +105,8 @@ export async function findPublicResources(params: { kind?: string; limit?: numbe
  * references is cleanup.
  *
  * Matches roles **and** users. It matched only roles until a real account
- * reported no administrators while two IAM users held `AdministratorAccess`
- * (engineering log #29). A user has no instance profile or Lambda to be used
+ * reported no administrators while two IAM users held `AdministratorAccess`.
+ * A user has no instance profile or Lambda to be used
  * by, so `usedBy` is empty for them - which is itself the point: a standing
  * admin user with long-lived credentials and nothing attaching it to a
  * workload is a different risk from an admin role a service assumes, not a
@@ -200,8 +200,8 @@ export async function findReachableFrom(params: {
    * Every answer to "if X were compromised, what could it reach?" names X, so
    * with X absent its ARN was outside the citable set and the agent emitted a
    * bare ARN prefix plus "let me confirm exact ARN" - correctly flagged as
-   * unsupported. An eval case had been *relaxed* to stop expecting the source
-   * (log #13), which fixed the test and left the defect (log #32).
+   * unsupported. An eval case had been *relaxed* to stop expecting the source,
+   * which fixed the test and left the defect.
    *
    * Two queries rather than a UNION: the source lookup also separates "no such
    * resource" from "reaches nothing", which one query conflated.

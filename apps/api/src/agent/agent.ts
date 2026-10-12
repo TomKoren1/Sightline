@@ -6,8 +6,7 @@
  * not the only way to keep the citation ledger exact. `execute` below is this
  * file's own function - it records into the tracker where the rows are produced,
  * so nothing mediates the results. The two load-bearing parts are unchanged:
- * the ledger, and `enforceReadOnlyNotice` on the single exit path (ADR-005,
- * ADR-006, ADR-018).
+ * the ledger, and `enforceReadOnlyNotice` on the single exit path.
  *
  * Every step is emitted as an event, so the UI can name the running tool rather
  * than show a spinner.

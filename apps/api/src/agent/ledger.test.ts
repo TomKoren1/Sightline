@@ -10,7 +10,7 @@
  * No network, key or databases: the model and the two prompt reads are stubbed,
  * so a guard on a safety property runs on every commit. The header claimed that
  * while `getLatestScan()` still opened Postgres - invisible locally,
- * `ECONNREFUSED` in CI (engineering log #56).
+ * `ECONNREFUSED` in CI.
  */
 
 import { describe, expect, it, vi } from "vitest";

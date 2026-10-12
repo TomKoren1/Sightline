@@ -6,9 +6,8 @@
  * account's ARN — the scan persists a complete, confident, entirely fictional
  * inventory of somebody's real AWS account. That is the worst output this
  * system can produce, and it has now happened twice by two different routes:
- * once through a leaked `AWS_ENDPOINT_URL` (engineering log #17) and once
- * through `AWS_MODE=mock` overriding a `.env` that pointed at a real account
- * (engineering log #31).
+ * once through a leaked `AWS_ENDPOINT_URL` and once
+ * through `AWS_MODE=mock` overriding a `.env` that pointed at a real account.
  *
  * Hence a pure function with a test, rather than a condition inside a module
  * that reads `process.env` at import time and cannot be exercised.
@@ -40,7 +39,7 @@ describe("accountOfArn", () => {
 
 describe("honoursConfiguredArnInMock", () => {
   it("honours the onboarding variables when they name the mock account", () => {
-    // Engineering log #24: editing these must not appear to do nothing.
+    // Editing these must not appear to do nothing.
     expect(
       honoursConfiguredArnInMock(
         "mock",

@@ -5,7 +5,7 @@
  * 19 while `react` stayed on 18. That resolves two copies of `@types/react`,
  * and since v19 adds `bigint` to `ReactNode` the two are not assignable -
  * twelve "cannot be used as a JSX component" errors from a dependency bump
- * nobody wrote. Neither PR was mergeable on its own (engineering log #61).
+ * nobody wrote. Neither PR was mergeable on its own.
  */
 
 import { readFileSync } from "node:fs";

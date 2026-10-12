@@ -327,7 +327,7 @@ async function seedIam() {
    * `arn:aws:iam::<account>:role/aws-service-role/<service>/AWSServiceRoleFor…`.
    * Percent-encoded into a URL that is 113 characters, which is what made
    * clicking one in the UI return HTTP 414 against a real account while every
-   * fixture role worked fine at 61 (engineering log #37).
+   * fixture role worked fine at 61.
    *
    * Every role in this fixture had a short, path-less name, so the fixture
    * could not express the shape that broke. It can now.
@@ -357,7 +357,7 @@ async function seedIam() {
    * `AdministratorAccess`, and the findings panel reported no administrators:
    * the collector gathered users without their policies and the analyser only
    * ever looked at roles. Technically "no admin roles", read by anyone as
-   * "nobody has admin" (engineering log #29).
+   * "nobody has admin".
    *
    * So the fixture now contains one admin user and two negatives - a user with
    * a scoped policy, and one with no policies at all - which is what makes the

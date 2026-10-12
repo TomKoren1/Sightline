@@ -4,7 +4,7 @@ import { GraphService } from "./graph.service.js";
 
 @Controller("api")
 export class GraphController {
-  // The token is named explicitly — see HealthController and ADR-017.
+  // The token is named explicitly — see HealthController.
   constructor(@Inject(GraphService) private readonly graph: GraphService) {}
 
   @Get("summary")

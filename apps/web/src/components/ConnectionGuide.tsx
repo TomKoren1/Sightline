@@ -9,7 +9,7 @@
  *
  * `<Fields>` declares which values are pre-filled and which are the reader's. A
  * value that is not known is never labelled as filled in - the defect that sent
- * a real deploy at a principal that did not exist (engineering log #46).
+ * a real deploy at a principal that did not exist.
  */
 
 import { useMutation, useQuery } from "@tanstack/react-query";
@@ -118,8 +118,8 @@ function Fields({
  * Part of the step 3 snippet rather than a note of their own. They used to sit
  * in a warning box under step 4's restart command - read after the restart it
  * needed to precede - and carried only `COMPOSE_FILE`, which Windows Compose
- * splits on `;` and so reads as one missing filename without the separator line
- * (engineering log #45). On a host the chain finds ~/.aws by itself, so these
+ * splits on `;` and so reads as one missing filename without the separator line.
+ * On a host the chain finds ~/.aws by itself, so these
  * are shown only in a container.
  */
 const CONTAINER_PROFILE_MOUNT = [
@@ -155,7 +155,7 @@ export function ConnectionGuide() {
    * `arn:aws:iam::<account>:role/SightlineScanner`, which marks one blank and hides
    * two — a reader substitutes the account id and leaves a role name that does
    * not exist, and CloudFormation answers `Invalid principal in policy` without
-   * saying which half was wrong (engineering log #46).
+   * saying which half was wrong.
    */
   const scannerPrincipal =
     c.scannerPrincipal ?? "arn:aws:iam::<account-id>:<role-or-user>/<name-of-this-identity>";
@@ -314,8 +314,7 @@ export function ConnectionGuide() {
               </p>
               <p>
                 Read <code className="text-ink-300">infra/readonly-role.yaml</code> before deploying
-                it. ADR-007 in <code>docs/DECISIONS.md</code> explains every change made to the
-                template Sightline supplied.
+                it. Its own comments explain every permission it grants and every one it denies.
               </p>
             </Why>
           </Step>

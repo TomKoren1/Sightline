@@ -7,7 +7,7 @@
  * The first version told the reader to pass `-f` flags, which works - until the
  * README's own recreate command drops them and silently loses the mount. The
  * connection test then reported "No source credentials were found" for a setup
- * working a minute earlier (engineering log #45). `COMPOSE_FILE` in `.env`
+ * working a minute earlier. `COMPOSE_FILE` in `.env`
  * cannot fail that way, because Compose applies it to every invocation.
  */
 
@@ -27,8 +27,7 @@ const override = read("deploy/compose.aws-profile.yml");
  * Derived from the Dockerfile rather than written down, because writing it down
  * is what failed: this file asserted the literal `/root/.aws` and kept passing
  * when the image gained `USER node`, so the host profile was mounted where the
- * SDK does not look and could not have read it anyway - `/root` is 0700
- * (engineering log #60).
+ * SDK does not look and could not have read it anyway - `/root` is 0700.
  */
 function containerHome(): string {
   const user = /^USER\s+(\S+)\s*$/m.exec(read("Dockerfile"));
@@ -113,7 +112,7 @@ describe("the real-AWS override for the containerised app", () => {
      * becomes `/.aws`, mounts nothing, and produces the same missing-credentials
      * error the mount exists to prevent. Verified by running `docker compose
      * config` with HOME stripped: source became `/.aws` and the only complaint
-     * was a warning (engineering log #45).
+     * was a warning.
      *
      * USERPROFILE is the fallback rather than a Windows path in .env, because
      * .env is shared by every shell: a `C:/...` value there is rejected as an
@@ -132,12 +131,7 @@ describe("the real-AWS override for the containerised app", () => {
   });
 
   it("is referenced by the documentation that tells people to use it", () => {
-    /**
-     * `docs/SETUP.md`, not the README. The README was shortened to read like a
-     * product page and this detail moved with the rest of the configuration
-     * material; the guard follows the content rather than the filename.
-     */
-    const readme = read("docs/SETUP.md");
+    const readme = read("README.md");
     expect(readme).toContain("COMPOSE_FILE=docker-compose.yml:deploy/compose.aws-profile.yml");
     /**
      * And the trap it avoids is stated, not only the command. Newlines are

@@ -1,7 +1,7 @@
 /**
  * Type-aware rules are the reason to run a linter here: `no-misused-promises`
  * and `no-base-to-string` cannot work from syntax alone, and both found real
- * bugs (ADR-019). The cost is that every linted file must belong to one of the
+ * bugs. The cost is that every linted file must belong to one of the
  * projects listed below — which is why `tsconfig.tools.json` exists.
  */
 
@@ -19,8 +19,6 @@ export default tseslint.config(
       "**/build/**",
       "**/coverage/**",
       "apps/api/drizzle/meta/**",
-      // CommonJS, run by hand, belongs to no tsconfig.
-      "docs/handover/render.cjs",
     ],
   },
 

@@ -188,7 +188,7 @@ describe("a placeholder is never labelled as filled in", () => {
    * know, leaves `role/SightlineScanner` because it reads like a real name, and
    * deploys a trust policy naming a principal that does not exist.
    * CloudFormation answers `Invalid principal in policy` without saying which
-   * half was wrong (engineering log #46).
+   * half was wrong.
    */
   it("marks the scanner principal as the reader's when it could not be resolved", () => {
     const at = guide.indexOf('name: "SightlineScannerRoleArn"');

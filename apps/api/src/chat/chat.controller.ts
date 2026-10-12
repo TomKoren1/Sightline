@@ -28,7 +28,7 @@ import { errorMessage } from "@sightline/shared";
 
 @Controller("api")
 export class ChatController {
-  // The token is named explicitly — see ADR-017.
+  // The token is named explicitly.
   constructor(@Inject(ChatService) private readonly chat: ChatService) {}
 
   /**

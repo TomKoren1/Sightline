@@ -236,7 +236,7 @@ export async function collectIam(ctx: CollectorContext): Promise<CollectorOutput
    * whose only administrators were IAM users reported no administrators at
    * all - a false negative in the one analysis a reader is most likely to check
    * first. Found against a real account with two `AdministratorAccess` users
-   * and an empty findings panel (engineering log #29).
+   * and an empty findings panel.
    *
    * Roles remain the more interesting case in a mature account, but "no admin
    * roles" and "no admins" are different statements and the tool was making the

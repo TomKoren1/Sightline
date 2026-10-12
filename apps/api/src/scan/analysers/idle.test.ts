@@ -9,7 +9,7 @@
  * associated and no orphaned Elastic IP was ever reported.
  *
  * Nothing failed. The ground-truth answer key had the same omission, so the
- * idle check agreed with the bug (engineering log #30). Hence tests at the
+ * idle check agreed with the bug. Hence tests at the
  * value level, where the empty string can be stated explicitly.
  */
 

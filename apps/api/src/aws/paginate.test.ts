@@ -2,7 +2,7 @@
  * Pagination.
  *
  * moto returns whole collections in a single response and never issues a
- * `NextToken` (engineering log #3), so the mock cannot demonstrate that the
+ * `NextToken`, so the mock cannot demonstrate that the
  * scanner handles paging. These tests stand in for that: a stub client that
  * really does page, driven through the same SDK paginator the collectors use.
  *

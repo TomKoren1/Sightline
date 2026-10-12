@@ -3,13 +3,13 @@
 [![CI](https://github.com/TomKoren1/Sightline/actions/workflows/ci.yml/badge.svg)](https://github.com/TomKoren1/Sightline/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
-Sightline connects to an AWS account with a read-only role, ingests what is
-there and how it fits together, and puts an agent on top that answers the
-questions a DevOps engineer would act on — what can reach the production
-database, who is effectively an administrator, what changed since yesterday.
+Sightline connects to an AWS account with a read-only role, ingests what is there
+and how it fits together, and puts an agent on top that answers the questions a
+DevOps engineer would act on — what can reach the production database, who is
+effectively an administrator, what changed since yesterday.
 
-It runs end to end against a mocked AWS account with no credentials and no
-cloud spend.
+It runs end to end against a mocked AWS account with no credentials and no cloud
+spend.
 
 ```
 AWS (real or mock) ──▶ scanner ──▶ Postgres ──▶ Neo4j ──▶ agent ──▶ React UI
@@ -18,12 +18,18 @@ AWS (real or mock) ──▶ scanner ──▶ Postgres ──▶ Neo4j ──�
                        per region
 ```
 
+**Contents** — [Try it](#try-it) · [What it answers](#what-it-answers) ·
+[How it works](#how-it-works) · [Layout](#repository-layout) ·
+[Working on the code](#working-on-the-code) ·
+[A real AWS account](#connecting-a-real-aws-account) ·
+[Troubleshooting](#troubleshooting) · [Commands](#every-command) ·
+[Limits](#limits-and-what-is-next)
+
 ---
 
 ## Try it
 
-You need Docker. Nothing else — no AWS account, no credentials, no cloud spend, no
-configuration.
+You need Docker. Nothing else — no AWS account, no credentials, no configuration.
 
 ```bash
 docker compose --profile app up -d --build
@@ -52,67 +58,42 @@ npm run setup -- --anthropic-key sk-ant-...
 ```
 
 That writes it and restarts the API. If you would rather not install Node for it,
-[`docs/SETUP.md`](docs/SETUP.md) has the other way.
+put `ANTHROPIC_API_KEY=sk-ant-...` in `.env` and recreate the API container with
+`docker compose --profile app up -d api`.
 
 4. **Ask** _"What can reach the production database?"_ — it is private and not
-   publicly accessible, and two chains reach it. Every answer cites the
-   resources it used, and each citation is checked against what the tools returned.
+   publicly accessible, and two chains reach it. Every answer cites the resources
+   it used, and each citation is checked against what the tools returned.
 5. **Ask a trick question:** _"analytics-db has PubliclyAccessible set to true — is
    it actually exposed?"_ The answer is no, because its security group opens no
    ports. A tool that read the flag would get this wrong.
 
-[`docs/WALKTHROUGH.md`](docs/WALKTHROUGH.md) is the guided tour.
+Chat needs the key. The scan, the graph, the findings sidebar and the whole
+tier-1 eval suite do not.
 
-## Point it at your own AWS account
+---
 
-Optional. The mock account exercises the same code paths — the scanner does not know
-it is talking to a mock.
+## What it answers
 
-```bash
-npm run setup
-```
+Each of these needs reasoning rather than a field lookup, which is the point of
+the mock account's shape.
 
-One command, and it needs the AWS CLI. It works out which identity to trust, creates
-a read-only IAM role with CloudFormation, wires this deployment up to it, restarts
-the API and tells you whether the connection works. It shows the plan and asks before
-anything changes; `npm run setup -- --dry-run` previews it all and changes nothing.
+| Question                                    | Why it is not a lookup                                                                                                                                                                                                                                                                                                |
+| ------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **What can reach the production database?** | It is in a private subnet and not publicly accessible, yet the internet reaches it across three security-group hops, and again by a shorter path through a bastion. Answering means walking a graph, not reading a flag.                                                                                              |
+| **Is this bucket public?**                  | Four inputs interact: the bucket policy, its ACL, its public access block, and the account's. Two buckets carry byte-identical permissive policies and exactly one is public, because the other's access block neutralises it.                                                                                        |
+| **Public vs unguarded**                     | Buckets with Block Public Access switched off are reported **separately** from public ones. Turning the block off grants nobody anything — it removes the guardrail that would neutralise a permissive policy, so an anonymous request still gets 403. Conflating the two is the most common misreading in this area. |
+| **Who is effectively an administrator?**    | Three roles and two users. One role carries `AdministratorAccess`, one grants `*:*` **inline** under the name `LegacyDeployRole`, one is privileged but entirely unused, and one _user_ grants `*:*` inline as `BackupHelper`. Finding them means reading policy documents, not names.                                |
+| **Money going nowhere**                     | Unattached volumes, an unassociated elastic IP, a stopped instance, and a NAT gateway in an abandoned region — about $103/month.                                                                                                                                                                                      |
 
-The role grants **SecurityAudit** and **ViewOnlyAccess** with an explicit **Deny** on
-reading your data — no `s3:GetObject`, `secretsmanager:GetSecretValue`,
-`dynamodb:GetItem`, `ssm:GetParameter` or `sqs:ReceiveMessage`. A Deny in IAM cannot
-be overridden by any Allow, so that holds even if AWS widens one of those managed
-policies later. `npm run setup -- --disconnect` deletes the role again.
-
-Full detail, and how to do it by hand: [`docs/SETUP.md`](docs/SETUP.md).
-
-## What is in the mock account
-
-The mock account is built around traps that defeat a naive lookup, because a
-fixture whose questions have obvious answers proves nothing:
-
-|                                         |                                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
-| --------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Two buckets, one policy**             | `northwind-public-assets` and `northwind-reports` carry byte-identical wildcard-principal policies. Only the first is public; the second is neutralised by `RestrictPublicBuckets`.                                                                                                                                                                                                                                                                                   |
-| **Public vs unguarded**                 | Buckets with Block Public Access switched off are reported **separately** from public ones. Turning the block off grants nobody anything — it removes the guardrail that would neutralise a permissive policy, so an anonymous request still gets 403. Conflating the two is the most common misreading in this area ([ADR-012](docs/DECISIONS.md)).                                                                                                                  |
-| **A private database anyone can reach** | `northwind-prod-db` is `PubliclyAccessible: false` in a private subnet, and is reachable from the internet by **two** chains — three hops through the web and app tiers, and two through a bastion with SSH open to the world.                                                                                                                                                                                                                                        |
-| **A public database nobody can reach**  | `analytics-db` is `PubliclyAccessible: true` and its security group opens no ports. The obvious answer is wrong.                                                                                                                                                                                                                                                                                                                                                      |
-| **Admin hiding in plain sight**         | Three roles and two users are effectively administrator. One role carries `AdministratorAccess`, one grants `*:*` **inline** under the name `LegacyDeployRole`, one is privileged but entirely unused, and one _user_ grants `*:*` inline under the name `BackupHelper`. Users are here because a real account exposed their absence: admin detection read roles only, so an account administered through IAM users reported no administrators (engineering log #29). |
-| **Money going nowhere**                 | Unattached volumes, an unassociated elastic IP, a stopped instance, and a NAT gateway in an abandoned region — about $103/month.                                                                                                                                                                                                                                                                                                                                      |
-| **Three regions**                       | Production in `us-east-1`, staging in `eu-west-1` with RDP open to the world, and `ap-southeast-1` nobody has looked at in two years.                                                                                                                                                                                                                                                                                                                                 |
-
-The answer key lives in [`packages/mock-aws/src/topology.ts`](packages/mock-aws/src/topology.ts)
-and is written by hand rather than generated from the code under test, so an
-analyser bug cannot grade itself as correct.
+The answer key lives in
+[`packages/mock-aws/src/topology.ts`](packages/mock-aws/src/topology.ts) and is
+written by hand rather than generated from the code under test, so an analyser bug
+cannot grade itself as correct.
 
 ---
 
 ## How it works
-
-```
-AWS ──▶ scanner ──▶ Postgres ──▶ Neo4j ──▶ agent ──▶ UI
-        per service  immutable    graph     curated   graph +
-        per region   snapshots    projection tools     chat
-```
 
 **Postgres is the system of record; Neo4j is a rebuildable projection of it.** The
 questions are about relationships — _"what can reach the production database?"_ is a
@@ -134,17 +115,29 @@ reader cannot catch themselves.
 
 **It cannot change anything.** No tool can express a mutation and the IAM role holds
 no write permissions. Asked to fix something, it says what it would run and why it
-will not run it.
+will not run it. Remediation is generated as text for an operator to run, and every
+one states what it might break.
 
-Two eval tiers back this up: **fifteen ground-truth checks** against a hand-written
-answer key, needing no model and no API key, running in CI on every commit; and
-**twenty-one cases** against the live agent, scored on the resources each answer
-cites, with traps that a tool reading flags rather than evaluating them would fall
-into. The same checks run inside the product, under **Trust**.
+**The role refuses `ReadOnlyAccess`.** That policy grants roughly 7,000 actions
+including data-plane reads — `s3:GetObject`, `secretsmanager:GetSecretValue`,
+`sqs:ReceiveMessage` — which an inventory product has no business holding.
+[`infra/readonly-role.yaml`](infra/readonly-role.yaml) uses `SecurityAudit` plus
+`job-function/ViewOnlyAccess`, an enumerated inline policy for the handful of calls
+those miss, and an explicit **Deny** on data-plane reads that is attached by default.
+A Deny cannot be overridden by any Allow, including one a future AWS update might add
+to a managed policy. See [SECURITY.md](SECURITY.md).
 
-The reasoning behind each of these is in
-the nineteen ADRs in
-[**docs/DECISIONS.md**](docs/DECISIONS.md).
+### How the answers are checked
+
+Two eval tiers that fail for different reasons: **fifteen ground-truth checks**
+against the hand-written answer key, needing no model and no API key, running in CI
+on every commit; and **twenty-one cases** against the live agent, scored on the
+resources each answer cites, with traps that a tool reading flags rather than
+evaluating them would fall into. The split makes failures diagnosable — tier 1
+passing and tier 2 failing means the data is right and the agent misused it. The
+same checks run inside the product, under **Trust**.
+
+---
 
 ## Repository layout
 
@@ -160,44 +153,244 @@ apps/api            backend: scanner, analysers, graph, agent, HTTP API
 apps/web            React frontend: graph, chat, findings, UX states
 packages/shared     domain model shared by every package
 packages/mock-aws   the seeded customer account and its answer key
-infra/              the replacement read-only role, and the original
-deploy/             nginx config for the containerised frontend
+infra/              the read-only role template, and guards on it
+deploy/             nginx config, and the AWS profile mount for containers
+scripts/            the dependency guard every npm script runs first
+Dockerfile          API and frontend images, used only by the `app` profile
 eslint.config.mjs   lint rules, with the reason for each exception
 tsconfig.tools.json type-checking for everything outside a workspace
-Dockerfile          API and frontend images, used only by the `app` profile
-docs/               decisions, engineering log, commit log, walkthrough
 ```
 
-## Documentation
+---
 
-- **[docs/DECISIONS.md](docs/DECISIONS.md)** — nineteen ADRs: the stack, the
-  mock, the two-database split, deterministic analysis, the tool boundary,
-  citation validation, the IAM role, the eval strategy, the read-only refusal in
-  code, guided onboarding, evals shown in the product, public vs unprotected,
-  the runtime account toggle, remediation that is never applied, onboarding
-  automated by a host script rather than a form, type-aware linting and what its
-  first run found, and the three that supersede earlier ones — Drizzle, NestJS,
-  and the agent loop moving onto the Vercel AI SDK, each recording what the
-  decision it replaces got right as well as wrong.
-- **[docs/ENGINEERING-LOG.md](docs/ENGINEERING-LOG.md)** — every non-obvious
-  problem hit while building this, with diagnosis and fix. Includes a silent
-  moto account-namespacing trap, two capability gaps in the mock recorded as
-  gaps rather than hidden, and an SDK type that degraded to `any` behind
-  `skipLibCheck`.
-- **[docs/ROADMAP.md](docs/ROADMAP.md)** — where this breaks as an account gets
-  large, in the order it would actually happen, and what I would build next.
-  Every limit is one I can point at in the code.
-- **[SECURITY.md](SECURITY.md)** — what the project holds and does not hold,
-  why the role template refuses `ReadOnlyAccess`, what the ExternalId is for,
-  and the limitations worth knowing before pointing this at an account you care
-  about.
-- **[docs/SETUP.md](docs/SETUP.md)** — configuration, the host development path,
-  connecting AWS by hand, troubleshooting and every command. Nothing in it is
-  needed to run the project.
-- **[docs/COMMITS.md](docs/COMMITS.md)** — what each commit changed and why.
-- **[docs/WALKTHROUGH.md](docs/WALKTHROUGH.md)** — a guided tour of the running
-  system.
-- **[docs/handover/](docs/handover/)** — two print documents: a project handover
-  (decisions, problems, limits) and a **codebase tour** that walks every source
-  file, traces the four request paths hop by hop with line numbers, and indexes
-  likely questions to the file that answers them.
+## Working on the code
+
+Docker for the three dependencies, Node for the rest — hot reload, and the CLIs to
+hand.
+
+```bash
+docker compose up -d          # Postgres, Neo4j, and moto (mock AWS)
+npm install
+
+npm run seed                  # build the fictional customer account
+npm run scan                  # discover it, persist it, build the graph
+
+npm run dev:api               # http://localhost:3000
+npm run dev:web               # http://localhost:5173   ← open this
+```
+
+Both paths are covered by CI, and nothing about the product differs between them.
+Run `npm run verify` before pushing — it is everything CI's static job runs.
+
+The agent uses Anthropic. `ANTHROPIC_MODEL` defaults to `claude-sonnet-5`.
+`/api/health` says whether a key is configured rather than making you discover it
+through a failed request, and names the `.env` it read if the key is missing.
+
+---
+
+## Connecting a real AWS account
+
+Entirely optional — the mock exercises the same code paths, and the scanner does not
+know it is talking to a mock. `npm run setup` does the whole thing: it shows what it
+will do and asks before anything changes, backs `.env` up first, and rewrites **only**
+the keys it names — verified against its own output rather than promised. It never
+asks for an access key and cannot write one. Re-running is a no-op, and it reuses an
+ExternalId already in use rather than rotating a working secret.
+
+|                                   |                                                 |
+| --------------------------------- | ----------------------------------------------- |
+| `npm run setup -- --dry-run`      | print the plan, change nothing                  |
+| `npm run setup -- --mock`         | stay on the demo account                        |
+| `npm run setup -- --disconnect`   | delete the role and go back to the demo account |
+| `npm run setup -- --profile work` | use a named AWS CLI profile                     |
+| `npm run setup -- --yes`          | no confirmations, for scripting                 |
+
+It needs the AWS CLI, which is also what creates the role. The demo account needs
+neither it nor Node.
+
+The UI's **Connection** panel walks through the same thing by hand, and the
+**Demo / My AWS** toggle in the header switches between accounts at runtime without
+restarting or rewriting `.env`. Switching does not rescan, so the graph keeps showing
+the previous account until you run one — the banner says so rather than letting you
+read one account's inventory under another's name.
+
+By hand: deploy [`infra/readonly-role.yaml`](infra/readonly-role.yaml) and set
+
+```bash
+AWS_MODE=real                 # drops the endpoint override
+AWS_TARGET_ROLE_ARN=arn:aws:iam::<customer>:role/SightlineReadOnlyRole
+AWS_EXTERNAL_ID=<the per-customer secret>
+AWS_SCAN_REGIONS=             # empty = discover every enabled region
+```
+
+In `real` mode the source credentials come from the standard AWS chain. Assume-role,
+pagination, adaptive retry, region fan-out and partial-failure handling are the same
+code in both modes.
+
+### Three things that are easy to get wrong
+
+Each of these cost a real deployment.
+
+- **Two ARNs are involved and each looks like a valid value for the other.**
+  `SightlineScannerRoleArn` is an _input_ — the principal allowed to assume.
+  `AWS_TARGET_ROLE_ARN` is the stack's `RoleArn` _output_ — the role that gets
+  assumed. `sts:AssumeRole` can only assume a role, so a user ARN in the second can
+  never work; the API refuses it by name at startup rather than failing later with
+  `AccessDenied`.
+- **`aws sts get-caller-identity` does not print a principal ARN.** It reports your
+  _session_, so it returns `arn:aws:sts::…`. A trust policy needs the
+  `arn:aws:iam::…` identity behind it. The guide converts it; pasting the raw value
+  fails the template's own parameter pattern.
+- **The role must be deployed from the current template.** Every `AssumeRole` sends
+  `sts:SourceIdentity` and the trust policy requires it. A role deployed from an
+  older copy matches a pattern no legal value can satisfy — AWS forbids a colon in a
+  SourceIdentity — so the assume is refused with `AccessDenied`.
+
+### Getting credentials into the container
+
+The scanner uses the standard AWS credential chain, which finds `~/.aws` on a host. A
+container has no such directory unless it is given one, so a profile that works
+locally fails inside the container with _"No source credentials were found"_.
+Uncomment these in `.env`:
+
+```bash
+COMPOSE_PATH_SEPARATOR=:
+COMPOSE_FILE=docker-compose.yml:deploy/compose.aws-profile.yml
+```
+
+The separator line is for Windows, where Compose splits `COMPOSE_FILE` on `;` and
+otherwise fails with _"The filename, directory name, or volume label syntax is
+incorrect"_. It is harmless elsewhere.
+
+That mounts `~/.aws` read-only, and — the reason it belongs in `.env` rather than as
+`-f` flags on the command line — it applies to **every** subsequent
+`docker compose` command automatically. With flags, recreating the API to pick up an
+edited `.env` drops the mount without saying so, and the next connection test reports
+missing credentials for a setup that was working a moment earlier.
+
+**On Windows there is nothing more to set.** PowerShell does not set `HOME`, so the
+mount falls back to `USERPROFILE`; Git Bash and WSL set `HOME`. Avoid putting a
+`C:/...` path in `AWS_PROFILE_DIR` if you ever run Compose from WSL — the Linux CLI
+cannot parse it and the API fails to start with _"invalid volume specification"_.
+
+It lands at `/home/node/.aws`, because the API container runs as the non-root `node`
+user and that is where the SDK resolves `~` to. If the connection test still reports
+missing credentials with those two lines already set, the mount is arriving somewhere
+else — the message names the path it actually read, and
+`docker exec sightline-api ls -l ~/.aws` confirms it.
+
+The mount is preferable to real keys in `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY`:
+it keeps long-lived credentials out of a file sitting next to the code, and it carries
+the SSO token cache, so `aws sso login` on the host works inside the container too.
+
+---
+
+## Troubleshooting
+
+**A `.env` edit appears to do nothing.** Configuration is read once at startup, so the
+process has to be **replaced**, not restarted:
+
+```bash
+docker compose --profile app up -d api     # recreates it with the new values
+```
+
+`docker compose restart api` is the command you would reach for and it does **not**
+work: it restarts the existing container, whose environment was resolved when the
+container was created, so the edit is ignored and the command exits zero. On the host
+path, stop `npm run dev:api` and start it again — `tsx watch` does not watch `.env`.
+
+**A container fails to start.** Ports in use. It binds `8080` for the app and `5432`,
+`7474`, `7687`, `5000` for Postgres, Neo4j and moto; each is configurable in `.env` as
+`APP_PORT`, `POSTGRES_PORT`, `NEO4J_HTTP_PORT`, `NEO4J_BOLT_PORT` and `MOCK_AWS_PORT`.
+Running two clones at once will collide.
+
+**A scan finds nothing.** moto holds the account in memory, so any `down` empties it.
+Run `npm run seed` before `npm run scan`.
+
+**Tearing it down:**
+
+```bash
+docker compose --profile app down -v     # use this one, whichever way you started it
+```
+
+The `--profile app` flag is **required to clean up if you ever started that profile**,
+and harmless if you did not. Without it, Compose removes only the default services, so
+the API and nginx containers are left running against databases that no longer exist.
+`-v` deletes the volumes: every scan, the graph, agent traces and recorded eval runs.
+
+---
+
+## Every command
+
+| Command                                        | What it does                                                 |
+| ---------------------------------------------- | ------------------------------------------------------------ |
+| `docker compose up -d`                         | Postgres, Neo4j and moto — just the dependencies             |
+| `docker compose --profile app up -d --build`   | The whole thing in Docker, served on `:8080`                 |
+| `docker compose --profile app down -v`         | Tear it all down, volumes included                           |
+| `npm run setup`                                | Connect an AWS account, or switch back to the demo one       |
+| `npm run seed`                                 | Rebuild the mock account from scratch                        |
+| `npm run scan`                                 | Scan, persist, project the graph                             |
+| `npm run drift`                                | Change the mock account, so a second scan has a diff         |
+| `npm run inspect -w @sightline/api`            | Scan and print findings without touching the databases       |
+| `npm run query -w @sightline/api`              | Run every curated query against the graph                    |
+| `npm test`                                     | 504 unit tests                                               |
+| `npm run lint`                                 | Prettier and ESLint, both in check mode                      |
+| `npm run format`                               | Fix everything those two can fix automatically               |
+| `npm run typecheck`                            | `tsc` over every workspace, and over `infra/` and `scripts/` |
+| `npm run verify`                               | Everything CI's static job runs — use before pushing         |
+| `npm run evals:ground-truth -w @sightline/api` | Tier-1 evals — no API key needed                             |
+| `npm run evals -w @sightline/api`              | Tier-2 agent evals — needs a key                             |
+| `npm run db:generate -w @sightline/api`        | Generate a migration after editing `src/db/schema.ts`        |
+| `npm run db:migrate -w @sightline/api`         | Apply pending migrations — the server also does this on boot |
+| `npm run db:studio -w @sightline/api`          | Browse the database in Drizzle Studio                        |
+
+---
+
+## Limits and what is next
+
+Every limit here is one I can point at in the code, and every fix is one the design
+already leaves room for.
+
+**What breaks first on a large account,** in the order it would happen:
+
+1. **The graph rebuild, at roughly 50k resources.** Neo4j is rebuilt wholesale in one
+   transaction — simple, leaves no stale nodes, and O(all resources) per scan. _Fix:_
+   diff the Postgres snapshots, which already exist, and `MERGE` only what changed.
+2. **Scan wall-clock across many regions.** 6 services × 30 regions is 180 units at a
+   concurrency of 6, and per-bucket S3 calls are four each. Partly addressed by the
+   Resource Explorer fast path, which asks one indexed query which regions hold
+   anything and skips the rest. _Remaining fix:_ per-service concurrency and splitting
+   oversized units.
+3. **Throttling, well before that.** `retryMode: adaptive` handles bursts, but a full
+   parallel scan of a busy account will hit quotas and compete with the customer's own
+   workloads. _Fix:_ a token bucket per `(service, region)` sized from published
+   quotas, and a scan budget the customer controls.
+4. **The frontend, at about 2,000 nodes.** React Flow renders every node. _Fix:_
+   server-side aggregation — collapse a VPC to one node until expanded — and viewport
+   virtualisation.
+5. **The agent's context, on broad questions.** Tool results are capped and truncated.
+   _Fix:_ tools should return aggregates with drill-down, and say so when truncating.
+
+**What does not break:** partial-failure handling and credential renewal both get
+_more_ useful at scale, which is why they were built in from the start.
+
+**Multi-tenancy** is the other axis. Today one module-level flag tracks whether a scan
+is running, and the graph holds one account. Multi-tenant needs an account id on every
+node and query, per-tenant credential caching, and a job queue instead of an in-process
+scan. Every resource already carries `accountId`; the scan orchestration is what would
+change.
+
+**What I would build next:** incremental graph updates (removes the first limit and
+makes scans cheap enough to run continuously); real idle detection from CloudWatch and
+Cost Explorer, for which the role already grants the permissions; an LLM judge over a
+larger eval set; scheduled scans, so _"what changed overnight?"_ is answerable without
+someone having remembered to scan; and more of the account — ELB especially, which
+would fill a real gap in the reachability graph.
+
+---
+
+## Security
+
+Read-only by construction, no long-lived credentials, and an agent that cannot write.
+The details, the ExternalId's purpose, and the known limitations are in
+[SECURITY.md](SECURITY.md). Licensed under [MIT](LICENSE).

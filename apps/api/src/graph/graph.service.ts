@@ -2,7 +2,7 @@
  * Graph and resource reads, backed by the curated query library.
  *
  * Thin by design: `db/queries.ts` is already the boundary that decides what
- * can be asked of the graph (ADR-005), and wrapping each query in a method
+ * can be asked of the graph, and wrapping each query in a method
  * that reshapes it would put the same decision in two places. What this adds
  * is the small amount of policy the HTTP layer should not hold — parsing a
  * comma-separated filter, and deciding that a search with no term is an empty

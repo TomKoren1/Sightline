@@ -72,7 +72,7 @@ describe("health status", () => {
   it("still reports the agent check, so nothing is hidden", () => {
     expect(source).toContain('checks["agent"]');
     // And still names the file it looked in, which is the part that was actively
-    // misleading when it was missing (engineering log #36).
+    // misleading when it was missing.
     expect(source).toContain("no .env found at");
   });
 });

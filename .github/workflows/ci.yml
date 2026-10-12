@@ -43,7 +43,7 @@ jobs:
         # job; this one must stay fast and dependency-free. SKIP_INTEGRATION
         # also switches off the suites that issue real HTTP requests, which
         # would otherwise spend thirty seconds per request timing out against
-        # databases that are not here (engineering log #37).
+        # databases that are not here.
         #
         # The exclusion names one file rather than the whole `evals/` directory.
         # `**/evals/**` also excluded `readme.test.ts` and `summarise.test.ts`,
@@ -100,7 +100,7 @@ jobs:
         run: npm run scan
 
       - name: Ground-truth assertions
-        # Tier 1 of the eval suite (ADR-008). Needs no API key, and catches the
+        # Tier 1 of the eval suite. Needs no API key, and catches the
         # regression that matters most: an analyser becoming quietly wrong.
         run: npx vitest run apps/api/src/evals/groundTruth.test.ts
 

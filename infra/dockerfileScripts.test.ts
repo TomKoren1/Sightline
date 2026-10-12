@@ -3,7 +3,7 @@
  *
  * Every script in the root `package.json` is prefixed with
  * `node scripts/deps.mjs &&`, which installs the dependency tree when it is
- * missing (engineering log #51). That prefix made the root scripts depend on a
+ * missing. That prefix made the root scripts depend on a
  * *file*, and the API image did not copy it — so the compose `seed` service,
  * whose command is `npm run seed`, died with `Cannot find module
  * /app/scripts/deps.mjs` and took the whole `app` profile down with it, before

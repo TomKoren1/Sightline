@@ -12,7 +12,7 @@ export class HealthController {
    * cannot emit it, because it needs type information the transpiler does not
    * have. Nest does not complain: it injects `undefined`, and the handler
    * fails at request time with "cannot read properties of undefined". So every
-   * injection in this package names its token. See ADR-017.
+   * injection in this package names its token.
    */
   constructor(@Inject(HealthService) private readonly health: HealthService) {}
 

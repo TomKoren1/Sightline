@@ -39,7 +39,7 @@ export type Database = typeof db;
  *
  * `fileURLToPath`, not `URL.pathname`: on Windows the latter yields
  * `/C:/projects/app/drizzle` and any directory containing a space arrives
- * percent-encoded (engineering log #36).
+ * percent-encoded.
  */
 export async function migrate(): Promise<void> {
   await runMigrations(db, {

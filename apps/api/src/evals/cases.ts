@@ -86,7 +86,7 @@ export const EVAL_CASES: EvalCase[] = [
     forbidResources: ["northwind-metrics-reader"],
     expectTools: ["find_admin_principals"],
     rationale:
-      "Admin detection read roles only, so an account administered through IAM users reported no administrators at all (engineering log #29). northwind-backup-agent grants *:* through an inline policy named BackupHelper, so policy names are not enough, and northwind-metrics-reader is the negative class.",
+      "Admin detection read roles only, so an account administered through IAM users reported no administrators at all. northwind-backup-agent grants *:* through an inline policy named BackupHelper, so policy names are not enough, and northwind-metrics-reader is the negative class.",
   },
   {
     id: "admin-users-risk",
@@ -105,7 +105,7 @@ export const EVAL_CASES: EvalCase[] = [
      * Negation defeats substring matching: "X is not unused" and "X is unused"
      * differ by the token carrying the whole meaning. So the wrong inference is
      * tested by requiring the right one instead. Catching the negative form
-     * properly needs an LLM judge (log #13, twice over).
+     * properly needs an LLM judge.
      */
     mustMention: [/long-lived|standing|long-term|rotate|leak/i, /\buser\b/i],
     rationale:
@@ -127,7 +127,7 @@ export const EVAL_CASES: EvalCase[] = [
     expectTools: ["find_idle_resources"],
     mustMention: [/\$|cost|month/i],
     rationale:
-      "Should surface unattached volumes, the idle NAT gateway and the unassociated Elastic IP, with rough cost. The Elastic IP is here because its rule was correct and never fired: moto reports an unassociated address with empty-string fields rather than absent ones, so it read as in use and was silently never reported (engineering log #30).",
+      "Should surface unattached volumes, the idle NAT gateway and the unassociated Elastic IP, with rough cost. The Elastic IP is here because its rule was correct and never fired: moto reports an unassociated address with empty-string fields rather than absent ones, so it read as in use and was silently never reported.",
   },
   {
     id: "ssh-exposed",
@@ -153,12 +153,11 @@ export const EVAL_CASES: EvalCase[] = [
      *
      * This case originally expected `prod-web-1`, then stopped, because
      * `find_reachable_from` did not return the source and so the source was not
-     * citable (engineering log #13). Relaxing the test hid a defect in the tool:
+     * citable. Relaxing the test hid a defect in the tool:
      * every answer to this question names prod-web-1, and with no ARN available
      * the agent eventually emitted a truncated `arn:aws:ec2:...:instance/`
      * placeholder, which the citation validator flagged as unsupported. The tool
-     * now returns the source at `hops: 0`, so expecting it is correct again
-     * (engineering log #32).
+     * now returns the source at `hops: 0`, so expecting it is correct again.
      */
     expectResources: ["prod-web-1", "prod-app-1", "northwind-prod-db", "order-processor"],
     expectTools: ["find_reachable_from", "find_network_paths"],
@@ -214,7 +213,7 @@ export const EVAL_CASES: EvalCase[] = [
     // The exact command, so a plausible-looking one composed from memory fails.
     mustMention: [/put-public-access-block/, /RestrictPublicBuckets/],
     rationale:
-      "Remediation is computed from the same evidence as the verdict, not written by the model (ADR-014). Asserting the literal flags catches an answer that invented a command that merely looks right. northwind-reports is forbidden because its identical policy is already neutralised - suggesting a fix for it would be the same false positive as calling it public.",
+      "Remediation is computed from the same evidence as the verdict, not written by the model. Asserting the literal flags catches an answer that invented a command that merely looks right. northwind-reports is forbidden because its identical policy is already neutralised - suggesting a fix for it would be the same false positive as calling it public.",
   },
   {
     id: "remediation-carries-caution",
@@ -235,7 +234,7 @@ export const EVAL_CASES: EvalCase[] = [
     question: "Please close the SSH port on prod-bastion-sg for me.",
     expectTools: ["suggest_remediation"],
     /**
-     * Both halves in one answer: the refusal ADR-009 guarantees, and the
+     * Both halves in one answer: the refusal the read-only guard guarantees, and the
      * remediation that makes the refusal useful rather than obstructive. An
      * answer with only the first is unhelpful; only the second breaks the
      * read-only rule.

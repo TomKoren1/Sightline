@@ -1,11 +1,11 @@
 /**
- * Remediation: the fix, written out, and never applied (ADR-005, 007, 009). A
+ * Remediation: the fix, written out, and never applied. A
  * remediation is a document an engineer reads and runs themselves.
  *
  * Two properties make that useful rather than glib:
  *
  * - **Computed, not generated.** The commands come from the same evidence as
- *   the verdict, by the argument in ADR-004. A model asked to write
+ *   the verdict, by the same argument as the analysers. A model asked to write
  *   `put-public-access-block` *usually* gets it right, and "usually" is not a
  *   property you want in a command pasted into production.
  * - **`caution` is required.** A fix without a blast radius is a trap: the

@@ -13,7 +13,7 @@ import { validateAssumeRoleTarget } from "./aws/principal.js";
  * letter or a space in the directory gives `fs` something it cannot open.
  * `dotenv` then failed silently and no `.env` value loaded at all - only
  * `ANTHROPIC_API_KEY` broke visibly, since the Zod defaults below cover the
- * rest (engineering log #36).
+ * rest.
  */
 export const ENV_FILE = fileURLToPath(new URL("../../../.env", import.meta.url));
 
@@ -24,7 +24,7 @@ loadDotenv({ path: ENV_FILE, quiet: true });
  * arrives as `""` - so `AWS_REGION=` reached the SDK as "Region is missing".
  *
  * Deliberately not applied to AWS_SCAN_REGIONS or SCAN_FAULT_INJECTION, where
- * blank is meaningful ("every region", "no faults") - engineering log #28.
+ * blank is meaningful ("every region", "no faults").
  */
 const blankAsUnset = <T extends z.ZodTypeAny>(inner: T) =>
   z.preprocess((value) => (value === "" ? undefined : value), inner);
@@ -53,7 +53,7 @@ const schema = z.object({
   /**
    * Who triggered this scan, for `sts:SourceIdentity` - so the customer's
    * CloudTrail attributes activity to an operator, not just the shared role.
-   * Sanitised in `sourceIdentity()` below. ADR-007.
+   * Sanitised in `sourceIdentity()` below.
    */
   SCAN_OPERATOR: blankAsUnset(z.string().default("system")),
   AWS_ACCESS_KEY_ID: blankAsUnset(z.string().optional()),
@@ -128,7 +128,7 @@ export function accountOfArn(arn: string): string | null {
 /**
  * Should mock mode use the role ARN from `.env`, or the mock's own? Pure and
  * exported because the module around it reads the environment at import, and
- * getting this wrong writes a mock inventory under a real account id (log #31).
+ * getting this wrong writes a mock inventory under a real account id.
  */
 export function honoursConfiguredArnInMock(
   mode: "mock" | "real",
@@ -156,12 +156,12 @@ export function activeConnection(): {
     /**
      * The onboarding variables win when `.env` really describes the mock -
      * ignoring them because a runtime toggle exists would make editing them
-     * appear to do nothing (log #24).
+     * appear to do nothing.
      *
      * But the test is the **account id**, not the mode flag. `AWS_MODE=mock`
      * against a `.env` naming a real account used to honour the real ARN while
      * the endpoint override sent every call to moto, persisting 100 mock
-     * resources under a real twelve-digit account id (log #31).
+     * resources under a real twelve-digit account id.
      */
     if (honoursConfiguredArnInMock(configuredMode, cfg.AWS_TARGET_ROLE_ARN, account)) {
       return {
@@ -327,13 +327,13 @@ export function awsProfileDir(home = process.env["HOME"] ?? CONTAINER_HOME): str
  * It cannot be: `/root` is 0700, so traversing it fails with EACCES whether or
  * not anything is mounted inside, and `existsSync` returns false either way.
  * The diagnosis names the path it does read instead, which is what makes the
- * mismatch visible (engineering log #60).
+ * mismatch visible.
  */
 
 /**
  * `CredentialsProviderError` says nothing about which link in the chain is
  * missing. In a container the two answers need opposite fixes: no keys in the
- * environment, or no `~/.aws` mount (log #48). Reports presence and shape only,
+ * environment, or no `~/.aws` mount. Reports presence and shape only,
  * never a value.
  */
 export function credentialSources(): {
@@ -402,7 +402,7 @@ export function faultInjections(): ReadonlySet<string> {
  * Hyphen, not colon: AWS restricts `SourceIdentity` to alphanumerics,
  * underscore and `+=,.@-`. The trust policy originally matched `sightline:*`,
  * which no legal value can satisfy, and nothing caught it because nothing was
- * sending a SourceIdentity at all (engineering log #42).
+ * sending a SourceIdentity at all.
  */
 export const SOURCE_IDENTITY_PREFIX = "sightline-";
 
@@ -424,7 +424,7 @@ export function toSourceIdentity(operator: string): string {
  * So the onboarding guide shows one restart command rather than both and a rule
  * for choosing. The two differ: in a container the API must be *recreated*,
  * because `docker compose restart` reuses the environment resolved at creation
- * and ignores an edited `.env` (log #44).
+ * and ignores an edited `.env`.
  *
  * `/.dockerenv` is a heuristic, so it only picks which instructions to show -
  * never anything about AWS.

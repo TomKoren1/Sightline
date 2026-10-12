@@ -41,7 +41,7 @@ export function ModeToggle({ onSwitched }: { onSwitched: (note: string) => void 
    * which is exactly how it was reported. The common cause is also not what
    * the tooltip said: configuration is read once at startup, so editing `.env`
    * without restarting the API leaves the process reporting the old values and
-   * the button correctly, but confusingly, disabled. See engineering log #28.
+   * the button correctly, but confusingly, disabled.
    */
   const blockedReason = c.roleArnProblem
     ? "AWS_TARGET_ROLE_ARN cannot be assumed — open Connect for the fix"

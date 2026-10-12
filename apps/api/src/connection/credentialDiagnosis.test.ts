@@ -12,7 +12,7 @@
  *     unset HOME produces: the mount succeeds and the directory is empty
  *
  * None is visible from outside the container, so the reader cannot tell them
- * apart by inspection (engineering log #48).
+ * apart by inspection.
  */
 
 import {
@@ -59,7 +59,7 @@ describe("credentialSources", () => {
     // File *names* are safe and useful (config, credentials); contents are not.
     for (const f of src.profileFiles) expect(typeof f).toBe("string");
     // A path, not a credential - and the message needs it: "~/.aws" was
-    // ambiguous enough to hide a mount landing in the wrong home (log #60).
+    // ambiguous enough to hide a mount landing in the wrong home.
     expect(src.profileDir).toMatch(/\/\.aws$/);
   });
 

@@ -49,7 +49,7 @@ try {
    * Every case asserts against the seeded fixture - `northwind-prod-db`,
    * `prod-bastion` and the rest. Against a real estate they would all fail for
    * the same uninteresting reason, after spending money on sixteen model calls
-   * to get there. Same hazard as the ground-truth suite (engineering log #23),
+   * to get there. Same hazard as the ground-truth suite,
    * which is why it is checked the same way.
    */
   if (!isMock()) {
@@ -203,7 +203,7 @@ try {
   // regression can be diffed against a previous run.
   // fileURLToPath keeps the trailing separator, so the concatenation below
   // still works - and unlike URL.pathname it produces a path mkdir can use on
-  // Windows and through directories containing spaces (engineering log #36).
+  // Windows and through directories containing spaces.
   const dir = fileURLToPath(new URL("../../../../evals/results/", import.meta.url));
   await mkdir(dir, { recursive: true });
   const stamp = new Date().toISOString().replace(/[:.]/g, "-");

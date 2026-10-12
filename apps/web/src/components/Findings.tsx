@@ -56,7 +56,7 @@ export function Findings({ summary, findings, loading, onHighlight }: FindingsPr
           to shrink and spilled across the graph pane instead - where the
           floating Filter button then covered two of them. Two rows of three is
           the only arrangement that keeps every label readable and inside the
-          column. Found by screenshotting the running UI (engineering log #34). */}
+          column. Found by screenshotting the running UI. */}
       <div className="flex flex-wrap border-b border-ink-800">
         {tabs.map((t) => (
           <button

@@ -20,7 +20,7 @@ export function Copyable({ value, label }: { value: string; label?: string }) {
         content, and the button ends up sitting on top of the command text with
         a character or two visible past it. A copy button that obscures the
         thing being copied is a bad joke in a feature whose whole purpose is
-        handing people exact commands (engineering log #34).
+        handing people exact commands.
       */}
       <div className="mb-0.5 flex items-baseline justify-between gap-2">
         <span className="min-w-0 truncate text-[10px] text-ink-400">{label ?? ""}</span>

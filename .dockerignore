@@ -7,7 +7,6 @@ node_modules
 .github
 dist
 **/dist
-docs/handover/*.pdf
 evals/results
 .env
 .env.*

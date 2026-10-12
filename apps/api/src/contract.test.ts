@@ -334,7 +334,7 @@ const CONTRACTS: Contract[] = [
       // Two shapes, not one with an optional field: with no run recorded the
       // response carries a `hint` and no `currentModel`. Captured from a
       // populated database, this branch was missed until the volume was
-      // dropped for the rename — see engineering log #57.
+      // dropped for the rename.
       200: z.union([
         z.object({ run: z.null(), hint: z.string() }).strict(),
         z

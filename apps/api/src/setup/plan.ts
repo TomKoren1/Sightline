@@ -71,7 +71,7 @@ export interface RealConnectionInput {
  * `AWS_TARGET_ROLE_ARN` is built from the account id rather than accepted as a
  * string, so the value written is necessarily the role the stack creates. Pasting
  * the wrong ARN there is the mistake that produced `Invalid principal in policy`
- * on a real account (engineering log #46), and this removes the opportunity.
+ * on a real account, and this removes the opportunity.
  */
 export function realConnectionEdits(input: RealConnectionInput): EnvEdit[] {
   return [

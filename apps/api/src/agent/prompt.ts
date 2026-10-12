@@ -8,8 +8,8 @@
  *
  * Note what this prompt does *not* try to do. It does not ask the model to
  * evaluate IAM policies, work out whether a bucket is public, or trace
- * security group chains. Those are computed by analysers during ingest
- * (ADR-004). Asking the model to do them as well would invite it to disagree
+ * security group chains. Those are computed by analysers during ingest.
+ * Asking the model to do them as well would invite it to disagree
  * with the deterministic answer, and the deterministic answer is the one we
  * can test.
  */

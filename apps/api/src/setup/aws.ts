@@ -214,10 +214,10 @@ export async function deleteStack(
  *
  *  - `Invalid principal in policy` means the trust policy names something that
  *    does not exist - almost always because a placeholder ARN was pasted whole
- *    rather than replaced (engineering log #46).
+ *    rather than replaced.
  *  - a `SetSourceIdentity` denial came from an `sts:ExternalId` condition on that
  *    action, where the key is absent from the request context, so it could never
- *    match (engineering log, ExternalId condition fix).
+ *    match (the ExternalId condition fix).
  */
 export function explainStackFailure(reasons: string[]): string[] {
   const out: string[] = [];

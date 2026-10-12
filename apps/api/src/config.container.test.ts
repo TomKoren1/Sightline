@@ -4,7 +4,7 @@
  * Both instructions exist and only one is right for any given reader, and the
  * wrong one wastes real time: `docker compose restart api` exits zero and ignores
  * an edited `.env` entirely, because it reuses the environment resolved when the
- * container was created (engineering log #44). Showing both and a rule for
+ * container was created. Showing both and a rule for
  * choosing is how a reader picks wrong.
  *
  * So the server reports which case it is in, and the guide renders accordingly.
