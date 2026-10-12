@@ -80,7 +80,7 @@ export function annotate(
    * Roles *and* users. This loop skipped users until a scan of a real account
    * returned "no admin roles" for an account whose only two human identities
    * both carried `AdministratorAccess` - technically true, and read by anyone
-   * looking at the findings panel as "nobody has admin" (engineering log #29).
+   * looking at the findings panel as "nobody has admin".
    *
    * The analyser itself is principal-agnostic: it evaluates policy documents,
    * which are the same shape either way. Only the collection and this filter

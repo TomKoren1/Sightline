@@ -67,7 +67,7 @@ export class HealthService {
    *
    * "ANTHROPIC_API_KEY not set" is true and was actively misleading to a user
    * who was looking at the key in their `.env` at the time: the real fault was
-   * that `.env` had not been read at all (engineering log #36). Naming the file
+   * that `.env` had not been read at all. Naming the file
    * distinguishes "you have not set it" from "we could not find your file", and
    * the second is the one you cannot guess.
    */

@@ -32,14 +32,14 @@ export type Database = typeof db;
 /**
  * Apply any migrations the database has not seen.
  *
- * Runs on boot, as the idempotent `schema.sql` did before it, so nothing about
+ * Runs on boot, as the idempotent schema file it replaced did, so nothing about
  * how the project starts has changed — but the schema is now defined once, in
  * `schema.ts`, and changes to it produce a reviewable migration instead of an
  * edit to a file that was applied by being re-read.
  *
  * `fileURLToPath`, not `URL.pathname`: on Windows the latter yields
  * `/C:/projects/app/drizzle` and any directory containing a space arrives
- * percent-encoded (engineering log #36).
+ * percent-encoded.
  */
 export async function migrate(): Promise<void> {
   await runMigrations(db, {

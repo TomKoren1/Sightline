@@ -3,8 +3,7 @@
  * which nothing in this repository executes. Two things went wrong as a result:
  *
  *  - it shipped `iam::aws:policy/ViewOnlyAccess`, which does not exist -
- *    ViewOnlyAccess is a job-function policy. A real deployment rolled back
- *    (engineering log #20).
+ *    ViewOnlyAccess is a job-function policy. A real deployment rolled back.
  *  - twice the explanatory header was silently truncated, ~70 lines each time,
  *    including the rationale the README points readers at - and nothing failed,
  *    because comments have no tests.
@@ -69,7 +68,7 @@ describe("readonly-role.yaml structure", () => {
   });
 });
 
-describe("the permissions ADR-007 claims", () => {
+describe("the permissions the template claims", () => {
   /**
    * The bug a real deployment found. ViewOnlyAccess is a job-function policy;
    * the root-path ARN 404s, and SecurityAudit on the line above *is* at the
@@ -113,7 +112,7 @@ describe("the permissions ADR-007 claims", () => {
   });
 });
 
-describe("the trust model ADR-007 claims", () => {
+describe("the trust model the template claims", () => {
   it("scopes trust to a named principal rather than an account root", () => {
     expect(template).toContain("AWS: !Ref SightlineScannerRoleArn");
     expect(template).not.toMatch(/:root"/);
@@ -164,7 +163,7 @@ describe("the reasoning survives", () => {
  * looked at, with `Template format error: 'Description' length is greater than
  * 1024` - which names no resource and suggests no fix. The explanatory header
  * had grown past it, so the template could not be deployed at all, and nothing
- * here noticed because nothing here deploys it (engineering log #28).
+ * here noticed because nothing here deploys it.
  *
  * The fix was to move the prose into `#` comments, which have no limit and are
  * stripped before evaluation. These guards stop it drifting back.

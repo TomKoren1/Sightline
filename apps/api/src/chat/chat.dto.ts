@@ -6,7 +6,7 @@ import { z } from "zod";
  * Zod rather than `class-validator`, because the schema is shared in spirit
  * with the rest of this codebase's validation and because `class-validator`
  * infers its rules from property types — the same `emitDecoratorMetadata` this
- * package cannot have (ADR-017).
+ * package cannot have.
  */
 export const askSchema = z.object({
   question: z.string().min(1).max(2000),

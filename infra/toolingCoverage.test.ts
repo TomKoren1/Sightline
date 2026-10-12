@@ -50,8 +50,8 @@ function escapeRegExp(literal: string): string {
 
 /**
  * The root `tsconfig.json` owns no files — it exists to hand esbuild
- * `experimentalDecorators` and deliberately declares no `include`
- * (engineering log #55), so it belongs in no linter project.
+ * `experimentalDecorators` and deliberately declares no `include`,
+ * so it belongs in no linter project.
  */
 const NOT_A_PROJECT = new Set(["tsconfig.json", "tsconfig.base.json"]);
 

@@ -6,7 +6,6 @@
  * inventoried once. Proper detection would add CloudWatch utilisation, Cost
  * Explorer for real spend, and a time window so "created ten minutes ago" is
  * not reported as abandoned; all reachable from the read-only role
- * (docs/ROADMAP.md).
  *
  * Prices are hard-coded us-east-1 list prices, used only to rank findings by
  * rough size, and presented as estimates.
@@ -71,7 +70,7 @@ export function analyseIdleResources(resources: Resource[], relationships: Relat
          * unassociated address as `NetworkInterfaceId: ""` and `InstanceId: ""`
          * rather than omitting them, and `"" !== null` is true - so every
          * orphaned Elastic IP read as associated and was silently never
-         * reported (engineering log #30).
+         * reported.
          *
          * The collector now normalises blanks, so this is the second layer
          * rather than the fix. It is worth having both: the analyser should not

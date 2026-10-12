@@ -35,7 +35,7 @@ export async function buildApp(): Promise<NestFastifyApplication> {
      * That default is a routing-performance guard, not a security control, and
      * far too low here: a service-linked role's ARN percent-encodes to 136
      * characters, and every one of them returned HTTP 414 with an empty detail
-     * panel (engineering log #37). 2048 is the practical ceiling for an ARN;
+     * panel. 2048 is the practical ceiling for an ARN;
      * anything beyond that is not an ARN this system produced.
      */
     maxParamLength: 2048,

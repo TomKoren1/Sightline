@@ -3,7 +3,7 @@
  *
  * "How do you know the agent is right?" is a fair question from someone about
  * to act on an answer, and answering it inside the product is more use than
- * answering it in a README. Two tiers, matching ADR-008:
+ * answering it in a README. Two tiers:
  *
  *   - ground-truth checks, run on demand: free, instant, no API key, and they
  *     validate the data the user is currently looking at.
@@ -17,7 +17,7 @@ import { EvalsService } from "./evals.service.js";
 
 @Controller("api/evals")
 export class EvalsController {
-  // The token is named explicitly — see ADR-017.
+  // The token is named explicitly.
   constructor(@Inject(EvalsService) private readonly evals: EvalsService) {}
 
   @Get("checks")

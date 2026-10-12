@@ -5,7 +5,7 @@
  * `resourceArn.test.ts` moved during the NestJS port and its step reported
  * `No test files found, exiting with code 1` - the lucky, loud version. The
  * quiet version is a step that tolerates a missing file, where the suite stops
- * running and nothing says so (engineering log #56).
+ * running and nothing says so.
  *
  * Paths rather than globs: a glob matching nothing is indistinguishable from
  * one that matches nothing *yet*.

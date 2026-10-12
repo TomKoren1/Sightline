@@ -8,8 +8,7 @@
  *   a space in a dir -> /home/me/My%20Projects/.env
  *
  * `dotenv` then failed ENOENT silently and no `.env` value loaded - only
- * `ANTHROPIC_API_KEY` broke visibly, since the Zod defaults cover the rest
- * (engineering log #36).
+ * `ANTHROPIC_API_KEY` broke visibly, since the Zod defaults cover the rest.
  *
  * Two guards: one that the computed path resolves to a real file, and one that
  * refuses the idiom anywhere in the repository - including in files that do not
@@ -86,7 +85,7 @@ describe("no source file addresses the filesystem with URL.pathname", () => {
     expect(
       offenders,
       "URL.pathname is a URL path and breaks on Windows and on any path needing " +
-        "escaping - use fileURLToPath(new URL(...)) instead. See engineering log #36.",
+        "escaping - use fileURLToPath(new URL(...)) instead.",
     ).toEqual([]);
   });
 });

@@ -62,7 +62,7 @@ function diagnose(
      * frequently not the one they assumed, because the host's ambient
      * credentials need not be the identity they had in mind when they deployed
      * the stack. We know exactly who we are, so say it, and give the command
-     * that fixes it (engineering log #28).
+     * that fixes it.
      */
     const identity = callerIdentity
       ? `\n  This backend is authenticating as ${callerIdentity}. The stack's trust policy has to name exactly that principal, ` +
@@ -74,13 +74,13 @@ function diagnose(
     /**
      * A third cause, and now the most likely one for an existing deployment.
      *
-     * Every AssumeRole sets `sts:SourceIdentity` (ADR-007). A stack deployed
+     * Every AssumeRole sets `sts:SourceIdentity`. A stack deployed
      * before that became mandatory carries `StringLike sts:SourceIdentity:
      * "sightline:*"` - a pattern no legal value can match, because AWS forbids a
      * colon in SourceIdentity - so `sts:SetSourceIdentity` is denied and the
      * whole AssumeRole fails. The denial says nothing about SourceIdentity, and
      * the obvious reading is that the ExternalId or the principal is wrong, so
-     * naming it here saves an hour of looking in the wrong place (log #44).
+     * naming it here saves an hour of looking in the wrong place.
      */
     const sourceIdentityHint =
       "\n  If this role was deployed before SourceIdentity became mandatory, its trust policy still matches " +
@@ -126,7 +126,7 @@ function diagnose(
      * "Provide credentials" is true and useless: in a container there are two
      * plausible causes needing opposite fixes, and the reader cannot see inside
      * the container to tell which applies. This reports what was actually
-     * checked (engineering log #48).
+     * checked.
      */
     const src = credentialSources();
     const checked: string[] = [];
@@ -223,7 +223,7 @@ export class ConnectionService {
      * `arn:aws:sts::...` ARN, and the guide used to print that straight into
      * the CloudFormation command. It is rejected by the template's own
      * AllowedPattern, and a trust policy that did accept it would simply never
-     * match. See aws/principal.ts and engineering log #28.
+     * match. See aws/principal.ts.
      */
     const resolved = assumablePrincipalArn(callerIdentity);
 
@@ -372,7 +372,7 @@ export class ConnectionService {
         mode: cfg.AWS_MODE,
         // Reported explicitly because a successful test against the mock while
         // believing you are on a real account is the worst outcome this
-        // endpoint can produce - see engineering log #17.
+        // endpoint can produce.
         endpoint: isMock() ? cfg.AWS_ENDPOINT_URL : "AWS (no endpoint override)",
       };
     } catch (err) {

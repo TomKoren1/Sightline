@@ -11,7 +11,7 @@
 # at CreateChangeSet time - before anything is validated, so the error says
 # nothing about what is actually wrong. Comments have no such limit and are
 # stripped before the template is ever evaluated, so the explanation costs
-# nothing. See engineering log #28.
+# nothing.
 #
 # -----------------------------------------------------------------------------
 # WHY THE ORIGINAL WAS CHANGED
@@ -21,7 +21,7 @@
 # readonly-role.original.yaml). Two things changed, both narrowing access: the
 # trust policy no longer trusts an entire AWS account, and the permission set no
 # longer grants the ability to read customer data. The reasoning is in
-# docs/DECISIONS.md (ADR-007) and summarised here.
+# the comments below.
 #
 # 1. `ReadOnlyAccess` is not read-only in the sense an inventory product needs.
 #
@@ -114,7 +114,7 @@ Description: >
   inventory, visualisation and security analysis; grants no writes and, by
   default, explicitly denies reading the contents of objects, records,
   parameters and secrets. Trusts one named principal rather than an account
-  root. Reasoning: docs/DECISIONS.md (ADR-007) and the comments in this file.
+  root. Reasoning: the comments in this file.
 
 Parameters:
   SightlineScannerRoleArn:
@@ -225,7 +225,7 @@ Resources:
                 # alphanumerics, underscore and +=,.@- so a colon is rejected
                 # outright: `sightline:*` was a pattern no legal value could ever
                 # match, and nothing caught it because nothing was sending a
-                # SourceIdentity at all (engineering log #42).
+                # SourceIdentity at all.
                 sts:SourceIdentity: "sightline-*"
 
       ManagedPolicyArns:
@@ -240,7 +240,7 @@ Resources:
         # Note the path: ViewOnlyAccess is a *job function* policy, so it lives
         # under job-function/ rather than at the root like SecurityAudit. The
         # obvious ARN does not exist and CloudFormation only says so at deploy
-        # time - see engineering log #20.
+        # time.
         - arn:aws:iam::aws:policy/job-function/ViewOnlyAccess
 
       Policies:

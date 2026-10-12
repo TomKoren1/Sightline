@@ -38,7 +38,6 @@ export const RESOURCE_KINDS = [
 
 export type ResourceKind = (typeof RESOURCE_KINDS)[number];
 
-/** Relationship types in the graph. */
 export const RELATIONSHIP_TYPES = [
   "IN_REGION",
   "IN_VPC",

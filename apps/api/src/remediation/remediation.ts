@@ -139,7 +139,7 @@ function s3Remediations(input: RemediationInput): Remediation[] {
     /**
      * The risk here is genuinely low, and saying so is the point.
      *
-     * An unprotected bucket is not a public one (ADR-012). Nothing currently
+     * An unprotected bucket is not a public one. Nothing currently
      * grants anonymous access, so re-enabling the guardrail cannot remove
      * access that nobody has. Rating this "high" alongside a genuinely public
      * bucket would train people to ignore the rating.

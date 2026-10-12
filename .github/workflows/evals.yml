@@ -1,6 +1,6 @@
 name: Agent evals
 
-# Tier 2 of the eval suite (ADR-008). Kept off the default CI path because it
+# Tier 2 of the eval suite. Kept off the default CI path because it
 # costs money and needs a key: run it deliberately before merging a change to
 # the prompt, the tools or the model.
 on:

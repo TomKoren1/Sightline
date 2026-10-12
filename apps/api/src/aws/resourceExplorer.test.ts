@@ -1,6 +1,6 @@
 /**
  * Resource Explorer cannot be exercised against the mock at all — moto does not
- * implement the service (engineering log #4) — and on a real account it needs
+ * implement the service — and on a real account it needs
  * an index a read-only role cannot create. So the behaviour that matters is
  * tested here: that narrowing is correct when the index is available, and that
  * every way it can be unavailable degrades to scanning everything rather than

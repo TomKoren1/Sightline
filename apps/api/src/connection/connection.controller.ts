@@ -3,7 +3,7 @@
  * switch, and why a real one is refusing to connect.
  *
  * Nothing here writes a credential or touches `.env` — that is `npm run setup`,
- * which runs on the host where the AWS CLI and the file both are (ADR-015).
+ * which runs on the host where the AWS CLI and the file both are.
  */
 
 import { Body, Controller, Get, HttpCode, Inject, Post } from "@nestjs/common";
@@ -12,7 +12,7 @@ import { ConnectionService } from "./connection.service.js";
 
 @Controller("api/connection")
 export class ConnectionController {
-  // The token is named explicitly — see ADR-017.
+  // The token is named explicitly.
   constructor(@Inject(ConnectionService) private readonly connection: ConnectionService) {}
 
   @Get()

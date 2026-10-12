@@ -6,7 +6,8 @@
  * stating it emphatically, and moving it ahead of the competing style rules.
  * The model kept answering "delete this volume" with the volume's details and
  * the CLI command - useful, and never once saying Sightline cannot touch the
- * account. Same argument as ADR-004, applied to safety: a property that must
+ * account. Same argument as the deterministic analysers, applied to safety: a
+ * property that must
  * hold is computed in code.
  *
  * Conservative on purpose - it fires on a request *directed at the agent*, not

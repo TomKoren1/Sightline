@@ -11,7 +11,7 @@
  * public, that a database flagged public but unreachable says so, and that
  * every single remediation states what it might break. Those are the
  * distinctions the rest of the project is built on, and a remediation feature
- * that flattens them would undo ADR-012 at the last step.
+ * that flattens them would collapse that distinction at the last step.
  */
 
 import { describe, expect, it } from "vitest";
@@ -124,7 +124,7 @@ describe("S3", () => {
   });
 
   /**
-   * The distinction ADR-012 exists for, carried into remediation. Rating an
+   * Public versus merely unprotected, carried into remediation. Rating an
    * unprotected bucket "high" next to a genuinely public one would train people
    * to ignore the rating.
    */
@@ -209,7 +209,7 @@ describe("IAM", () => {
       name: "ci-deploy",
       properties: { inlinePolicies: [{ policyName: "DeployHelper" }] },
     })[0]!;
-    // For a user, "nothing uses it" is not evidence of anything (log #29).
+    // For a user, "nothing uses it" is not evidence of anything.
     expect(user.caution).toMatch(/long-lived|not evidence it is unused/i);
   });
 

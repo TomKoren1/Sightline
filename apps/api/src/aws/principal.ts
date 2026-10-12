@@ -5,7 +5,7 @@
  * policy's `Principal` needs the **identity** behind it (`arn:aws:iam::...`).
  * IAM rejects the former outright, and a policy that does accept one silently
  * never matches - the stack deploys and every AssumeRole fails later with
- * AccessDenied (engineering log #28).
+ * AccessDenied.
  *
  *   sts::A:assumed-role/Role/session  ->  iam::A:role/Role
  *   sts::A:user/name                  ->  iam::A:user/name
@@ -57,7 +57,7 @@ export function assumablePrincipalArn(callerIdentity: string | null): PrincipalR
 
   // Already a principal ARN. Accept the two forms the template's
   // AllowedPattern accepts and nothing else - `:root` is a legitimate
-  // principal but deliberately not permitted here (see ADR-007).
+  // principal but deliberately not permitted here.
   if (service === "iam") {
     if (/^(role|user)\//.test(resource)) {
       return { ok: true, principalArn: callerIdentity.trim(), converted: false };
@@ -96,7 +96,7 @@ export function assumablePrincipalArn(callerIdentity: string | null): PrincipalR
 
   // moto reports `sts::<account>:user/<name>` for static credentials. Real STS
   // does not, but the conversion is unambiguous and it keeps the mock's
-  // onboarding walkthrough producing a valid command.
+  // onboarding guide producing a valid command.
   const user = /^user\/(.+)$/.exec(resource);
   if (user) {
     return {
@@ -135,7 +135,7 @@ export const SCANNER_PRINCIPAL_PATTERN = /^arn:aws:iam::[0-9]{12}:(role|user)\/.
  * is the one variable where a *user* ARN is both plausible and useless: it is
  * what `get-caller-identity` shows on a workstation, it is the correct answer
  * for the template's scanner-principal parameter, and putting it here instead
- * produces a confusing AccessDenied much later (engineering log #28).
+ * produces a confusing AccessDenied much later.
  */
 export function validateAssumeRoleTarget(
   arn: string,

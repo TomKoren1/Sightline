@@ -9,7 +9,7 @@ import { errorMessage } from "@sightline/shared";
 
 // fileURLToPath, not URL.pathname: the latter is a URL path and cannot address
 // the filesystem on Windows or through any directory needing escaping. See
-// apps/api/src/config.ts and engineering log #36.
+// apps/api/src/config.ts.
 config({ path: fileURLToPath(new URL("../../../.env", import.meta.url)), quiet: true });
 
 seed()

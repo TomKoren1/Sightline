@@ -1,5 +1,5 @@
 /**
- * The Neo4j projection: derived, not authoritative (ADR-003). Rebuilt wholesale
+ * The Neo4j projection: derived, not authoritative. Rebuilt wholesale
  * from one scan's Postgres snapshots in a single transaction, so a reader never
  * sees a half-built graph and a failed rebuild leaves the previous one intact.
  *
@@ -46,7 +46,6 @@ export async function closeDriver(): Promise<void> {
  * Note for production: Neo4j **Community has no role-based access control**,
  * so a genuinely read-only database *user* is not available here. On
  * Enterprise this would additionally run as a user granted only `MATCH`.
- * See docs/ENGINEERING-LOG.md #7.
  */
 export async function readQuery<T = Record<string, unknown>>(
   cypher: string,

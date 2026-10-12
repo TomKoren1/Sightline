@@ -6,7 +6,7 @@ import { ScansService } from "./scans.service.js";
 
 @Controller("api/scans")
 export class ScansController {
-  // The token is named explicitly — see ADR-017.
+  // The token is named explicitly.
   constructor(@Inject(ScansService) private readonly scans: ScansService) {}
 
   @Get()

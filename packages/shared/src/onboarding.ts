@@ -20,7 +20,7 @@ export const STACK_NAME = "sightline-readonly";
  * The role the stack creates, matching `RoleName`'s default in
  * `infra/readonly-role.yaml`. A test asserts the two agree, because a drift here
  * means the reader configures a role that does not exist and the connection test
- * reports `NoSuchEntity` (engineering log #46).
+ * reports `NoSuchEntity`.
  */
 export const READ_ONLY_ROLE_NAME = "SightlineReadOnlyRole";
 
@@ -30,7 +30,7 @@ export const TEMPLATE_PATH = "infra/readonly-role.yaml";
 /**
  * Prefix for generated ExternalIds, and for the `sts:SourceIdentity` the scanner
  * sends. Hyphen, not colon: AWS rejects a colon in a SourceIdentity, and the
- * trust policy's `StringLike` has to be satisfiable (engineering log #42).
+ * trust policy's `StringLike` has to be satisfiable.
  */
 export const SIGHTLINE_PREFIX = "sightline-";
 

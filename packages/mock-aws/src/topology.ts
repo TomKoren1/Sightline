@@ -70,7 +70,7 @@ export const GROUND_TRUTH = {
    * Every other role in this account has a short, path-less name, and that gap
    * let a routing bug reach a real user: percent-encoded, a service-linked
    * role's ARN is 136 characters against Fastify's 100-character default cap,
-   * and clicking one returned HTTP 414 (engineering log #37). A fixture that
+   * and clicking one returned HTTP 414. A fixture that
    * cannot express the shape cannot catch the bug.
    */
   longArnRolePath: "/aws-service-role/elasticloadbalancing.amazonaws.com/",
@@ -129,7 +129,7 @@ export const GROUND_TRUTH = {
      * was correct; the collector passed moto's empty-string "not associated"
      * through as a non-null value, so the address read as associated and was
      * silently never reported. The answer key had the same omission, so the
-     * idle check passed (engineering log #30).
+     * idle check passed.
      */
     "orphaned-eip",
   ],

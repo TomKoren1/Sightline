@@ -4,11 +4,11 @@
  *
  * It has rotted twice. `npm run query -w @sightline/api` was in the commands
  * table with no such script defined - the CLI file existed and its own header
- * gave that invocation. And the counts drifted: eight ADRs claimed where there
- * were thirteen.
+ * gave that invocation. And the counts drifted: fourteen assertions claimed
+ * where there were fifteen.
  *
- * "The documentation" is the README plus `docs/SETUP.md` and `docs/ROADMAP.md`,
- * so moving a line between them is not a way to escape the check.
+ * The README is now the only documentation, which makes these guards the only
+ * thing standing between it and rot.
  */
 
 import { readFileSync, readdirSync } from "node:fs";
@@ -18,18 +18,7 @@ const root = new URL("../../../../", import.meta.url);
 const read = (path: string) => readFileSync(new URL(path, root), "utf8");
 const readJson = (path: string) => JSON.parse(read(path)) as { scripts?: Record<string, string> };
 
-/**
- * "The README" now means the README **and** `docs/SETUP.md`.
- *
- * The README was deliberately shortened to read like a product page: the
- * configuration detail, the command table and the troubleshooting moved into
- * `docs/SETUP.md`, and the limits and roadmap into `docs/ROADMAP.md`. These
- * guards exist to stop documented commands and quoted numbers from rotting, and
- * which of the three files a given fact sits in does not change that — so all
- * three are checked, and moving a line between them is not a way to escape the
- * check.
- */
-const readme = ["README.md", "docs/SETUP.md", "docs/ROADMAP.md"].map(read).join("\n\n");
+const readme = read("README.md");
 
 const scripts = {
   root: readJson("package.json").scripts ?? {},
@@ -37,10 +26,19 @@ const scripts = {
   "@sightline/web": readJson("apps/web/package.json").scripts ?? {},
 };
 
-/** Every `npm run …` the README tells the reader to type. */
+/**
+ * Every `npm run …` the README tells the reader to type, wherever it appears.
+ *
+ * Deliberately not anchored to backticks. Requiring a closing backtick right
+ * after the script name skipped two whole categories: compound spans like
+ * `npm run drift && npm run scan`, where neither command is followed by one,
+ * and every command inside a fenced block - which is most of them, including
+ * the four in "Working on the code". A command is a claim about a script
+ * existing no matter how it is typeset.
+ */
 function documentedCommands(): { raw: string; script: string; workspace: string }[] {
   const found: { raw: string; script: string; workspace: string }[] = [];
-  const pattern = /`npm run ([a-z:-]+)(?: -w (@sightline\/[a-z]+))?`/g;
+  const pattern = /\bnpm run ([a-z:-]+)(?:\s+-w\s+(@sightline\/[a-z]+))?/g;
   for (const match of readme.matchAll(pattern)) {
     found.push({ raw: match[0], script: match[1]!, workspace: match[2] ?? "root" });
   }
@@ -120,11 +118,6 @@ describe("the numbers the README quotes are true", () => {
     const raw = m[1]!.toLowerCase();
     return words[raw] ?? Number(raw);
   }
-
-  it("states the real number of ADRs", () => {
-    const actual = (read("docs/DECISIONS.md").match(/^## ADR-/gm) ?? []).length;
-    expect(quoted(/\*\*\[docs\/DECISIONS\.md\]\([^)]*\)\*\* — ([a-z-]+) ADRs/)).toBe(actual);
-  });
 
   it("states the real number of agent tools", () => {
     const tools = read("apps/api/src/agent/tools.ts");

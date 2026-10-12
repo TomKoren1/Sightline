@@ -1,5 +1,5 @@
 /**
- * Citation validation (ADR-006).
+ * Citation validation.
  *
  * The failure mode that matters most for a tool a DevOps engineer is supposed
  * to act on is not a vague answer - it is a confident, plausible, invented

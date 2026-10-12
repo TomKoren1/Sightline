@@ -11,7 +11,7 @@
  * 30 enabled regions hold resources, which is 30 scan units instead of 180.
  *
  * Every failure degrades to "fast path unavailable", never to an error -
- * including a mock that does not implement the service (engineering log #4).
+ * including a mock that does not implement the service.
  */
 
 import { ListIndexesCommand, paginateSearch } from "@aws-sdk/client-resource-explorer-2";

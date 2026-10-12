@@ -1,7 +1,7 @@
 /**
  * The database schema, as TypeScript.
  *
- * This replaces `schema.sql` as the single definition of the tables. It is the
+ * The single definition of the tables, replacing a hand-written schema file. It is the
  * same schema: the generated migration was diffed against the SQL it replaced
  * until the two produced an identical database, which is the only way to
  * introduce an ORM to a database that already has rows in it.

@@ -28,7 +28,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
  * `fileURLToPath`, not `URL.pathname`: on Windows the latter yields
  * `/C:/projects/app/`, and any directory containing a space arrives
  * percent-encoded. Both are unopenable. Same conversion, and the same reason, as
- * `ENV_FILE` in `apps/api/src/config.ts` (engineering log #36).
+ * `ENV_FILE` in `apps/api/src/config.ts`.
  */
 export const ROOT = fileURLToPath(new URL("../", import.meta.url));
 

@@ -1,7 +1,7 @@
 /**
  * The agent's tools.
  *
- * Each one wraps a curated query (ADR-005). The model chooses which to call
+ * Each one wraps a curated query. The model chooses which to call
  * and with what arguments; it never writes the Cypher, and none of these can
  * express a mutation - the read-only rule is enforced by construction
  * rather than by instruction.
@@ -56,7 +56,7 @@ const wrap = (rows: unknown[], extra: Partial<ToolResult> = {}): ToolResult => {
  * JSON Schema for the arguments.
  *
  * Declared here rather than borrowed from a provider's SDK types, because this
- * list is the tool boundary (ADR-005) and should not be shaped by whichever
+ * list is the tool boundary and should not be shaped by whichever
  * client happens to deliver it. `agent.ts` hands these to the AI SDK verbatim.
  */
 export interface ToolDefinition {

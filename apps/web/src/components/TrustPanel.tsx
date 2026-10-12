@@ -3,7 +3,7 @@
  *
  * "How much should I trust this?" is a fair question from someone about to act
  * on an answer, and it deserves an answer inside the product rather than in a
- * README nobody opens. Two tiers, matching ADR-008 and deliberately presented
+ * README nobody opens. Two tiers, deliberately presented
  * as different kinds of evidence:
  *
  *   - **Data checks** validate the inventory the UI is currently showing. They

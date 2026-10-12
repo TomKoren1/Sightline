@@ -26,7 +26,7 @@ import type { CollectorContext, CollectorOutput } from "./types.js";
  * `!== null`, and every downstream "is this attached to something?" test read
  * an unassociated address as associated.
  *
- * That is the same shape as the blank-`.env` bug in engineering log #28: an
+ * That is the same shape as the blank-`.env` bug: an
  * empty string is a *present* value to any check written against null, and the
  * failure is silent in both cases. Normalising at the boundary means analysers
  * can keep asking the obvious question.
