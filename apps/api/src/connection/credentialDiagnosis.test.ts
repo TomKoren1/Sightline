@@ -50,6 +50,7 @@ describe("credentialSources", () => {
       "envKeyLength",
       "envKeyLooksReal",
       "envKeySet",
+      "profileDir",
       "profileDirExists",
       "profileFiles",
     ]);
@@ -57,6 +58,9 @@ describe("credentialSources", () => {
     expect(typeof src.envKeyLooksReal).toBe("boolean");
     // File *names* are safe and useful (config, credentials); contents are not.
     for (const f of src.profileFiles) expect(typeof f).toBe("string");
+    // A path, not a credential - and the message needs it: "~/.aws" was
+    // ambiguous enough to hide a mount landing in the wrong home (log #60).
+    expect(src.profileDir).toMatch(/\/\.aws$/);
   });
 
   it("distinguishes an empty profile directory from an absent one", () => {

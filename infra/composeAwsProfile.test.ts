@@ -21,6 +21,22 @@ const read = (p: string) => readFileSync(root + p, "utf8");
 const envExample = read(".env.example");
 const override = read("deploy/compose.aws-profile.yml");
 
+/**
+ * The home directory of the user the api image runs as.
+ *
+ * Derived from the Dockerfile rather than written down, because writing it down
+ * is what failed: this file asserted the literal `/root/.aws` and kept passing
+ * when the image gained `USER node`, so the host profile was mounted where the
+ * SDK does not look and could not have read it anyway - `/root` is 0700
+ * (engineering log #60).
+ */
+function containerHome(): string {
+  const user = /^USER\s+(\S+)\s*$/m.exec(read("Dockerfile"));
+  expect(user, "the Dockerfile no longer declares a USER for the api image").toBeTruthy();
+  const name = user![1]!;
+  return name === "root" ? "/root" : `/home/${name}`;
+}
+
 /** The COMPOSE_FILE value as documented, commented out. */
 function documentedComposeFiles(): string[] {
   const m = /^#\s*COMPOSE_FILE=(.+)$/m.exec(envExample);
@@ -54,15 +70,33 @@ describe("the real-AWS override for the containerised app", () => {
 
   it("mounts the host profile read-only, at the path the SDK reads", () => {
     /**
-     * Asserted as target + mode rather than as the whole literal spec, which is
-     * what this checked first and why it broke when the source side gained an
-     * override variable. The invariant is "whatever the source, it lands at
-     * /root/.aws and cannot be written" - the source path is covered separately.
-     *
-     * `ro` matters: a scanner arguing for least privilege has no business being
-     * able to write the credentials it was lent.
+     * Target and mode, not the whole literal spec - the source side carries
+     * fallbacks and is covered separately. `ro` matters: a scanner arguing for
+     * least privilege has no business writing the credentials it was lent.
      */
-    expect(override).toMatch(/:\/root\/\.aws:ro/);
+    const home = containerHome();
+    expect(
+      override,
+      `the mount must land in ${home}/.aws, which is where the user the image ` +
+        "runs as resolves ~ to",
+    ).toContain(`:${home}/.aws:ro`);
+  });
+
+  it("agrees with the path the API actually reads", () => {
+    // The other half: config.ts resolves the profile directory from HOME and
+    // falls back to this constant. If the two drift, the mount lands somewhere
+    // nothing reads - which is exactly what shipped.
+    const config = read("apps/api/src/config.ts");
+    const declared = /export const CONTAINER_HOME = "([^"]+)"/.exec(config);
+    expect(declared, "config.ts no longer declares CONTAINER_HOME").toBeTruthy();
+    expect(declared![1]).toBe(containerHome());
+  });
+
+  it("would notice the mount target drifting from the container user", () => {
+    // A canary: if `containerHome()` silently returned something constant, the
+    // two assertions above would pass for any Dockerfile at all.
+    expect(containerHome()).toBe("/home/node");
+    expect(containerHome()).not.toBe("/root");
   });
 
   it("only touches the api service", () => {

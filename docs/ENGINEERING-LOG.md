@@ -3377,3 +3377,115 @@ tail of my new `--exclude '**/evals/groundTruth.test.ts'` as a repository path,
 found no such file at the root, and reported it missing. A correct change, a
 real failure, and a false positive: the file's own header says it checks paths
 rather than globs, and it had no code enforcing that. It does now.
+
+---
+
+## #60 — Hardening the container broke the thing the container was for, and the guard watched it happen
+
+**What happened.** Running `npm run setup` against a real AWS account on
+Windows got all the way through — role created, `.env` written, container
+recreated — and then failed the connection test with _"No source credentials
+were found"_, advising the reader to add the two `COMPOSE_FILE` lines that the
+script had written sixty seconds earlier.
+
+**The cause was the previous commit.** Adding `USER node` to the api image
+moved `HOME` from `/root` to `/home/node`, so the AWS SDK resolves `~/.aws` to
+`/home/node/.aws` — while `deploy/compose.aws-profile.yml` went on mounting the
+host profile at `/root/.aws`. The credentials were present in the container and
+unreachable twice over: nothing looks at that path, and `/root` is `0700`, so
+the `node` user cannot traverse it even when told the absolute path.
+
+Reproduced directly, which is the only reason the second half is known:
+
+```
+$ docker run --rm -v fake:/root/.aws:ro api sh -c 'ls ~/.aws; cat /root/.aws/credentials'
+ls: /home/node/.aws: No such file or directory
+cat: can't open '/root/.aws/credentials': Permission denied
+```
+
+**The guard existed and passed.** `composeAwsProfile.test.ts` opens by saying
+"three artefacts must agree and nothing connected them", and then asserted
+`expect(override).toMatch(/:\/root\/\.aws:ro/)` — a **literal**. Its own comment
+called `/root/.aws` the invariant. So the check was pinned to a constant rather
+than tied to the other artefact, and changing the container's user left it
+green. A guard that encodes one side of an agreement as a constant is not
+checking an agreement; it is checking that nobody edited that line.
+
+It now derives the expected target from the Dockerfile's `USER` and
+cross-checks it against `CONTAINER_HOME` in `config.ts`. Verified by three
+sabotages — mount back at `/root/.aws`, remove `USER`, drift
+`CONTAINER_HOME` — each with the edit asserted to have landed first, per #59.
+
+**CI could not have caught this.** The containerised job runs the mock account,
+which needs no credentials; the real path needs a profile CI does not have.
+What was testable, and is now tested, is the agreement between the artefacts
+rather than the behaviour.
+
+**A fix I wrote and then deleted.** The diagnosis should say "your credentials
+are mounted somewhere I cannot read" instead of "no profile was mounted", so I
+added a check for a directory at `/root/.aws`. It cannot work:
+
+```
+existsSync("/root/.aws")  with the mount -> false
+existsSync("/root/.aws")  with no mount  -> false   (EACCES either way)
+```
+
+Traversing `/root` fails before the lookup, so `EACCES` is indistinguishable
+from absence and the clause could never fire. That is log #42's lesson —
+a condition that can never match is indistinguishable from no condition — and
+I had written it into a diagnosis whose entire job is to be trustworthy.
+
+So the honest version: the message **names the path it actually reads**
+(`/home/node/.aws`) rather than the ambiguous `~/.aws`, and says that if the
+`.env` lines are already set then the mount is landing somewhere else. Tom's
+report would have been self-diagnosing against that sentence.
+
+**The shape of it.** A security improvement that shipped green, broke the
+feature it was protecting, and was waved through by the one test written to
+prevent exactly that class of mistake — because the test knew the answer
+instead of knowing where to look it up.
+
+---
+
+## #61 — The Dependabot config I added produced two unmergeable pull requests
+
+**What happened.** The grouped Dependabot config opened ten PRs on its first
+run. Two failed, and both failures were the config's fault rather than the
+dependency's.
+
+**React split across groups.** `react` and `react-dom` were in no group
+together, so they were bumped in separate PRs. `react-dom` went to 19 while
+`react` stayed on 18, which resolves **two copies of `@types/react`** — and
+since v19 adds `bigint` to `ReactNode`, the two `ReactNode` types are not
+assignable:
+
+```
+error TS2786: 'Handle' cannot be used as a JSX component.
+  Type '…/node_modules/@types/react/index").ReactNode' is not assignable to
+  type 'React.ReactNode'.  Type 'bigint' is not assignable to type 'ReactNode'.
+```
+
+Twelve of those, from a bump nobody wrote. Neither PR was mergeable alone, and
+each looked like a React incompatibility rather than a grouping mistake.
+
+**A group that swept up two majors.** `dev-tooling` matched `eslint*`,
+`typescript` and the rest without restricting update types, so one PR carried
+ESLint 9 → 10 **and** TypeScript 5 → 7. It failed all four jobs, and there is
+no way to review or bisect it: the only honest response to that PR is to close
+it.
+
+**Both fixed in the config.** The four React packages are one group, and every
+group now takes `["minor", "patch"]` only — so majors arrive individually,
+which is the only form in which they can be judged. `infra/dependabot.test.ts`
+asserts both properties, verified by splitting the React group and by removing
+a group's `update-types`.
+
+**Worth recording** because the config was added as hygiene, in a commit whose
+own description called it "grouped so a week's patches arrive as one reviewable
+pull request". It did group them. It grouped the wrong things, and the way I
+found out was two red pull requests whose diffs blamed the dependencies.
+
+**And one to decline rather than fix:** the `docker` ecosystem offered
+`node:22-alpine` → `node:25-alpine`, which passes CI and should not be taken.
+25 is an odd-numbered Node release and therefore never becomes LTS. Green CI
+answers "does it work today", not "is this a runtime to ship on".

@@ -133,6 +133,12 @@ mount falls back to `USERPROFILE`; Git Bash and WSL set `HOME`. Avoid putting a
 `C:/...` path in `AWS_PROFILE_DIR` if you ever run Compose from WSL — the Linux CLI
 cannot parse it and the API fails to start with _"invalid volume specification"_.
 
+It lands at `/home/node/.aws`, because the API container runs as the non-root
+`node` user and that is where the SDK resolves `~` to. If the connection test still
+reports missing credentials with those two lines already set, the mount is arriving
+somewhere else — the message names the path it actually read, and
+`docker exec sightline-api ls -l ~/.aws` confirms it.
+
 The mount is preferable to putting real keys in `AWS_ACCESS_KEY_ID` /
 `AWS_SECRET_ACCESS_KEY`: it keeps long-lived credentials out of a file sitting next
 to the code, and it carries the SSO token cache, so `aws sso login` on the host
@@ -210,7 +216,7 @@ the Vite dev server solves in development.
 | `npm run drift`                                | Change the mock account, so a second scan has a diff         |
 | `npm run inspect -w @sightline/api`            | Scan and print findings without touching the databases       |
 | `npm run query -w @sightline/api`              | Run every curated query against the graph                    |
-| `npm test`                                     | 488 unit tests                                               |
+| `npm test`                                     | 493 unit tests                                               |
 | `npm run lint`                                 | Prettier and ESLint, both in check mode                      |
 | `npm run format`                               | Fix everything those two can fix automatically               |
 | `npm run typecheck`                            | `tsc` over every workspace, and over `infra/` and `scripts/` |

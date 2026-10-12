@@ -303,15 +303,32 @@ export function sourceCredentials(): { accessKeyId: string; secretAccessKey: str
 }
 
 /**
+ * The home directory of the user the container runs as, which is where the AWS
+ * SDK resolves `~` from. `deploy/compose.aws-profile.yml` must mount the host
+ * profile here; `infra/composeAwsProfile.test.ts` ties the two together.
+ */
+export const CONTAINER_HOME = "/home/node";
+
+/**
  * Where the AWS credential chain looks for a shared profile.
  *
  * Exported so the diagnosis below can be tested against a directory that exists
  * and is empty, which is the Windows failure mode and cannot be reproduced by
  * whatever happens to be on the machine running the tests.
  */
-export function awsProfileDir(home = process.env["HOME"] ?? "/root"): string {
+export function awsProfileDir(home = process.env["HOME"] ?? CONTAINER_HOME): string {
   return `${home}/.aws`;
 }
+
+/**
+ * A stale mount at `/root/.aws` - where this project mounted the profile until
+ * the api image stopped running as root - is deliberately **not** detected.
+ *
+ * It cannot be: `/root` is 0700, so traversing it fails with EACCES whether or
+ * not anything is mounted inside, and `existsSync` returns false either way.
+ * The diagnosis names the path it does read instead, which is what makes the
+ * mismatch visible (engineering log #60).
+ */
 
 /**
  * `CredentialsProviderError` says nothing about which link in the chain is
@@ -334,6 +351,8 @@ export function credentialSources(): {
   /** The directory exists, whether or not it holds anything. */
   profileDirExists: boolean;
   profileFiles: string[];
+  /** The path the SDK reads, so the diagnosis can name it rather than say "~". */
+  profileDir: string;
 } {
   const dir = awsProfileDir();
   let profileFiles: string[] = [];
@@ -356,6 +375,7 @@ export function credentialSources(): {
      */
     profileDirExists: existsSync(dir),
     profileFiles,
+    profileDir: dir,
   };
 }
 
