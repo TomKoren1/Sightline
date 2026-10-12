@@ -3,8 +3,8 @@
  * of these guard mistakes that were present, each invisible in review because
  * the page renders perfectly either way:
  *
- *  - the intro promised "four steps" while five rendered, and two handover
- *    documents copied the wrong number
+ *  - the intro promised "four steps" while five rendered, and the wrong number
+ *    was then copied into two other places
  *  - the deploy command carried no `--region`, so it failed for any reader
  *    whose CLI had no default
  *  - `ExternalId=` interpolated a loading string, so copying before the fetch

@@ -96,7 +96,7 @@ export function assumablePrincipalArn(callerIdentity: string | null): PrincipalR
 
   // moto reports `sts::<account>:user/<name>` for static credentials. Real STS
   // does not, but the conversion is unambiguous and it keeps the mock's
-  // onboarding walkthrough producing a valid command.
+  // onboarding guide producing a valid command.
   const user = /^user\/(.+)$/.exec(resource);
   if (user) {
     return {

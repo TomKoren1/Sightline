@@ -70,7 +70,6 @@ export function disabledBlockSettings(pab: PublicAccessBlock | null): string[] {
   return settings.filter(([key]) => pab?.[key] !== true).map(([, label]) => label);
 }
 
-/** Does a policy document allow a wildcard principal? */
 export function policyAllowsWildcardPrincipal(policyJson: string | null): boolean {
   if (!policyJson) return false;
   try {

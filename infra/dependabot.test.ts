@@ -17,7 +17,6 @@ const config = readFileSync(
   "utf8",
 );
 
-/** The `patterns: [...]` line of one named group. */
 function groupPatterns(name: string): string[] {
   const block = new RegExp(`^ {6}${name}:\\n(?: {8}.*\\n)+`, "m").exec(config);
   expect(block, `dependabot.yml has no group called "${name}"`).toBeTruthy();

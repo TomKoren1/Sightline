@@ -61,7 +61,6 @@ export interface ScanResult {
   relationships: Relationship[];
 }
 
-/** Roll a set of unit outcomes into an overall scan status. */
 export function rollUpStatus(units: ScanUnit[]): ScanStatus {
   const done = units.filter((u) => u.status !== "pending" && u.status !== "running");
   if (done.length === 0) return "running";
