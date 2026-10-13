@@ -319,6 +319,43 @@ export async function countScope(scope: GraphScope): Promise<{ nodes: number; ed
 }
 
 /**
+ * Delete the graphs of named scans.
+ *
+ * Used when a connection is forgotten: Postgres cascades from the row, and this
+ * is the half that does not. Batched for the same reason the sweep is - a
+ * `DETACH DELETE` of a large estate is the one operation here whose cost scales
+ * with the customer rather than with the change.
+ */
+export async function dropScanScopes(
+  tenantId: TenantId,
+  scanIds: string[],
+  limit = 50_000,
+): Promise<number> {
+  if (scanIds.length === 0) return 0;
+  const session = getDriver().session();
+  let total = 0;
+  try {
+    for (;;) {
+      const result = await session.executeWrite((tx) =>
+        tx.run(
+          `MATCH (n:Resource {tenantId: $tenantId})
+           WHERE n.scanId IN $scanIds
+           WITH n LIMIT $limit
+           DETACH DELETE n
+           RETURN count(n) AS deleted`,
+          { tenantId, scanIds, limit: neo4j.int(limit) },
+        ),
+      );
+      const deleted = (result.records[0]?.get("deleted") as number | undefined) ?? 0;
+      total += deleted;
+      if (deleted === 0) return total;
+    }
+  } finally {
+    await session.close();
+  }
+}
+
+/**
  * Delete the graphs of scans that are no longer current.
  *
  * Batched and off the critical path, because a `DETACH DELETE` of a large

@@ -6,6 +6,7 @@ import { migrate, closePool } from "./db/postgres.js";
 import { closeDriver } from "./db/neo4j.js";
 import { assertHostedInvariants } from "./hostedMode.js";
 import { ensureLocalTenant } from "./tenancy/local.js";
+import { pruneExpiredSessions } from "./auth/session.js";
 
 /**
  * Before anything else, and before the app is even built.
@@ -27,6 +28,14 @@ try {
   // A clone is one tenant with two connections. No-op in hosted mode, where
   // tenants arrive by signing up.
   await ensureLocalTenant();
+  /**
+   * Expired sessions are already refused by `readSession`, so this is
+   * housekeeping rather than a control - but an exported function nothing calls
+   * is how a check ends up enforced by its own tests and nothing else, which
+   * this project has done before. On boot is enough until the job queue exists
+   * to run it on a schedule.
+   */
+  log.info(`pruned ${await pruneExpiredSessions()} expired session(s)`);
   await app.listen(cfg.BACKEND_PORT, cfg.BACKEND_HOST);
   log.info(`deployment: ${cfg.DEPLOYMENT_MODE}, AWS mode: ${cfg.AWS_MODE}`);
 } catch (err) {

@@ -370,6 +370,65 @@ const CONTRACTS: Contract[] = [
  * completeness check below accepts an entry here, and a second check refuses an
  * entry whose reason is a placeholder.
  */
+const CONNECTION_SUMMARY = z
+  .object({
+    id: z.string(),
+    kind: z.enum(["real", "demo"]),
+    label: z.string(),
+    accountId: z.string().nullable(),
+    roleArn: z.string().nullable(),
+    status: z.enum(["pending", "verified", "failed", "disconnected"]),
+    lastError: z.string().nullable(),
+    scanRegions: z.array(z.string()),
+    templateVersion: z.string().nullable(),
+    lastVerifiedAt: z.string().nullable(),
+    lastScanAt: z.string().nullable(),
+  })
+  // No external id, encrypted or otherwise. The shape is asserted strictly so
+  // that adding one to the summary fails here rather than in production.
+  .strict();
+
+CONTRACTS.push(
+  {
+    method: "GET",
+    route: "/api/auth/providers",
+    url: "/api/auth/providers",
+    responses: {
+      200: z.object({ providers: z.array(z.string()), hosted: z.boolean() }).strict(),
+    },
+  },
+  {
+    method: "GET",
+    route: "/api/me",
+    url: "/api/me",
+    responses: {
+      200: z
+        .object({
+          hosted: z.boolean(),
+          signedIn: z.boolean(),
+          user: z
+            .object({
+              email: z.string(),
+              name: z.string().nullable(),
+              avatarUrl: z.string().nullable(),
+            })
+            .nullable(),
+          isAdmin: z.boolean(),
+          providers: z.array(z.string()),
+          linked: z.array(z.string()),
+          connections: z.array(CONNECTION_SUMMARY),
+        })
+        .strict(),
+    },
+  },
+  {
+    method: "GET",
+    route: "/api/connections",
+    url: "/api/connections",
+    responses: { 200: z.object({ connections: z.array(CONNECTION_SUMMARY) }).strict() },
+  },
+);
+
 const EXCLUDED = new Map<string, string>([
   [
     "POST /api/scans",
@@ -379,6 +438,52 @@ const EXCLUDED = new Map<string, string>([
       "overwrite the graph. The scan itself is covered by the tier-1 ground-truth " +
       "suite, which drives `runScan()` directly, and the SSE payloads are typed as " +
       "`ScanEvent` in @sightline/shared, so a port that changes them fails typecheck.",
+  ],
+  [
+    "GET /api/auth/:provider",
+    "A 302 to the provider's consent screen. There is no body to have a shape, and the " +
+      "query string it builds is asserted directly in auth/providers.test.ts.",
+  ],
+  [
+    "GET /api/auth/:provider/callback",
+    "A 302 either into the app or back to it with a reason. Every branch is a redirect, " +
+      "and the claim checks behind it are asserted in auth/providers.test.ts without a " +
+      "network.",
+  ],
+  [
+    "POST /api/auth/logout",
+    "204 and a cleared cookie: no body to declare. Revocation is asserted against real " +
+      "rows in auth/signin.test.ts.",
+  ],
+  [
+    "GET /api/auth/sessions",
+    "Session management has no meaning in a self-hosted deployment, which has no " +
+      "sessions, and this suite runs self-hosted. Covered by auth/signin.test.ts.",
+  ],
+  [
+    "POST /api/auth/sessions/revoke-all",
+    "Revokes every session for the caller. Covered by auth/signin.test.ts, which asserts " +
+      "each token is dead afterwards.",
+  ],
+  [
+    "DELETE /api/auth/sessions/:id",
+    "Revokes one session, scoped to its owner. Covered by auth/signin.test.ts.",
+  ],
+  [
+    "POST /api/connections",
+    "Creates a connection and returns an ExternalId that is shown once. Calling it here " +
+      "would leave rows behind and put a one-time secret in a test log; the behaviour is " +
+      "covered by the tenancy suites.",
+  ],
+  [
+    "POST /api/connections/:id/target",
+    "Writes a role ARN derived from an account id. Mutating, and the derivation is " +
+      "asserted in packages/shared's onboarding tests.",
+  ],
+  [
+    "DELETE /api/connections/:id",
+    "Forgets a connection and purges its graph scopes. Destructive by design, so it is " +
+      "exercised where the rows are disposable rather than against the running app.",
   ],
 ]);
 

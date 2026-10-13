@@ -1,6 +1,13 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { assertHostedInvariants, hostedInvariantViolations, type Env } from "./hostedMode.js";
+
+const ORIGINAL_ENV = { ...process.env };
+
+afterEach(() => {
+  process.env = { ...ORIGINAL_ENV };
+  vi.resetModules();
+});
 
 /** A hosted environment with nothing wrong with it. */
 const valid: Env = {
@@ -106,6 +113,47 @@ describe("hosted invariants", () => {
       AWS_ENDPOINT_URL: "http://moto:5000",
     });
     expect(broken.length).toBeGreaterThan(4);
+  });
+
+  /**
+   * The gap these invariants do not close on their own.
+   *
+   * They read the **raw** environment, deliberately - several of these keys
+   * carry a Zod default, so "unset" is not representable after parsing. The
+   * consequence is that an *unset* `AWS_MODE` passes the check against `"mock"`
+   * and then parses to the `mock` default, leaving a public deployment
+   * believing it is pointed at a local fixture.
+   *
+   * Found by booting hosted mode and watching the legacy connection test aim
+   * its STS calls at `http://localhost:5000`. Pinned here because the fix lives
+   * in `isMock()` rather than in the list above, and nothing else would notice
+   * if it were reverted.
+   */
+  it("leaves no mock path reachable in hosted mode", async () => {
+    // The worst case: the parsed configuration says `mock` outright. How it got
+    // there - a Zod default, or a file - is not the point. The point is that
+    // hosted mode must not act on it.
+    process.env = { ...ORIGINAL_ENV, ...valid, AWS_MODE: "mock" };
+    delete process.env["AWS_ENDPOINT_URL"];
+    vi.resetModules();
+
+    const hosted = await import("./config.js");
+    expect(hosted.isHosted()).toBe(true);
+    expect(hosted.cfg.AWS_MODE).toBe("mock");
+    expect(hosted.isMock()).toBe(false);
+  });
+
+  it("still means what it says in a self-hosted deployment", async () => {
+    // The other half: a clone pointed at the fixture must keep working. A fix
+    // that answered "no" everywhere would break the demo while looking like
+    // success from the assertion above.
+    process.env = { ...ORIGINAL_ENV, AWS_MODE: "mock" };
+    delete process.env["DEPLOYMENT_MODE"];
+    vi.resetModules();
+
+    const selfHosted = await import("./config.js");
+    expect(selfHosted.isHosted()).toBe(false);
+    expect(selfHosted.isMock()).toBe(true);
   });
 
   it("throws with every reason numbered", () => {

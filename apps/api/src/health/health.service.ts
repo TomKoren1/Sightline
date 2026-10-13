@@ -66,7 +66,12 @@ export class HealthService {
     return {
       status: REQUIRED.every((key) => checks[key] === "ok") ? "ok" : "degraded",
       checks,
-      awsMode: cfg.AWS_MODE,
+      /**
+       * The process-wide mode, which exists only in a self-hosted deployment.
+       * Reporting `mock` on a public one - which it would, from the Zod
+       * default - says something untrue about where the scanner is pointed.
+       */
+      awsMode: isHosted() ? "per-connection" : cfg.AWS_MODE,
       lastScan: latest ? { id: latest.id, at: latest.startedAt, status: latest.status } : null,
     };
   }

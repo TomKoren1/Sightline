@@ -1,61 +1,116 @@
 /**
- * The scope for one HTTP request — the single seam between "who is asking" and
- * every read below it.
+ * The scope for one request — the single seam between "who is asking" and every
+ * read below it.
  *
- * Controllers resolve it here and pass it down as a parameter; services never
- * reach for it. That is what keeps the services honest: a method that takes a
- * scope cannot read the wrong tenant's data by forgetting something, only by
- * being handed the wrong scope, and there is exactly one place that does the
- * handing.
+ * Resolved once, in the authentication guard, and attached to the request;
+ * controllers read it with `@CurrentScope()` and pass it down as a parameter.
+ * Services never reach for it. That is what keeps them honest: a method taking
+ * a scope cannot read the wrong tenant's data by forgetting something, only by
+ * being handed the wrong scope, and there is exactly one place that hands it
+ * over.
  *
- * Hosted mode **refuses** rather than falling back to a default. A fallback is
- * indistinguishable from working: whoever configured the deployment would see
- * their own account and conclude the product was fine, and the failure would
- * surface as a customer reading somebody else's inventory.
+ * Hosted mode **refuses** rather than falling back to a default tenant. A
+ * fallback is indistinguishable from working: whoever configured the deployment
+ * would see their own account and conclude the product was fine, while a
+ * customer read somebody else's inventory.
  */
 
-import { ServiceUnavailableException } from "@nestjs/common";
+import { BadRequestException, ConflictException } from "@nestjs/common";
+import { and, asc, eq } from "drizzle-orm";
 
 import { isHosted } from "../config.js";
-import { asConnectionId } from "./ids.js";
+import { db } from "../db/postgres.js";
+import { connections } from "../db/schema.js";
+import { asConnectionId, asTenantId, type TenantId } from "./ids.js";
 import { localScope } from "./local.js";
 import type { Scope } from "./scope.js";
 
-/** What a request needs to carry for a scope to be derived from it. */
+/** What the guard has put on the request by the time a scope is wanted. */
 export interface ScopedRequest {
-  /** Set by the authentication hook once there is one. */
-  tenantId?: string;
-  /** Which of the tenant's connections this request is about. */
+  tenantId?: TenantId;
+  scope?: Scope;
   headers?: Record<string, string | string[] | undefined>;
 }
 
 export const CONNECTION_HEADER = "x-sightline-connection";
 
-export function scopeForRequest(req: ScopedRequest): Scope {
+function headerValue(req: ScopedRequest, name: string): string | undefined {
+  const raw = req.headers?.[name];
+  return Array.isArray(raw) ? raw[0] : raw;
+}
+
+/**
+ * Which connection this request is about.
+ *
+ * The header wins; with none, the tenant's oldest connection is used so the API
+ * is usable before the UI has chosen one. That default is safe in a way a
+ * default *tenant* would not be — it only ever picks among accounts this tenant
+ * has already connected.
+ *
+ * A tenant with no connections gets a refusal naming the next step, rather than
+ * an empty graph that reads as "your account contains nothing".
+ */
+async function connectionFor(req: ScopedRequest, tenantId: TenantId) {
+  const requested = headerValue(req, CONNECTION_HEADER);
+  if (requested) {
+    const id = asConnectionId(requested);
+    /**
+     * Matched on the tenant as well as the id, so a connection belonging to
+     * someone else is reported as simply not existing.
+     *
+     * Every query below filters on the tenant too, so an unchecked id would
+     * return nothing rather than another tenant's rows - but "no such
+     * connection" leaks nothing, while "that exists and is not yours" would
+     * confirm that it exists.
+     */
+    const [owned] = await db
+      .select({ id: connections.id })
+      .from(connections)
+      .where(and(eq(connections.id, id), eq(connections.tenantId, tenantId)));
+    if (!owned) throw new BadRequestException({ error: "No such connection" });
+    return id;
+  }
+
+  const [first] = await db
+    .select({ id: connections.id })
+    .from(connections)
+    .where(eq(connections.tenantId, tenantId))
+    .orderBy(asc(connections.createdAt))
+    .limit(1);
+
+  if (!first) {
+    throw new ConflictException({
+      error: "No AWS account is connected yet. Connect one to start scanning.",
+      code: "NO_CONNECTION",
+    });
+  }
+  return asConnectionId(first.id);
+}
+
+/**
+ * The scope for this request.
+ *
+ * Async because hosted mode has to look up which of the tenant's accounts is
+ * being asked about. Called from the guard, so the cost falls only on routes
+ * that are authenticated in the first place.
+ */
+export async function resolveScope(req: ScopedRequest): Promise<Scope> {
   if (!isHosted()) {
     const scope = localScope();
-    // Even self-hosted honours an explicit connection, because that is how the
+    // Self-hosted honours an explicit connection too, because that is how the
     // account switcher moves between the demo fixture and a real account
     // without restarting or rewriting `.env`.
-    // Not validated against the tenant's connections here: every read filters
-    // on the tenant as well, so an id from elsewhere returns nothing rather
-    // than somebody else's rows. The UI only ever sends ids it was given.
     const requested = headerValue(req, CONNECTION_HEADER);
     return requested ? { ...scope, connectionId: asConnectionId(requested) } : scope;
   }
 
-  /**
-   * Sign-in is still being built, so hosted mode has no way to know who is
-   * asking. A refusal and not a default: there must be no window in which
-   * hosted mode serves one tenant's data to an unauthenticated request, and a
-   * default here is exactly such a window.
-   */
-  throw new ServiceUnavailableException({
-    error: "Sign-in is not available in this build, so no tenant can be resolved.",
-  });
-}
-
-function headerValue(req: ScopedRequest, name: string): string | undefined {
-  const raw = req.headers?.[name];
-  return Array.isArray(raw) ? raw[0] : raw;
+  const tenantId = req.tenantId;
+  if (!tenantId) {
+    // The guard resolves a scope only after authenticating, so reaching here
+    // means a route asked for one while being public.
+    throw new BadRequestException({
+      error: "This route has no tenant, so it cannot read tenant data.",
+    });
+  }
+  return { tenantId: asTenantId(tenantId), connectionId: await connectionFor(req, tenantId) };
 }

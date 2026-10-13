@@ -17,6 +17,7 @@ import { BadRequestException, ConflictException, Injectable, Logger } from "@nes
 import { STSClient, GetCallerIdentityCommand } from "@aws-sdk/client-sts";
 
 import {
+  isHosted,
   activeConnection,
   cfg,
   credentialSources,
@@ -293,6 +294,23 @@ export class ConnectionService {
    * rather than reusing credentials for the account we just left.
    */
   setMode(body: { mode?: string } | undefined) {
+    /**
+     * Process-wide, and therefore refused in hosted mode.
+     *
+     * One tenant clicking this would change which AWS account every other
+     * tenant on the process was looking at, and which one their next scan read.
+     * In hosted mode the equivalent is choosing a different connection, which
+     * is a property of the request rather than of the process.
+     */
+    if (isHosted()) {
+      throw new ConflictException({
+        error:
+          "This deployment switches accounts per request, not per process. Use the account " +
+          "switcher, which selects one of your connections — see GET /api/connections.",
+        code: "NOT_APPLICABLE",
+      });
+    }
+
     const mode = body?.mode;
     if (mode !== "mock" && mode !== "real") {
       throw new BadRequestException({ error: 'mode must be "mock" or "real"' });
@@ -330,6 +348,21 @@ export class ConnectionService {
    * storing a credential behind no authentication.
    */
   newExternalId() {
+    /**
+     * Generates an id it does not store, which was honest when an operator was
+     * going to paste it into `.env` themselves. In hosted mode it would hand a
+     * customer a value this service will never present, producing AccessDenied
+     * with both ends looking correct — the exact bug `createConnection` exists
+     * to avoid. Creating a connection issues a stored one instead.
+     */
+    if (isHosted()) {
+      throw new ConflictException({
+        error:
+          "An ExternalId is issued when you connect an account, and stored with it. " +
+          "Create a connection — see POST /api/connections.",
+        code: "NOT_APPLICABLE",
+      });
+    }
     return {
       externalId: `sightline-${randomBytes(18).toString("base64url")}`,
       note: "Generated for you to use. It is not stored — put it in the CloudFormation stack and in AWS_EXTERNAL_ID.",

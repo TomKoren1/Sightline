@@ -19,7 +19,8 @@ import { readOnlyRoleArn } from "@sightline/shared";
 
 import { cfg, MOCK_EXTERNAL_ID } from "../config.js";
 import { db } from "../db/postgres.js";
-import { connections } from "../db/schema.js";
+import { connections, scanRuns } from "../db/schema.js";
+import { dropScanScopes } from "../db/neo4j.js";
 import { asConnectionId, type ConnectionId, type TenantId } from "./ids.js";
 import { encryptSecret, decryptSecret, generateExternalId } from "./secrets.js";
 import type { Scope } from "./scope.js";
@@ -221,12 +222,35 @@ export function accountMismatch(pinned: string | null, reached: string): string 
 }
 
 /**
- * Forget everything about a connection.
+ * Forget everything about a connection, in both stores.
  *
- * Deliberately does **not** claim the customer is disconnected: only they can
- * delete the CloudFormation stack that trusts us, and saying otherwise would
- * leave standing access nobody believed was there. The caller tells them.
+ * Postgres cascades from the `connections` row, so the scans, units, snapshots
+ * and conversations go with it. **Neo4j does not cascade**, and its scopes are
+ * keyed by scan id - so they are collected first and deleted explicitly.
+ * Leaving them would mean a customer who disconnected still had their inventory
+ * sitting in the graph, which is exactly the thing they asked us to stop
+ * holding.
+ *
+ * Graph first: if that fails, the connection is still there to try again. The
+ * other order would leave orphaned nodes with nothing left pointing at them.
+ *
+ * Deliberately does **not** claim the customer is disconnected at the AWS end -
+ * only they can delete the CloudFormation stack that trusts us, and saying
+ * otherwise would leave standing access nobody believed was there.
  */
 export async function deleteConnection(scope: Scope): Promise<void> {
+  const scans = await db
+    .select({ id: scanRuns.id })
+    .from(scanRuns)
+    .where(
+      and(eq(scanRuns.tenantId, scope.tenantId), eq(scanRuns.connectionId, scope.connectionId)),
+    );
+
+  if (scans.length > 0) {
+    await dropScanScopes(
+      scope.tenantId,
+      scans.map((s) => s.id),
+    );
+  }
   await db.delete(connections).where(owned(scope));
 }

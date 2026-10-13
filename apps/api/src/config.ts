@@ -179,7 +179,21 @@ export const configuredMode: "mock" | "real" = cfg.AWS_MODE;
  */
 let activeMode: "mock" | "real" = cfg.AWS_MODE;
 
-export const isMock = (): boolean => activeMode === "mock";
+/**
+ * Never true in hosted mode, whatever `AWS_MODE` says.
+ *
+ * The hosted invariants refuse `AWS_MODE=mock`, but they read the *raw*
+ * environment - so an **unset** `AWS_MODE` passes them and then parses to the
+ * `mock` default, leaving `isMock()` true on a public deployment. Found by
+ * booting hosted mode and watching the legacy connection test aim its STS
+ * calls at `http://localhost:5000`, which is the stale default
+ * `AWS_ENDPOINT_URL` carries for the same reason.
+ *
+ * A mock path has no meaning in hosted mode - a demo account is a property of a
+ * connection there - so the honest answer is no, and this is the one place that
+ * can give it once for every caller.
+ */
+export const isMock = (): boolean => !isHosted() && activeMode === "mock";
 export const currentMode = (): "mock" | "real" => activeMode;
 
 export function setMode(mode: "mock" | "real"): void {
