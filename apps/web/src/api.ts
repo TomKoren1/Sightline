@@ -150,14 +150,107 @@ export interface Health {
   lastScan: { id: string; at: string; status: string } | null;
 }
 
-async function get<T>(path: string): Promise<T> {
-  const res = await fetch(path);
-  if (!res.ok) {
-    const body = await res.text();
-    throw new Error(`${res.status} ${res.statusText}: ${body.slice(0, 200)}`);
+/** What `/api/me` answers, which is everything the first frame needs. */
+export interface Me {
+  hosted: boolean;
+  signedIn: boolean;
+  user: { email: string; name: string | null; avatarUrl: string | null } | null;
+  isAdmin: boolean;
+  providers: string[];
+  linked: string[];
+  connections: ConnectionSummary[];
+}
+
+export interface ConnectionSummary {
+  id: string;
+  kind: "real" | "demo";
+  label: string;
+  accountId: string | null;
+  roleArn: string | null;
+  status: "pending" | "verified" | "failed" | "disconnected";
+  lastError: string | null;
+  scanRegions: string[];
+  templateVersion: string | null;
+  lastVerifiedAt: string | null;
+  lastScanAt: string | null;
+}
+
+export interface SessionRow {
+  id: string;
+  createdAt: string;
+  lastUsedAt: string | null;
+  userAgent: string | null;
+  current: boolean;
+}
+
+/**
+ * Which of the tenant's AWS accounts the UI is looking at.
+ *
+ * Module-level because every request carries it and threading it through each
+ * call site would mean a call site that forgets. The server treats an absent
+ * header as "your oldest connection", so this being null is a valid state
+ * rather than an error.
+ */
+let connectionId: string | null = null;
+
+export function selectConnection(id: string | null): void {
+  connectionId = id;
+}
+
+export function selectedConnection(): string | null {
+  return connectionId;
+}
+
+/**
+ * Headers every request carries.
+ *
+ * `X-Sightline-Request` is the forgery check: a cross-site form cannot set a
+ * custom header, and a cross-origin `fetch` that tries triggers a preflight the
+ * API's CORS configuration does not answer. Sent on reads too, so there is one
+ * rule rather than a list of methods to keep in step with the server's.
+ */
+function withHeaders(extra?: HeadersInit): HeadersInit {
+  return {
+    ...(extra as Record<string, string> | undefined),
+    "X-Sightline-Request": "1",
+    ...(connectionId ? { "X-Sightline-Connection": connectionId } : {}),
+  };
+}
+
+/** The one place a request is made, so the headers cannot be left off one. */
+function request(path: string, init: RequestInit = {}): Promise<Response> {
+  return fetch(path, { ...init, headers: withHeaders(init.headers) });
+}
+
+/** The server's `{ error }` body if there is one, else the status line. */
+async function failure(res: Response): Promise<Error> {
+  const text = await res.text().catch(() => "");
+  try {
+    const body = JSON.parse(text) as { error?: string };
+    if (body.error) return new Error(body.error);
+  } catch {
+    /* not JSON; fall through to the raw body */
   }
+  return new Error(`${res.status} ${res.statusText}: ${text.slice(0, 200)}`);
+}
+
+async function get<T>(path: string): Promise<T> {
+  const res = await request(path);
+  if (!res.ok) throw await failure(res);
   return res.json() as Promise<T>;
 }
+
+async function send<T>(path: string, init: RequestInit): Promise<T> {
+  const res = await request(path, init);
+  if (!res.ok) throw await failure(res);
+  return (res.status === 204 ? undefined : await res.json()) as T;
+}
+
+const asJson = (body: unknown): RequestInit => ({
+  method: "POST",
+  headers: { "Content-Type": "application/json" },
+  body: JSON.stringify(body),
+});
 
 export const api = {
   health: () => get<Health>("/api/health"),
@@ -177,31 +270,35 @@ export const api = {
   checks: () => get<{ checks: Omit<CheckResult, "passed" | "detail">[] }>("/api/evals/checks"),
   latestEvalRun: () =>
     get<{ run: AgentEvalRun | null; hint?: string; currentModel?: string }>("/api/evals/latest"),
-  runGroundTruth: async (): Promise<GroundTruthRun> => {
-    const res = await fetch("/api/evals/ground-truth", { method: "POST" });
-    if (!res.ok) {
-      const body = (await res.json().catch(() => ({}))) as { error?: string };
-      throw new Error(body.error ?? `${res.status} ${res.statusText}`);
-    }
-    return res.json() as Promise<GroundTruthRun>;
-  },
+  runGroundTruth: () => send<GroundTruthRun>("/api/evals/ground-truth", { method: "POST" }),
 
   connection: () => get<Connection>("/api/connection"),
-  setMode: async (mode: "mock" | "real") => {
-    const res = await fetch("/api/connection/mode", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ mode }),
-    });
-    const body = (await res.json()) as { error?: string; note?: string; accountId?: string };
-    if (!res.ok) throw new Error(body.error ?? `${res.status} ${res.statusText}`);
-    return body;
-  },
   newExternalId: () => get<{ externalId: string; note: string }>("/api/connection/external-id"),
   testConnection: async (): Promise<ConnectionTest> => {
-    const res = await fetch("/api/connection/test", { method: "POST" });
+    // A failed test is a 200 with `ok: false` and a diagnosis, which is the
+    // useful part - so the body is read whatever the status.
+    const res = await request("/api/connection/test", { method: "POST" });
     return res.json() as Promise<ConnectionTest>;
   },
+
+  // --- identity and accounts ----------------------------------------------
+  me: () => get<Me>("/api/me"),
+  logout: () => send<void>("/api/auth/logout", { method: "POST" }),
+  sessions: () => get<{ sessions: SessionRow[] }>("/api/auth/sessions"),
+  revokeSession: (id: string) =>
+    send<void>(`/api/auth/sessions/${encodeURIComponent(id)}`, { method: "DELETE" }),
+  revokeAllSessions: () =>
+    send<{ revoked: number }>("/api/auth/sessions/revoke-all", { method: "POST" }),
+
+  connections: () => get<{ connections: ConnectionSummary[] }>("/api/connections"),
+  createConnection: (input: { label: string; kind?: "real" | "demo" }) =>
+    send<{ id: string; externalId: string; note: string }>("/api/connections", asJson(input)),
+  setConnectionTarget: (id: string, accountId: string) =>
+    send<{ ok: true }>(`/api/connections/${encodeURIComponent(id)}/target`, asJson({ accountId })),
+  disconnect: (id: string) =>
+    send<{ ok: true; note: string }>(`/api/connections/${encodeURIComponent(id)}`, {
+      method: "DELETE",
+    }),
 };
 
 /**
@@ -218,10 +315,8 @@ async function streamPost<E>(
   onEvent: (event: E) => void,
   signal?: AbortSignal,
 ): Promise<void> {
-  const res = await fetch(path, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body),
+  const res = await request(path, {
+    ...asJson(body),
     ...(signal ? { signal } : {}),
   });
 

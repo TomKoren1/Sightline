@@ -8,7 +8,8 @@
 
 import type { ScanRun, ScanUnit } from "@sightline/shared";
 
-import { ModeToggle } from "./ModeToggle.js";
+import { AccountSwitcher } from "./AccountSwitcher.js";
+import type { ConnectionSummary } from "../api.js";
 
 /** Beyond this, the inventory is old enough that the user should be told. */
 const STALE_AFTER_MS = 60 * 60 * 1000;
@@ -32,8 +33,14 @@ export interface ScanBannerProps {
   onScan: () => void;
   onOpenTrust: () => void;
   onOpenConnection: () => void;
-  onModeSwitched: (note: string) => void;
-  modeNote: string | null;
+  switchNote: string | null;
+  connections: ConnectionSummary[];
+  /** Null means the server picks the oldest, which is what the switcher shows. */
+  selectedConnectionId: string | null;
+  onSelectConnection: (id: string) => void;
+  /** Null in a self-hosted deployment, which has no sign-in. */
+  signedInAs: string | null;
+  onSignOut: () => void;
 }
 
 export function ScanBanner({
@@ -45,8 +52,12 @@ export function ScanBanner({
   onScan,
   onOpenTrust,
   onOpenConnection,
-  onModeSwitched,
-  modeNote,
+  switchNote,
+  connections,
+  selectedConnectionId,
+  onSelectConnection,
+  signedInAs,
+  onSignOut,
 }: ScanBannerProps) {
   const units = scanning ? liveUnits : (scan?.units ?? []);
   const failed = units.filter((u) => u.status === "failed");
@@ -95,7 +106,24 @@ export function ScanBanner({
         </div>
 
         <div className="flex items-center gap-1.5">
-          <ModeToggle onSwitched={onModeSwitched} />
+          <AccountSwitcher
+            connections={connections}
+            selectedId={selectedConnectionId}
+            onSelect={onSelectConnection}
+            onConnect={onOpenConnection}
+          />
+          {signedInAs && (
+            <>
+              <span className="mx-0.5 h-4 w-px bg-ink-700" aria-hidden />
+              <button
+                onClick={onSignOut}
+                title={`Signed in as ${signedInAs}`}
+                className="rounded border border-ink-700 bg-ink-800 px-2 py-1 text-[11px] text-ink-300 transition hover:border-ink-600 hover:text-ink-100"
+              >
+                Sign out
+              </button>
+            </>
+          )}
           <span className="mx-0.5 h-4 w-px bg-ink-700" aria-hidden />
           <button
             onClick={onOpenConnection}
@@ -120,9 +148,9 @@ export function ScanBanner({
       </div>
 
       {/* After a switch the graph still holds the previous account's scan. */}
-      {modeNote && !scanning && (
+      {switchNote && !scanning && (
         <div className="border-t border-accent/30 bg-accent/10 px-3 py-1.5 text-[11px] text-accent">
-          {modeNote}
+          {switchNote}
         </div>
       )}
 

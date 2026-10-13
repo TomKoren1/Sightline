@@ -208,11 +208,18 @@ ExternalId already in use rather than rotating a working secret.
 It needs the AWS CLI, which is also what creates the role. The demo account needs
 neither it nor Node.
 
-The UI's **Connection** panel walks through the same thing by hand, and the
-**Demo / My AWS** toggle in the header switches between accounts at runtime without
-restarting or rewriting `.env`. Switching does not rescan, so the graph keeps showing
-the previous account until you run one — the banner says so rather than letting you
-read one account's inventory under another's name.
+The UI's **Connection** panel walks through the same thing by hand, and the **account
+switcher** in the header moves between accounts at runtime without restarting or
+rewriting `.env` — a clone has two, the demo fixture and whatever `.env` points at.
+Switching does not rescan, so the graph keeps showing the previous account until you run
+one, and the banner says so rather than letting you read one account's inventory under
+another's name.
+
+It replaced a demo/real toggle that flipped a module-level variable. That was honest for
+one operator and would have been a shared surprise for many: one person clicking it
+would have changed which AWS account every other tenant on the process was looking at.
+The switcher sends a header instead, and the server validates that the connection is
+yours.
 
 By hand: deploy [`infra/readonly-role.yaml`](infra/readonly-role.yaml) and set
 
@@ -333,7 +340,7 @@ the API and nginx containers are left running against databases that no longer e
 | `npm run drift`                                | Change the mock account, so a second scan has a diff         |
 | `npm run inspect -w @sightline/api`            | Scan and print findings without touching the databases       |
 | `npm run query -w @sightline/api`              | Run every curated query against the graph                    |
-| `npm test`                                     | 545 unit tests                                               |
+| `npm test`                                     | 585 unit tests                                               |
 | `npm run lint`                                 | Prettier and ESLint, both in check mode                      |
 | `npm run format`                               | Fix everything those two can fix automatically               |
 | `npm run typecheck`                            | `tsc` over every workspace, and over `infra/` and `scripts/` |
@@ -388,10 +395,25 @@ the query list by reflection, so a new query fails for _not being covered_ befor
 fail for leaking. Credentials are cached per connection rather than per process, and the
 AWS target comes from a `connections` row with no fallback to configuration.
 
-What is still single-process: the scan runs in the API rather than on a worker behind a
-queue, and there is no sign-in, so the public service cannot yet be deployed — hosted
-mode refuses to start without the configuration it needs and refuses to resolve a tenant
-without a session.
+**Sign-in** is Google and GitHub, written against the protocol rather than through a
+library, with sessions as rows so one can actually be revoked. Matching is on the
+provider's subject and never on an email address, and the same address arriving from a
+second provider is refused rather than silently joined to the first account. Every route
+is protected by one global guard and escapes only by saying `@Public()`;
+[`enforcement.test.ts`](apps/api/src/auth/enforcement.test.ts) takes the real route table
+from Fastify and checks both directions, so a route added later cannot quietly answer an
+unauthenticated request.
+
+`DEPLOYMENT_MODE=hosted` refuses to start on configuration that would produce a working
+system with a silently wrong security property, and names every problem at once rather
+than one per restart. The capabilities that are harmless with one operator and dangerous
+with many are **removed** there rather than guarded: no process-wide endpoint override,
+no process-wide mock, and no raw-Cypher escape hatch for the agent — the existing guards
+on that one defend against writes, and neither of them knows whose data a read touches.
+
+What is still single-process: the scan runs inside the API rather than on a worker behind
+a queue, so a long scan is tied to the request that started it. That is the next piece,
+along with the per-tenant limits that a public deployment needs before it meets anyone.
 
 **What I would build next:** incremental graph updates (removes the first limit and
 makes scans cheap enough to run continuously); real idle detection from CloudWatch and

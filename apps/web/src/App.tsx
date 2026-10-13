@@ -12,7 +12,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { ReactFlowProvider } from "@xyflow/react";
 import type { ScanEvent, ScanUnit } from "@sightline/shared";
 
-import { api, startScan } from "./api.js";
+import { api, selectConnection, startScan } from "./api.js";
 import { DEFAULT_VISIBLE_KINDS, KIND_STYLES, styleFor } from "./kinds.js";
 import { Chat } from "./components/Chat.js";
 import { ConnectionGuide } from "./components/ConnectionGuide.js";
@@ -22,6 +22,7 @@ import { Findings } from "./components/Findings.js";
 import { GraphView } from "./components/GraphView.js";
 import { ResourceDetail } from "./components/ResourceDetail.js";
 import { ScanBanner } from "./components/ScanBanner.js";
+import { SignIn } from "./components/SignIn.js";
 import { errorMessage } from "@sightline/shared";
 
 export function App() {
@@ -37,21 +38,66 @@ export function App() {
   const [visibleKinds, setVisibleKinds] = useState<string[]>(DEFAULT_VISIBLE_KINDS);
   const [showFilters, setShowFilters] = useState(false);
   const [modal, setModal] = useState<"trust" | "connection" | null>(null);
-  const [modeNote, setModeNote] = useState<string | null>(null);
+  const [switchNote, setSwitchNote] = useState<string | null>(null);
+  const [connectionId, setConnectionId] = useState<string | null>(null);
 
-  const latest = useQuery({ queryKey: ["latestScan"], queryFn: api.latestScan });
+  /**
+   * Who is asking, and which accounts they have. One request before the first
+   * frame, so there is no flash of an empty app for a signed-out visitor.
+   */
+  const me = useQuery({ queryKey: ["me"], queryFn: api.me });
+  const connections = me.data?.connections ?? [];
+
+  /**
+   * Every tenant-data query is keyed by the connection.
+   *
+   * Without this, switching accounts would show the previous account's cached
+   * graph under the new account's name - which is the specific confusion the
+   * banner exists to prevent, arriving by a different route.
+   */
+  const conn = connectionId ?? connections[0]?.id ?? null;
+
+  const latest = useQuery({
+    queryKey: ["latestScan", conn],
+    queryFn: api.latestScan,
+    enabled: Boolean(conn),
+  });
   const hasScan = Boolean(latest.data?.scan);
 
   // The graph and findings are meaningless before a scan, so they are not
   // fetched until there is one - which also keeps the empty state clean.
-  const graph = useQuery({ queryKey: ["graph"], queryFn: () => api.graph(), enabled: hasScan });
-  const summary = useQuery({ queryKey: ["summary"], queryFn: api.summary, enabled: hasScan });
-  const findings = useQuery({ queryKey: ["findings"], queryFn: api.findings, enabled: hasScan });
+  const graph = useQuery({
+    queryKey: ["graph", conn],
+    queryFn: () => api.graph(),
+    enabled: hasScan,
+  });
+  const summary = useQuery({ queryKey: ["summary", conn], queryFn: api.summary, enabled: hasScan });
+  const findings = useQuery({
+    queryKey: ["findings", conn],
+    queryFn: api.findings,
+    enabled: hasScan,
+  });
+
+  const switchConnection = useCallback(
+    (id: string) => {
+      selectConnection(id);
+      setConnectionId(id);
+      setCitedArns([]);
+      setSelectedArn(null);
+      // Switching does not rescan, so say so rather than letting someone read
+      // one account's inventory under another's name.
+      setSwitchNote(
+        "Switched account. The graph still shows the previous scan — run one to load this account.",
+      );
+      void queryClient.invalidateQueries();
+    },
+    [queryClient],
+  );
 
   const runScan = useCallback(async () => {
     setScanning(true);
     setScanError(null);
-    setModeNote(null);
+    setSwitchNote(null);
     setLiveUnits([]);
     setProgress(null);
     setCitedArns([]);
@@ -96,6 +142,16 @@ export function App() {
     }
   }, [queryClient]);
 
+  /**
+   * A signed-out visitor sees the sign-in screen and nothing else.
+   *
+   * Checked before the first frame rather than after, so there is no flash of
+   * an empty application - and so a request is never made on behalf of nobody.
+   */
+  if (me.data?.hosted && !me.data.signedIn) {
+    return <SignIn providers={me.data.providers} />;
+  }
+
   const nodes = graph.data?.nodes ?? [];
   const edges = graph.data?.edges ?? [];
   const presentKinds = [...new Set(nodes.map((n) => n.kind))].sort();
@@ -111,11 +167,13 @@ export function App() {
         onScan={() => void runScan()}
         onOpenTrust={() => setModal("trust")}
         onOpenConnection={() => setModal("connection")}
-        modeNote={modeNote}
-        onModeSwitched={(note) => {
-          setModeNote(note);
-          setCitedArns([]);
-          setSelectedArn(null);
+        switchNote={switchNote}
+        connections={connections}
+        selectedConnectionId={conn}
+        onSelectConnection={switchConnection}
+        signedInAs={me.data?.user?.email ?? null}
+        onSignOut={() => {
+          void api.logout().then(() => window.location.reload());
         }}
       />
 

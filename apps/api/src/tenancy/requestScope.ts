@@ -21,7 +21,7 @@ import { and, asc, eq } from "drizzle-orm";
 import { isHosted } from "../config.js";
 import { db } from "../db/postgres.js";
 import { connections } from "../db/schema.js";
-import { asConnectionId, asTenantId, type TenantId } from "./ids.js";
+import { asConnectionId, asTenantId, type ConnectionId, type TenantId } from "./ids.js";
 import { localScope } from "./local.js";
 import type { Scope } from "./scope.js";
 
@@ -50,10 +50,17 @@ function headerValue(req: ScopedRequest, name: string): string | undefined {
  * A tenant with no connections gets a refusal naming the next step, rather than
  * an empty graph that reads as "your account contains nothing".
  */
-async function connectionFor(req: ScopedRequest, tenantId: TenantId) {
+async function connectionFor(req: ScopedRequest, tenantId: TenantId, fallback?: ConnectionId) {
   const requested = headerValue(req, CONNECTION_HEADER);
   if (requested) {
-    const id = asConnectionId(requested);
+    let id: ConnectionId;
+    try {
+      id = asConnectionId(requested);
+    } catch {
+      // A branded-id constructor throws a plain Error, which Nest would turn
+      // into a 500 - and a header the client got wrong is the client's problem.
+      throw new BadRequestException({ error: "That connection id is not a valid id" });
+    }
     /**
      * Matched on the tenant as well as the id, so a connection belonging to
      * someone else is reported as simply not existing.
@@ -70,6 +77,8 @@ async function connectionFor(req: ScopedRequest, tenantId: TenantId) {
     if (!owned) throw new BadRequestException({ error: "No such connection" });
     return id;
   }
+
+  if (fallback) return fallback;
 
   const [first] = await db
     .select({ id: connections.id })
@@ -96,12 +105,23 @@ async function connectionFor(req: ScopedRequest, tenantId: TenantId) {
  */
 export async function resolveScope(req: ScopedRequest): Promise<Scope> {
   if (!isHosted()) {
+    /**
+     * Self-hosted honours an explicit connection too - that is how the account
+     * switcher moves between the demo fixture and a real account without
+     * restarting or rewriting `.env` - and it goes through **the same**
+     * validation as hosted mode.
+     *
+     * It briefly did not, on the grounds that every read filters on the tenant
+     * anyway, so a foreign id returns nothing. True, and still wrong twice
+     * over: a mistyped id showed an empty graph rather than an error, and it
+     * left self-hosted on a code path hosted mode never takes - which is the
+     * thing "one tenant that always exists" was meant to avoid.
+     */
     const scope = localScope();
-    // Self-hosted honours an explicit connection too, because that is how the
-    // account switcher moves between the demo fixture and a real account
-    // without restarting or rewriting `.env`.
-    const requested = headerValue(req, CONNECTION_HEADER);
-    return requested ? { ...scope, connectionId: asConnectionId(requested) } : scope;
+    return {
+      ...scope,
+      connectionId: await connectionFor(req, scope.tenantId, scope.connectionId),
+    };
   }
 
   const tenantId = req.tenantId;
