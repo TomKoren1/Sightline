@@ -9,7 +9,10 @@
  */
 
 import { closeDriver } from "../db/neo4j.js";
+import { closePool } from "../db/postgres.js";
 import * as q from "../db/queries.js";
+import { requireGraphScope } from "../tenancy/graphScope.js";
+import { ensureLocalTenant, localScope } from "../tenancy/local.js";
 
 const bold = (s: string) => `\x1b[1m${s}\x1b[0m`;
 const dim = (s: string) => `\x1b[2m${s}\x1b[0m`;
@@ -19,8 +22,13 @@ const show = (title: string, rows: unknown[]) => {
   for (const row of rows.slice(0, 8)) console.log("  " + JSON.stringify(row));
 };
 
+await ensureLocalTenant();
+// Throws with "run a scan first" rather than printing an empty report, which
+// would read as "your account is empty".
+const graph = await requireGraphScope(localScope());
+
 try {
-  const summary = await q.summariseAccount();
+  const summary = await q.summariseAccount(graph);
   console.log(`${bold("Account summary")}`);
   console.log(
     `  ${summary.byKind.map((k) => `${k.kind}:${k.count}`).join(" ")}\n` +
@@ -29,13 +37,13 @@ try {
       `idleCost:$${summary.idleCost}`,
   );
 
-  show("findPublicResources(S3Bucket)", await q.findPublicResources({ kind: "S3Bucket" }));
-  show("findAdminPrincipals", await q.findAdminPrincipals({}));
-  show("findInstancesInPublicSubnets", await q.findInstancesInPublicSubnets({}));
-  show("findIdleResources", await q.findIdleResources({}));
-  show("findOpenSecurityGroups", await q.findOpenSecurityGroups({}));
+  show("findPublicResources(S3Bucket)", await q.findPublicResources(graph, { kind: "S3Bucket" }));
+  show("findAdminPrincipals", await q.findAdminPrincipals(graph, {}));
+  show("findInstancesInPublicSubnets", await q.findInstancesInPublicSubnets(graph, {}));
+  show("findIdleResources", await q.findIdleResources(graph, {}));
+  show("findOpenSecurityGroups", await q.findOpenSecurityGroups(graph, {}));
 
-  const paths = await q.findNetworkPaths({ target: "northwind-prod-db", maxHops: 5 });
+  const paths = await q.findNetworkPaths(graph, { target: "northwind-prod-db", maxHops: 5 });
   console.log(`\n${bold("findNetworkPaths(northwind-prod-db)")} ${dim(`(${paths.length} paths)`)}`);
   for (const path of paths) {
     console.log("  " + path.hops.map((h) => h.name).join(" -> "));
@@ -43,10 +51,11 @@ try {
       console.log(dim(`      ${edge.ports.join(", ")} via ${edge.via}`));
   }
 
-  const analytics = await q.findNetworkPaths({ target: "analytics-db", maxHops: 5 });
+  const analytics = await q.findNetworkPaths(graph, { target: "analytics-db", maxHops: 5 });
   console.log(
     `\n${bold("findNetworkPaths(analytics-db)")} ${dim(`(${analytics.length} paths - expected 0)`)}`,
   );
 } finally {
   await closeDriver();
+  await closePool();
 }

@@ -23,8 +23,10 @@ import {
 } from "@sightline/shared";
 
 import { cfg, faultInjections } from "../config.js";
-import { callCounter } from "../aws/clients.js";
+import { CallCounter, type AwsContext } from "../aws/clients.js";
 import { getSession } from "../aws/credentials.js";
+import { accountMismatch } from "../tenancy/connections.js";
+import type { ScanTarget } from "../tenancy/scanTarget.js";
 import { resolveRegions } from "../aws/regions.js";
 import { discoverActiveRegions, narrowRegions } from "../aws/resourceExplorer.js";
 import { runWithConcurrency } from "./limiter.js";
@@ -47,9 +49,16 @@ const COLLECTORS: Record<ScannableService, Collector> = {
 };
 
 export interface ScanOptions {
+  /** Which account to scan. There is deliberately no default. */
+  target: ScanTarget;
   /** Called as units start and finish, so the UI can show live progress. */
   onEvent?: (event: ScanEvent) => void;
   scanId: string;
+  /**
+   * Counts this scan's AWS calls. Per scan rather than per process, so one
+   * tenant's traffic is never reported as another's.
+   */
+  counter?: CallCounter;
 }
 
 /** Pull a usable error code out of whatever the SDK threw. */
@@ -95,13 +104,28 @@ function explainFailure(service: string, region: string | null, err: unknown): s
 }
 
 export async function runScan(options: ScanOptions): Promise<ScanResult & { units: ScanUnit[] }> {
-  const { scanId, onEvent } = options;
+  const { scanId, onEvent, target } = options;
+  const counter = options.counter ?? new CallCounter();
+  const ctx: AwsContext = { target, counter };
   const emit = (event: ScanEvent) => onEvent?.(event);
 
   // Without credentials there is no scan to report on - this is the one
   // genuinely fatal failure.
-  const session = await getSession();
-  const { regions: candidateRegions } = await resolveRegions();
+  const session = await getSession(target);
+
+  /**
+   * The account the role actually reached must be the one this connection was
+   * verified against.
+   *
+   * A role ARN edited after verification would otherwise repoint an existing
+   * connection, its history and its graph at a different account, and the scan
+   * would succeed - filing one account's inventory under another's name. The
+   * pin is evidence; the ARN is only a claim.
+   */
+  const mismatch = accountMismatch(target.pinnedAccountId, session.accountId);
+  if (mismatch) throw new Error(mismatch);
+
+  const { regions: candidateRegions } = await resolveRegions(ctx, target.regions);
 
   /**
    * Optional fast path. One Resource Explorer query can tell us which regions
@@ -110,7 +134,7 @@ export async function runScan(options: ScanOptions): Promise<ScanResult & { unit
    * index - which a read-only role cannot create - so this always degrades to
    * scanning every candidate region.
    */
-  const fastPath = await discoverActiveRegions();
+  const fastPath = await discoverActiveRegions(ctx);
   const { regions, skipped } = narrowRegions(candidateRegions, fastPath, cfg.AWS_REGION);
   if (fastPath.available && skipped.length > 0) {
     console.log(
@@ -162,7 +186,7 @@ export async function runScan(options: ScanOptions): Promise<ScanResult & { unit
     unit.startedAt = startedAt.toISOString();
     emit({ type: "unit.started", scanId, service: unit.service, region: unit.region });
 
-    const callsBefore = callCounter.get(`${unit.service}:${unit.region ?? "global"}`);
+    const callsBefore = counter.get(`${unit.service}:${unit.region ?? "global"}`);
 
     try {
       // Testing hook. Lets the partial-failure UI be demonstrated on a mock
@@ -174,6 +198,7 @@ export async function runScan(options: ScanOptions): Promise<ScanResult & { unit
       }
 
       const output = await COLLECTORS[unit.service]({
+        ...ctx,
         region: unit.region,
         accountId: session.accountId,
       });
@@ -188,7 +213,7 @@ export async function runScan(options: ScanOptions): Promise<ScanResult & { unit
     } finally {
       unit.durationMs = Date.now() - startedAt.getTime();
       unit.finishedAt = new Date().toISOString();
-      unit.apiCalls = callCounter.get(`${unit.service}:${unit.region ?? "global"}`) - callsBefore;
+      unit.apiCalls = counter.get(`${unit.service}:${unit.region ?? "global"}`) - callsBefore;
       completed++;
       emit({ type: "unit.finished", scanId, unit: structuredClone(unit) });
       emit({ type: "scan.progress", scanId, completed, total: units.length });

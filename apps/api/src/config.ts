@@ -29,6 +29,14 @@ loadDotenv({ path: ENV_FILE, quiet: true });
 const blankAsUnset = <T extends z.ZodTypeAny>(inner: T) =>
   z.preprocess((value) => (value === "" ? undefined : value), inner);
 
+/**
+ * The external id the mock fixture accepts. Published, not secret: moto
+ * accepts any AssumeRole, and pretending this is a credential would be
+ * theatre. Named so the demo path has one definition rather than three
+ * string literals that have to agree.
+ */
+export const MOCK_EXTERNAL_ID = "local-dev-external-id-0000";
+
 const schema = z.object({
   DATABASE_URL: blankAsUnset(
     z.string().default("postgres://sightline:sightline@localhost:5432/sightline"),
@@ -47,7 +55,7 @@ const schema = z.object({
   AWS_TARGET_ROLE_ARN: blankAsUnset(
     z.string().default("arn:aws:iam::123456789012:role/SightlineReadOnlyRole"),
   ),
-  AWS_EXTERNAL_ID: blankAsUnset(z.string().default("local-dev-external-id-0000")),
+  AWS_EXTERNAL_ID: blankAsUnset(z.string().default(MOCK_EXTERNAL_ID)),
   AWS_REGION: blankAsUnset(z.string().default("us-east-1")),
 
   /**
@@ -85,6 +93,56 @@ const schema = z.object({
    * when the UI is served to another machine.
    */
   BACKEND_HOST: blankAsUnset(z.string().default("127.0.0.1")),
+
+  /**
+   * `self-hosted` is one operator, one account, no sign-in - the default, and
+   * what a clone of this repository runs. `hosted` is the public service: many
+   * tenants, sign-in required, and the capabilities that are harmless with one
+   * operator but dangerous with many are removed rather than guarded. See
+   * `hostedMode.ts`.
+   */
+  DEPLOYMENT_MODE: blankAsUnset(z.enum(["self-hosted", "hosted"]).default("self-hosted")),
+
+  /** Where the service is reachable. Decides the OAuth redirect and the cookie's Secure flag. */
+  PUBLIC_BASE_URL: blankAsUnset(z.string().default("http://localhost:5173")),
+
+  /**
+   * Tenant secrets at rest: KMS where there is one, else a local key. Hosted
+   * mode requires KMS - a key in the environment is not an acceptable place to
+   * hold half a credential for someone else's cloud.
+   */
+  AWS_KMS_KEY_ID: blankAsUnset(z.string().optional()),
+  SECRETS_LOCAL_KEY: blankAsUnset(z.string().optional()),
+
+  /**
+   * The demo fixture's endpoint, for tenants who choose the demo account.
+   *
+   * Deliberately not `AWS_ENDPOINT_URL`, which is an SDK-wide override that
+   * would redirect every signed call the process makes - including calls made
+   * with credentials assumed inside a customer's account. This one names a
+   * fixture the operator deployed and applies only to demo connections. Unset,
+   * no demo connection can be created at all.
+   */
+  DEMO_AWS_ENDPOINT_URL: blankAsUnset(z.string().optional()),
+
+  /**
+   * The principal every customer's trust policy names: this service's own
+   * identity. One value for the whole deployment, pre-filled into the
+   * CloudFormation link a customer deploys.
+   */
+  SCANNER_PRINCIPAL_ARN: blankAsUnset(z.string().optional()),
+
+  /** Where the read-only role template is published, for the one-click link. */
+  ROLE_TEMPLATE_URL: blankAsUnset(z.string().optional()),
+
+  GOOGLE_CLIENT_ID: blankAsUnset(z.string().optional()),
+  GOOGLE_CLIENT_SECRET: blankAsUnset(z.string().optional()),
+  GITHUB_CLIENT_ID: blankAsUnset(z.string().optional()),
+  GITHUB_CLIENT_SECRET: blankAsUnset(z.string().optional()),
+
+  /** Signing key for the OAuth `state` parameter and session cookies. */
+  SESSION_SECRET: blankAsUnset(z.string().optional()),
+  SESSION_TTL_HOURS: blankAsUnset(z.coerce.number().int().positive().default(8)),
 });
 
 const parsed = schema.safeParse(process.env);
@@ -94,6 +152,19 @@ if (!parsed.success) {
 }
 
 export const cfg = parsed.data;
+
+/** The public multi-tenant service, as opposed to a single-operator clone. */
+export const isHosted = (): boolean => cfg.DEPLOYMENT_MODE === "hosted";
+
+/**
+ * Should the session cookie be `Secure`?
+ *
+ * Follows the scheme rather than the mode. A Secure cookie over plain http is
+ * dropped silently, which presents as "signing in does nothing" - and a
+ * developer testing the hosted path over `http://<lan-ip>`, which unlike
+ * `localhost` is not a secure context, would hit exactly that.
+ */
+export const useSecureCookies = (): boolean => cfg.PUBLIC_BASE_URL.startsWith("https://");
 
 /**
  * The mode the process started in. `.env` decides this; the toggle does not
@@ -181,7 +252,7 @@ export function activeConnection(): {
 
     return {
       roleArn: `arn:aws:iam::${account}:role/SightlineReadOnlyRole`,
-      externalId: "local-dev-external-id-0000",
+      externalId: MOCK_EXTERNAL_ID,
       endpoint: cfg.AWS_ENDPOINT_URL,
     };
   }
@@ -288,11 +359,17 @@ const SDK_ENV_OVERRIDES = [
  * Source credentials to call `sts:AssumeRole` with, or `undefined` to use the
  * standard AWS credential chain.
  *
- * In `mock` mode these are the static placeholders moto accepts. In `real` mode
- * they are only honoured if they look like genuine AWS keys.
+ * For a demo connection these are the static placeholders moto accepts. For a
+ * real account they are only honoured if they look like genuine AWS keys, so a
+ * placeholder left in `.env` cannot shadow the platform identity.
+ *
+ * Takes the connection's kind as an argument rather than reading a process-wide
+ * mode: one process serves demo and real connections at the same time.
  */
-export function sourceCredentials(): { accessKeyId: string; secretAccessKey: string } | undefined {
-  if (isMock()) {
+export function sourceCredentials(
+  isDemo: boolean,
+): { accessKeyId: string; secretAccessKey: string } | undefined {
+  if (isDemo) {
     return cfg.AWS_ACCESS_KEY_ID && cfg.AWS_SECRET_ACCESS_KEY
       ? { accessKeyId: cfg.AWS_ACCESS_KEY_ID, secretAccessKey: cfg.AWS_SECRET_ACCESS_KEY }
       : { accessKeyId: "mock", secretAccessKey: "mock" };

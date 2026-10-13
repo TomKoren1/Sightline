@@ -15,11 +15,48 @@
 import type { JSONSchema7 } from "ai";
 
 import * as q from "../db/queries.js";
+import { isHosted } from "../config.js";
 import { remediationInputFromGraph } from "../remediation/fromGraph.js";
 import { remediationsFor } from "../remediation/remediation.js";
-import { readQuery } from "../db/neo4j.js";
+import { readScoped, type GraphScope } from "../db/neo4j.js";
 import { diffScans, getLatestScan, listScans } from "../db/repository.js";
+import type { Scope } from "../tenancy/scope.js";
 import { assertReadOnlyCypher } from "./cypherGuard.js";
+
+/**
+ * What a tool may read: one tenant, and one of their scans.
+ *
+ * Passed in rather than resolved here, so a tool cannot run without the caller
+ * having decided whose graph it is reading.
+ */
+export interface ToolContext {
+  scope: Scope;
+  graph: GraphScope;
+}
+
+/** The raw-Cypher escape hatch, by name, because two places refer to it. */
+export const RAW_CYPHER_TOOL = "graph_query";
+
+/**
+ * The tools on offer.
+ *
+ * In hosted mode the raw-Cypher escape hatch is **not offered**, and the
+ * dispatch refuses it independently - the list is a suggestion and the dispatch
+ * is the gate, because a model can call a tool it was never offered from a
+ * replayed conversation or because the name appears in the prompt.
+ *
+ * Removed rather than guarded. The existing guards defend against *writes*;
+ * neither knows whose data a read touches, and an unfiltered `MATCH
+ * (r:Resource) RETURN r` is a cross-tenant read that is not a write, so both
+ * pass it correctly having been asked a different question. A rewriter that
+ * forced a predicate onto every `MATCH` would be a third layer whose
+ * correctness depends on handling every Cypher shape - `UNION`, `CALL {}`,
+ * pattern comprehensions - and whose failure mode is silent, cross-customer,
+ * and discovered by the customer. Removing the capability has no failure mode.
+ */
+export function availableTools(): ToolDefinition[] {
+  return isHosted() ? TOOL_DEFINITIONS.filter((t) => t.name !== RAW_CYPHER_TOOL) : TOOL_DEFINITIONS;
+}
 
 export interface ToolResult {
   rows: unknown[];
@@ -284,21 +321,25 @@ type ToolInput = Record<string, never> & Record<string, unknown>;
  * recover by calling a different tool, and an exception here would end the
  * turn with nothing to show the user.
  */
-export async function runTool(name: string, input: ToolInput): Promise<ToolResult> {
+export async function runTool(
+  ctx: ToolContext,
+  name: string,
+  input: ToolInput,
+): Promise<ToolResult> {
   switch (name) {
     case "summarise_account":
-      return wrap([await q.summariseAccount()]);
+      return wrap([await q.summariseAccount(ctx.graph)]);
 
     case "list_resources":
-      return wrap(await q.listResources(input));
+      return wrap(await q.listResources(ctx.graph, input));
 
     case "get_resource": {
-      const row = await q.getResource(String(input["arnOrName"] ?? ""));
+      const row = await q.getResource(ctx.graph, String(input["arnOrName"] ?? ""));
       return wrap(row ? [row] : [], row ? {} : { note: "No resource matched that ARN or name." });
     }
 
     case "suggest_remediation": {
-      const row = await q.getResource(String(input["arnOrName"] ?? ""));
+      const row = await q.getResource(ctx.graph, String(input["arnOrName"] ?? ""));
       if (!row) return wrap([], { note: "No resource matched that ARN or name." });
       const remediations = remediationsFor(remediationInputFromGraph(row));
       return wrap(remediations.length > 0 ? [{ arn: row.arn, remediations }] : [], {
@@ -310,13 +351,13 @@ export async function runTool(name: string, input: ToolInput): Promise<ToolResul
     }
 
     case "find_public_resources":
-      return wrap(await q.findPublicResources(input));
+      return wrap(await q.findPublicResources(ctx.graph, input));
 
     case "find_admin_principals":
-      return wrap(await q.findAdminPrincipals(input));
+      return wrap(await q.findAdminPrincipals(ctx.graph, input));
 
     case "find_network_paths": {
-      const rows = await q.findNetworkPaths({
+      const rows = await q.findNetworkPaths(ctx.graph, {
         target: String(input["target"] ?? ""),
         source: input["source"] ? String(input["source"]) : undefined,
         maxHops: input["maxHops"] ? Number(input["maxHops"]) : undefined,
@@ -331,35 +372,35 @@ export async function runTool(name: string, input: ToolInput): Promise<ToolResul
 
     case "find_reachable_from":
       return wrap(
-        await q.findReachableFrom({
+        await q.findReachableFrom(ctx.graph, {
           source: String(input["source"] ?? ""),
           maxHops: input["maxHops"] ? Number(input["maxHops"]) : undefined,
         }),
       );
 
     case "find_instances_in_public_subnets":
-      return wrap(await q.findInstancesInPublicSubnets(input));
+      return wrap(await q.findInstancesInPublicSubnets(ctx.graph, input));
 
     case "find_idle_resources":
-      return wrap(await q.findIdleResources(input));
+      return wrap(await q.findIdleResources(ctx.graph, input));
 
     case "find_unprotected_buckets":
-      return wrap(await q.findUnprotectedBuckets(input));
+      return wrap(await q.findUnprotectedBuckets(ctx.graph, input));
 
     case "find_open_security_groups":
-      return wrap(await q.findOpenSecurityGroups(input));
+      return wrap(await q.findOpenSecurityGroups(ctx.graph, input));
 
     case "search_resources":
-      return wrap(await q.searchResources({ text: String(input["text"] ?? "") }));
+      return wrap(await q.searchResources(ctx.graph, { text: String(input["text"] ?? "") }));
 
     case "list_scans":
-      return wrap(await listScans(Number(input["limit"] ?? 10)));
+      return wrap(await listScans(ctx.scope, Number(input["limit"] ?? 10)));
 
     case "diff_scans": {
       let from = input["fromScanId"] ? String(input["fromScanId"]) : null;
       let to = input["toScanId"] ? String(input["toScanId"]) : null;
       if (!from || !to) {
-        const scans = await listScans(2);
+        const scans = await listScans(ctx.scope, 2);
         if (scans.length < 2) {
           return wrap([], {
             note: "Only one scan exists, so there is nothing to compare it against yet.",
@@ -368,16 +409,29 @@ export async function runTool(name: string, input: ToolInput): Promise<ToolResul
         to = to ?? scans[0]!.id;
         from = from ?? scans[1]!.id;
       }
-      return wrap([await diffScans(from, to)]);
+      return wrap([await diffScans(ctx.scope, from, to)]);
     }
 
-    case "graph_query": {
+    case RAW_CYPHER_TOOL: {
+      // The second of the two gates in ADR-016. The first is `availableTools`.
+      if (isHosted()) {
+        return {
+          rows: [],
+          arns: [],
+          note:
+            "Raw Cypher is not available in this deployment. Use the curated tools; they cover " +
+            "every question this one was for, and they cannot read another customer's account.",
+        };
+      }
       const cypher = String(input["cypher"] ?? "");
       const guard = assertReadOnlyCypher(cypher);
       if (!guard.ok) {
         return { rows: [], arns: [], note: `Query rejected: ${guard.reason}` };
       }
-      const rows = await readQuery(cypher);
+      // Scoped like every other read. `readScoped` refuses Cypher that does not
+      // bind both parameters, so a query written without them comes back as a
+      // correctable error rather than as another account's resources.
+      const rows = await readScoped(ctx.graph, cypher);
       return wrap(rows.slice(0, 200), { query: cypher });
     }
 

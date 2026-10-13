@@ -9,10 +9,11 @@
 import { existsSync } from "node:fs";
 import { Injectable } from "@nestjs/common";
 
-import { cfg, ENV_FILE } from "../config.js";
-import { readQuery } from "../db/neo4j.js";
+import { cfg, ENV_FILE, isHosted } from "../config.js";
+import { probeNeo4j } from "../db/neo4j.js";
 import { pool } from "../db/postgres.js";
 import { getLatestScan } from "../db/repository.js";
+import { localScope } from "../tenancy/local.js";
 
 /**
  * Dependencies the service cannot work without.
@@ -44,7 +45,7 @@ export class HealthService {
     }
 
     try {
-      await readQuery("RETURN 1 AS ok");
+      await probeNeo4j();
       checks["neo4j"] = "ok";
     } catch (err) {
       checks["neo4j"] = err instanceof Error ? err.message : "error";
@@ -52,7 +53,15 @@ export class HealthService {
 
     checks["agent"] = this.agentCheck();
 
-    const latest = await getLatestScan().catch(() => null);
+    /**
+     * The last scan, in self-hosted only.
+     *
+     * This route is public - the cluster scrapes it and Prometheus cannot be
+     * given a session - so in hosted mode it must carry no tenant's data. A
+     * single-operator deployment has exactly one tenant and uses this as a
+     * dashboard, which is why it is not simply dropped.
+     */
+    const latest = isHosted() ? null : await getLatestScan(localScope()).catch(() => null);
 
     return {
       status: REQUIRED.every((key) => checks[key] === "ok") ? "ok" : "degraded",

@@ -2,6 +2,8 @@ import { Controller, Get, Inject, Param, Post, Query, Req, Res } from "@nestjs/c
 import type { FastifyReply, FastifyRequest } from "fastify";
 import type { ScanEvent } from "@sightline/shared";
 
+import { CurrentScope } from "../tenancy/currentScope.decorator.js";
+import type { Scope } from "../tenancy/scope.js";
 import { ScansService } from "./scans.service.js";
 
 @Controller("api/scans")
@@ -10,24 +12,24 @@ export class ScansController {
   constructor(@Inject(ScansService) private readonly scans: ScansService) {}
 
   @Get()
-  list() {
-    return this.scans.list();
+  list(@CurrentScope() scope: Scope) {
+    return this.scans.list(scope);
   }
 
   // Declared before `:id`, or Fastify would route "latest" and "diff" into it.
   @Get("latest")
-  latest() {
-    return this.scans.latest();
+  latest(@CurrentScope() scope: Scope) {
+    return this.scans.latest(scope);
   }
 
   @Get("diff")
-  diff(@Query() query: { from?: string; to?: string }) {
-    return this.scans.diff(query);
+  diff(@CurrentScope() scope: Scope, @Query() query: { from?: string; to?: string }) {
+    return this.scans.diff(scope, query);
   }
 
   @Get(":id")
-  byId(@Param("id") id: string) {
-    return this.scans.byId(id);
+  byId(@CurrentScope() scope: Scope, @Param("id") id: string) {
+    return this.scans.byId(scope, id);
   }
 
   /**
@@ -41,9 +43,9 @@ export class ScansController {
    * is exactly what a hand-managed stream needs.
    */
   @Post()
-  async run(@Req() req: FastifyRequest, @Res() reply: FastifyReply) {
-    if (!this.scans.claim()) {
-      return reply.code(409).send({ error: "A scan is already running" });
+  async run(@CurrentScope() scope: Scope, @Req() req: FastifyRequest, @Res() reply: FastifyReply) {
+    if (!this.scans.claim(scope)) {
+      return reply.code(409).send({ error: "A scan of this account is already running" });
     }
 
     reply.raw.writeHead(200, {
@@ -59,7 +61,7 @@ export class ScansController {
       reply.raw.write(`data: ${JSON.stringify(event)}\n\n`);
     };
 
-    await this.scans.run(send, (err) => req.log.error({ err }, "scan failed"));
+    await this.scans.run(scope, send, (err) => req.log.error({ err }, "scan failed"));
     reply.raw.end();
   }
 }

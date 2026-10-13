@@ -1,30 +1,37 @@
 /**
- * Whether a scan is in flight.
+ * Which connections have a scan in flight.
  *
- * Was a module-level `let`. Same single flag, but a provider can be given a
- * narrower lifetime without touching a caller - which matters because this and
- * the cached AWS session are the two things standing between this and
- * multi-tenancy. Still one boolean, not a map: single-tenant, and honest.
+ * Was a single boolean, which is honest for one operator and would be a shared
+ * surprise for many: one tenant starting a scan would have blocked every other
+ * tenant's. Keyed by connection, so two accounts can be scanned at once while a
+ * second scan of the *same* account - which would race on the same rows and the
+ * same graph scope - still cannot start.
+ *
+ * In-process, and therefore only correct while there is one API process. The
+ * durable version is the `scan_jobs` queue, where the claim is a row and a
+ * worker that dies leaves something another can reclaim.
  */
 
 import { Injectable } from "@nestjs/common";
 
+import type { ConnectionId } from "../tenancy/ids.js";
+
 @Injectable()
 export class ScanStateService {
-  private running = false;
+  private readonly running = new Set<ConnectionId>();
 
-  get isRunning(): boolean {
-    return this.running;
+  isRunning(connectionId: ConnectionId): boolean {
+    return this.running.has(connectionId);
   }
 
   /** Test-and-set in one call, so a caller cannot check and claim with a gap between. */
-  claim(): boolean {
-    if (this.running) return false;
-    this.running = true;
+  claim(connectionId: ConnectionId): boolean {
+    if (this.running.has(connectionId)) return false;
+    this.running.add(connectionId);
     return true;
   }
 
-  release(): void {
-    this.running = false;
+  release(connectionId: ConnectionId): void {
+    this.running.delete(connectionId);
   }
 }

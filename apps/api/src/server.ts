@@ -4,6 +4,18 @@ import { buildApp } from "./app.js";
 import { cfg } from "./config.js";
 import { migrate, closePool } from "./db/postgres.js";
 import { closeDriver } from "./db/neo4j.js";
+import { assertHostedInvariants } from "./hostedMode.js";
+import { ensureLocalTenant } from "./tenancy/local.js";
+
+/**
+ * Before anything else, and before the app is even built.
+ *
+ * Every rule it checks is a configuration mistake that produces a *working*
+ * system with a silently wrong security property, so this must not be reachable
+ * only after a request has arrived. Throwing here means the pod never becomes
+ * ready, which is what a cluster should see.
+ */
+assertHostedInvariants();
 
 const app = await buildApp();
 // Fastify's logger, reached through the adapter: Nest's own logger is kept to
@@ -12,8 +24,11 @@ const log = app.getHttpAdapter().getInstance().log;
 
 try {
   await migrate();
+  // A clone is one tenant with two connections. No-op in hosted mode, where
+  // tenants arrive by signing up.
+  await ensureLocalTenant();
   await app.listen(cfg.BACKEND_PORT, cfg.BACKEND_HOST);
-  log.info(`AWS mode: ${cfg.AWS_MODE}`);
+  log.info(`deployment: ${cfg.DEPLOYMENT_MODE}, AWS mode: ${cfg.AWS_MODE}`);
 } catch (err) {
   log.error(err);
   process.exit(1);

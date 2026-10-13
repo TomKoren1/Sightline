@@ -2,7 +2,14 @@
 
 import type { Relationship, Resource } from "@sightline/shared";
 
-export interface CollectorContext {
+import type { AwsContext } from "../../aws/clients.js";
+
+/**
+ * Extends `AwsContext`, so a collector cannot build a client without naming
+ * whose account it will talk to - the context it already has is the context the
+ * client factories require.
+ */
+export interface CollectorContext extends AwsContext {
   /** `null` for global services. */
   region: string | null;
   accountId: string;

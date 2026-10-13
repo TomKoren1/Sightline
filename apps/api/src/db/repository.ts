@@ -7,7 +7,7 @@
  */
 
 import { randomUUID } from "node:crypto";
-import { and, asc, desc, eq, inArray, ne, notExists, sql } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, isNotNull, ne, notExists, sql } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 import type {
   Relationship,
@@ -21,6 +21,20 @@ import type {
 
 import { db, fingerprint } from "./postgres.js";
 import { relationshipSnapshots, resourceSnapshots, scanRuns, scanUnits } from "./schema.js";
+import type { ScanId } from "../tenancy/ids.js";
+import type { Scope } from "../tenancy/scope.js";
+
+/**
+ * Reads are filtered on the tenant as well as on the scan id.
+ *
+ * A scan id is a uuid and therefore unguessable, which is an argument for
+ * convenience and not for safety: the id can also arrive from a stale page, a
+ * copied link or a bug, and "unguessable" is not the same as "checked". Every
+ * read names the tenant, so a scan belonging to someone else returns nothing
+ * rather than returning their inventory.
+ */
+const ownedScan = (scope: Scope, scanId: string) =>
+  and(eq(scanRuns.id, scanId), eq(scanRuns.tenantId, scope.tenantId));
 
 /**
  * Rows per INSERT.
@@ -33,27 +47,68 @@ const BATCH_SIZE = 500;
 
 const GLOBAL = "global";
 
-export async function createScanRun(accountId: string, regions: string[]): Promise<string> {
+export async function createScanRun(
+  scope: Scope,
+  accountId: string,
+  regions: string[],
+): Promise<ScanId> {
   const id = randomUUID();
   await db.insert(scanRuns).values({
     id,
+    tenantId: scope.tenantId,
+    connectionId: scope.connectionId,
     accountId,
     status: "running",
     startedAt: new Date(),
     regions,
   });
-  return id;
+  return id as ScanId;
 }
 
-export async function failScanRun(scanId: string, error: string): Promise<void> {
+export async function failScanRun(scope: Scope, scanId: string, error: string): Promise<void> {
   await db
     .update(scanRuns)
     .set({ status: "failed", finishedAt: new Date(), error })
-    .where(eq(scanRuns.id, scanId));
+    .where(ownedScan(scope, scanId));
+}
+
+/**
+ * Make this scan's graph projection the current one.
+ *
+ * The flip in write-then-flip, and deliberately one statement: the projection
+ * has already committed into its own Neo4j scope by the time this runs, so
+ * there is no window in which a reader sees a half-built graph, and a
+ * projection that failed simply never gets here.
+ */
+export async function markProjected(scope: Scope, scanId: string): Promise<void> {
+  await db.update(scanRuns).set({ projectedAt: new Date() }).where(ownedScan(scope, scanId));
+}
+
+/**
+ * The scan whose graph this connection currently reads, if any.
+ *
+ * "Latest projected", rather than a pointer kept in step by hand - one fewer
+ * thing that can disagree with the graph it names.
+ */
+export async function currentScanId(scope: Scope): Promise<ScanId | null> {
+  const [row] = await db
+    .select({ id: scanRuns.id })
+    .from(scanRuns)
+    .where(
+      and(
+        eq(scanRuns.tenantId, scope.tenantId),
+        eq(scanRuns.connectionId, scope.connectionId),
+        isNotNull(scanRuns.projectedAt),
+      ),
+    )
+    .orderBy(desc(scanRuns.projectedAt))
+    .limit(1);
+  return (row?.id as ScanId | undefined) ?? null;
 }
 
 /** Persist a completed scan: units, resources and relationships, atomically. */
 export async function saveScanResult(
+  scope: Scope,
   scanId: string,
   params: {
     status: ScanStatus;
@@ -68,6 +123,7 @@ export async function saveScanResult(
       await tx
         .insert(scanUnits)
         .values({
+          tenantId: scope.tenantId,
           scanId,
           service: unit.service,
           // 'global' rather than NULL, so a non-regional service can take part
@@ -101,6 +157,7 @@ export async function saveScanResult(
         .insert(resourceSnapshots)
         .values(
           batch.map((r) => ({
+            tenantId: scope.tenantId,
             scanId,
             arn: r.arn,
             kind: r.kind,
@@ -120,6 +177,7 @@ export async function saveScanResult(
       const batch = params.relationships.slice(i, i + BATCH_SIZE);
       await tx.insert(relationshipSnapshots).values(
         batch.map((rel) => ({
+          tenantId: scope.tenantId,
           scanId,
           fromArn: rel.from,
           toArn: rel.to,
@@ -138,7 +196,7 @@ export async function saveScanResult(
         relationshipCount: params.relationships.length,
         apiCalls: params.apiCalls,
       })
-      .where(eq(scanRuns.id, scanId));
+      .where(ownedScan(scope, scanId));
   });
 }
 
@@ -159,12 +217,12 @@ function toScanRun(row: ScanRow, units: ScanUnit[]): ScanRun {
   };
 }
 
-async function unitsFor(scanIds: string[]): Promise<Map<string, ScanUnit[]>> {
+async function unitsFor(scope: Scope, scanIds: string[]): Promise<Map<string, ScanUnit[]>> {
   if (scanIds.length === 0) return new Map();
   const rows = await db
     .select()
     .from(scanUnits)
-    .where(inArray(scanUnits.scanId, scanIds))
+    .where(and(inArray(scanUnits.scanId, scanIds), eq(scanUnits.tenantId, scope.tenantId)))
     .orderBy(asc(scanUnits.service), asc(scanUnits.region));
 
   const map = new Map<string, ScanUnit[]>();
@@ -186,33 +244,49 @@ async function unitsFor(scanIds: string[]): Promise<Map<string, ScanUnit[]>> {
   return map;
 }
 
-export async function listScans(limit = 20): Promise<ScanRun[]> {
-  const rows = await db.select().from(scanRuns).orderBy(desc(scanRuns.startedAt)).limit(limit);
-  const units = await unitsFor(rows.map((r) => r.id));
+export async function listScans(scope: Scope, limit = 20): Promise<ScanRun[]> {
+  const rows = await db
+    .select()
+    .from(scanRuns)
+    .where(
+      and(eq(scanRuns.tenantId, scope.tenantId), eq(scanRuns.connectionId, scope.connectionId)),
+    )
+    .orderBy(desc(scanRuns.startedAt))
+    .limit(limit);
+  const units = await unitsFor(
+    scope,
+    rows.map((r) => r.id),
+  );
   return rows.map((row) => toScanRun(row, units.get(row.id) ?? []));
 }
 
-export async function getScan(scanId: string): Promise<ScanRun | null> {
-  const [row] = await db.select().from(scanRuns).where(eq(scanRuns.id, scanId));
+export async function getScan(scope: Scope, scanId: string): Promise<ScanRun | null> {
+  const [row] = await db.select().from(scanRuns).where(ownedScan(scope, scanId));
   if (!row) return null;
-  const units = await unitsFor([row.id]);
+  const units = await unitsFor(scope, [row.id]);
   return toScanRun(row, units.get(row.id) ?? []);
 }
 
-/** The most recent scan that produced usable data. */
-export async function getLatestScan(): Promise<ScanRun | null> {
+/** The most recent scan of this connection that produced usable data. */
+export async function getLatestScan(scope: Scope): Promise<ScanRun | null> {
   const [row] = await db
     .select()
     .from(scanRuns)
-    .where(inArray(scanRuns.status, ["succeeded", "partial"]))
+    .where(
+      and(
+        eq(scanRuns.tenantId, scope.tenantId),
+        eq(scanRuns.connectionId, scope.connectionId),
+        inArray(scanRuns.status, ["succeeded", "partial"]),
+      ),
+    )
     .orderBy(desc(scanRuns.startedAt))
     .limit(1);
   if (!row) return null;
-  const units = await unitsFor([row.id]);
+  const units = await unitsFor(scope, [row.id]);
   return toScanRun(row, units.get(row.id) ?? []);
 }
 
-export async function loadResources(scanId: string): Promise<Resource[]> {
+export async function loadResources(scope: Scope, scanId: string): Promise<Resource[]> {
   const rows = await db
     .select({
       arn: resourceSnapshots.arn,
@@ -225,11 +299,13 @@ export async function loadResources(scanId: string): Promise<Resource[]> {
       derived: resourceSnapshots.derived,
     })
     .from(resourceSnapshots)
-    .where(eq(resourceSnapshots.scanId, scanId));
+    .where(
+      and(eq(resourceSnapshots.scanId, scanId), eq(resourceSnapshots.tenantId, scope.tenantId)),
+    );
   return rows;
 }
 
-export async function loadRelationships(scanId: string): Promise<Relationship[]> {
+export async function loadRelationships(scope: Scope, scanId: string): Promise<Relationship[]> {
   const rows = await db
     .select({
       from: relationshipSnapshots.fromArn,
@@ -238,7 +314,12 @@ export async function loadRelationships(scanId: string): Promise<Relationship[]>
       properties: relationshipSnapshots.properties,
     })
     .from(relationshipSnapshots)
-    .where(eq(relationshipSnapshots.scanId, scanId));
+    .where(
+      and(
+        eq(relationshipSnapshots.scanId, scanId),
+        eq(relationshipSnapshots.tenantId, scope.tenantId),
+      ),
+    );
   return rows;
 }
 
@@ -250,8 +331,18 @@ export async function loadRelationships(scanId: string): Promise<Relationship[]>
  * so the expensive comparison runs on the handful of rows that actually
  * differ rather than on the whole inventory.
  */
-export async function diffScans(fromScanId: string, toScanId: string): Promise<ScanDiff> {
-  const [fromRun, toRun] = await Promise.all([getScan(fromScanId), getScan(toScanId)]);
+export async function diffScans(
+  scope: Scope,
+  fromScanId: string,
+  toScanId: string,
+): Promise<ScanDiff> {
+  const [fromRun, toRun] = await Promise.all([
+    getScan(scope, fromScanId),
+    getScan(scope, toScanId),
+  ]);
+  // Both lookups are tenant-scoped, so a scan belonging to another tenant is
+  // indistinguishable from one that does not exist - which is the right answer
+  // to give, and the reason this check is not merely about typos.
   if (!fromRun || !toRun) throw new Error("One or both scans do not exist");
 
   // The table is joined to itself, so each side needs its own name.
@@ -264,6 +355,7 @@ export async function diffScans(fromScanId: string, toScanId: string): Promise<S
     .where(
       and(
         eq(after.scanId, toScanId),
+        eq(after.tenantId, scope.tenantId),
         notExists(
           db
             .select({ one: sql`1` })
@@ -280,6 +372,7 @@ export async function diffScans(fromScanId: string, toScanId: string): Promise<S
     .where(
       and(
         eq(before.scanId, fromScanId),
+        eq(before.tenantId, scope.tenantId),
         notExists(
           db
             .select({ one: sql`1` })
@@ -302,7 +395,13 @@ export async function diffScans(fromScanId: string, toScanId: string): Promise<S
     })
     .from(before)
     .innerJoin(after, and(eq(after.arn, before.arn), eq(after.scanId, toScanId)))
-    .where(and(eq(before.scanId, fromScanId), ne(before.fingerprint, after.fingerprint)))
+    .where(
+      and(
+        eq(before.scanId, fromScanId),
+        eq(before.tenantId, scope.tenantId),
+        ne(before.fingerprint, after.fingerprint),
+      ),
+    )
     .orderBy(asc(after.kind), asc(after.name));
 
   const modified: ResourceDiff[] = changed.map((row) => ({

@@ -8,13 +8,15 @@
 
 import { randomUUID } from "node:crypto";
 import { ConflictException, Injectable } from "@nestjs/common";
-import { asc, eq } from "drizzle-orm";
+import { and, asc, eq } from "drizzle-orm";
 import type { AgentEvent, AgentMessage } from "@sightline/shared";
 
 import { ask } from "../agent/agent.js";
 import { db } from "../db/postgres.js";
 import { conversations, messages } from "../db/schema.js";
 import { getLatestScan } from "../db/repository.js";
+import { requireGraphScope } from "../tenancy/graphScope.js";
+import type { Scope } from "../tenancy/scope.js";
 
 @Injectable()
 export class ChatService {
@@ -25,8 +27,8 @@ export class ChatService {
    * refused with something the UI can act on rather than attempted. Resolved
    * before the stream opens, so the refusal can be a status code.
    */
-  async requireScan() {
-    const latest = await getLatestScan();
+  async requireScan(scope: Scope) {
+    const latest = await getLatestScan(scope);
     if (!latest) {
       throw new ConflictException({
         error: "No scan has completed yet. Run a scan before asking questions.",
@@ -36,12 +38,17 @@ export class ChatService {
     return latest;
   }
 
-  answer(params: {
+  async answer(params: {
+    scope: Scope;
     question: string;
     history?: { role: "user" | "assistant"; content: string }[];
     onEvent: (event: AgentEvent) => void;
   }) {
+    // `require`, not `graphScopeFor`: an empty graph would have the agent tell
+    // a customer their account contains nothing, which is worse than a refusal.
+    const graph = await requireGraphScope(params.scope);
     return ask({
+      tools: { scope: params.scope, graph },
       question: params.question,
       history: params.history ?? [],
       onEvent: params.onEvent,
@@ -50,6 +57,7 @@ export class ChatService {
 
   /** The full audit trail: which tools ran, what was cited, what was flagged. */
   async record(params: {
+    scope: Scope;
     conversationId: string;
     accountId: string;
     scanId: string;
@@ -58,11 +66,17 @@ export class ChatService {
   }) {
     await db
       .insert(conversations)
-      .values({ id: params.conversationId, accountId: params.accountId })
+      .values({
+        id: params.conversationId,
+        tenantId: params.scope.tenantId,
+        connectionId: params.scope.connectionId,
+        accountId: params.accountId,
+      })
       .onConflictDoNothing();
     await db.insert(messages).values([
       {
         id: randomUUID(),
+        tenantId: params.scope.tenantId,
         conversationId: params.conversationId,
         role: "user",
         content: params.question,
@@ -70,6 +84,7 @@ export class ChatService {
       },
       {
         id: params.message.id,
+        tenantId: params.scope.tenantId,
         conversationId: params.conversationId,
         role: "assistant",
         content: params.message.content,
@@ -81,7 +96,7 @@ export class ChatService {
     ]);
   }
 
-  async conversation(id: string) {
+  async conversation(scope: Scope, id: string) {
     const rows = await db
       .select({
         id: messages.id,
@@ -93,7 +108,9 @@ export class ChatService {
         createdAt: messages.createdAt,
       })
       .from(messages)
-      .where(eq(messages.conversationId, id))
+      // Scoped as well as keyed: a conversation id is a uuid, which is an
+      // argument for convenience and not for access control.
+      .where(and(eq(messages.conversationId, id), eq(messages.tenantId, scope.tenantId)))
       .orderBy(asc(messages.createdAt));
 
     return { messages: rows.map((r) => ({ ...r, createdAt: r.createdAt.toISOString() })) };

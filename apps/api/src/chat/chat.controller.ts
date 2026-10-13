@@ -22,6 +22,8 @@ import type { FastifyReply, FastifyRequest } from "fastify";
 import { randomUUID } from "node:crypto";
 import type { AgentEvent } from "@sightline/shared";
 
+import { CurrentScope } from "../tenancy/currentScope.decorator.js";
+import type { Scope } from "../tenancy/scope.js";
 import { askSchema } from "./chat.dto.js";
 import { ChatService } from "./chat.service.js";
 import { errorMessage } from "@sightline/shared";
@@ -37,7 +39,12 @@ export class ChatController {
    * change the structure of the code and nothing a client can observe.
    */
   @Post("chat")
-  async ask(@Body() body: unknown, @Req() req: FastifyRequest, @Res() reply: FastifyReply) {
+  async ask(
+    @CurrentScope() scope: Scope,
+    @Body() body: unknown,
+    @Req() req: FastifyRequest,
+    @Res() reply: FastifyReply,
+  ) {
     const parsed = askSchema.safeParse(body);
     if (!parsed.success) {
       throw new BadRequestException({ error: "Invalid request", details: parsed.error.flatten() });
@@ -46,7 +53,7 @@ export class ChatController {
 
     // Resolved before a byte of the stream is written, so a missing scan is
     // still a status code rather than an error event nobody can act on.
-    const latest = await this.chat.requireScan();
+    const latest = await this.chat.requireScan(scope);
     const conversationId = parsed.data.conversationId ?? randomUUID();
 
     reply.raw.writeHead(200, {
@@ -59,12 +66,18 @@ export class ChatController {
     const send = (event: AgentEvent) => reply.raw.write(`data: ${JSON.stringify(event)}\n\n`);
 
     try {
-      const message = await this.chat.answer({ question, history: history ?? [], onEvent: send });
+      const message = await this.chat.answer({
+        scope,
+        question,
+        history: history ?? [],
+        onEvent: send,
+      });
 
       // Persisted after the fact. A failure to persist must not lose the
       // answer the user is already reading.
       try {
         await this.chat.record({
+          scope,
           conversationId,
           accountId: latest.accountId,
           scanId: latest.id,
@@ -84,7 +97,7 @@ export class ChatController {
   }
 
   @Get("conversations/:id")
-  conversation(@Param("id") id: string) {
-    return this.chat.conversation(id);
+  conversation(@CurrentScope() scope: Scope, @Param("id") id: string) {
+    return this.chat.conversation(scope, id);
   }
 }

@@ -1,5 +1,7 @@
 import { Controller, Get, Inject, Param, Query } from "@nestjs/common";
 
+import { CurrentScope } from "../tenancy/currentScope.decorator.js";
+import type { Scope } from "../tenancy/scope.js";
 import { GraphService } from "./graph.service.js";
 
 @Controller("api")
@@ -8,32 +10,35 @@ export class GraphController {
   constructor(@Inject(GraphService) private readonly graph: GraphService) {}
 
   @Get("summary")
-  summary() {
-    return this.graph.summary();
+  summary(@CurrentScope() scope: Scope) {
+    return this.graph.summary(scope);
   }
 
   @Get("graph")
-  fetchGraph(@Query() query: { region?: string; kinds?: string; limit?: string }) {
-    return this.graph.graph(query);
+  fetchGraph(
+    @CurrentScope() scope: Scope,
+    @Query() query: { region?: string; kinds?: string; limit?: string },
+  ) {
+    return this.graph.graph(scope, query);
   }
 
   @Get("resources/:arn")
-  resource(@Param("arn") arn: string) {
-    return this.graph.resource(arn);
+  resource(@CurrentScope() scope: Scope, @Param("arn") arn: string) {
+    return this.graph.resource(scope, arn);
   }
 
   @Get("resources/:arn/remediation")
-  remediation(@Param("arn") arn: string) {
-    return this.graph.remediation(arn);
+  remediation(@CurrentScope() scope: Scope, @Param("arn") arn: string) {
+    return this.graph.remediation(scope, arn);
   }
 
   @Get("search")
-  search(@Query("q") text?: string) {
-    return this.graph.search(text);
+  search(@CurrentScope() scope: Scope, @Query("q") text?: string) {
+    return this.graph.search(scope, text);
   }
 
   @Get("findings")
-  findings() {
-    return this.graph.findings();
+  findings(@CurrentScope() scope: Scope) {
+    return this.graph.findings(scope);
   }
 }

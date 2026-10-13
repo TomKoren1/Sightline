@@ -333,7 +333,7 @@ the API and nginx containers are left running against databases that no longer e
 | `npm run drift`                                | Change the mock account, so a second scan has a diff         |
 | `npm run inspect -w @sightline/api`            | Scan and print findings without touching the databases       |
 | `npm run query -w @sightline/api`              | Run every curated query against the graph                    |
-| `npm test`                                     | 504 unit tests                                               |
+| `npm test`                                     | 545 unit tests                                               |
 | `npm run lint`                                 | Prettier and ESLint, both in check mode                      |
 | `npm run format`                               | Fix everything those two can fix automatically               |
 | `npm run typecheck`                            | `tsc` over every workspace, and over `infra/` and `scripts/` |
@@ -353,9 +353,11 @@ already leaves room for.
 
 **What breaks first on a large account,** in the order it would happen:
 
-1. **The graph rebuild, at roughly 50k resources.** Neo4j is rebuilt wholesale in one
-   transaction — simple, leaves no stale nodes, and O(all resources) per scan. _Fix:_
-   diff the Postgres snapshots, which already exist, and `MERGE` only what changed.
+1. **The graph rebuild, at roughly 50k resources.** A scan projects into its own scope
+   and `scan_runs.projected_at` makes it current, so commits are batched and heap use is
+   flat — but it is still O(all resources) per scan, and the superseded scope has to be
+   swept afterwards. _Fix:_ diff the Postgres snapshots, which already exist, and `MERGE`
+   only what changed.
 2. **Scan wall-clock across many regions.** 6 services × 30 regions is 180 units at a
    concurrency of 6, and per-bucket S3 calls are four each. Partly addressed by the
    Resource Explorer fast path, which asks one indexed query which regions hold
@@ -374,11 +376,22 @@ already leaves room for.
 **What does not break:** partial-failure handling and credential renewal both get
 _more_ useful at scale, which is why they were built in from the start.
 
-**Multi-tenancy** is the other axis. Today one module-level flag tracks whether a scan
-is running, and the graph holds one account. Multi-tenant needs an account id on every
-node and query, per-tenant credential caching, and a job queue instead of an in-process
-scan. Every resource already carries `accountId`; the scan orchestration is what would
-change.
+**Multi-tenancy** is built, as far as the data path goes. Every table holding customer
+data carries a tenant id — `NOT NULL`, with no default, so an insert that forgets one
+fails rather than landing in somebody else's account. Graph node identity is
+`(scanId, arn)` rather than `arn`, because two tenants collide immediately on the
+synthetic `Internet` node and completely if they connect the same AWS account. Reads go
+through one chokepoint that **refuses** Cypher not binding both parameters, and
+[`tenantIsolation.test.ts`](apps/api/src/db/tenantIsolation.test.ts) projects two
+tenants into one graph and asserts that no query returns the other's data — discovering
+the query list by reflection, so a new query fails for _not being covered_ before it can
+fail for leaking. Credentials are cached per connection rather than per process, and the
+AWS target comes from a `connections` row with no fallback to configuration.
+
+What is still single-process: the scan runs in the API rather than on a worker behind a
+queue, and there is no sign-in, so the public service cannot yet be deployed — hosted
+mode refuses to start without the configuration it needs and refuses to resolve a tenant
+without a session.
 
 **What I would build next:** incremental graph updates (removes the first limit and
 makes scans cheap enough to run continuously); real idle detection from CloudWatch and

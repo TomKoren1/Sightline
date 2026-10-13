@@ -14,7 +14,9 @@
 import type { Relationship, Resource, ScanStatus, ScanUnit } from "@sightline/shared";
 import { sql } from "drizzle-orm";
 import {
+  boolean,
   check,
+  customType,
   index,
   integer,
   jsonb,
@@ -23,6 +25,7 @@ import {
   real,
   text,
   timestamp,
+  uniqueIndex,
   uuid,
 } from "drizzle-orm/pg-core";
 
@@ -32,6 +35,13 @@ export const scanRuns = pgTable(
   "scan_runs",
   {
     id: uuid("id").primaryKey(),
+    tenantId: uuid("tenant_id")
+      .notNull()
+      .references(() => tenants.id, { onDelete: "cascade" }),
+    connectionId: uuid("connection_id")
+      .notNull()
+      .references(() => connections.id, { onDelete: "cascade" }),
+    /** Denormalised from the connection, and no longer what anything filters on. */
     accountId: text("account_id").notNull(),
     status: text("status").$type<ScanStatus>().notNull(),
     startedAt: timestamp("started_at", tz).notNull(),
@@ -44,9 +54,22 @@ export const scanRuns = pgTable(
     relationshipCount: integer("relationship_count").notNull().default(0),
     apiCalls: integer("api_calls").notNull().default(0),
     error: text("error"),
+    /**
+     * When this scan's graph projection committed, or null if it never did.
+     *
+     * This single column *is* the flip in write-then-flip: a scan projects into
+     * its own Neo4j scope while the previous graph stays readable, and setting
+     * this is what makes the new one current. The connection's graph is
+     * therefore "its latest scan with a projected_at", which needs no pointer
+     * to keep in step and leaves a record of which scans were ever projected.
+     */
+    projectedAt: timestamp("projected_at", tz),
   },
   (t) => [
-    index("scan_runs_account_started").on(t.accountId, t.startedAt.desc().nullsFirst()),
+    index("scan_runs_projected").on(t.connectionId, t.projectedAt.desc().nullsLast()),
+    // Scoped to the connection, because that is what every read filters on
+    // now: "the latest scan" is meaningless across tenants.
+    index("scan_runs_connection_started").on(t.connectionId, t.startedAt.desc().nullsFirst()),
     // Kept as a database constraint rather than only as a TypeScript union: the
     // type is erased at runtime, and a bad status reaching this column would
     // make `getLatestScan` silently skip a scan that had in fact succeeded.
@@ -64,6 +87,9 @@ export const scanRuns = pgTable(
 export const scanUnits = pgTable(
   "scan_units",
   {
+    tenantId: uuid("tenant_id")
+      .notNull()
+      .references(() => tenants.id, { onDelete: "cascade" }),
     scanId: uuid("scan_id")
       .notNull()
       .references(() => scanRuns.id, { onDelete: "cascade" }),
@@ -90,6 +116,9 @@ export const scanUnits = pgTable(
 export const resourceSnapshots = pgTable(
   "resource_snapshots",
   {
+    tenantId: uuid("tenant_id")
+      .notNull()
+      .references(() => tenants.id, { onDelete: "cascade" }),
     scanId: uuid("scan_id")
       .notNull()
       .references(() => scanRuns.id, { onDelete: "cascade" }),
@@ -106,13 +135,16 @@ export const resourceSnapshots = pgTable(
   (t) => [
     primaryKey({ columns: [t.scanId, t.arn] }),
     index("resource_snapshots_kind").on(t.scanId, t.kind),
-    index("resource_snapshots_arn").on(t.arn),
+    index("resource_snapshots_tenant_arn").on(t.tenantId, t.arn),
   ],
 );
 
 export const relationshipSnapshots = pgTable(
   "relationship_snapshots",
   {
+    tenantId: uuid("tenant_id")
+      .notNull()
+      .references(() => tenants.id, { onDelete: "cascade" }),
     scanId: uuid("scan_id")
       .notNull()
       .references(() => scanRuns.id, { onDelete: "cascade" }),
@@ -130,6 +162,12 @@ export const relationshipSnapshots = pgTable(
  */
 export const conversations = pgTable("conversations", {
   id: uuid("id").primaryKey(),
+  tenantId: uuid("tenant_id")
+    .notNull()
+    .references(() => tenants.id, { onDelete: "cascade" }),
+  connectionId: uuid("connection_id")
+    .notNull()
+    .references(() => connections.id, { onDelete: "cascade" }),
   accountId: text("account_id").notNull(),
   title: text("title"),
   createdAt: timestamp("created_at", tz).notNull().defaultNow(),
@@ -139,6 +177,9 @@ export const messages = pgTable(
   "messages",
   {
     id: uuid("id").primaryKey(),
+    tenantId: uuid("tenant_id")
+      .notNull()
+      .references(() => tenants.id, { onDelete: "cascade" }),
     conversationId: uuid("conversation_id")
       .notNull()
       .references(() => conversations.id, { onDelete: "cascade" }),
@@ -171,3 +212,248 @@ export const evalRuns = pgTable("eval_runs", {
   meanF1: real("mean_f1").notNull().default(0),
   results: jsonb("results").notNull().default([]),
 });
+
+/* ---------------------------------------------------------------------------
+ * Tenancy
+ *
+ * A tenant is who is asking; a connection is which of their AWS accounts they
+ * are asking about. Every table above holding customer data carries both, with
+ * `NOT NULL` and **no default** - a default would let an insert that forgot the
+ * tenant succeed, landing the row in whichever tenant the default names, which
+ * in a shared database is somebody else's account.
+ * ------------------------------------------------------------------------- */
+
+/**
+ * Encrypted bytes. Drizzle has no `bytea`, and the alternative - base64 in a
+ * text column - makes it possible to read a secret with a plain SELECT and not
+ * notice.
+ */
+const bytea = customType<{ data: Buffer; driverData: Buffer }>({
+  dataType: () => "bytea",
+});
+
+export const tenants = pgTable("tenants", {
+  id: uuid("id").primaryKey(),
+  name: text("name").notNull(),
+  createdAt: timestamp("created_at", tz).notNull().defaultNow(),
+  /** Admin-only facilities, and the demo account. One flag, on the tenant. */
+  isAdmin: boolean("is_admin").notNull().default(false),
+});
+
+export const users = pgTable(
+  "users",
+  {
+    id: uuid("id").primaryKey(),
+    tenantId: uuid("tenant_id")
+      .notNull()
+      .references(() => tenants.id, { onDelete: "cascade" }),
+    /**
+     * Unique, so one person cannot end up with two accounts by signing in with
+     * a second provider. A provider's email is only trusted when the provider
+     * says it is verified - see `auth/`.
+     */
+    email: text("email").notNull().unique(),
+    name: text("name"),
+    avatarUrl: text("avatar_url"),
+    createdAt: timestamp("created_at", tz).notNull().defaultNow(),
+    lastSeenAt: timestamp("last_seen_at", tz),
+  },
+  (t) => [index("users_tenant").on(t.tenantId)],
+);
+
+/**
+ * One row per external identity, so one user can hold both Google and GitHub.
+ *
+ * Keyed on the provider's **subject**, never on email: subjects are stable,
+ * while email addresses are renamed and reassigned inside a Workspace, and
+ * matching on one is how a person ends up inside somebody else's account.
+ */
+export const identities = pgTable(
+  "identities",
+  {
+    provider: text("provider").$type<"google" | "github">().notNull(),
+    subject: text("subject").notNull(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    createdAt: timestamp("created_at", tz).notNull().defaultNow(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.provider, t.subject] }),
+    index("identities_user").on(t.userId),
+    check("identities_provider", sql`${t.provider} IN ('google','github')`),
+  ],
+);
+
+/**
+ * Sessions, server-side, so one can be revoked.
+ *
+ * The cookie carries a random token; only its hash is stored, so a dump of
+ * this table is not a set of usable sessions. A signed stateless cookie would
+ * need no table, but could not be revoked - which for a service holding access
+ * to other people's AWS accounts is the property worth having.
+ */
+export const sessions = pgTable(
+  "sessions",
+  {
+    id: uuid("id").primaryKey(),
+    tokenHash: bytea("token_hash").notNull().unique(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    createdAt: timestamp("created_at", tz).notNull().defaultNow(),
+    expiresAt: timestamp("expires_at", tz).notNull(),
+    lastUsedAt: timestamp("last_used_at", tz),
+    userAgent: text("user_agent"),
+    ip: text("ip"),
+  },
+  (t) => [index("sessions_user").on(t.userId), index("sessions_expiry").on(t.expiresAt)],
+);
+
+/**
+ * One connected AWS account. Several per tenant, which is the point.
+ *
+ * The **account id is pinned on first verification** rather than read from the
+ * role ARN at scan time, so a role ARN edited later cannot quietly repoint an
+ * existing connection, its history and its graph at a different account.
+ */
+export const connections = pgTable(
+  "connections",
+  {
+    id: uuid("id").primaryKey(),
+    tenantId: uuid("tenant_id")
+      .notNull()
+      .references(() => tenants.id, { onDelete: "cascade" }),
+    /** `demo` is the moto fixture and is admin-only; `real` is a customer account. */
+    kind: text("kind").$type<"real" | "demo">().notNull(),
+    /** The tenant's own name for it - "prod", "staging". */
+    label: text("label").notNull(),
+    roleArn: text("role_arn"),
+    /** Null until the first successful assume-role says what it really is. */
+    accountId: text("account_id"),
+    /**
+     * Where the external id comes from, named rather than inferred from a null.
+     *
+     *   `stored` - encrypted in the column below. The only legal value in
+     *              hosted mode, and the only one that is actually a secret.
+     *   `config` - `AWS_EXTERNAL_ID` in a self-hosted `.env`. Encrypting a copy
+     *              would protect nothing: the plaintext is already on the same
+     *              disk, two files away.
+     *   `demo`   - the published constant the mock fixture accepts. Not a
+     *              secret, and pretending otherwise would be theatre.
+     *
+     * The alternative was a nullable column plus a rule about when null is
+     * allowed, which puts the rule somewhere no constraint can check.
+     */
+    externalIdSource: text("external_id_source").$type<"stored" | "config" | "demo">().notNull(),
+    /**
+     * Issued when this row is created, because the customer needs it to deploy
+     * the stack that creates the role. Never regenerated on save: doing so left
+     * the stack and the service disagreeing, which surfaces as AccessDenied
+     * with nothing to suggest why.
+     */
+    externalIdEncrypted: bytea("external_id_encrypted"),
+    status: text("status")
+      .$type<"pending" | "verified" | "failed" | "disconnected">()
+      .notNull()
+      .default("pending"),
+    lastError: text("last_error"),
+    /** Which published template they deployed, so a stale one is detected not diagnosed. */
+    templateVersion: text("template_version"),
+    scanRegions: text("scan_regions")
+      .array()
+      .notNull()
+      .default(sql`'{}'`),
+    createdBy: uuid("created_by").references(() => users.id, { onDelete: "set null" }),
+    createdAt: timestamp("created_at", tz).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", tz).notNull().defaultNow(),
+    lastVerifiedAt: timestamp("last_verified_at", tz),
+    lastScanAt: timestamp("last_scan_at", tz),
+  },
+  (t) => [
+    index("connections_tenant").on(t.tenantId),
+    /**
+     * One connection per account per tenant. `account_id` is null until
+     * verified and Postgres permits many nulls in a unique index, so several
+     * pending connections coexist while only one verified one can.
+     */
+    uniqueIndex("connections_tenant_account").on(t.tenantId, t.accountId),
+    check("connections_kind", sql`${t.kind} IN ('real','demo')`),
+    check(
+      "connections_external_id_source",
+      sql`${t.externalIdSource} IN ('stored','config','demo')`,
+    ),
+    // The pair has to agree: `stored` is the only source with bytes, and bytes
+    // with any other source would be a secret nothing reads.
+    check(
+      "connections_external_id_present",
+      sql`(${t.externalIdSource} = 'stored') = (${t.externalIdEncrypted} IS NOT NULL)`,
+    ),
+    check("connections_status", sql`${t.status} IN ('pending','verified','failed','disconnected')`),
+  ],
+);
+
+/**
+ * The scan queue.
+ *
+ * Postgres rather than Redis: `FOR UPDATE SKIP LOCKED` to claim, `LISTEN` to
+ * wake, and the queue is then transactional with the data it produces. One
+ * fewer thing to deploy, back up and lose.
+ */
+export const scanJobs = pgTable(
+  "scan_jobs",
+  {
+    id: uuid("id").primaryKey(),
+    tenantId: uuid("tenant_id")
+      .notNull()
+      .references(() => tenants.id, { onDelete: "cascade" }),
+    connectionId: uuid("connection_id")
+      .notNull()
+      .references(() => connections.id, { onDelete: "cascade" }),
+    status: text("status")
+      .$type<"queued" | "running" | "succeeded" | "partial" | "failed" | "cancelled">()
+      .notNull()
+      .default("queued"),
+    requestedBy: uuid("requested_by").references(() => users.id, { onDelete: "set null" }),
+    attempts: integer("attempts").notNull().default(0),
+    maxAttempts: integer("max_attempts").notNull().default(3),
+    lockedBy: text("locked_by"),
+    lockedAt: timestamp("locked_at", tz),
+    /** So a worker that died leaves a job another can reclaim. */
+    heartbeatAt: timestamp("heartbeat_at", tz),
+    scanId: uuid("scan_id").references(() => scanRuns.id, { onDelete: "set null" }),
+    queuedAt: timestamp("queued_at", tz).notNull().defaultNow(),
+    startedAt: timestamp("started_at", tz),
+    finishedAt: timestamp("finished_at", tz),
+    error: text("error"),
+  },
+  (t) => [
+    index("scan_jobs_claim").on(t.status, t.queuedAt),
+    index("scan_jobs_tenant").on(t.tenantId),
+    check(
+      "scan_jobs_status",
+      sql`${t.status} IN ('queued','running','succeeded','partial','failed','cancelled')`,
+    ),
+  ],
+);
+
+/**
+ * Who did what. Cheap, and not optional for a product that asks customers to
+ * trust it with access to their cloud.
+ */
+export const auditLog = pgTable(
+  "audit_log",
+  {
+    id: uuid("id").primaryKey(),
+    tenantId: uuid("tenant_id").references(() => tenants.id, { onDelete: "cascade" }),
+    /** Null when the actor is the system - a scheduled sweep, a worker. */
+    actorUserId: uuid("actor_user_id").references(() => users.id, { onDelete: "set null" }),
+    action: text("action").notNull(),
+    /** What it was done to: a connection id, an account id, a user id. */
+    subject: text("subject"),
+    detail: jsonb("detail").notNull().default({}),
+    ip: text("ip"),
+    createdAt: timestamp("created_at", tz).notNull().defaultNow(),
+  },
+  (t) => [index("audit_log_tenant").on(t.tenantId, t.createdAt.desc())],
+);

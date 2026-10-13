@@ -17,7 +17,7 @@
 import { ListIndexesCommand, paginateSearch } from "@aws-sdk/client-resource-explorer-2";
 
 import { cfg } from "../config.js";
-import { resourceExplorerClient } from "./clients.js";
+import { resourceExplorerClient, type AwsContext } from "./clients.js";
 import { errorMessage } from "@sightline/shared";
 
 export interface FastPathResult {
@@ -35,8 +35,8 @@ export interface FastPathResult {
  * The aggregator index is the only one that can answer a cross-region query.
  * A local index only sees its own region, so finding one is not enough.
  */
-async function findAggregatorRegion(): Promise<string | null> {
-  const client = resourceExplorerClient(cfg.AWS_REGION);
+async function findAggregatorRegion(ctx: AwsContext): Promise<string | null> {
+  const client = resourceExplorerClient(ctx, cfg.AWS_REGION);
   const res = await client.send(new ListIndexesCommand({ Type: "AGGREGATOR" }));
   const index = (res.Indexes ?? []).find((i) => i.Type === "AGGREGATOR" && i.Region);
   return index?.Region ?? null;
@@ -50,7 +50,10 @@ async function findAggregatorRegion(): Promise<string | null> {
  * paging the whole index is slow, the region set has almost certainly converged
  * long before the end.
  */
-export async function discoverActiveRegions(maxPages = 20): Promise<FastPathResult> {
+export async function discoverActiveRegions(
+  ctx: AwsContext,
+  maxPages = 20,
+): Promise<FastPathResult> {
   const unavailable = (reason: string): FastPathResult => ({
     available: false,
     activeRegions: new Set(),
@@ -59,12 +62,12 @@ export async function discoverActiveRegions(maxPages = 20): Promise<FastPathResu
   });
 
   try {
-    const aggregatorRegion = await findAggregatorRegion();
+    const aggregatorRegion = await findAggregatorRegion(ctx);
     if (!aggregatorRegion) {
       return unavailable("no aggregator index in this account, using per-service enumeration");
     }
 
-    const client = resourceExplorerClient(aggregatorRegion);
+    const client = resourceExplorerClient(ctx, aggregatorRegion);
     const activeRegions = new Set<string>();
     let resourceCount = 0;
     let pages = 0;

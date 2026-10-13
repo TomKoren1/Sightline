@@ -15,8 +15,10 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { DRIFT_EXPECTED_CHECK_FAILURES, drift, seed } from "@sightline/mock-aws";
 import type { Relationship, Resource } from "@sightline/shared";
 
-import { isMock } from "../config.js";
+import { isMock, MOCK_EXTERNAL_ID } from "../config.js";
 import { runScan } from "../scan/runner.js";
+import { asConnectionId } from "../tenancy/ids.js";
+import type { ScanTarget } from "../tenancy/scanTarget.js";
 import { CHECKS, runChecks, type CheckResult } from "./checks.js";
 import { errorMessage } from "@sightline/shared";
 
@@ -25,6 +27,25 @@ let relationships: Relationship[] = [];
 let results: CheckResult[] = [];
 let available = false;
 let skipReason: string | null = null;
+
+/**
+ * The demo fixture as a scan target, built literally.
+ *
+ * This suite talks to moto and never touches Postgres, so resolving a target
+ * from a `connections` row would make a database the price of a check that
+ * deliberately needs none.
+ */
+function demoTarget(): ScanTarget {
+  return {
+    connectionId: asConnectionId("00000000-0000-0000-0000-000000000002"),
+    kind: "demo",
+    roleArn: `arn:aws:iam::${process.env["MOCK_AWS_ACCOUNT_ID"] ?? "123456789012"}:role/SightlineReadOnlyRole`,
+    externalId: MOCK_EXTERNAL_ID,
+    endpoint: process.env["AWS_ENDPOINT_URL"] ?? "http://localhost:5000",
+    pinnedAccountId: null,
+    regions: null,
+  };
+}
 
 beforeAll(async () => {
   try {
@@ -54,7 +75,7 @@ beforeAll(async () => {
     }
 
     await seed();
-    const scan = await runScan({ scanId: "eval" });
+    const scan = await runScan({ target: demoTarget(), scanId: "eval" });
     resources = scan.resources;
     relationships = scan.relationships;
     results = runChecks({ resources, relationships });
@@ -111,7 +132,7 @@ describe.runIf(!process.env["SKIP_INTEGRATION"])("drift attribution", () => {
 
     try {
       await drift();
-      const drifted = await runScan({ scanId: "eval-drift" });
+      const drifted = await runScan({ target: demoTarget(), scanId: "eval-drift" });
       const after = runChecks({
         resources: drifted.resources,
         relationships: drifted.relationships,

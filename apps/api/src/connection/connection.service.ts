@@ -32,6 +32,8 @@ import {
 import { assumablePrincipalArn } from "../aws/principal.js";
 import { accountIdFromArn, getSession, resetSession } from "../aws/credentials.js";
 import { getLatestScan } from "../db/repository.js";
+import { localScope } from "../tenancy/local.js";
+import { resolveScanTarget } from "../tenancy/scanTarget.js";
 import { errorMessage } from "@sightline/shared";
 
 /** Show enough of a secret to confirm which one is configured, and no more. */
@@ -191,9 +193,16 @@ function diagnose(
 export class ConnectionService {
   private readonly log = new Logger(ConnectionService.name);
 
-  /** Current connection state, with nothing secret in the response. */
+  /**
+   * Current connection state, with nothing secret in the response.
+   *
+   * Still reads the process-wide `activeConnection()` and the demo/real mode
+   * toggle. Both become a selection between `connections` rows when the account
+   * switcher lands; until then this is the single-operator view, which is why
+   * it takes the local scope rather than a request's.
+   */
   async state() {
-    const latest = await getLatestScan().catch(() => null);
+    const latest = await getLatestScan(localScope()).catch(() => null);
     const connection = activeConnection();
     const accountId = accountIdFromArn(connection.roleArn);
 
@@ -353,7 +362,7 @@ export class ConnectionService {
 
     try {
       resetSession(); // Test the real thing, not a cached session.
-      const session = await getSession();
+      const session = await getSession(await resolveScanTarget(localScope()));
 
       const sts = new STSClient({
         region: cfg.AWS_REGION,
@@ -367,6 +376,17 @@ export class ConnectionService {
         durationMs: Date.now() - started,
         assumedRoleArn: session.assumedRoleArn,
         accountId: session.accountId,
+        /**
+         * Reported on success as well as on failure.
+         *
+         * The contract has always declared this field as always present and
+         * only the failure branch set it, so the shape assertion passed only
+         * while the connection test was failing - which is how it survived.
+         * It belongs here on its own merits too: "which identity assumed the
+         * role" is the first thing to check when a test passes against the
+         * wrong account.
+         */
+        callerIdentity,
         callerArn: identity.Arn ?? null,
         expiresAt: session.expiresAt.toISOString(),
         mode: cfg.AWS_MODE,
