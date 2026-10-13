@@ -16,6 +16,7 @@ import { db } from "../db/postgres.js";
 import { conversations, messages } from "../db/schema.js";
 import { getLatestScan } from "../db/repository.js";
 import { requireGraphScope } from "../tenancy/graphScope.js";
+import type { ConversationId } from "../tenancy/ids.js";
 import type { Scope } from "../tenancy/scope.js";
 
 @Injectable()
@@ -96,7 +97,7 @@ export class ChatService {
     ]);
   }
 
-  async conversation(scope: Scope, id: string) {
+  async conversation(scope: Scope, id: ConversationId) {
     const rows = await db
       .select({
         id: messages.id,

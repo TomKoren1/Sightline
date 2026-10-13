@@ -174,7 +174,13 @@ export async function runScan(options: ScanOptions): Promise<ScanResult & { unit
     }
   }
 
-  emit({ type: "scan.started", scanId, regions, units: structuredClone(units) });
+  emit({
+    type: "scan.started",
+    scanId,
+    regions,
+    units: structuredClone(units),
+    accountId: session.accountId,
+  });
 
   let completed = 0;
   const outputs: CollectorOutput[] = [];

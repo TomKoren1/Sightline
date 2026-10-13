@@ -19,7 +19,17 @@ import type {
   ScanUnit,
 } from "@sightline/shared";
 
-import { db, fingerprint } from "./postgres.js";
+import { db, fingerprint, type Database } from "./postgres.js";
+
+/**
+ * Anything that can run a write: the pool, or a transaction on it.
+ *
+ * Derived from `db.transaction`'s own callback rather than written out, because
+ * Drizzle's transaction type carries several generic parameters that have to
+ * match the schema exactly - naming them by hand is a type that compiles today
+ * and stops matching the moment the schema gains a table.
+ */
+type Writer = Database | Parameters<Parameters<Database["transaction"]>[0]>[0];
 import { relationshipSnapshots, resourceSnapshots, scanRuns, scanUnits } from "./schema.js";
 import type { ScanId } from "../tenancy/ids.js";
 import type { Scope } from "../tenancy/scope.js";
@@ -106,6 +116,95 @@ export async function currentScanId(scope: Scope): Promise<ScanId | null> {
   return (row?.id as ScanId | undefined) ?? null;
 }
 
+/**
+ * Write one unit's current state.
+ *
+ * Shared by the incremental path - the worker calling this as each unit starts
+ * and finishes, which is what a reloaded page reads its progress from - and by
+ * `saveScanResult`, which writes the final set. One function rather than two
+ * similar ones on purpose: they must agree about the `'global'` sentinel and
+ * about which columns an upsert overwrites, and two copies of that agreement is
+ * one copy too many.
+ *
+ * An upsert, so the order of "all pending", "this one running" and "this one
+ * finished" does not matter and a retried scan overwrites its own earlier
+ * attempt rather than conflicting with it.
+ */
+async function writeScanUnit(
+  tx: Writer,
+  scope: Scope,
+  scanId: string,
+  unit: ScanUnit,
+): Promise<void> {
+  await tx
+    .insert(scanUnits)
+    .values({
+      tenantId: scope.tenantId,
+      scanId,
+      service: unit.service,
+      // 'global' rather than NULL, so a non-regional service can take part
+      // in the primary key.
+      region: unit.region ?? GLOBAL,
+      status: unit.status,
+      resourceCount: unit.resourceCount,
+      apiCalls: unit.apiCalls,
+      durationMs: unit.durationMs,
+      error: unit.error ?? null,
+      errorCode: unit.errorCode ?? null,
+      startedAt: unit.startedAt ? new Date(unit.startedAt) : null,
+      finishedAt: unit.finishedAt ? new Date(unit.finishedAt) : null,
+    })
+    .onConflictDoUpdate({
+      target: [scanUnits.scanId, scanUnits.service, scanUnits.region],
+      set: {
+        status: sql`excluded.status`,
+        resourceCount: sql`excluded.resource_count`,
+        apiCalls: sql`excluded.api_calls`,
+        durationMs: sql`excluded.duration_ms`,
+        error: sql`excluded.error`,
+        errorCode: sql`excluded.error_code`,
+        startedAt: sql`excluded.started_at`,
+        finishedAt: sql`excluded.finished_at`,
+      },
+    });
+}
+
+/**
+ * Write the whole plan as pending, before any of it has run.
+ *
+ * So that a page joining a scan already in flight sees every service the scan
+ * intends to read rather than a list growing from empty - the same reason the
+ * runner builds its unit list up front. One statement rather than one per unit,
+ * because this is on the critical path before any work starts.
+ */
+export async function startScanUnits(
+  scope: Scope,
+  scanId: string,
+  units: ScanUnit[],
+): Promise<void> {
+  if (units.length === 0) return;
+  await db
+    .insert(scanUnits)
+    .values(
+      units.map((unit) => ({
+        tenantId: scope.tenantId,
+        scanId,
+        service: unit.service,
+        region: unit.region ?? GLOBAL,
+        status: unit.status,
+        resourceCount: unit.resourceCount,
+        apiCalls: unit.apiCalls,
+        durationMs: unit.durationMs,
+      })),
+    )
+    .onConflictDoNothing({ target: [scanUnits.scanId, scanUnits.service, scanUnits.region] });
+}
+
+/** Update one unit as it starts or finishes, so progress is readable from SQL. */
+export async function recordScanUnit(scope: Scope, scanId: string, unit: ScanUnit): Promise<void> {
+  await writeScanUnit(db, scope, scanId, unit);
+}
+
 /** Persist a completed scan: units, resources and relationships, atomically. */
 export async function saveScanResult(
   scope: Scope,
@@ -120,35 +219,7 @@ export async function saveScanResult(
 ): Promise<void> {
   await db.transaction(async (tx) => {
     for (const unit of params.units) {
-      await tx
-        .insert(scanUnits)
-        .values({
-          tenantId: scope.tenantId,
-          scanId,
-          service: unit.service,
-          // 'global' rather than NULL, so a non-regional service can take part
-          // in the primary key.
-          region: unit.region ?? GLOBAL,
-          status: unit.status,
-          resourceCount: unit.resourceCount,
-          apiCalls: unit.apiCalls,
-          durationMs: unit.durationMs,
-          error: unit.error ?? null,
-          errorCode: unit.errorCode ?? null,
-          startedAt: unit.startedAt ? new Date(unit.startedAt) : null,
-          finishedAt: unit.finishedAt ? new Date(unit.finishedAt) : null,
-        })
-        .onConflictDoUpdate({
-          target: [scanUnits.scanId, scanUnits.service, scanUnits.region],
-          set: {
-            status: sql`excluded.status`,
-            resourceCount: sql`excluded.resource_count`,
-            apiCalls: sql`excluded.api_calls`,
-            durationMs: sql`excluded.duration_ms`,
-            error: sql`excluded.error`,
-            errorCode: sql`excluded.error_code`,
-          },
-        });
+      await writeScanUnit(tx, scope, scanId, unit);
     }
 
     for (let i = 0; i < params.resources.length; i += BATCH_SIZE) {
@@ -260,7 +331,7 @@ export async function listScans(scope: Scope, limit = 20): Promise<ScanRun[]> {
   return rows.map((row) => toScanRun(row, units.get(row.id) ?? []));
 }
 
-export async function getScan(scope: Scope, scanId: string): Promise<ScanRun | null> {
+export async function getScan(scope: Scope, scanId: ScanId): Promise<ScanRun | null> {
   const [row] = await db.select().from(scanRuns).where(ownedScan(scope, scanId));
   if (!row) return null;
   const units = await unitsFor(scope, [row.id]);
@@ -333,8 +404,8 @@ export async function loadRelationships(scope: Scope, scanId: string): Promise<R
  */
 export async function diffScans(
   scope: Scope,
-  fromScanId: string,
-  toScanId: string,
+  fromScanId: ScanId,
+  toScanId: ScanId,
 ): Promise<ScanDiff> {
   const [fromRun, toRun] = await Promise.all([
     getScan(scope, fromScanId),

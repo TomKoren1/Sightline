@@ -30,8 +30,8 @@ import { and, eq, sql } from "drizzle-orm";
 
 import { db } from "../db/postgres.js";
 import { scanJobs } from "../db/schema.js";
-import type { ConnectionId, ScanId, TenantId } from "../tenancy/ids.js";
-import { asConnectionId, asTenantId } from "../tenancy/ids.js";
+import type { ConnectionId, JobId, ScanId, TenantId } from "../tenancy/ids.js";
+import { asConnectionId, asJobId, asTenantId } from "../tenancy/ids.js";
 import type { Scope } from "../tenancy/scope.js";
 
 /**
@@ -68,7 +68,7 @@ export const TERMINAL: ReadonlySet<JobStatus> = new Set<JobStatus>([
 ]);
 
 export interface ScanJob {
-  id: string;
+  id: JobId;
   tenantId: TenantId;
   connectionId: ConnectionId;
   status: JobStatus;
@@ -90,7 +90,7 @@ export interface ScanJob {
  * twice.
  */
 export class ScanAlreadyQueued extends Error {
-  constructor(public readonly existingJobId: string | null) {
+  constructor(public readonly existingJobId: JobId | null) {
     super("A scan of this account is already queued or running.");
   }
 }
@@ -137,7 +137,7 @@ export async function enqueueScan(
   scope: Scope,
   requestedBy: string | null = null,
 ): Promise<ScanJob> {
-  const id = randomUUID();
+  const id = asJobId(randomUUID());
   try {
     await db.insert(scanJobs).values({
       id,
@@ -179,7 +179,7 @@ async function notifyQueued(): Promise<void> {
 }
 
 /** The job currently queued or running for this connection, if any. */
-export async function activeJobId(scope: Scope): Promise<string | null> {
+export async function activeJobId(scope: Scope): Promise<JobId | null> {
   const [row] = await db
     .select({ id: scanJobs.id })
     .from(scanJobs)
@@ -191,12 +191,12 @@ export async function activeJobId(scope: Scope): Promise<string | null> {
       ),
     )
     .limit(1);
-  return row?.id ?? null;
+  return row?.id ? asJobId(row.id) : null;
 }
 
 function rowToJob(row: Record<string, unknown>): ScanJob {
   return {
-    id: row["id"] as string,
+    id: asJobId(row["id"]),
     tenantId: asTenantId(row["tenant_id"]),
     connectionId: asConnectionId(row["connection_id"]),
     status: row["status"] as JobStatus,
@@ -254,7 +254,7 @@ export async function claimNextJob(workerId: string): Promise<ScanJob | null> {
  * a scan another worker is now also writing to. So the caller checks this, and
  * a false means abandon the work in progress.
  */
-export async function heartbeat(jobId: string, workerId: string): Promise<boolean> {
+export async function heartbeat(jobId: JobId, workerId: string): Promise<boolean> {
   const { rowCount } = await db.execute(sql`
     UPDATE scan_jobs
        SET heartbeat_at = now()
@@ -266,7 +266,7 @@ export async function heartbeat(jobId: string, workerId: string): Promise<boolea
 }
 
 /** Record which scan run a claimed job produced, so progress can be read. */
-export async function attachScanRun(jobId: string, scanId: ScanId): Promise<void> {
+export async function attachScanRun(jobId: JobId, scanId: ScanId): Promise<void> {
   await db.update(scanJobs).set({ scanId }).where(eq(scanJobs.id, jobId));
 }
 
@@ -279,7 +279,7 @@ export async function attachScanRun(jobId: string, scanId: ScanId): Promise<void
  * attempt's.
  */
 export async function finishJob(
-  jobId: string,
+  jobId: JobId,
   workerId: string,
   outcome: { status: Exclude<JobStatus, "queued" | "running">; error?: string | null },
 ): Promise<boolean> {
@@ -348,7 +348,7 @@ export async function reclaimStale(staleAfterMs = STALE_AFTER_MS): Promise<Recla
 }
 
 /** One of this tenant's jobs, or null. Never another tenant's. */
-export async function getJob(scope: Scope, jobId: string): Promise<ScanJob | null> {
+export async function getJob(scope: Scope, jobId: JobId): Promise<ScanJob | null> {
   const [row] = await db
     .select()
     .from(scanJobs)
@@ -356,7 +356,7 @@ export async function getJob(scope: Scope, jobId: string): Promise<ScanJob | nul
     .limit(1);
   if (!row) return null;
   return {
-    id: row.id,
+    id: asJobId(row.id),
     tenantId: asTenantId(row.tenantId),
     connectionId: asConnectionId(row.connectionId),
     status: row.status,
@@ -378,7 +378,7 @@ export async function getJob(scope: Scope, jobId: string): Promise<ScanJob | nul
  * all - so this refuses rather than lying about what it did. Returns whether
  * anything was cancelled, so the caller can say which happened.
  */
-export async function cancelQueuedJob(scope: Scope, jobId: string): Promise<boolean> {
+export async function cancelQueuedJob(scope: Scope, jobId: JobId): Promise<boolean> {
   const { rowCount } = await db.execute(sql`
     UPDATE scan_jobs
        SET status = 'cancelled', finished_at = now()

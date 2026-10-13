@@ -77,6 +77,32 @@ const schema = z.object({
   SCAN_CONCURRENCY: blankAsUnset(z.coerce.number().int().positive().default(6)),
 
   /**
+   * Where scans run.
+   *
+   * `embedded` runs the queue worker inside the API process, which is what a
+   * self-hosted operator wants: one container, `npm run dev` scans, nothing
+   * else to start. `separate` means this process serves requests and runs no
+   * worker, so a scan that exhausts memory or wedges on a slow account takes
+   * down a worker rather than the API serving everybody else - and a hosted
+   * deployment then has to actually run one, which `/api/health` reports on.
+   * `off` is for a process that should never scan, such as a migration job.
+   *
+   * Defaulted below rather than here, because the right default depends on
+   * DEPLOYMENT_MODE and a Zod default cannot see another field.
+   */
+  SCAN_WORKER: blankAsUnset(z.enum(["embedded", "separate", "off"]).optional()),
+
+  /**
+   * How many scans one worker runs at once.
+   *
+   * One, and the default is the point: a scan holds an account's whole
+   * inventory in memory and then projects it, so this multiplies the peak
+   * memory of both the worker and Neo4j. Raising it is a statement about the
+   * machine, which is why it is configuration rather than a constant.
+   */
+  SCAN_WORKER_CONCURRENCY: blankAsUnset(z.coerce.number().int().positive().default(1)),
+
+  /**
    * Testing hook: comma-separated `service:region` pairs that should fail.
    * Used to demonstrate partial-failure handling without breaking the mock.
    * Example: `rds:eu-west-1,lambda:ap-southeast-1`
@@ -155,6 +181,21 @@ export const cfg = parsed.data;
 
 /** The public multi-tenant service, as opposed to a single-operator clone. */
 export const isHosted = (): boolean => cfg.DEPLOYMENT_MODE === "hosted";
+
+/**
+ * Whether this process should run the scan worker, and the default if unset.
+ *
+ * Hosted defaults to `separate`: a scan is the one thing in this system that
+ * can consume an unbounded amount of memory, and in a multi-tenant deployment
+ * it must not be able to take the API down with it. Self-hosted defaults to
+ * `embedded`, because asking one operator to run a second container to scan
+ * their own account is a worse tool with no benefit they can observe.
+ *
+ * A function rather than a constant so tests can set the variable and see the
+ * effect without re-importing the module.
+ */
+export const scanWorkerMode = (): "embedded" | "separate" | "off" =>
+  cfg.SCAN_WORKER ?? (isHosted() ? "separate" : "embedded");
 
 /**
  * Should the session cookie be `Secure`?

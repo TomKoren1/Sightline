@@ -28,7 +28,7 @@ import {
   loadResources,
   saveScanResult,
 } from "./repository.js";
-import { asConnectionId, asTenantId } from "../tenancy/ids.js";
+import { asConnectionId, asScanId, asTenantId, type ScanId } from "../tenancy/ids.js";
 import type { Scope } from "../tenancy/scope.js";
 
 const HAS_INFRA = !process.env["SKIP_INTEGRATION"];
@@ -63,15 +63,23 @@ function resourceAt(i: number, publicFlag = false): Resource {
   };
 }
 
-const created: string[] = [];
+const created: ScanId[] = [];
 
-async function newScan(): Promise<string> {
+/**
+ * `ScanId`, not `string`.
+ *
+ * It declared `string`, which widened what `createScanRun` returns and meant
+ * every `getScan` in this file was passing an unbranded id - so the branding
+ * that exists to catch an unvalidated id reaching a uuid column was switched
+ * off for the whole suite by one return type.
+ */
+async function newScan(): Promise<ScanId> {
   const id = await createScanRun(scope, ACCOUNT, ["us-east-1", "eu-west-1"]);
   created.push(id);
   return id;
 }
 
-let scanId = "";
+let scanId = asScanId("00000000-0000-0000-0000-000000000000");
 let resources: Resource[] = [];
 let relationships: Relationship[] = [];
 let available = false;

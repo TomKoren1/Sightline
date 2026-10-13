@@ -1,10 +1,11 @@
 /** HTTP server: builds the app, migrates, listens. */
 
 import { buildApp } from "./app.js";
-import { cfg } from "./config.js";
+import { cfg, scanWorkerMode } from "./config.js";
 import { migrate, closePool } from "./db/postgres.js";
 import { closeDriver } from "./db/neo4j.js";
 import { assertHostedInvariants } from "./hostedMode.js";
+import { ScanWorker } from "./jobs/worker.js";
 import { ensureLocalTenant } from "./tenancy/local.js";
 import { pruneExpiredSessions } from "./auth/session.js";
 
@@ -23,6 +24,15 @@ const app = await buildApp();
 // errors so the two do not report every request in two formats.
 const log = app.getHttpAdapter().getInstance().log;
 
+/**
+ * Built unconditionally, started conditionally.
+ *
+ * So that the shutdown handler below can always call `stop()` without knowing
+ * whether it was ever started - a worker that was never started has nothing in
+ * flight and stops instantly.
+ */
+const worker = new ScanWorker({ log });
+
 try {
   await migrate();
   // A clone is one tenant with two connections. No-op in hosted mode, where
@@ -36,6 +46,23 @@ try {
    * to run it on a schedule.
    */
   log.info(`pruned ${await pruneExpiredSessions()} expired session(s)`);
+
+  /**
+   * The scan worker, in this process or not at all.
+   *
+   * `embedded` is the self-hosted default: one container, and `npm run dev`
+   * scans without anything else being started. Hosted defaults to `separate`,
+   * where `apps/api/src/worker.ts` is its own deployment and this process runs
+   * no worker - so a scan that exhausts memory takes down a worker rather than
+   * the API serving everybody else.
+   */
+  const mode = scanWorkerMode();
+  if (mode === "embedded") {
+    await worker.start();
+  } else {
+    log.info(`scan worker: ${mode} (this process will not run scans)`);
+  }
+
   await app.listen(cfg.BACKEND_PORT, cfg.BACKEND_HOST);
   log.info(`deployment: ${cfg.DEPLOYMENT_MODE}, AWS mode: ${cfg.AWS_MODE}`);
 } catch (err) {
@@ -51,6 +78,11 @@ for (const signal of ["SIGINT", "SIGTERM"] as const) {
     log.info(`${signal} received, shutting down`);
     void (async () => {
       try {
+        // The worker first, and before the pool it writes through: it stops
+        // claiming, then waits for the scans already in flight. Closing the
+        // pool underneath a running scan would fail it for no reason other
+        // than the process having been asked to stop.
+        await worker.stop();
         await app.close();
         await closeDriver();
         await closePool();

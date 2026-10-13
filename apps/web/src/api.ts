@@ -278,7 +278,13 @@ const asJson = (body: unknown): RequestInit => ({
 
 export const api = {
   health: () => get<Health>("/api/health"),
-  latestScan: () => get<{ scan: ScanRun | null; scanning: boolean }>("/api/scans/latest"),
+  latestScan: () =>
+    get<{
+      scan: ScanRun | null;
+      scanning: boolean;
+      /** The job to attach to, when one is in flight. Null otherwise. */
+      activeJobId: string | null;
+    }>("/api/scans/latest"),
   scans: () => get<{ scans: ScanRun[] }>("/api/scans"),
   summary: () => get<Summary>("/api/summary"),
   findings: () => get<Findings>("/api/findings"),
@@ -347,7 +353,27 @@ async function streamPost<E>(
     ...asJson(body),
     ...(signal ? { signal } : {}),
   });
+  await consume(res, onEvent);
+}
 
+/**
+ * The same, for a stream behind a GET.
+ *
+ * Which is how a scan already in flight is rejoined: the scan is no longer tied
+ * to the request that asked for it, so attaching to one is a read rather than a
+ * command. Still `fetch` and not `EventSource`, because `EventSource` cannot
+ * send the connection header this API scopes requests with.
+ */
+async function streamGet<E>(
+  path: string,
+  onEvent: (event: E) => void,
+  signal?: AbortSignal,
+): Promise<void> {
+  const res = await request(path, { ...(signal ? { signal } : {}) });
+  await consume(res, onEvent);
+}
+
+async function consume<E>(res: Response, onEvent: (event: E) => void): Promise<void> {
   if (!res.ok) {
     const text = await res.text();
     let message = text;
@@ -386,8 +412,44 @@ async function streamPost<E>(
   }
 }
 
-export const startScan = (onEvent: (event: ScanEvent) => void, signal?: AbortSignal) =>
-  streamPost<ScanEvent>("/api/scans", {}, onEvent, signal);
+/**
+ * Ask for a scan and watch it, or attach to the one already running.
+ *
+ * A 409 means somebody - another tab, or this user a moment ago - already
+ * started one. That is not an error worth showing: the scan they wanted is
+ * happening, so this attaches to it. The response carries the job's id for
+ * exactly this purpose.
+ */
+export async function startScan(
+  onEvent: (event: ScanEvent) => void,
+  signal?: AbortSignal,
+): Promise<void> {
+  const res = await request("/api/scans", {
+    ...asJson({}),
+    ...(signal ? { signal } : {}),
+  });
+
+  if (res.status === 409) {
+    const body = (await res.json()) as { activeJobId?: string | null; error?: string };
+    if (body.activeJobId) return watchScan(body.activeJobId, onEvent, signal);
+    throw new Error(body.error ?? "A scan is already running");
+  }
+
+  await consume(res, onEvent);
+}
+
+/**
+ * Watch a scan that is already running.
+ *
+ * What makes a reload harmless: `latestScan` names the active job, and this
+ * picks it up from wherever it has got to - including the full unit list as it
+ * currently stands, so the page looks like the page that never reloaded.
+ */
+export const watchScan = (
+  jobId: string,
+  onEvent: (event: ScanEvent) => void,
+  signal?: AbortSignal,
+) => streamGet<ScanEvent>(`/api/scans/jobs/${encodeURIComponent(jobId)}/stream`, onEvent, signal);
 
 export const askAgent = (
   question: string,

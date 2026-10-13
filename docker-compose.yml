@@ -172,6 +172,14 @@ services:
       # Loopback would accept nothing from the nginx container.
       BACKEND_HOST: "0.0.0.0"
       BACKEND_PORT: "3000"
+      # Scans run in the `worker` service below, not here.
+      #
+      # Self-hosted would default to `embedded`, and this profile deliberately
+      # overrides it: the two-process topology is what a hosted deployment runs,
+      # it is the arrangement most likely to be subtly wrong, and this is the
+      # only place that exercises it end to end. Running the worker in-process
+      # here would test the same path twice and the real one never.
+      SCAN_WORKER: separate
     depends_on:
       postgres:
         condition: service_healthy
@@ -192,6 +200,46 @@ services:
       retries: 20
       # tsx compiles on boot, and the server applies the schema before listening.
       start_period: 30s
+
+  # Scans, out of the request path.
+  #
+  # The same image as the API - it already carries the whole workspace and runs
+  # through tsx - with a different command. A scan holds an account's inventory
+  # in memory and then projects it, so it is the one thing here that can consume
+  # an unbounded amount of memory; in its own process it takes down a worker
+  # rather than the API serving everybody else.
+  #
+  # No ports and no healthcheck: it serves nothing. Work arrives through the
+  # `scan_jobs` table and `heartbeat_at` is how anything else learns it is
+  # alive, which makes liveness a question for the database rather than a probe.
+  worker:
+    profiles: ["app"]
+    build:
+      context: .
+      target: api
+    container_name: sightline-worker
+    restart: unless-stopped
+    command: ["npm", "run", "worker", "-w", "@sightline/api"]
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      DATABASE_URL: postgres://${POSTGRES_USER:-sightline}:${POSTGRES_PASSWORD:-sightline}@postgres:5432/${POSTGRES_DB:-sightline}
+      NEO4J_URI: bolt://neo4j:7687
+      AWS_ENDPOINT_URL: http://moto:5000
+      SCAN_WORKER: separate
+    depends_on:
+      postgres:
+        condition: service_healthy
+      neo4j:
+        condition: service_healthy
+      moto:
+        condition: service_healthy
+      # The API applies the schema on boot, and the worker deliberately does
+      # not migrate - two processes racing to migrate is the problem a migration
+      # Job exists to solve. So it waits for the one that does.
+      api:
+        condition: service_healthy
 
   web:
     profiles: ["app"]

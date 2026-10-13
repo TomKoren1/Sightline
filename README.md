@@ -179,6 +179,11 @@ npm run dev:api               # http://localhost:3000
 npm run dev:web               # http://localhost:5173   ← open this
 ```
 
+Scans run on a Postgres-backed queue. The API process drains it itself, so this is
+all you need — closing the tab no longer orphans a scan, and reloading mid-scan
+rejoins it. To run scans in their own process as a hosted deployment does, set
+`SCAN_WORKER=separate` and also run `npm run dev:worker`.
+
 Both paths are covered by CI, and nothing about the product differs between them.
 Run `npm run verify` before pushing — it is everything CI's static job runs.
 
@@ -340,7 +345,8 @@ the API and nginx containers are left running against databases that no longer e
 | `npm run drift`                                | Change the mock account, so a second scan has a diff         |
 | `npm run inspect -w @sightline/api`            | Scan and print findings without touching the databases       |
 | `npm run query -w @sightline/api`              | Run every curated query against the graph                    |
-| `npm test`                                     | 596 unit tests                                               |
+| `npm run dev:worker`                           | Run scans in their own process, as a hosted deployment does  |
+| `npm test`                                     | 640 unit tests                                               |
 | `npm run lint`                                 | Prettier and ESLint, both in check mode                      |
 | `npm run format`                               | Fix everything those two can fix automatically               |
 | `npm run typecheck`                            | `tsc` over every workspace, and over `infra/` and `scripts/` |

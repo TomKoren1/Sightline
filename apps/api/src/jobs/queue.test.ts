@@ -29,6 +29,7 @@ import { db, pool } from "../db/postgres.js";
 import { connections, scanJobs, tenants } from "../db/schema.js";
 import { asConnectionId, asTenantId } from "../tenancy/ids.js";
 import type { Scope } from "../tenancy/scope.js";
+import { lockQueueForTest } from "./queueTestLock.js";
 import {
   cancelQueuedJob,
   claimNextJob,
@@ -66,6 +67,7 @@ const otherScope: Scope = {
 };
 
 let available = false;
+let releaseLock: (() => Promise<void>) | null = null;
 
 beforeAll(async () => {
   try {
@@ -73,6 +75,9 @@ beforeAll(async () => {
   } catch {
     return;
   }
+  // Exclusive use of the queue: claiming crosses tenants by design, so this
+  // file and `progress.test.ts` cannot run at the same time. See queueTestLock.
+  releaseLock = await lockQueueForTest();
   available = true;
 
   for (const [id, name] of [
@@ -93,11 +98,13 @@ beforeAll(async () => {
 });
 
 afterAll(async () => {
-  if (!available) return;
-  // Tenants cascade to connections and jobs.
-  for (const id of [tenantId, otherTenantId]) {
-    await db.delete(tenants).where(eq(tenants.id, id));
+  if (available) {
+    // Tenants cascade to connections and jobs.
+    for (const id of [tenantId, otherTenantId]) {
+      await db.delete(tenants).where(eq(tenants.id, id));
+    }
   }
+  await releaseLock?.();
 });
 
 /** Clear the queue between tests, so each starts from a known state. */

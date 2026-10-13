@@ -13,7 +13,7 @@
  */
 
 import { execFileSync } from "node:child_process";
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 
@@ -175,6 +175,10 @@ describe("no source file carries a credential-shaped string", () => {
     const rules = gitleaksRules();
     const findings: string[] = [];
     for (const file of sourceFiles()) {
+      // `git ls-files --cached` lists a deleted file until the deletion is
+      // staged, so mid-change this would fail on ENOENT rather than on
+      // anything to do with secrets - which reads as the guard being broken.
+      if (!existsSync(root + file)) continue;
       findings.push(...scanLines(file, readFileSync(root + file, "utf8").split("\n"), rules));
     }
     expect(findings, `credential-shaped strings found:\n  ${findings.join("\n  ")}`).toEqual([]);

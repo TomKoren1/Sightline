@@ -27,6 +27,15 @@ function relativeAge(iso: string): string {
 export interface ScanBannerProps {
   scan: ScanRun | null;
   scanning: boolean;
+  /**
+   * Accepted, waiting for a worker to pick it up.
+   *
+   * Only reachable when scans run in their own process. It earns a distinct
+   * state because a progress bar sitting at zero is indistinguishable from a
+   * scan that silently failed to start, and "queued" is the difference between
+   * waiting and wondering.
+   */
+  queued: boolean;
   progress: { completed: number; total: number } | null;
   liveUnits: ScanUnit[];
   error: string | null;
@@ -46,6 +55,7 @@ export interface ScanBannerProps {
 export function ScanBanner({
   scan,
   scanning,
+  queued,
   progress,
   liveUnits,
   error,
@@ -76,8 +86,9 @@ export function ScanBanner({
             <div className="flex items-center gap-2">
               <span className="pulse h-1.5 w-1.5 rounded-full bg-accent" />
               <span className="text-[11px] text-ink-300">
-                Scanning
-                {progress ? ` — ${progress.completed}/${progress.total} services` : "…"}
+                {queued && !progress
+                  ? "Queued — waiting for a scanner"
+                  : `Scanning${progress ? ` — ${progress.completed}/${progress.total} services` : "…"}`}
               </span>
               <div className="h-1 w-40 overflow-hidden rounded-full bg-ink-800">
                 <div
@@ -142,7 +153,13 @@ export function ScanBanner({
             disabled={scanning}
             className="rounded border border-ink-700 bg-ink-800 px-2.5 py-1 text-[11px] text-ink-100 transition hover:border-ink-600 disabled:cursor-not-allowed disabled:opacity-40"
           >
-            {scanning ? "Scanning…" : scan ? "Rescan" : "Run scan"}
+            {scanning
+              ? queued && !progress
+                ? "Queued…"
+                : "Scanning…"
+              : scan
+                ? "Rescan"
+                : "Run scan"}
           </button>
         </div>
       </div>

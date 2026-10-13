@@ -21,6 +21,7 @@ import { FastifyAdapter, type NestFastifyApplication } from "@nestjs/platform-fa
 
 import { AppModule } from "./app.module.js";
 import { cfg, isHosted } from "./config.js";
+import { InvalidIdFilter, SchemaErrorFilter } from "./malformedRequest.filter.js";
 
 /** One registered route, as Fastify sees it. */
 export interface RouteInfo {
@@ -95,6 +96,14 @@ export async function buildApp(options: BuildOptions = {}): Promise<NestFastifyA
     origin: isHosted() ? [cfg.PUBLIC_BASE_URL.replace(/\/$/, "")] : true,
     credentials: isHosted(),
   });
+
+  /**
+   * A malformed request answers 400 rather than 500, on every route.
+   *
+   * Global, so a route added later cannot reintroduce the 500 by forgetting -
+   * the same argument as the auth guard being global rather than per route.
+   */
+  app.useGlobalFilters(new InvalidIdFilter(), new SchemaErrorFilter());
 
   await app.init();
   return app;

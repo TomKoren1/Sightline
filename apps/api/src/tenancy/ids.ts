@@ -32,7 +32,44 @@ export type ConnectionId = string & { readonly __connection: unique symbol };
  */
 export type ScanId = string & { readonly __scan: unique symbol };
 
+/**
+ * One queued or running scan request.
+ *
+ * Distinct from `ScanId` because they exist at different times and only
+ * sometimes both: a job that fails while assuming the role never produces a
+ * scan, and a scan made by `npm run scan` never had a job. Both are uuids, so
+ * without separate types passing one where the other belongs compiles - and
+ * reads as an empty progress stream rather than as an error.
+ */
+export type JobId = string & { readonly __job: unique symbol };
+
+/** One chat conversation. A uuid, and so the same trap as the others. */
+export type ConversationId = string & { readonly __conversation: unique symbol };
+
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/**
+ * A malformed id, as a type rather than a message.
+ *
+ * It needs to be recognisable at the edge, because the status code for "you
+ * sent nonsense" is 400 and not 500 - and these ids arrive from path
+ * parameters, query strings, headers and bodies, so recognising it per route
+ * means remembering per route. `InvalidIdFilter` maps this to a 400 for every
+ * route at once; a type rather than a message so the mapping cannot be broken
+ * by rewording an error.
+ *
+ * Four routes answered 500 to a malformed id before this existed - and one of
+ * them, `connections/:id/onboarding`, had the fix applied to the *header* path
+ * in an earlier change while the path parameter kept throwing before the
+ * handler's own try block. Which is the argument for one mechanism rather than
+ * four patches.
+ */
+export class InvalidId extends Error {
+  constructor(what: string) {
+    super(`Invalid ${what}`);
+    this.name = "InvalidId";
+  }
+}
 
 function checked(value: unknown, what: string): string {
   // Validated rather than trusted: every value reaching these comes from a
@@ -40,10 +77,14 @@ function checked(value: unknown, what: string): string {
   // to some default, because a fallback turns a malformed id into a successful
   // read of the wrong tenant's data.
   if (typeof value !== "string" || !UUID.test(value)) {
-    throw new Error(`Invalid ${what}`);
+    throw new InvalidId(what);
   }
   return value;
 }
+
+/** Whether a value is shaped like one of these ids, without branding it. */
+export const isUuid = (value: unknown): value is string =>
+  typeof value === "string" && UUID.test(value);
 
 export const asTenantId = (value: unknown): TenantId => checked(value, "tenant id") as TenantId;
 
@@ -51,3 +92,8 @@ export const asConnectionId = (value: unknown): ConnectionId =>
   checked(value, "connection id") as ConnectionId;
 
 export const asScanId = (value: unknown): ScanId => checked(value, "scan id") as ScanId;
+
+export const asJobId = (value: unknown): JobId => checked(value, "scan job id") as JobId;
+
+export const asConversationId = (value: unknown): ConversationId =>
+  checked(value, "conversation id") as ConversationId;

@@ -23,6 +23,7 @@ import { randomUUID } from "node:crypto";
 import type { AgentEvent } from "@sightline/shared";
 
 import { CurrentScope } from "../tenancy/currentScope.decorator.js";
+import { asConversationId } from "../tenancy/ids.js";
 import type { Scope } from "../tenancy/scope.js";
 import { askSchema } from "./chat.dto.js";
 import { ChatService } from "./chat.service.js";
@@ -98,6 +99,6 @@ export class ChatController {
 
   @Get("conversations/:id")
   conversation(@CurrentScope() scope: Scope, @Param("id") id: string) {
-    return this.chat.conversation(scope, id);
+    return this.chat.conversation(scope, asConversationId(id));
   }
 }

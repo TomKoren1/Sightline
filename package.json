@@ -19,6 +19,7 @@
     "seed": "node scripts/deps.mjs && npm run seed -w @sightline/mock-aws",
     "scan": "node scripts/deps.mjs && npm run scan -w @sightline/api",
     "dev:api": "node scripts/deps.mjs && npm run dev -w @sightline/api",
+    "dev:worker": "node scripts/deps.mjs && npm run worker:dev -w @sightline/api",
     "dev:web": "node scripts/deps.mjs && npm run dev -w @sightline/web",
     "evals": "node scripts/deps.mjs && npm run evals -w @sightline/api",
     "verify": "node scripts/deps.mjs && npm run typecheck && npm run lint && vitest run --exclude '**/evals/groundTruth.test.ts' && npm run build -w @sightline/web",

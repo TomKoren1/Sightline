@@ -20,6 +20,7 @@ import { remediationInputFromGraph } from "../remediation/fromGraph.js";
 import { remediationsFor } from "../remediation/remediation.js";
 import { readScoped, type GraphScope } from "../db/neo4j.js";
 import { diffScans, getLatestScan, listScans } from "../db/repository.js";
+import { asScanId } from "../tenancy/ids.js";
 import type { Scope } from "../tenancy/scope.js";
 import { assertReadOnlyCypher } from "./cypherGuard.js";
 
@@ -409,7 +410,7 @@ export async function runTool(
         to = to ?? scans[0]!.id;
         from = from ?? scans[1]!.id;
       }
-      return wrap([await diffScans(ctx.scope, from, to)]);
+      return wrap([await diffScans(ctx.scope, asScanId(from), asScanId(to))]);
     }
 
     case RAW_CYPHER_TOOL: {

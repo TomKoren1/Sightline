@@ -55,7 +55,7 @@ const scan = z.object({
 });
 
 interface Contract {
-  method: "GET" | "POST";
+  method: "GET" | "POST" | "DELETE";
   /** The path as Fastify registers it, with `:params`. Keyed against the router. */
   route: string;
   /** A concrete URL to call. */
@@ -105,7 +105,50 @@ const CONTRACTS: Contract[] = [
     route: "/api/scans/latest",
     url: "/api/scans/latest",
     responses: {
-      200: z.object({ scan: scan.nullable(), scanning: z.boolean() }).strict(),
+      200: z
+        .object({
+          scan: scan.nullable(),
+          scanning: z.boolean(),
+          /**
+           * The job a reloaded page attaches to.
+           *
+           * `scanning` alone was enough while a scan lived inside the request
+           * that started it, because the only client that could be watching
+           * was the one holding that response open.
+           */
+          activeJobId: z.string().nullable(),
+        })
+        .strict(),
+    },
+  },
+  {
+    method: "GET",
+    route: "/api/scans/jobs/:jobId",
+    // A well-formed id nobody owns, which is the declinable path: a real job's
+    // 200 needs a scan to have run, and the 404 is what the UI renders when a
+    // remembered job id has aged out.
+    url: `/api/scans/jobs/${UNKNOWN_ID}`,
+    responses: {
+      200: z
+        .object({
+          status: z.string(),
+          queuedAt: z.string(),
+          scanId: z.string().nullable(),
+          run: scan.nullable(),
+          error: z.string().nullable(),
+        })
+        .strict(),
+      404: error,
+    },
+  },
+  {
+    method: "DELETE",
+    route: "/api/scans/jobs/:jobId",
+    url: `/api/scans/jobs/${UNKNOWN_ID}`,
+    responses: {
+      // Cancelling something that is not queued is not an error: it answers
+      // what actually happened, which is how the UI can say so.
+      200: z.object({ cancelled: z.boolean(), note: z.string().optional() }).strict(),
     },
   },
   {
@@ -432,12 +475,19 @@ CONTRACTS.push(
 const EXCLUDED = new Map<string, string>([
   [
     "POST /api/scans",
-    "Starts a real scan. Its only refusal is 409 when one is already running, and " +
-      "`scanInProgress` is module-private, so there is no input that makes it decline: " +
-      "calling it would scan whichever AWS account the deployment is pointed at and " +
-      "overwrite the graph. The scan itself is covered by the tier-1 ground-truth " +
-      "suite, which drives `runScan()` directly, and the SSE payloads are typed as " +
-      "`ScanEvent` in @sightline/shared, so a port that changes them fails typecheck.",
+    "Queues a real scan, then streams it. There is no input that makes it decline - its " +
+      "409 needs a scan already queued, and reaching that state means having queued one - " +
+      "so calling it would scan whichever AWS account the deployment is pointed at and " +
+      "overwrite the graph. The events are covered by jobs/progress.test.ts, which seeds " +
+      "the rows they are derived from, and typed as `ScanEvent` in @sightline/shared, so " +
+      "a port that changes them fails typecheck. The queue itself is jobs/queue.test.ts.",
+  ],
+  [
+    "GET /api/scans/jobs/:jobId/stream",
+    "An event stream, so it has no single response body to declare, and it stays open " +
+      "until the scan ends. What it emits is asserted directly in jobs/progress.test.ts " +
+      "by seeding the rows the events are derived from - which is possible precisely " +
+      "because the stream is now a function of the database rather than of a live scan.",
   ],
   [
     "GET /api/auth/:provider",

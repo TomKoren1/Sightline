@@ -70,10 +70,47 @@ export function rollUpStatus(units: ScanUnit[]): ScanStatus {
   return "partial";
 }
 
-/** Server-sent event payloads emitted while a scan runs. */
+/**
+ * Server-sent event payloads emitted while a scan runs.
+ *
+ * Every one of these is now derivable from Postgres rather than only from the
+ * process doing the work, which is what lets a reloaded page rejoin a scan in
+ * flight instead of orphaning it. `scanId` is the correlation id throughout; it
+ * is the job's id until a scan run row exists, because a scan that fails while
+ * assuming the role never gets one and still has to report why.
+ */
 export type ScanEvent =
-  | { type: "scan.started"; scanId: string; regions: string[]; units: ScanUnit[] }
-  | { type: "unit.started"; scanId: string; service: string; region: string | null }
+  /**
+   * Accepted, and waiting for a worker to pick it up.
+   *
+   * Only reachable when scans run in a separate process - in a single-process
+   * deployment the worker claims it immediately. It exists so the UI can say
+   * "queued" rather than showing an idle progress bar, which is
+   * indistinguishable from the scan having silently failed to start.
+   */
+  | { type: "scan.queued"; scanId: string; queuedAt: string }
+  | {
+      type: "scan.started";
+      scanId: string;
+      regions: string[];
+      units: ScanUnit[];
+      /**
+       * The account the role actually reached.
+       *
+       * Evidence rather than a claim, and carried here because it is the first
+       * moment it is known: the run row cannot be written until the role has
+       * been assumed, and until the row exists there is nothing for progress to
+       * hang off.
+       */
+      accountId: string;
+    }
+  /**
+   * `ScannableService`, not `string`. It was the looser type, and the moment a
+   * consumer needed to write the unit it was describing into `scan_units` -
+   * whose service column is the union - the only way through was a cast. An
+   * event that describes a unit should carry the unit's own types.
+   */
+  | { type: "unit.started"; scanId: string; service: ScannableService; region: string | null }
   | { type: "unit.finished"; scanId: string; unit: ScanUnit }
   | { type: "scan.progress"; scanId: string; completed: number; total: number }
   | { type: "scan.finished"; scanId: string; run: ScanRun }
