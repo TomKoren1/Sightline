@@ -29,6 +29,15 @@ import type { RouteInfo } from "../app.js";
 
 const ORIGINAL = { ...process.env };
 
+/**
+ * Captured at import, before any test rewrites `process.env`.
+ *
+ * CI's fast job sets this and runs with no databases at all, which is the
+ * difference between asserting that a route demanded no session and asserting
+ * that Postgres answered.
+ */
+const HAS_INFRA = !process.env["SKIP_INTEGRATION"];
+
 /** A hosted environment complete enough to build the app. */
 const HOSTED_ENV: Record<string, string> = {
   DEPLOYMENT_MODE: "hosted",
@@ -183,7 +192,16 @@ describe("self-hosted mode", () => {
       const app = await buildApp();
       const instance = app.getHttpAdapter().getInstance() as unknown as Injectable;
       const res = await instance.inject({ method: "GET", url: "/api/scans/latest" });
-      expect(res.statusCode).toBe(200);
+
+      /**
+       * The property is that **no session is demanded**, which `not 401` says
+       * exactly. It asserted 200, which also asserts that Postgres answered -
+       * and CI's fast job deliberately runs with no databases at all, so this
+       * failed there while passing on any machine with the stack up. The
+       * stronger assertion is kept where it can mean something.
+       */
+      expect(res.statusCode).not.toBe(401);
+      if (HAS_INFRA) expect(res.statusCode).toBe(200);
       await app.close();
     } finally {
       process.env = saved;
