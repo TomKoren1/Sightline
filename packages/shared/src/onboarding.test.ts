@@ -23,9 +23,12 @@ import {
   READ_ONLY_ROLE_NAME,
   STACK_NAME,
   TEMPLATE_PATH,
+  TEMPLATE_VERSION,
   deployCommandArgs,
   formatDeployCommand,
+  quickCreateUrl,
   readOnlyRoleArn,
+  terraformSnippet,
 } from "./onboarding.js";
 
 const root = fileURLToPath(new URL("../../../", import.meta.url));
@@ -147,5 +150,120 @@ describe("the managed env keys", () => {
     expect(all).not.toContain("AWS_ACCESS_KEY_ID");
     expect(all).not.toContain("AWS_SECRET_ACCESS_KEY");
     expect(all).not.toContain("AWS_SESSION_TOKEN");
+  });
+});
+
+const published = {
+  templateUrl: "https://sightline-templates.s3.amazonaws.com/v1/readonly-role.yaml",
+  scannerPrincipalArn: input.scannerPrincipalArn,
+  externalId: input.externalId,
+  region: "us-east-1",
+};
+
+describe("the one-click link", () => {
+  it("puts the parameters in the fragment, where the console reads them", () => {
+    const url = quickCreateUrl(published);
+    // Not the real query string: the console's own router parses the fragment,
+    // and parameters placed before the `#` do nothing at all.
+    const [, fragment] = url.split("#");
+    expect(fragment).toBeDefined();
+    expect(fragment).toContain("param_ExternalId=");
+    expect(fragment).toContain("param_SightlineScannerRoleArn=");
+    expect(url.split("#")[0]).not.toContain("param_");
+  });
+
+  it("pre-fills every parameter the template requires", () => {
+    const fragment = quickCreateUrl(published).split("#")[1]!;
+    const params = new URLSearchParams(fragment.slice(fragment.indexOf("?") + 1));
+    expect(params.get("param_ExternalId")).toBe(input.externalId);
+    expect(params.get("param_SightlineScannerRoleArn")).toBe(input.scannerPrincipalArn);
+    expect(params.get("templateURL")).toBe(published.templateUrl);
+    expect(params.get("stackName")).toBe(STACK_NAME);
+  });
+
+  it("names every template parameter that has no default", () => {
+    /**
+     * The check that makes the link worth having.
+     *
+     * A parameter without a default and without a value in the link leaves the
+     * customer staring at an empty required field - which is the step they
+     * abandon. Read from the template rather than listed here, so adding a
+     * required parameter fails this test instead of quietly degrading
+     * onboarding.
+     */
+    const parameterBlock = template.slice(
+      template.indexOf("\nParameters:"),
+      template.indexOf("\nConditions:"),
+    );
+    /**
+     * Sliced between consecutive parameter headers.
+     *
+     * Not by searching forward for the next two-space indent: `"\n  "` is also
+     * a prefix of every four-space nested line, so each body came out empty and
+     * every parameter looked as though it had no default.
+     */
+    const headers = [...parameterBlock.matchAll(/^ {2}(\w+):$/gm)];
+    const required = headers
+      .filter((header, i) => {
+        const from = header.index + header[0].length;
+        const to = headers[i + 1]?.index ?? parameterBlock.length;
+        return !/^\s+Default:/m.test(parameterBlock.slice(from, to));
+      })
+      .map((header) => header[1]!);
+
+    const fragment = quickCreateUrl(published).split("#")[1]!;
+    const params = new URLSearchParams(fragment.slice(fragment.indexOf("?") + 1));
+    expect(required.length).toBeGreaterThan(0);
+    for (const name of required) {
+      expect(
+        params.get(`param_${name}`),
+        `${name} has no default and is not pre-filled`,
+      ).toBeTruthy();
+    }
+  });
+
+  it("survives a template URL full of slashes and colons", () => {
+    // Encoded value by value rather than through URLSearchParams, which turns
+    // `/` and `:` into a form the console does not unpick.
+    const url = quickCreateUrl(published);
+    expect(url).toContain(encodeURIComponent(published.templateUrl));
+    expect(url).not.toContain(
+      "https://sightline-templates.s3.amazonaws.com/v1/readonly-role.yaml&",
+    );
+  });
+
+  it("lands in the console for the region the stack is created in", () => {
+    const url = quickCreateUrl({ ...published, region: "eu-west-1" });
+    expect(url.startsWith("https://eu-west-1.console.aws.amazon.com/")).toBe(true);
+    expect(url).toContain("?region=eu-west-1");
+  });
+});
+
+describe("the Terraform form", () => {
+  it("deploys the same stack, with the same parameters", () => {
+    const snippet = terraformSnippet(published);
+    expect(snippet).toContain(`name         = "${STACK_NAME}"`);
+    expect(snippet).toContain(`ExternalId              = "${input.externalId}"`);
+    expect(snippet).toContain(`SightlineScannerRoleArn = "${input.scannerPrincipalArn}"`);
+    // The acknowledgement the console asks for as a checkbox.
+    expect(snippet).toContain("CAPABILITY_NAMED_IAM");
+  });
+
+  it("outputs the ARN the customer has to send back", () => {
+    expect(terraformSnippet(published)).toContain('outputs["RoleArn"]');
+  });
+
+  it("is a valid resource name, which the stack name is not", () => {
+    // `sightline-readonly` has a hyphen; a Terraform identifier cannot.
+    expect(terraformSnippet(published)).not.toMatch(/resource "[^"]+" "[a-z_]*-/);
+  });
+});
+
+describe("the template version", () => {
+  it("is recorded so a stale deployment is detected rather than diagnosed", () => {
+    // The failure it exists for: a role deployed from an older template matched
+    // a SourceIdentity pattern no legal value could satisfy, and the assume was
+    // refused with an AccessDenied that mentioned nothing relevant.
+    expect(TEMPLATE_VERSION).toMatch(/^v\d+$/);
   });
 });

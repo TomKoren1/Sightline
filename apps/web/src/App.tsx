@@ -15,6 +15,7 @@ import type { ScanEvent, ScanUnit } from "@sightline/shared";
 import { api, selectConnection, startScan } from "./api.js";
 import { DEFAULT_VISIBLE_KINDS, KIND_STYLES, styleFor } from "./kinds.js";
 import { Chat } from "./components/Chat.js";
+import { ConnectAccount } from "./components/ConnectAccount.js";
 import { ConnectionGuide } from "./components/ConnectionGuide.js";
 import { Modal } from "./components/Modal.js";
 import { TrustPanel } from "./components/TrustPanel.js";
@@ -194,18 +195,21 @@ export function App() {
           onClose={() => setModal(null)}
         >
           {/*
-            `ConnectionGuide` describes the one connection a *process* has, and
-            reads endpoints that a hosted deployment refuses by design. Showing
-            it there would present a panel whose buttons return errors, so it is
-            replaced by a short notice until the per-connection flow lands.
+            `ConnectionGuide` describes the one connection a *process* has and
+            reads endpoints a hosted deployment refuses by design, so hosted
+            gets the per-connection flow instead. A self-hosted clone keeps the
+            guide: its connection genuinely is a property of the deployment, and
+            the guide explains the `.env` values that describe it.
           */}
           {me.data?.hosted ? (
-            <p className="text-[12px] leading-relaxed text-ink-300">
-              Connecting an account from this screen is not built yet. The pieces are in place — an
-              ExternalId is issued and stored when a connection is created, and the role template is
-              published — but the one-click flow that puts them together is the next thing to be
-              written.
-            </p>
+            <ConnectAccount
+              onConnected={(id) => {
+                // The new connection is not in `me` yet, and it is almost
+                // certainly what they now want to be looking at.
+                void queryClient.invalidateQueries({ queryKey: ["me"] });
+                switchConnection(id);
+              }}
+            />
           ) : (
             <ConnectionGuide />
           )}

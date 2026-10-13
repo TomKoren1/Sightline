@@ -27,7 +27,7 @@ const STATUS_COLOUR: Record<ConnectionSummary["status"], string> = {
   verified: "text-ink-400",
   pending: "text-warn",
   failed: "text-danger",
-  disconnected: "text-ink-500",
+  disconnected: "text-ink-400",
 };
 
 export function AccountSwitcher({

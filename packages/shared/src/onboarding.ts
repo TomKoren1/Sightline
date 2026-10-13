@@ -28,6 +28,21 @@ export const READ_ONLY_ROLE_NAME = "SightlineReadOnlyRole";
 export const TEMPLATE_PATH = "infra/readonly-role.yaml";
 
 /**
+ * Which published template a customer deployed.
+ *
+ * Recorded against the connection, because this project has already shipped the
+ * failure it prevents: a role deployed from an older copy of the template
+ * matched a `sts:SourceIdentity` pattern no legal value could satisfy, and the
+ * assume was refused with an `AccessDenied` that mentioned nothing relevant.
+ * With the version stored, that becomes something detected rather than
+ * something diagnosed an hour later.
+ *
+ * Bump it whenever a change to the template would break a role deployed from
+ * the previous one.
+ */
+export const TEMPLATE_VERSION = "v1";
+
+/**
  * Prefix for generated ExternalIds, and for the `sts:SourceIdentity` the scanner
  * sends. Hyphen, not colon: AWS rejects a colon in a SourceIdentity, and the
  * trust policy's `StringLike` has to be satisfiable.
@@ -45,6 +60,84 @@ export const MOCK_ACCESS_KEY_PLACEHOLDER = "mock";
  */
 export function readOnlyRoleArn(accountId: string): string {
   return `arn:aws:iam::${accountId}:role/${READ_ONLY_ROLE_NAME}`;
+}
+
+/**
+ * The one-click CloudFormation link.
+ *
+ * A quick-create link opens the console's Create-stack page with the template
+ * and every parameter already filled in, so the customer ticks the IAM
+ * acknowledgement and presses the button. That checkbox is the only thing that
+ * cannot be pre-set, and it is there because the stack creates a named IAM
+ * role - which is exactly what they are agreeing to.
+ *
+ * Two things about the shape. The parameters live in the URL **fragment**,
+ * after `#/stacks/create/review`, because that is where the console's own
+ * router reads them; putting them in the real query string does nothing. And
+ * every value is encoded individually rather than through `URLSearchParams`,
+ * because that encodes `/` and `:` in the template URL into a form the console
+ * does not unpick.
+ *
+ * `region` is where the *stack* is created. The role itself is global, so this
+ * only decides which console the customer lands in and where the stack's own
+ * record lives.
+ */
+export interface QuickCreateInput {
+  /** The published template, as an https URL the CloudFormation console can fetch. */
+  templateUrl: string;
+  /** The principal allowed to assume the new role: this service's own identity. */
+  scannerPrincipalArn: string;
+  externalId: string;
+  region: string;
+}
+
+export function quickCreateUrl(input: QuickCreateInput): string {
+  const params = [
+    ["templateURL", input.templateUrl],
+    ["stackName", STACK_NAME],
+    ["param_SightlineScannerRoleArn", input.scannerPrincipalArn],
+    ["param_ExternalId", input.externalId],
+  ]
+    .map(([key, value]) => `${key}=${encodeURIComponent(value!)}`)
+    .join("&");
+
+  return (
+    `https://${input.region}.console.aws.amazon.com/cloudformation/home` +
+    `?region=${encodeURIComponent(input.region)}` +
+    `#/stacks/create/review?${params}`
+  );
+}
+
+/**
+ * The same stack as Terraform, for an estate that is managed that way.
+ *
+ * Offered because a quick-create link is useless to anyone whose organisation
+ * forbids creating stacks from the console, and telling them to do it anyway is
+ * how onboarding stops at the first screen. Derived from the same constants as
+ * the link and the CLI command, so the three cannot describe different roles.
+ */
+export function terraformSnippet(input: {
+  templateUrl: string;
+  scannerPrincipalArn: string;
+  externalId: string;
+}): string {
+  return `# Sightline read-only access (${TEMPLATE_VERSION}).
+# Equivalent to the CloudFormation stack; see ${TEMPLATE_PATH} for the full
+# permission set and the reasoning behind it.
+resource "aws_cloudformation_stack" "${STACK_NAME.replace(/-/g, "_")}" {
+  name         = "${STACK_NAME}"
+  capabilities = ["CAPABILITY_NAMED_IAM"]
+  template_url = "${input.templateUrl}"
+
+  parameters = {
+    SightlineScannerRoleArn = "${input.scannerPrincipalArn}"
+    ExternalId              = "${input.externalId}"
+  }
+}
+
+output "sightline_role_arn" {
+  value = aws_cloudformation_stack.${STACK_NAME.replace(/-/g, "_")}.outputs["RoleArn"]
+}`;
 }
 
 export interface DeployCommandInput {

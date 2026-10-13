@@ -72,7 +72,7 @@ function Step({
 function Why({ children, label = "Why this way" }: { children: React.ReactNode; label?: string }) {
   return (
     <details className="group">
-      <summary className="cursor-pointer text-[10px] text-ink-500 transition hover:text-ink-300">
+      <summary className="cursor-pointer text-[10px] text-ink-400 transition hover:text-ink-300">
         {label}
       </summary>
       <div className="mt-1 space-y-1 border-l border-ink-800 pl-2 text-[10px] leading-relaxed text-ink-400">
@@ -248,7 +248,7 @@ export function ConnectionGuide() {
 
       {/* ---- the long way, for anyone who would rather see every step --- */}
       <details className="group border-t border-ink-800 pt-3">
-        <summary className="cursor-pointer text-[11px] text-ink-400 transition hover:text-ink-200">
+        <summary className="cursor-pointer text-[11px] text-ink-400 transition hover:text-ink-100">
           ▸ Or do it by hand — five steps, about five minutes
         </summary>
         <p className="mt-2 text-[12px] leading-relaxed text-ink-300">
@@ -504,7 +504,7 @@ export function ConnectionGuide() {
       <div className="border-t border-ink-800 pt-3">
         <button
           onClick={() => setShowAccess((v) => !v)}
-          className="text-[11px] text-ink-400 transition hover:text-ink-200"
+          className="text-[11px] text-ink-400 transition hover:text-ink-100"
         >
           {showAccess ? "▾" : "▸"} What access this grants, and how to revoke it
         </button>

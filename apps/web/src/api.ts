@@ -175,6 +175,30 @@ export interface ConnectionSummary {
   lastScanAt: string | null;
 }
 
+/** Everything the connect screen needs, in one request. */
+export interface OnboardingPlan {
+  connection: ConnectionSummary;
+  externalId: string;
+  scannerPrincipalArn: string;
+  templateUrl: string;
+  templateVersion: string;
+  launchUrl: string;
+  cliCommand: string;
+  terraform: string;
+  roleArnPattern: string;
+}
+
+export interface VerifyResult {
+  ok: boolean;
+  accountId?: string;
+  assumedRoleArn?: string;
+  durationMs: number;
+  /** The useful part of a failure: what is wrong and what to do about it. */
+  diagnosis?: { code: string; problem: string; fix: string };
+  /** A refusal that is not a diagnosis — the account reached is not the one agreed. */
+  problem?: string;
+}
+
 export interface SessionRow {
   id: string;
   createdAt: string;
@@ -295,6 +319,10 @@ export const api = {
     send<{ id: string; externalId: string; note: string }>("/api/connections", asJson(input)),
   setConnectionTarget: (id: string, accountId: string) =>
     send<{ ok: true }>(`/api/connections/${encodeURIComponent(id)}/target`, asJson({ accountId })),
+  connectionOnboarding: (id: string) =>
+    get<OnboardingPlan>(`/api/connections/${encodeURIComponent(id)}/onboarding`),
+  verifyConnection: (id: string) =>
+    send<VerifyResult>(`/api/connections/${encodeURIComponent(id)}/verify`, { method: "POST" }),
   disconnect: (id: string) =>
     send<{ ok: true; note: string }>(`/api/connections/${encodeURIComponent(id)}`, {
       method: "DELETE",

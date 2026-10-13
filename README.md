@@ -340,7 +340,7 @@ the API and nginx containers are left running against databases that no longer e
 | `npm run drift`                                | Change the mock account, so a second scan has a diff         |
 | `npm run inspect -w @sightline/api`            | Scan and print findings without touching the databases       |
 | `npm run query -w @sightline/api`              | Run every curated query against the graph                    |
-| `npm test`                                     | 585 unit tests                                               |
+| `npm test`                                     | 596 unit tests                                               |
 | `npm run lint`                                 | Prettier and ESLint, both in check mode                      |
 | `npm run format`                               | Fix everything those two can fix automatically               |
 | `npm run typecheck`                            | `tsc` over every workspace, and over `infra/` and `scripts/` |
@@ -410,6 +410,28 @@ than one per restart. The capabilities that are harmless with one operator and d
 with many are **removed** there rather than guarded: no process-wide endpoint override,
 no process-wide mock, and no raw-Cypher escape hatch for the agent — the existing guards
 on that one defend against writes, and neither of them knows whose data a read touches.
+
+**Connecting an account** is one link and one field. A quick-create CloudFormation link
+arrives with the ExternalId and the trusted principal already filled in, the customer
+ticks the IAM acknowledgement and presses Create stack, and types their twelve-digit
+account id — the role's name is fixed by the template, so Sightline derives the ARN
+rather than asking anyone to paste one. The screen then polls `sts:AssumeRole` and goes
+green on its own, usually while they are still looking at CloudFormation.
+
+Two things it deliberately does not do. The stack creates **one IAM role and calls
+nobody**: a Lambda-backed custom resource could report the ARN back and remove the twelve
+digits entirely, and that would put a function, an execution role and an outbound call to
+a third party into a stack a security reviewer has to approve. And the ExternalId stays
+**readable** to whoever owns the connection rather than being shown once — it grants
+nothing without Sightline's own credentials, their deployed stack holds it in plaintext in
+the trust policy anyway, and hiding it makes a failed deploy unrecoverable without
+rotating a secret the stack already contains. The AWS CLI and Terraform forms sit behind
+the same link, because a console link is useless to anyone whose organisation forbids it.
+
+When it does not work, the diagnosis is the product. `AccessDenied` becomes "the trust
+policy does not name this principal — it names _this_ one, redeploy with that value, and
+here is the command to check", which is the difference between ten minutes and an
+afternoon.
 
 What is still single-process: the scan runs inside the API rather than on a worker behind
 a queue, so a long scan is tied to the request that started it. That is the next piece,

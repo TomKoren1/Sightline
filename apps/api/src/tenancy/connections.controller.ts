@@ -8,17 +8,25 @@
  * somebody's account. The reason it is safe now is that there *is*
  * authentication, and every row is bound to the tenant that created it.
  *
- * The external id is returned **once**, at creation, because the customer needs
- * it to deploy the stack. It is never returned again.
+ * The external id is returned to whoever owns the connection, at creation and
+ * from the onboarding plan afterwards. It was once-only to begin with, which is
+ * the reflex and the wrong call: the value grants nothing without this
+ * service's own credentials, their deployed stack holds it in plaintext in the
+ * trust policy anyway, and hiding it made a failed deploy unrecoverable without
+ * rotating a secret the stack already contained. It stays out of the connection
+ * *list*, which renders on every page load.
  */
 
 import {
+  BadRequestException,
   Body,
   Controller,
   Delete,
   ForbiddenException,
   Get,
   HttpCode,
+  HttpException,
+  HttpStatus,
   Param,
   Post,
 } from "@nestjs/common";
@@ -33,6 +41,7 @@ import {
 } from "./connections.js";
 import { CurrentTenant, IsAdmin } from "./currentTenant.decorator.js";
 import { asConnectionId, type TenantId } from "./ids.js";
+import { onboardingPlan, verifyConnection, VerifyTooSoon } from "./onboarding.js";
 
 const createSchema = z.object({
   kind: z.enum(["real", "demo"]).default("real"),
@@ -85,15 +94,60 @@ export class ConnectionsController {
     return {
       id: created.id,
       /**
-       * Shown once. The customer pastes it into CloudFormation, and it is the
-       * same string this service will present when assuming the role - which is
-       * the bug that generating a fresh one at save time caused: a stack and a
-       * service holding different secrets, surfacing as AccessDenied with both
-       * ends looking correct.
+       * The same string this service will present when assuming the role.
+       *
+       * Issued here rather than when a role ARN is saved, because the customer
+       * needs it *before* a role exists. Generating a fresh one at save time
+       * left the deployed stack and this service holding different secrets,
+       * surfacing as AccessDenied with both ends looking correct.
        */
       externalId: created.externalId,
-      note: "Save this ExternalId now — it is shown only once.",
     };
+  }
+
+  /**
+   * Everything needed to connect this account: the one-click link, and the two
+   * alternatives for an estate that cannot use it.
+   */
+  @Get(":id/onboarding")
+  async onboarding(@CurrentTenant() tenantId: TenantId, @Param("id") id: string) {
+    const scope = { tenantId, connectionId: asConnectionId(id) };
+    try {
+      return await onboardingPlan(scope);
+    } catch (err) {
+      // A missing connection, a demo one, or a deployment with no published
+      // template: all things the caller asked for wrongly, not failures.
+      throw new BadRequestException({
+        error: err instanceof Error ? err.message : "Could not build a connection plan",
+      });
+    }
+  }
+
+  /**
+   * Try the connection, and pin the account if it works.
+   *
+   * Polled by the onboarding screen, so that it goes green while the customer
+   * is still looking at CloudFormation rather than making them come back and
+   * press something. A failure is a 200 with `ok: false` and a diagnosis: this
+   * endpoint's job *is* the diagnosis, and a 5xx would make the UI render "the
+   * request failed" over the top of an explanation of what to fix.
+   */
+  @Post(":id/verify")
+  @HttpCode(200)
+  async verify(@CurrentTenant() tenantId: TenantId, @Param("id") id: string) {
+    try {
+      return await verifyConnection({ tenantId, connectionId: asConnectionId(id) });
+    } catch (err) {
+      if (err instanceof VerifyTooSoon) {
+        throw new HttpException(
+          { error: err.message, retryAfterMs: err.retryAfterMs },
+          HttpStatus.TOO_MANY_REQUESTS,
+        );
+      }
+      throw new BadRequestException({
+        error: err instanceof Error ? err.message : "Could not verify the connection",
+      });
+    }
   }
 
   /**

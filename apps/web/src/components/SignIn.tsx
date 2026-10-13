@@ -83,16 +83,16 @@ export function SignIn({ providers }: { providers: string[] }) {
           <p className="text-ink-300">What Sightline can see, and what it cannot</p>
           <ul className="mt-2 flex flex-col gap-1.5">
             <li>
-              It reads <span className="text-ink-200">configuration and metadata</span> — that a
+              It reads <span className="text-ink-100">configuration and metadata</span> — that a
               bucket exists, who can reach it, how it is set up.
             </li>
             <li>
-              It <span className="text-ink-200">cannot read your data</span>. The role you deploy
+              It <span className="text-ink-100">cannot read your data</span>. The role you deploy
               carries an explicit Deny on object, record, parameter and secret contents, and a Deny
               cannot be overridden by any Allow.
             </li>
             <li>
-              It <span className="text-ink-200">cannot change anything</span>. No write permissions,
+              It <span className="text-ink-100">cannot change anything</span>. No write permissions,
               and the agent has no tool that can express a change.
             </li>
             <li>

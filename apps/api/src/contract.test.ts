@@ -481,6 +481,18 @@ const EXCLUDED = new Map<string, string>([
       "asserted in packages/shared's onboarding tests.",
   ],
   [
+    "GET /api/connections/:id/onboarding",
+    "Returns a one-click link carrying the connection's ExternalId. Needs a real " +
+      "connection to exist and would put that secret in a test log; the link's shape is " +
+      "asserted in packages/shared's onboarding tests, which need no database.",
+  ],
+  [
+    "POST /api/connections/:id/verify",
+    "Attempts a real sts:AssumeRole into a customer account. Read-only, but it is still " +
+      "an outbound call per invocation, and the diagnosis it returns is asserted in " +
+      "connection/credentialDiagnosis.test.ts against the error shapes AWS produces.",
+  ],
+  [
     "DELETE /api/connections/:id",
     "Forgets a connection and purges its graph scopes. Destructive by design, so it is " +
       "exercised where the rows are disposable rather than against the running app.",
