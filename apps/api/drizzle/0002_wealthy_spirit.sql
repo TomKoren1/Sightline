@@ -1,0 +1,1 @@
+CREATE UNIQUE INDEX "scan_jobs_one_active_per_connection" ON "scan_jobs" USING btree ("connection_id") WHERE "scan_jobs"."status" IN ('queued','running');

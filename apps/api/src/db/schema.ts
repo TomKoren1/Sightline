@@ -430,6 +430,23 @@ export const scanJobs = pgTable(
   (t) => [
     index("scan_jobs_claim").on(t.status, t.queuedAt),
     index("scan_jobs_tenant").on(t.tenantId),
+    /**
+     * One scan per connection at a time, as a database guarantee.
+     *
+     * This replaces an in-process `Set`, which was correct only while there was
+     * one API process - the moment there are two replicas, or an API and a
+     * worker, two scans of the same account run concurrently and race on the
+     * same snapshot rows and the same graph scope. A partial unique index
+     * cannot be raced: the second INSERT fails, whichever process makes it.
+     *
+     * Partial rather than total, because finished jobs must accumulate - the
+     * history is the point. `queued` and `running` are named explicitly rather
+     * than expressed as "not finished", so a status added later has to be
+     * considered here instead of silently joining or leaving the set.
+     */
+    uniqueIndex("scan_jobs_one_active_per_connection")
+      .on(t.connectionId)
+      .where(sql`${t.status} IN ('queued','running')`),
     check(
       "scan_jobs_status",
       sql`${t.status} IN ('queued','running','succeeded','partial','failed','cancelled')`,
