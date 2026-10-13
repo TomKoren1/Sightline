@@ -193,7 +193,22 @@ export function App() {
           subtitle="Read-only access to your account, in about five minutes"
           onClose={() => setModal(null)}
         >
-          <ConnectionGuide />
+          {/*
+            `ConnectionGuide` describes the one connection a *process* has, and
+            reads endpoints that a hosted deployment refuses by design. Showing
+            it there would present a panel whose buttons return errors, so it is
+            replaced by a short notice until the per-connection flow lands.
+          */}
+          {me.data?.hosted ? (
+            <p className="text-[12px] leading-relaxed text-ink-300">
+              Connecting an account from this screen is not built yet. The pieces are in place — an
+              ExternalId is issued and stored when a connection is created, and the role template is
+              published — but the one-click flow that puts them together is the next thing to be
+              written.
+            </p>
+          ) : (
+            <ConnectionGuide />
+          )}
         </Modal>
       )}
 
