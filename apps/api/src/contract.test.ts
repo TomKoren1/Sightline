@@ -511,6 +511,14 @@ const EXCLUDED = new Map<string, string>([
       "sessions, and this suite runs self-hosted. Covered by auth/signin.test.ts.",
   ],
   [
+    "DELETE /api/me",
+    "Deletes the account and everything in it. Not exercised here for the obvious reason - " +
+      "this suite runs against a populated database and the refusal path it *can* reach " +
+      "(self-hosted has no account to delete) is the uninteresting half. The purge itself is " +
+      "asserted in tenancy/purge.test.ts, which seeds two tenants, deletes one, and checks both " +
+      "that nothing of it remains and that the other is untouched.",
+  ],
+  [
     "POST /api/auth/sessions/revoke-all",
     "Revokes every session for the caller. Covered by auth/signin.test.ts, which asserts " +
       "each token is dead afterwards.",

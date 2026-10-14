@@ -100,6 +100,27 @@ export function SignIn({ providers }: { providers: string[] }) {
               your keys.
             </li>
           </ul>
+
+          {/*
+            Before signing in, not after. A privacy policy reachable only from
+            inside the application is a policy you have to agree to in order to
+            read - and Google's consent screen fetches this URL and checks it
+            against the deployment's own domain, so it has to be here.
+          */}
+          <p className="mt-4 text-ink-400">
+            <a href="/privacy" className="underline transition hover:text-ink-100">
+              Privacy
+            </a>
+            <span className="px-1.5">·</span>
+            <a href="/terms" className="underline transition hover:text-ink-100">
+              Terms
+            </a>
+            <span className="px-1.5">·</span>
+            <span>
+              A personal project, run on one machine. No SLA, and nothing here is a support
+              commitment.
+            </span>
+          </p>
         </div>
       </div>
     </div>

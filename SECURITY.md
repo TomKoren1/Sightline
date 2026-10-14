@@ -55,19 +55,89 @@ AWS client, and no tool that mutates anything.
 It defeats the [confused-deputy problem](https://docs.aws.amazon.com/IAM/latest/UserGuide/confused-deputy.html):
 knowing the role ARN is not enough to assume it, so one customer cannot be
 tricked into letting another's deployment in. It is a credential. `npm run setup`
-masks it in terminal output, never rotates one that is already in use, and the
-`/api/connection/external-id` endpoint generates one without storing it.
+masks it in terminal output and never rotates one that is already in use.
+
+In a hosted deployment it is stored encrypted — AES-256-GCM through AWS KMS,
+with versioned envelopes so a key can be rotated by adding one — and the
+plaintext is held only for the length of an `AssumeRole`. The logger redacts it
+by field name at every nesting depth, because the way a secret reaches a log is
+not `log.info({ externalId })` but `log.info({ connection })` or
+`log.info({ err })`, with the field arriving inside something somebody logged
+whole.
+
+It is returned to whoever owns the connection whenever they ask, which was a
+reversal: it was once-only at first, and that is the reflex rather than the
+reasoning. The value grants nothing without this service's own credentials,
+their deployed stack holds it in plaintext in the trust policy where anyone who
+can call `iam:GetRole` can read it, and hiding it made a failed deploy
+unrecoverable without rotating a secret the stack already contained. It stays
+out of the connection _list_, which renders on every page load.
+
+## Multiple customers in one deployment
+
+Running this as a service means one database holds several people's inventories,
+and "every query filters by tenant" is a convention rather than a guarantee.
+There are two independent mechanisms, which fail in different ways:
+
+**The application cannot forget.** `TenantId`, `ConnectionId` and `ScanId` are
+branded types, so passing an unscoped string where one is required is a compile
+error rather than a code review. Adding them produced 75 of those errors, each
+a call site reading data without saying whose. Graph node identity is
+`(scanId, arn)` rather than `arn`, because some ARNs — the synthetic `Internet`
+node — are the same constant for every customer, and a projection keyed on the
+ARN alone would attach one customer's relationships to another's nodes.
+
+**The database refuses anyway.** Row-level security policies on the nine tables
+holding customer data compare every row against the tenant on the connection,
+with `WITH CHECK` as well as `USING`, so an insert carrying another tenant's id
+is refused rather than accepted and hidden. The application connects as a
+restricted role for this to mean anything: `DATABASE_URL` is the table owner and
+in the development compose file a superuser, and **superusers ignore RLS
+entirely** — `FORCE ROW LEVEL SECURITY` does not change that, because FORCE only
+binds the owner. Policies installed against a superuser connection are
+decoration. Hosted mode refuses to start without the separate role.
+
+A query that escapes its tenant context fails closed: it returns no rows rather
+than another tenant's. The guards are asserted behaviourally, by seeding two
+tenants and looking at what comes back, because the static and runtime checks
+both pass a query that binds the right parameters and still leaks.
+
+## Authentication
+
+Google and GitHub OIDC. Users are matched on the provider's **subject**, never
+on email — an email can change hands, and a provider's email is only trusted
+when the provider says it is verified. Google's `id_token` gets an `aud` check,
+because a token minted for a different application is genuinely from Google and
+correctly signed.
+
+Sessions are rows, so they can be revoked. The cookie carries an opaque random
+token and only its SHA-256 is stored, so a database leak is not a session leak.
+
+One guard is registered globally and a route escapes it only by saying
+`@Public()`. That direction matters: a per-route guard is one a new route can
+omit with nothing failing, whereas forgetting here makes the route refuse. Both
+directions are asserted against the **real** Fastify route table.
+
+A self-hosted clone has no sign-in, deliberately: it is one operator reading
+their own account, and the `api` service publishes no host port — it is reachable
+only through the `web` container. Publishing port 3000 yourself would expose the
+graph to anyone who can reach it.
+
+## Deleting an account
+
+`DELETE /api/me`, confirmed by typing the account's own email address. It drops
+the tenant's graph from Neo4j first and then deletes the tenant row, which
+cascades to every scan, snapshot, conversation, connection and encrypted
+ExternalId — including the tenant's own audit trail, which is the right answer
+to a deletion request. The order is deliberate: dropping the graph second and
+failing would orphan those nodes with nothing left to identify them by.
+
+It reports what it deleted, and it says plainly what it cannot do: Sightline
+cannot delete the CloudFormation stack in a customer's AWS account. Only they
+can, and until they do, the role it created still exists.
 
 ## Known limitations
 
-- **No authentication on the API.** It is designed to sit behind a reverse
-  proxy: the `api` service publishes no host port at all and is reachable only
-  through the `web` (nginx) container on the compose network. Publishing port
-  3000 yourself would expose the whole graph to anyone who can reach it. This is
-  documented rather than solved, and authentication is the first thing to build
-  before any shared deployment.
-- **Single-tenant.** One deployment reads one account. See
-  [`docs/ROADMAP.md`](docs/ROADMAP.md) for what multi-tenancy would require.
 - **Four moderate dev-only advisories, with no upstream fix.** `drizzle-kit`
   (latest, 0.31.11) still depends on the deprecated `@esbuild-kit/*` packages,
   which pin `esbuild ~0.18.20`. The advisory is that esbuild's **development
@@ -80,3 +150,18 @@ masks it in terminal output, never rotates one that is already in use, and the
 - **The policy analyser is not an IAM evaluator.** It does not model permission
   boundaries, service control policies, or session policies, so "effectively an
   administrator" is a strong hint rather than a formal proof.
+- **One node, no replication, no SLA.** Postgres and Neo4j are a single replica
+  each; this is a single point of failure whose mitigation is a backup with a
+  restore that has actually been tested, not a second replica that would make it
+  worse. See [`deploy/k8s/README.md`](deploy/k8s/README.md).
+- **A scan's peak memory is not bounded.** There is a ceiling on how many
+  resources one scan may project, which protects the graph. It does not protect
+  the worker: the collectors have already held every resource in memory by the
+  time it is checked, so an account large enough to exhaust the worker exhausts
+  it before the limit fires. The worker runs in its own deployment so that it
+  takes itself down rather than the API; the real fix is streaming collection.
+- **Chat and scan quotas are per tenant and per hour**, which bounds cost but
+  not a determined single request. The agent's own loop is capped at eight steps.
+- **Backups do not leave the machine.** The nightly encrypted dump goes to a
+  volume on the same node as the database, which survives a lost database and
+  not a lost disk.

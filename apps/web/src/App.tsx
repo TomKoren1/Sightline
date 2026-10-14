@@ -17,10 +17,12 @@ import { DEFAULT_VISIBLE_KINDS, KIND_STYLES, styleFor } from "./kinds.js";
 import { Chat } from "./components/Chat.js";
 import { ConnectAccount } from "./components/ConnectAccount.js";
 import { ConnectionGuide } from "./components/ConnectionGuide.js";
+import { DeleteAccount } from "./components/DeleteAccount.js";
 import { Modal } from "./components/Modal.js";
 import { TrustPanel } from "./components/TrustPanel.js";
 import { Findings } from "./components/Findings.js";
 import { GraphView } from "./components/GraphView.js";
+import { LegalPage, legalPathFor } from "./components/LegalPage.js";
 import { ResourceDetail } from "./components/ResourceDetail.js";
 import { ScanBanner } from "./components/ScanBanner.js";
 import { SignIn } from "./components/SignIn.js";
@@ -40,7 +42,7 @@ export function App() {
   const [selectedArn, setSelectedArn] = useState<string | null>(null);
   const [visibleKinds, setVisibleKinds] = useState<string[]>(DEFAULT_VISIBLE_KINDS);
   const [showFilters, setShowFilters] = useState(false);
-  const [modal, setModal] = useState<"trust" | "connection" | null>(null);
+  const [modal, setModal] = useState<"trust" | "connection" | "delete" | null>(null);
   const [switchNote, setSwitchNote] = useState<string | null>(null);
   const [connectionId, setConnectionId] = useState<string | null>(null);
 
@@ -212,6 +214,21 @@ export function App() {
   }, [activeJobId, scanning, onScanEvent, refreshAfterScan]);
 
   /**
+   * The privacy policy and the terms, before anything else.
+   *
+   * Ahead of the signed-out check deliberately: these have to be readable
+   * *without* an account, both because Google's consent screen fetches the
+   * privacy URL and because being asked to sign in before you can read what a
+   * service does with your data is the wrong way round.
+   *
+   * Pathname matching rather than a router. Two static pages do not justify
+   * one, nginx already serves every path to this bundle, and a router would
+   * own how the rest of the application navigates.
+   */
+  const legal = legalPathFor(window.location.pathname);
+  if (legal) return <LegalPage path={legal} />;
+
+  /**
    * A signed-out visitor sees the sign-in screen and nothing else.
    *
    * Checked before the first frame rather than after, so there is no flash of
@@ -245,7 +262,28 @@ export function App() {
         onSignOut={() => {
           void api.logout().then(() => window.location.reload());
         }}
+        onDeleteAccount={() => setModal("delete")}
       />
+
+      {modal === "delete" && me.data?.user?.email && (
+        <Modal
+          title="Delete this account"
+          subtitle="Everything Sightline holds about you, removed immediately"
+          onClose={() => setModal(null)}
+        >
+          <DeleteAccount
+            email={me.data.user.email}
+            /**
+             * A full reload rather than clearing state.
+             *
+             * The session row is gone, so every query would now fail; the
+             * honest next frame is the sign-in screen, and a reload is the
+             * shortest way to one that cannot leave a stale cache behind.
+             */
+            onDeleted={() => window.location.assign("/")}
+          />
+        </Modal>
+      )}
 
       {modal === "trust" && (
         <Modal

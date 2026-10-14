@@ -90,3 +90,81 @@ body {
 .pulse {
   animation: pulse-dot 1.4s ease-in-out infinite;
 }
+
+/**
+ * Prose for the privacy policy and the terms.
+ *
+ * Plain CSS rather than Tailwind utilities, because the HTML comes from
+ * `marked` at build time and there is nowhere to put a class. Scoped to
+ * `.legal` so it cannot reach the rest of the application.
+ *
+ * Deliberately not Tailwind's typography plugin: four selectors and a table are
+ * the whole requirement, and a dependency that styles everything would then own
+ * how these two pages look.
+ */
+.legal h2 {
+  margin: 1.75rem 0 0.5rem;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--color-ink-100);
+}
+
+.legal h3 {
+  margin: 1.25rem 0 0.35rem;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--color-ink-100);
+}
+
+.legal p,
+.legal li {
+  margin: 0.5rem 0;
+}
+
+.legal ul {
+  padding-left: 1.1rem;
+  list-style: disc;
+}
+
+.legal strong {
+  color: var(--color-ink-100);
+  font-weight: 600;
+}
+
+.legal a {
+  color: var(--color-accent);
+}
+
+.legal code {
+  padding: 0.05rem 0.25rem;
+  border-radius: 3px;
+  background: var(--color-ink-850);
+  font-size: 11px;
+}
+
+.legal table {
+  display: block;
+  /* Wide content scrolls inside itself rather than widening the page. */
+  overflow-x: auto;
+  margin: 0.75rem 0;
+  border-collapse: collapse;
+}
+
+.legal th,
+.legal td {
+  padding: 0.35rem 0.6rem;
+  border: 1px solid var(--color-ink-700);
+  text-align: left;
+  vertical-align: top;
+}
+
+.legal th {
+  color: var(--color-ink-100);
+  font-weight: 600;
+}
+
+.legal hr {
+  margin: 1.5rem 0;
+  border: 0;
+  border-top: 1px solid var(--color-ink-800);
+}

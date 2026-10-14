@@ -24,9 +24,23 @@ const MAX_LIMIT = 500;
  * `LIMIT` requires an INTEGER. A plain JS number crosses the wire as a float
  * and Neo4j rejects it with "found 100.0", so the conversion is done here
  * rather than remembered at fifteen call sites.
+ *
+ * `NaN` is treated as absent, which it was not. `?limit=abc` reaches here as
+ * `Number("abc")`, and every arithmetic step preserved it - `Math.max(1, NaN)`
+ * is `NaN`, not 1 - so `neo4j.int(NaN)` became `LIMIT 0` and the graph endpoint
+ * answered with **no nodes at all**. A customer who mistyped a query parameter
+ * was told their AWS account was empty. Exactly the shape of failure a mistyped
+ * connection id had, and the reason that one is now a 400: an empty result is
+ * indistinguishable from a true answer.
+ *
+ * The boundary refuses a non-numeric limit outright, so this fallback should be
+ * unreachable from a request. It is here anyway, because being total is cheap
+ * and the next caller may not come through a controller.
  */
-const clamp = (n: number | undefined, fallback = DEFAULT_LIMIT) =>
-  neo4j.int(Math.min(Math.max(1, Math.floor(n ?? fallback)), MAX_LIMIT));
+const clamp = (n: number | undefined, fallback = DEFAULT_LIMIT) => {
+  const requested = Number.isFinite(n) ? n! : fallback;
+  return neo4j.int(Math.min(Math.max(1, Math.floor(requested)), MAX_LIMIT));
+};
 
 export interface ResourceRow {
   arn: string;

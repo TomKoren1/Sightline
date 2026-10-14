@@ -191,6 +191,11 @@ For a hosted deployment on Kubernetes — kustomize manifests, a Cloudflare tunn
 sealed secrets, and an encrypted backup with a restore procedure that is tested
 rather than described — see [`deploy/k8s/README.md`](deploy/k8s/README.md).
 
+What a hosted deployment holds, shares and deletes is in
+[`PRIVACY.md`](PRIVACY.md); the terms are in [`TERMS.md`](TERMS.md); and the
+security properties, including how one customer's data is kept from another's,
+are in [`SECURITY.md`](SECURITY.md).
+
 The agent uses Anthropic. `ANTHROPIC_MODEL` defaults to `claude-sonnet-5`.
 `/api/health` says whether a key is configured rather than making you discover it
 through a failed request, and names the `.env` it read if the key is missing.
@@ -350,7 +355,7 @@ the API and nginx containers are left running against databases that no longer e
 | `npm run inspect -w @sightline/api`            | Scan and print findings without touching the databases       |
 | `npm run query -w @sightline/api`              | Run every curated query against the graph                    |
 | `npm run dev:worker`                           | Run scans in their own process, as a hosted deployment does  |
-| `npm test`                                     | 640 unit tests                                               |
+| `npm test`                                     | 713 unit tests                                               |
 | `npm run lint`                                 | Prettier and ESLint, both in check mode                      |
 | `npm run format`                               | Fix everything those two can fix automatically               |
 | `npm run typecheck`                            | `tsc` over every workspace, and over `infra/` and `scripts/` |

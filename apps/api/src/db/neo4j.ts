@@ -356,6 +356,44 @@ export async function dropScanScopes(
 }
 
 /**
+ * Delete everything this tenant has in the graph.
+ *
+ * For a purge, and deliberately **not** expressed as "drop these scan ids".
+ * `dropScanScopes` takes a list, which is right when forgetting one connection
+ * because Postgres knows exactly which scans it had. A purge cannot rely on
+ * that: a scope whose scan row was already gone - a failed projection, an
+ * interrupted sweep - would be left behind, and once the tenant row is deleted
+ * there is nothing left to find it with. Matching on the tenant alone catches
+ * those.
+ *
+ * Returns the count so the caller can report what it deleted rather than
+ * claiming success. Batched, like the others, because a `DETACH DELETE` of a
+ * whole estate is the one operation whose cost scales with the customer.
+ */
+export async function dropTenantGraph(tenantId: TenantId, limit = 50_000): Promise<number> {
+  const session = getDriver().session();
+  let total = 0;
+  try {
+    for (;;) {
+      const result = await session.executeWrite((tx) =>
+        tx.run(
+          `MATCH (n:Resource {tenantId: $tenantId})
+           WITH n LIMIT $limit
+           DETACH DELETE n
+           RETURN count(n) AS deleted`,
+          { tenantId, limit: neo4j.int(limit) },
+        ),
+      );
+      const deleted = (result.records[0]?.get("deleted") as number | undefined) ?? 0;
+      total += deleted;
+      if (deleted === 0) return total;
+    }
+  } finally {
+    await session.close();
+  }
+}
+
+/**
  * Delete the graphs of scans that are no longer current.
  *
  * Batched and off the critical path, because a `DETACH DELETE` of a large

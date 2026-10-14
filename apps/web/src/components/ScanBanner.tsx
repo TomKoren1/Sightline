@@ -50,6 +50,7 @@ export interface ScanBannerProps {
   /** Null in a self-hosted deployment, which has no sign-in. */
   signedInAs: string | null;
   onSignOut: () => void;
+  onDeleteAccount: () => void;
 }
 
 export function ScanBanner({
@@ -68,6 +69,7 @@ export function ScanBanner({
   onSelectConnection,
   signedInAs,
   onSignOut,
+  onDeleteAccount,
 }: ScanBannerProps) {
   const units = scanning ? liveUnits : (scan?.units ?? []);
   const failed = units.filter((u) => u.status === "failed");
@@ -132,6 +134,20 @@ export function ScanBanner({
                 className="rounded border border-ink-700 bg-ink-800 px-2 py-1 text-[11px] text-ink-300 transition hover:border-ink-600 hover:text-ink-100"
               >
                 Sign out
+              </button>
+              {/*
+                Next to Sign out, not hidden in a settings page nobody opens.
+                A service holding somebody's production inventory should make
+                leaving as findable as arriving - and the destructive step is
+                behind a dialog that asks them to type their own address, so
+                proximity costs nothing.
+              */}
+              <button
+                onClick={onDeleteAccount}
+                title="Delete this account and everything Sightline holds about it"
+                className="rounded border border-ink-700 bg-ink-800 px-2 py-1 text-[11px] text-ink-400 transition hover:border-danger/60 hover:text-danger"
+              >
+                Delete account
               </button>
             </>
           )}

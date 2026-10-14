@@ -23,6 +23,7 @@ import { assertSchemaCurrent, closePool } from "./db/postgres.js";
 import { closeDriver } from "./db/neo4j.js";
 import { assertHostedInvariants } from "./hostedMode.js";
 import { ScanWorker } from "./jobs/worker.js";
+import { loggerOptions } from "./observability/logging.js";
 
 // The same invariants the API checks, for the same reason: every one of them is
 // a configuration mistake that produces a working process with a silently wrong
@@ -30,7 +31,10 @@ import { ScanWorker } from "./jobs/worker.js";
 // guarantees absent.
 assertHostedInvariants();
 
-const log = pino({ name: "sightline-worker" });
+// The same redaction the API uses. A second configuration would be a second
+// thing to forget, and this process is the one that holds assumed AWS
+// credentials and the ExternalIds it assumed them with.
+const log = pino({ name: "sightline-worker", ...loggerOptions() });
 
 if (scanWorkerMode() === "off") {
   log.error("SCAN_WORKER is 'off', so this process would claim nothing. Refusing to start idle.");

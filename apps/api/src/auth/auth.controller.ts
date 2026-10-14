@@ -13,6 +13,7 @@
 
 import {
   BadRequestException,
+  Body,
   Controller,
   Delete,
   Get,
@@ -27,6 +28,7 @@ import type { FastifyReply, FastifyRequest } from "fastify";
 
 import { cfg, isHosted } from "../config.js";
 import { listConnections } from "../tenancy/connections.js";
+import { confirmationMatches, purgeTenant } from "../tenancy/purge.js";
 import { Public } from "./public.decorator.js";
 import { configuredProviders, createState, verifyState, type ProviderName } from "./oauth.js";
 import { authorizationUrl, exchangeCode } from "./providers.js";
@@ -218,6 +220,71 @@ export class MeController {
       providers: configuredProviders(),
       linked,
       connections,
+    };
+  }
+
+  /**
+   * Delete this account and everything Sightline holds about it.
+   *
+   * A route rather than an email address, because a service holding an
+   * inventory of somebody's production estate has to be able to say what
+   * leaving looks like - and because a privacy policy promising deletion with
+   * no mechanism behind it is a promise nobody has tested.
+   *
+   * Confirmed by typing the account's own email. That cannot be clicked
+   * through, cannot be done by a cross-site request that does not know it, and
+   * makes the dialog impossible to misread; a checkbox gets dismissed and the
+   * word "DELETE" becomes muscle memory. The `X-Sightline-Request` header the
+   * guard demands on every mutating request is the other half.
+   */
+  @Delete("me")
+  @HttpCode(200)
+  async deleteAccount(@Req() req: FastifyRequest, @Body() body: unknown) {
+    const authed = req as unknown as AuthedRequest;
+
+    if (!isHosted()) {
+      /**
+       * Refused in a clone, and not for want of implementing it.
+       *
+       * Self-hosted has one tenant that `ensureLocalTenant` recreates on the
+       * next boot, so "delete my account" would delete the operator's own
+       * connections and scan history and then hand them a fresh empty tenant -
+       * a destructive no-op. Someone who wants that can drop the database,
+       * which is honest about what it does.
+       */
+      throw new BadRequestException({
+        error:
+          "This is a self-hosted deployment with a single local tenant, so there is no account " +
+          "to delete. To start over, remove the Postgres and Neo4j volumes.",
+      });
+    }
+
+    const session = authed.session;
+    if (!session) throw new UnauthorizedException({ error: "Not signed in" });
+
+    const typed = (body as { confirm?: unknown } | null)?.confirm;
+    if (!confirmationMatches(session.email, typed)) {
+      throw new BadRequestException({
+        error: `To confirm, send { "confirm": "<your email address>" }. Nothing has been deleted.`,
+      });
+    }
+
+    const deleted = await purgeTenant(session.tenantId);
+
+    /**
+     * Logged with counts and no content, because the tenant's own audit trail
+     * cascades away with it - which is the right answer to a deletion request,
+     * but does mean this line is the only remaining evidence the deletion
+     * happened at all.
+     */
+    req.log.info({ tenantId: session.tenantId, ...deleted }, "tenant purged");
+
+    return {
+      deleted,
+      note:
+        "Everything Sightline held about this account is gone, including the encrypted " +
+        "ExternalIds. Sightline cannot delete the CloudFormation stacks in your AWS accounts - " +
+        "only you can, and until you do, the roles they created still exist.",
     };
   }
 }

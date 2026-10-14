@@ -1,4 +1,4 @@
-import { Controller, Get, Inject, Param, Query } from "@nestjs/common";
+import { BadRequestException, Controller, Get, Inject, Param, Query } from "@nestjs/common";
 
 import { CurrentScope } from "../tenancy/currentScope.decorator.js";
 import type { Scope } from "../tenancy/scope.js";
@@ -19,6 +19,21 @@ export class GraphController {
     @CurrentScope() scope: Scope,
     @Query() query: { region?: string; kinds?: string; limit?: string },
   ) {
+    /**
+     * A limit that is not a number is refused, not guessed at.
+     *
+     * `?limit=abc` used to answer with an empty graph: the value became `NaN`,
+     * survived every clamp, and arrived at Neo4j as `LIMIT 0`. A customer who
+     * mistyped a query parameter was told their AWS account held nothing. The
+     * clamp is total now, so the worst case is the default rather than zero -
+     * but a caller who asked for a specific number and silently got a different
+     * one has also been given a wrong answer, so this says so instead.
+     */
+    if (query.limit !== undefined && query.limit !== "" && !/^\d+$/.test(query.limit)) {
+      throw new BadRequestException({
+        error: `limit must be a whole number; got ${JSON.stringify(query.limit)}`,
+      });
+    }
     return this.graph.graph(scope, query);
   }
 

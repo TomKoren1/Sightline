@@ -320,6 +320,19 @@ export const api = {
   revokeAllSessions: () =>
     send<{ revoked: number }>("/api/auth/sessions/revoke-all", { method: "POST" }),
 
+  /**
+   * Delete this account and everything Sightline holds about it.
+   *
+   * `confirm` is the account's own email address, checked by the server. The
+   * value is sent rather than a boolean so the confirmation cannot be satisfied
+   * by a request that does not know it.
+   */
+  deleteAccount: (confirm: string) =>
+    send<{ deleted: Record<string, number>; note: string }>("/api/me", {
+      ...asJson({ confirm }),
+      method: "DELETE",
+    }),
+
   connections: () => get<{ connections: ConnectionSummary[] }>("/api/connections"),
   createConnection: (input: { label: string; kind?: "real" | "demo" }) =>
     send<{ id: string; externalId: string; note: string }>("/api/connections", asJson(input)),

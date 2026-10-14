@@ -22,6 +22,7 @@ import { FastifyAdapter, type NestFastifyApplication } from "@nestjs/platform-fa
 import { AppModule } from "./app.module.js";
 import { cfg, isHosted } from "./config.js";
 import { InvalidIdFilter, SchemaErrorFilter } from "./malformedRequest.filter.js";
+import { loggerOptions } from "./observability/logging.js";
 
 /** One registered route, as Fastify sees it. */
 export interface RouteInfo {
@@ -44,7 +45,9 @@ export interface BuildOptions {
 
 export async function buildApp(options: BuildOptions = {}): Promise<NestFastifyApplication> {
   const adapter = new FastifyAdapter({
-    logger: { level: process.env["LOG_LEVEL"] ?? "info" },
+    // Redaction included, so an ExternalId cannot reach a log through an object
+    // somebody logged whole - see `observability/logging.ts`.
+    logger: loggerOptions(),
     // SSE responses are written directly to the raw socket and can outlive the
     // default timeout on a slow scan.
     connectionTimeout: 0,
