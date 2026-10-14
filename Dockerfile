@@ -56,6 +56,16 @@ CMD ["npm", "run", "start", "-w", "@sightline/api"]
 FROM deps AS webbuild
 WORKDIR /app
 COPY tsconfig.base.json ./
+# The privacy policy and the terms, which the frontend imports with Vite's
+# `?raw` so there is one copy of each rather than the same text in a `.tsx`.
+# They live at the repository root because that is where GitHub renders them and
+# where every link in the documents points - so the build needs them here too.
+#
+# Their absence failed this build and nothing else: `npm run build` locally has
+# the whole repository, so the import resolved, and only the image - which
+# copies directories deliberately rather than everything - could notice.
+# `infra/webBuildInputs.test.ts` now checks the two agree.
+COPY PRIVACY.md TERMS.md ./
 COPY packages/ packages/
 COPY apps/web/ apps/web/
 RUN npm run build -w @sightline/web
