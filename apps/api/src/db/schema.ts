@@ -195,6 +195,14 @@ export const messages = pgTable(
   },
   (t) => [
     index("messages_conversation").on(t.conversationId, t.createdAt),
+    /**
+     * For the chat quota, which counts a tenant's questions in the last hour.
+     *
+     * Without it that count is a sequential scan of every message every tenant
+     * has ever sent, on the path of every question - the quota would become
+     * the slowest thing about asking one.
+     */
+    index("messages_tenant_asked").on(t.tenantId, t.createdAt),
     check("messages_role", sql`${t.role} IN ('user','assistant')`),
   ],
 );

@@ -45,6 +45,7 @@ import {
   SCAN_QUEUE_CHANNEL,
   type ScanJob,
 } from "./queue.js";
+import { scanningEnabled } from "../tenancy/limits.js";
 import { runScanJob } from "./runScanJob.js";
 
 /**
@@ -173,6 +174,18 @@ export class ScanWorker {
   /** One pass: recover dead workers' jobs, then take what capacity allows. */
   private async tick(): Promise<void> {
     if (!this.running || this.draining) return;
+
+    /**
+     * The other end of the kill switch.
+     *
+     * Checked here as well as at the enqueue, because either alone leaves a
+     * surprise: refusing only at the API lets an existing backlog keep running,
+     * and refusing only here lets tenants queue jobs that never move and look
+     * stuck. Reclaim is skipped too - requeueing a job nothing will claim just
+     * churns the row.
+     */
+    if (!scanningEnabled()) return;
+
     this.draining = true;
     try {
       await this.reclaim();

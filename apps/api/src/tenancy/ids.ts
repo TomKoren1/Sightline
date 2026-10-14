@@ -82,10 +82,6 @@ function checked(value: unknown, what: string): string {
   return value;
 }
 
-/** Whether a value is shaped like one of these ids, without branding it. */
-export const isUuid = (value: unknown): value is string =>
-  typeof value === "string" && UUID.test(value);
-
 export const asTenantId = (value: unknown): TenantId => checked(value, "tenant id") as TenantId;
 
 export const asConnectionId = (value: unknown): ConnectionId =>

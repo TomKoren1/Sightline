@@ -34,7 +34,7 @@ import { getJob, TERMINAL, type JobStatus } from "./queue.js";
  * indexed queries per watcher per tick, and the number of watchers is bounded
  * by the number of scans actually running.
  */
-export const PROGRESS_POLL_MS = 400;
+const PROGRESS_POLL_MS = 400;
 
 /**
  * How long to keep streaming with the job in a state that should not last.
@@ -44,7 +44,7 @@ export const PROGRESS_POLL_MS = 400;
  * connection open indefinitely waiting for it, so the stream gives up and says
  * so - the scan carries on, and reopening the stream rejoins it.
  */
-export const STREAM_IDLE_LIMIT_MS = 10 * 60_000;
+const STREAM_IDLE_LIMIT_MS = 10 * 60_000;
 
 export interface ScanProgress {
   status: JobStatus;

@@ -40,6 +40,7 @@ import { runScan } from "../scan/runner.js";
 import { markScanned, markVerified } from "../tenancy/connections.js";
 import { resolveScanTarget } from "../tenancy/scanTarget.js";
 import type { ScanId } from "../tenancy/ids.js";
+import { tooManyResources } from "../tenancy/limits.js";
 import type { Scope } from "../tenancy/scope.js";
 
 export interface ScanJobOutcome {
@@ -197,6 +198,35 @@ export async function runScanJob(options: RunScanJobOptions): Promise<ScanJobOut
       return { status: "failed", scanId, error: problem };
     }
     const status = rolled;
+
+    /**
+     * Too big to project.
+     *
+     * Checked after `saveScanResult` would have run, and before the projection,
+     * so the scan is still *recorded* - the counts and the per-unit outcomes are
+     * real findings about the account, and throwing them away would hide the
+     * very thing the operator needs to see. What is skipped is the flip, so the
+     * tenant keeps reading the graph they already had rather than one built
+     * from a projection that ran Neo4j out of heap.
+     */
+    const size = tooManyResources(result.resources.length);
+    if (!size.allowed) {
+      // `failed`, not the rolled-up status: the units really did succeed, but
+      // the scan did not become anything the tenant can read, and a row saying
+      // `succeeded` is how somebody concludes their graph is up to date. Saved
+      // as failed from the start rather than corrected afterwards, so there is
+      // no moment where it claims otherwise.
+      await saveScanResult(scope, scanId, {
+        status: "failed",
+        units: result.units,
+        resources: result.resources,
+        relationships: result.relationships,
+        apiCalls: counter.total(),
+      });
+      await failScanRun(scope, scanId, size.reason);
+      emit({ type: "scan.failed", scanId, error: size.reason });
+      return { status: "failed", scanId, error: size.reason };
+    }
 
     await saveScanResult(scope, scanId, {
       status,

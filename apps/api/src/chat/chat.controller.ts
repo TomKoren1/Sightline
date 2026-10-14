@@ -24,6 +24,7 @@ import type { AgentEvent } from "@sightline/shared";
 
 import { CurrentScope } from "../tenancy/currentScope.decorator.js";
 import { asConversationId } from "../tenancy/ids.js";
+import { mayChat, statusFor } from "../tenancy/limits.js";
 import type { Scope } from "../tenancy/scope.js";
 import { askSchema } from "./chat.dto.js";
 import { ChatService } from "./chat.service.js";
@@ -51,6 +52,28 @@ export class ChatController {
       throw new BadRequestException({ error: "Invalid request", details: parsed.error.flatten() });
     }
     const { question, history } = parsed.data;
+
+    /**
+     * Checked before a byte of the stream is written, for the same reason the
+     * scan is: once the response is an event stream the status code is already
+     * 200, and a quota refusal would arrive as an error event the UI renders
+     * inside a chat bubble rather than as something a client can act on.
+     */
+    const quota = await mayChat(scope);
+    if (!quota.allowed) {
+      if (quota.retryAfterSeconds !== undefined) {
+        void reply.header("Retry-After", String(quota.retryAfterSeconds));
+      }
+      // 429 when they have asked a lot of questions in an hour, 503 when an
+      // operator has turned the assistant off. Never 403: nothing about this
+      // caller is forbidden, and both of these stop being true.
+      return reply.code(statusFor(quota.kind)).send({
+        error: quota.reason,
+        ...(quota.retryAfterSeconds !== undefined
+          ? { retryAfterSeconds: quota.retryAfterSeconds }
+          : {}),
+      });
+    }
 
     // Resolved before a byte of the stream is written, so a missing scan is
     // still a status code rather than an error event nobody can act on.

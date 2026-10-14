@@ -15,6 +15,7 @@ import type { ScanEvent } from "@sightline/shared";
 
 import type { AuthedRequest } from "../auth/auth.guard.js";
 import { ScanAlreadyQueued } from "../jobs/queue.js";
+import { ScanRefused } from "./scanRefused.js";
 import { asJobId, asScanId, type JobId } from "../tenancy/ids.js";
 import { CurrentScope } from "../tenancy/currentScope.decorator.js";
 import type { Scope } from "../tenancy/scope.js";
@@ -123,6 +124,27 @@ export class ScansController {
         return reply.code(409).send({
           error: "A scan of this account is already running",
           activeJobId: err.existingJobId,
+        });
+      }
+      if (err instanceof ScanRefused) {
+        /**
+         * 429 or 503, and `Retry-After` when waiting is the answer.
+         *
+         * Never 403: nothing about this caller is forbidden, they are early or
+         * the deployment is paused, and both stop being true. 429 and 503 are
+         * then distinguished because telling somebody who made one request that
+         * they have made too many is misleading - the refusal says which it is.
+         * The header is set as well as the body so a client that honours it does
+         * the right thing without reading the message.
+         */
+        if (err.retryAfterSeconds !== undefined) {
+          void reply.header("Retry-After", String(err.retryAfterSeconds));
+        }
+        return reply.code(err.status).send({
+          error: err.message,
+          ...(err.retryAfterSeconds !== undefined
+            ? { retryAfterSeconds: err.retryAfterSeconds }
+            : {}),
         });
       }
       throw err;

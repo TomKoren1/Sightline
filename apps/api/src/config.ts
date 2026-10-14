@@ -30,6 +30,43 @@ const blankAsUnset = <T extends z.ZodTypeAny>(inner: T) =>
   z.preprocess((value) => (value === "" ? undefined : value), inner);
 
 /**
+ * A yes/no environment variable, with no coercion.
+ *
+ * **Not** `z.coerce.boolean()`. That applies JavaScript's `Boolean()`, under
+ * which every non-empty string is true - so `SCANS_ENABLED=false` enables
+ * scans. A kill switch that cannot be switched off is worse than no kill
+ * switch: it fails silently, during an incident, in the direction nobody wants.
+ *
+ * Unrecognised values are **refused** rather than guessed at. Configuration
+ * that means one thing and does another is the whole failure mode here, and a
+ * startup error naming the variable costs an operator seconds; a switch that
+ * quietly stayed on costs whatever the incident costs.
+ */
+const TRUE = new Set(["1", "true", "yes", "on"]);
+const FALSE = new Set(["0", "false", "no", "off"]);
+
+const flag = (fallback: boolean) =>
+  blankAsUnset(
+    z
+      .union([z.boolean(), z.string()])
+      .optional()
+      .transform((value, ctx) => {
+        if (value === undefined) return fallback;
+        if (typeof value === "boolean") return value;
+        const normalised = value.trim().toLowerCase();
+        if (TRUE.has(normalised)) return true;
+        if (FALSE.has(normalised)) return false;
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message:
+            `"${value}" is not a yes or a no. Use one of ` +
+            `${[...TRUE].join(", ")} or ${[...FALSE].join(", ")}.`,
+        });
+        return z.NEVER;
+      }),
+  );
+
+/**
  * The external id the mock fixture accepts. Published, not secret: moto
  * accepts any AssumeRole, and pretending this is a credential would be
  * theatre. Named so the demo path has one definition rather than three
@@ -101,6 +138,56 @@ const schema = z.object({
    * machine, which is why it is configuration rather than a constant.
    */
   SCAN_WORKER_CONCURRENCY: blankAsUnset(z.coerce.number().int().positive().default(1)),
+
+  /**
+   * Kill switches.
+   *
+   * Environment variables rather than a database row, which means flipping one
+   * restarts the process. That is the right trade here: in Kubernetes an env
+   * change is a rollout, which is how an operator turns a feature off anyway,
+   * and a database-backed switch costs a read on the path of every request to
+   * protect against an incident that happens approximately never. The cost is
+   * that it is not instant - roughly a rollout - and the comment says so rather
+   * than leaving somebody to discover it mid-incident.
+   *
+   * Scans stop at both ends when disabled: the API refuses to enqueue and the
+   * worker refuses to claim, so the queue drains rather than building up.
+   */
+  SCANS_ENABLED: flag(true),
+  CHAT_ENABLED: flag(true),
+
+  /**
+   * Minimum gap between finishing one scan of an account and starting the next.
+   *
+   * Defaulted below rather than here, because the right answer depends on whose
+   * money is being spent: in a self-hosted clone it is the operator's own
+   * account and their own AWS bill, and a cooldown would only get in their way.
+   */
+  SCAN_COOLDOWN_SECONDS: blankAsUnset(z.coerce.number().int().nonnegative().optional()),
+
+  /** Scans one tenant may have queued or running across all their accounts. */
+  MAX_ACTIVE_SCANS_PER_TENANT: blankAsUnset(z.coerce.number().int().positive().default(3)),
+
+  /**
+   * Resources one scan may produce before it is refused.
+   *
+   * Bounds the *graph*, not the scan's own peak memory: by the time this is
+   * checked the collectors have already held every resource in an array, so an
+   * account large enough to exhaust the worker exhausts it before this fires.
+   * Fixing that needs streaming collection, which this is not. What it does buy
+   * is a clear message instead of a projection that runs Neo4j out of heap, and
+   * that is worth having on its own.
+   */
+  MAX_RESOURCES_PER_SCAN: blankAsUnset(z.coerce.number().int().positive().default(100_000)),
+
+  /**
+   * Questions one tenant may ask the agent per hour.
+   *
+   * Without this the Anthropic key is a free Claude proxy for anyone who signs
+   * up. Defaulted below: self-hosted uses the operator's own key, so a quota
+   * there limits nobody but them.
+   */
+  CHAT_QUESTIONS_PER_HOUR: blankAsUnset(z.coerce.number().int().positive().optional()),
 
   /**
    * Testing hook: comma-separated `service:region` pairs that should fail.
@@ -196,6 +283,22 @@ export const isHosted = (): boolean => cfg.DEPLOYMENT_MODE === "hosted";
  */
 export const scanWorkerMode = (): "embedded" | "separate" | "off" =>
   cfg.SCAN_WORKER ?? (isHosted() ? "separate" : "embedded");
+
+/**
+ * Limits whose sensible default depends on whose resources are being spent.
+ *
+ * A self-hosted clone scans the operator's own account with the operator's own
+ * API key, so a cooldown and a chat quota there restrict nobody but them - and
+ * a tool that rations its single user is just a worse tool. In a hosted
+ * deployment the same numbers are what stand between one signup and an
+ * unbounded AWS and Anthropic bill. Both are overridable; only the default
+ * moves.
+ */
+export const scanCooldownSeconds = (): number =>
+  cfg.SCAN_COOLDOWN_SECONDS ?? (isHosted() ? 300 : 0);
+
+export const chatQuestionsPerHour = (): number | null =>
+  cfg.CHAT_QUESTIONS_PER_HOUR ?? (isHosted() ? 60 : null);
 
 /**
  * Should the session cookie be `Secure`?

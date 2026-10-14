@@ -14,6 +14,8 @@ import { Injectable, NotFoundException } from "@nestjs/common";
 import { diffScans, getLatestScan, getScan, listScans } from "../db/repository.js";
 import { activeJobId, cancelQueuedJob, enqueueScan, getJob, type ScanJob } from "../jobs/queue.js";
 import { readProgress, streamScanEvents } from "../jobs/progress.js";
+import { mayScan } from "../tenancy/limits.js";
+import { ScanRefused } from "./scanRefused.js";
 import { asScanId, type JobId, type ScanId } from "../tenancy/ids.js";
 import type { Scope } from "../tenancy/scope.js";
 
@@ -68,8 +70,17 @@ export class ScansService {
     return { diff: await diffScans(scope, from, to) };
   }
 
-  /** Queue a scan. Throws `ScanAlreadyQueued` if one is already in flight. */
+  /**
+   * Queue a scan.
+   *
+   * Throws `ScanAlreadyQueued` if one is already in flight - that one is the
+   * database's answer, from the partial unique index - and `ScanRefused` for
+   * the limits a schema cannot express: a kill switch, a cooldown, a cap across
+   * the tenant's accounts.
+   */
   async enqueue(scope: Scope, requestedBy: string | null): Promise<ScanJob> {
+    const decision = await mayScan(scope);
+    if (!decision.allowed) throw new ScanRefused(decision);
     return enqueueScan(scope, requestedBy);
   }
 
