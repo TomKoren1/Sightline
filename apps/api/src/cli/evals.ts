@@ -23,7 +23,7 @@ import { gradeCase, summarise, type CaseResult } from "../evals/grade.js";
 import { isTerminalApiError } from "../evals/terminalError.js";
 import { listResources } from "../db/queries.js";
 import { closeDriver } from "../db/neo4j.js";
-import { closePool, db } from "../db/postgres.js";
+import { closePool, system } from "../db/postgres.js";
 import { evalRuns } from "../db/schema.js";
 import { getLatestScan } from "../db/repository.js";
 import { getConnection } from "../tenancy/connections.js";
@@ -196,7 +196,7 @@ try {
     );
     console.log(dim("  The previous recorded run is left as the reference. Re-run when able."));
   } else {
-    await db.insert(evalRuns).values({
+    await system.insert(evalRuns).values({
       id: runId,
       model: cfg.ANTHROPIC_MODEL,
       total: summary.total,

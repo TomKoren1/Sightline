@@ -78,6 +78,16 @@ const schema = z.object({
   DATABASE_URL: blankAsUnset(
     z.string().default("postgres://sightline:sightline@localhost:5432/sightline"),
   ),
+  /**
+   * The restricted role every tenant-scoped query uses.
+   *
+   * Separate from `DATABASE_URL`, which is the owner and in this project's own
+   * compose file is a superuser - and superusers ignore row-level security
+   * entirely, `FORCE ROW LEVEL SECURITY` included. So without this the policies
+   * exist and filter nothing. Hosted mode refuses to start without it.
+   */
+  DATABASE_URL_APP: blankAsUnset(z.string().optional()),
+
   NEO4J_URI: blankAsUnset(z.string().default("bolt://localhost:7687")),
   NEO4J_USER: blankAsUnset(z.string().default("neo4j")),
   NEO4J_PASSWORD: blankAsUnset(z.string().default("neo4jneo4j")),

@@ -20,6 +20,7 @@
 
 import type { ScanEvent, ScanRun, ScanUnit } from "@sightline/shared";
 
+import { withTenant } from "../db/postgres.js";
 import { getScan } from "../db/repository.js";
 import type { JobId } from "../tenancy/ids.js";
 import type { Scope } from "../tenancy/scope.js";
@@ -56,20 +57,22 @@ export interface ScanProgress {
 
 /** Everything known about one of this tenant's scan jobs, or null. */
 export async function readProgress(scope: Scope, jobId: JobId): Promise<ScanProgress | null> {
-  const job = await getJob(scope, jobId);
-  if (!job) return null;
+  return withTenant(scope.tenantId, async () => {
+    const job = await getJob(scope, jobId);
+    if (!job) return null;
 
-  // Scoped twice over: the job was read as this tenant's, and the run is read
-  // with the same scope rather than by id alone.
-  const run = job.scanId ? await getScan(scope, job.scanId) : null;
+    // Scoped twice over: the job was read as this tenant's, and the run is read
+    // with the same scope rather than by id alone.
+    const run = job.scanId ? await getScan(scope, job.scanId) : null;
 
-  return {
-    status: job.status,
-    queuedAt: job.queuedAt.toISOString(),
-    scanId: job.scanId,
-    run,
-    error: job.error,
-  };
+    return {
+      status: job.status,
+      queuedAt: job.queuedAt.toISOString(),
+      scanId: job.scanId,
+      run,
+      error: job.error,
+    };
+  });
 }
 
 /** A unit's identity within a scan. `region` is null for a global service. */

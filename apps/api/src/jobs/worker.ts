@@ -45,6 +45,7 @@ import {
   SCAN_QUEUE_CHANNEL,
   type ScanJob,
 } from "./queue.js";
+import { withTenant } from "../db/postgres.js";
 import { scanningEnabled } from "../tenancy/limits.js";
 import { runScanJob } from "./runScanJob.js";
 
@@ -244,15 +245,25 @@ export class ScanWorker {
     beat.unref();
 
     try {
-      const outcome = await runScanJob({
-        scope,
-        correlationId: job.id,
-        // A field read, not a query: the heartbeat timer below is what asks
-        // the database, and this is its cached answer.
-        stillMine: () => owned,
-        onScanRun: (scanId) => attachScanRun(job.id, asScanId(scanId)),
-        logError: (err) => this.log.error({ err, job: job.id }, "scan failed"),
-      });
+      /**
+       * One tenant context for the whole job.
+       *
+       * The data-access functions each open their own when called directly, and
+       * `withTenant` reuses an outer one - so wrapping here means a scan holds
+       * a single connection with `app.tenant_id` set rather than acquiring and
+       * resetting one per statement, of which a scan makes thousands.
+       */
+      const outcome = await withTenant(job.tenantId, () =>
+        runScanJob({
+          scope,
+          correlationId: job.id,
+          // A field read, not a query: the heartbeat timer below is what asks
+          // the database, and this is its cached answer.
+          stillMine: () => owned,
+          onScanRun: (scanId) => attachScanRun(job.id, asScanId(scanId)),
+          logError: (err) => this.log.error({ err, job: job.id }, "scan failed"),
+        }),
+      );
 
       const recorded = await finishJob(job.id, this.id, {
         status: outcome.status,

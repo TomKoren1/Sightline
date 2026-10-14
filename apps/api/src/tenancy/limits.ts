@@ -25,7 +25,7 @@
 import { and, count, eq, gte, sql } from "drizzle-orm";
 
 import { cfg, chatQuestionsPerHour, scanCooldownSeconds } from "../config.js";
-import { db } from "../db/postgres.js";
+import { db, withTenant } from "../db/postgres.js";
 import { messages, scanJobs, scanRuns } from "../db/schema.js";
 import type { Scope } from "./scope.js";
 
@@ -72,133 +72,137 @@ function secondsUntil(when: Date): number {
  * the index cannot express.
  */
 export async function mayScan(scope: Scope): Promise<Decision> {
-  if (!cfg.SCANS_ENABLED) {
-    return {
-      allowed: false,
-      kind: "paused",
-      reason:
-        "Scanning is turned off on this deployment while an operator looks at something. " +
-        "Nothing you have already scanned is affected.",
-    };
-  }
+  return withTenant(scope.tenantId, async () => {
+    if (!cfg.SCANS_ENABLED) {
+      return {
+        allowed: false,
+        kind: "paused",
+        reason:
+          "Scanning is turned off on this deployment while an operator looks at something. " +
+          "Nothing you have already scanned is affected.",
+      };
+    }
 
-  const cooldown = scanCooldownSeconds();
-  if (cooldown > 0) {
-    /**
-     * From `scan_runs`, not `scan_jobs`.
-     *
-     * The first version read the queue, and a cooldown of ten minutes did not
-     * fire one second after a scan: `npm run scan` goes through the same
-     * pipeline but creates no job row, so the queue has no record of it. The
-     * question being asked is "when was this account last scanned", and the
-     * answer to that lives with the scan. Every scan has a run row however it
-     * was started.
-     *
-     * Measured from when it *finished*, not when it started: from the start, a
-     * slow scan would eat its own cooldown and a fast account could be rescanned
-     * in a loop. From the finish, the gap is a gap.
-     */
-    const [last] = await db
-      .select({ finishedAt: sql<Date | null>`max(${scanRuns.finishedAt})` })
-      .from(scanRuns)
-      .where(
-        and(eq(scanRuns.tenantId, scope.tenantId), eq(scanRuns.connectionId, scope.connectionId)),
-      );
+    const cooldown = scanCooldownSeconds();
+    if (cooldown > 0) {
+      /**
+       * From `scan_runs`, not `scan_jobs`.
+       *
+       * The first version read the queue, and a cooldown of ten minutes did not
+       * fire one second after a scan: `npm run scan` goes through the same
+       * pipeline but creates no job row, so the queue has no record of it. The
+       * question being asked is "when was this account last scanned", and the
+       * answer to that lives with the scan. Every scan has a run row however it
+       * was started.
+       *
+       * Measured from when it *finished*, not when it started: from the start, a
+       * slow scan would eat its own cooldown and a fast account could be rescanned
+       * in a loop. From the finish, the gap is a gap.
+       */
+      const [last] = await db
+        .select({ finishedAt: sql<Date | null>`max(${scanRuns.finishedAt})` })
+        .from(scanRuns)
+        .where(
+          and(eq(scanRuns.tenantId, scope.tenantId), eq(scanRuns.connectionId, scope.connectionId)),
+        );
 
-    const finishedAt = last?.finishedAt ? new Date(last.finishedAt) : null;
-    if (finishedAt) {
-      const nextAllowed = new Date(finishedAt.getTime() + cooldown * 1000);
-      if (nextAllowed.getTime() > Date.now()) {
-        const wait = secondsUntil(nextAllowed);
-        return {
-          allowed: false,
-          kind: "throttled",
-          reason:
-            `This account was scanned less than ${Math.round(cooldown / 60)} minute(s) ago. ` +
-            `You can scan it again in ${wait} second(s) — an inventory does not usually ` +
-            "change faster than that, and each scan costs API calls against your account.",
-          retryAfterSeconds: wait,
-        };
+      const finishedAt = last?.finishedAt ? new Date(last.finishedAt) : null;
+      if (finishedAt) {
+        const nextAllowed = new Date(finishedAt.getTime() + cooldown * 1000);
+        if (nextAllowed.getTime() > Date.now()) {
+          const wait = secondsUntil(nextAllowed);
+          return {
+            allowed: false,
+            kind: "throttled",
+            reason:
+              `This account was scanned less than ${Math.round(cooldown / 60)} minute(s) ago. ` +
+              `You can scan it again in ${wait} second(s) — an inventory does not usually ` +
+              "change faster than that, and each scan costs API calls against your account.",
+            retryAfterSeconds: wait,
+          };
+        }
       }
     }
-  }
 
-  /**
-   * A cap across the tenant's accounts, which the per-connection index cannot
-   * express: somebody with fifty connected accounts could otherwise queue fifty
-   * scans at once and own every worker.
-   */
-  const [active] = await db
-    .select({ n: count() })
-    .from(scanJobs)
-    .where(
-      and(eq(scanJobs.tenantId, scope.tenantId), sql`${scanJobs.status} IN ('queued','running')`),
-    );
+    /**
+     * A cap across the tenant's accounts, which the per-connection index cannot
+     * express: somebody with fifty connected accounts could otherwise queue fifty
+     * scans at once and own every worker.
+     */
+    const [active] = await db
+      .select({ n: count() })
+      .from(scanJobs)
+      .where(
+        and(eq(scanJobs.tenantId, scope.tenantId), sql`${scanJobs.status} IN ('queued','running')`),
+      );
 
-  const running = Number(active?.n ?? 0);
-  if (running >= cfg.MAX_ACTIVE_SCANS_PER_TENANT) {
-    return {
-      allowed: false,
-      kind: "throttled",
-      reason:
-        `You already have ${running} scan(s) queued or running, which is the limit. ` +
-        "Wait for one to finish and this will work.",
-    };
-  }
+    const running = Number(active?.n ?? 0);
+    if (running >= cfg.MAX_ACTIVE_SCANS_PER_TENANT) {
+      return {
+        allowed: false,
+        kind: "throttled",
+        reason:
+          `You already have ${running} scan(s) queued or running, which is the limit. ` +
+          "Wait for one to finish and this will work.",
+      };
+    }
 
-  return ALLOWED;
+    return ALLOWED;
+  });
 }
 
 /** May this tenant ask the agent a question? */
 export async function mayChat(scope: Scope): Promise<Decision> {
-  if (!cfg.CHAT_ENABLED) {
-    return {
-      allowed: false,
-      kind: "paused",
-      reason:
-        "The assistant is turned off on this deployment while an operator looks at something. " +
-        "The graph and the findings are unaffected.",
-    };
-  }
+  return withTenant(scope.tenantId, async () => {
+    if (!cfg.CHAT_ENABLED) {
+      return {
+        allowed: false,
+        kind: "paused",
+        reason:
+          "The assistant is turned off on this deployment while an operator looks at something. " +
+          "The graph and the findings are unaffected.",
+      };
+    }
 
-  const perHour = chatQuestionsPerHour();
-  if (perHour === null) return ALLOWED;
+    const perHour = chatQuestionsPerHour();
+    if (perHour === null) return ALLOWED;
 
-  const since = new Date(Date.now() - 60 * 60 * 1000);
-  /**
-   * The tenant's own questions in the last hour.
-   *
-   * `role = 'user'` so the agent's own replies do not count against the person
-   * who asked - the number a user can reason about is how many questions they
-   * asked, and counting both would halve the quota they were told they had.
-   */
-  const [asked] = await db
-    .select({ n: count() })
-    .from(messages)
-    .where(
-      and(
-        eq(messages.tenantId, scope.tenantId),
-        eq(messages.role, "user"),
-        gte(messages.createdAt, since),
-      ),
-    );
+    const since = new Date(Date.now() - 60 * 60 * 1000);
+    /**
+     * The tenant's own questions in the last hour.
+     *
+     * `role = 'user'` so the agent's own replies do not count against the person
+     * who asked - the number a user can reason about is how many questions they
+     * asked, and counting both would halve the quota they were told they had.
+     */
+    const [asked] = await db
+      .select({ n: count() })
+      .from(messages)
+      .where(
+        and(
+          eq(messages.tenantId, scope.tenantId),
+          eq(messages.role, "user"),
+          gte(messages.createdAt, since),
+        ),
+      );
 
-  const used = Number(asked?.n ?? 0);
-  if (used >= perHour) {
-    return {
-      allowed: false,
-      kind: "throttled",
-      reason:
-        `You have asked ${used} questions in the last hour, which is this deployment's limit. ` +
-        "The limit resets as your earlier questions age out.",
-      // Deliberately not computed from the oldest message in the window. That
-      // would be more precise and would also tell a caller exactly when to
-      // retry hardest; an hour is the honest upper bound and costs no query.
-      retryAfterSeconds: 60 * 60,
-    };
-  }
+    const used = Number(asked?.n ?? 0);
+    if (used >= perHour) {
+      return {
+        allowed: false,
+        kind: "throttled",
+        reason:
+          `You have asked ${used} questions in the last hour, which is this deployment's limit. ` +
+          "The limit resets as your earlier questions age out.",
+        // Deliberately not computed from the oldest message in the window. That
+        // would be more precise and would also tell a caller exactly when to
+        // retry hardest; an hour is the honest upper bound and costs no query.
+        retryAfterSeconds: 60 * 60,
+      };
+    }
 
-  return ALLOWED;
+    return ALLOWED;
+  });
 }
 
 /**

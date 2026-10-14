@@ -17,9 +17,20 @@ import { randomUUID } from "node:crypto";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { eq, sql } from "drizzle-orm";
 
-import { db } from "../db/postgres.js";
+/**
+ * Fixtures run on `system`, the owner connection.
+ *
+ * Setting up rows is not the thing under test, and under row-level security the
+ * restricted role can only write rows for the tenant its connection names -
+ * which makes seeding *two* tenants impossible on that path, and seeding two
+ * tenants is the whole point of an isolation fixture. The functions under test
+ * open their own tenant context, so what they do is still exercised exactly as
+ * production does it.
+ */
+import { system } from "../db/postgres.js";
 import { connections, conversations, messages, scanJobs, scanRuns, tenants } from "../db/schema.js";
 import { asConnectionId, asTenantId } from "./ids.js";
+import { lockQueueForTest } from "../jobs/queueTestLock.js";
 import type { Scope } from "./scope.js";
 
 const HAS_INFRA = !process.env["SKIP_INTEGRATION"];
@@ -30,19 +41,31 @@ const scope: Scope = { tenantId, connectionId: asConnectionId(randomUUID()) };
 const secondScope: Scope = { tenantId, connectionId: asConnectionId(randomUUID()) };
 
 let available = false;
+let releaseLock: (() => Promise<void>) | null = null;
 
 beforeAll(async () => {
   if (!HAS_INFRA) return;
   try {
-    await db.execute("SELECT 1");
+    await system.execute("SELECT 1");
   } catch {
     return;
   }
+  /**
+   * This file seeds `scan_jobs`, so it is in the same conflict as the two job
+   * test files: `queue.test.ts` drains the whole table and claims across
+   * tenants, which deletes or claims the rows seeded here.
+   *
+   * Measured rather than assumed. Alone this file failed 0 times in 8; run
+   * alongside `queue.test.ts` without the lock it failed 5 times in 6 - and the
+   * failure looked like a row-level-security problem, because it appeared when
+   * the restricted role was introduced and sat on a limit that counts rows.
+   */
+  releaseLock = await lockQueueForTest();
   available = true;
 
-  await db.insert(tenants).values({ id: tenantId, name: "limits.test" });
+  await system.insert(tenants).values({ id: tenantId, name: "limits.test" });
   for (const s of [scope, secondScope]) {
-    await db.insert(connections).values({
+    await system.insert(connections).values({
       id: s.connectionId,
       tenantId: s.tenantId,
       kind: "demo",
@@ -53,15 +76,15 @@ beforeAll(async () => {
 });
 
 afterAll(async () => {
-  if (!available) return;
-  await db.delete(tenants).where(eq(tenants.id, tenantId));
+  if (available) await system.delete(tenants).where(eq(tenants.id, tenantId));
+  await releaseLock?.();
 });
 
 beforeEach(async () => {
   if (!available) return;
-  await db.delete(scanJobs).where(eq(scanJobs.tenantId, tenantId));
-  await db.delete(scanRuns).where(eq(scanRuns.tenantId, tenantId));
-  await db.delete(conversations).where(eq(conversations.tenantId, tenantId));
+  await system.delete(scanJobs).where(eq(scanJobs.tenantId, tenantId));
+  await system.delete(scanRuns).where(eq(scanRuns.tenantId, tenantId));
+  await system.delete(conversations).where(eq(conversations.tenantId, tenantId));
 });
 
 afterEach(() => {
@@ -96,7 +119,7 @@ async function withEnv(env: Record<string, string>) {
  */
 async function finishedScanAgo(target: Scope, seconds: number) {
   const id = randomUUID();
-  await db.insert(scanRuns).values({
+  await system.insert(scanRuns).values({
     id,
     tenantId: target.tenantId,
     connectionId: target.connectionId,
@@ -104,13 +127,13 @@ async function finishedScanAgo(target: Scope, seconds: number) {
     status: "succeeded",
     startedAt: new Date(),
   });
-  await db.execute(sql`
+  await system.execute(sql`
     UPDATE scan_runs SET finished_at = now() - ${`${seconds} seconds`}::interval WHERE id = ${id}
   `);
 }
 
 async function queuedJob(target: Scope) {
-  await db.insert(scanJobs).values({
+  await system.insert(scanJobs).values({
     id: randomUUID(),
     tenantId: target.tenantId,
     connectionId: target.connectionId,
@@ -120,14 +143,14 @@ async function queuedJob(target: Scope) {
 
 async function askedQuestions(n: number) {
   const conversationId = randomUUID();
-  await db.insert(conversations).values({
+  await system.insert(conversations).values({
     id: conversationId,
     tenantId,
     connectionId: scope.connectionId,
     accountId: "123456789012",
   });
   if (n === 0) return;
-  await db.insert(messages).values(
+  await system.insert(messages).values(
     Array.from({ length: n }, () => ({
       id: randomUUID(),
       tenantId,
@@ -260,7 +283,7 @@ describe.runIf(HAS_INFRA)("the spending limits", () => {
       if (!available) return;
       const { mayChat } = await withEnv({ CHAT_QUESTIONS_PER_HOUR: "3" });
       const conversationId = randomUUID();
-      await db.insert(conversations).values({
+      await system.insert(conversations).values({
         id: conversationId,
         tenantId,
         connectionId: scope.connectionId,
@@ -269,7 +292,7 @@ describe.runIf(HAS_INFRA)("the spending limits", () => {
       // Two questions and two answers. Counting both roles would put this at
       // the limit having asked two of three - halving the quota somebody was
       // told they had.
-      await db.insert(messages).values(
+      await system.insert(messages).values(
         ["user", "assistant", "user", "assistant"].map((role) => ({
           id: randomUUID(),
           tenantId,
@@ -286,7 +309,7 @@ describe.runIf(HAS_INFRA)("the spending limits", () => {
       if (!available) return;
       const { mayChat } = await withEnv({ CHAT_QUESTIONS_PER_HOUR: "2" });
       await askedQuestions(5);
-      await db.execute(sql`
+      await system.execute(sql`
         UPDATE messages SET created_at = now() - interval '2 hours' WHERE tenant_id = ${tenantId}
       `);
 

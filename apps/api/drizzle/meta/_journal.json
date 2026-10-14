@@ -29,6 +29,20 @@
       "when": 1791950826035,
       "tag": "0003_clear_madelyne_pryor",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1791950826036,
+      "tag": "0004_row_level_security",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1791950826037,
+      "tag": "0005_rls_empty_setting",
+      "breakpoints": true
     }
   ]
 }

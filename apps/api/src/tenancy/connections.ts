@@ -18,7 +18,7 @@ import { and, asc, eq } from "drizzle-orm";
 import { readOnlyRoleArn } from "@sightline/shared";
 
 import { cfg, MOCK_EXTERNAL_ID } from "../config.js";
-import { db } from "../db/postgres.js";
+import { db, withTenant } from "../db/postgres.js";
 import { connections, scanRuns } from "../db/schema.js";
 import { dropScanScopes } from "../db/neo4j.js";
 import { asConnectionId, type ConnectionId, type TenantId } from "./ids.js";
@@ -63,17 +63,21 @@ const owned = (scope: Scope) =>
   and(eq(connections.id, scope.connectionId), eq(connections.tenantId, scope.tenantId));
 
 export async function listConnections(tenantId: TenantId): Promise<ConnectionSummary[]> {
-  const rows = await db
-    .select()
-    .from(connections)
-    .where(eq(connections.tenantId, tenantId))
-    .orderBy(asc(connections.createdAt));
-  return rows.map(summarise);
+  return withTenant(tenantId, async () => {
+    const rows = await db
+      .select()
+      .from(connections)
+      .where(eq(connections.tenantId, tenantId))
+      .orderBy(asc(connections.createdAt));
+    return rows.map(summarise);
+  });
 }
 
 export async function getConnection(scope: Scope): Promise<ConnectionSummary | null> {
-  const [row] = await db.select().from(connections).where(owned(scope));
-  return row ? summarise(row) : null;
+  return withTenant(scope.tenantId, async () => {
+    const [row] = await db.select().from(connections).where(owned(scope));
+    return row ? summarise(row) : null;
+  });
 }
 
 /**
@@ -84,24 +88,26 @@ export async function getConnection(scope: Scope): Promise<ConnectionSummary | n
  * eventually return it into a response body. Callers have to ask.
  */
 export async function externalIdFor(scope: Scope): Promise<string> {
-  const [row] = await db
-    .select({
-      source: connections.externalIdSource,
-      blob: connections.externalIdEncrypted,
-    })
-    .from(connections)
-    .where(owned(scope));
-  if (!row) throw new Error("No such connection");
+  return withTenant(scope.tenantId, async () => {
+    const [row] = await db
+      .select({
+        source: connections.externalIdSource,
+        blob: connections.externalIdEncrypted,
+      })
+      .from(connections)
+      .where(owned(scope));
+    if (!row) throw new Error("No such connection");
 
-  switch (row.source) {
-    case "stored":
-      if (!row.blob) throw new Error("Connection claims a stored external id but holds none");
-      return decryptSecret(row.blob);
-    case "config":
-      return cfg.AWS_EXTERNAL_ID;
-    case "demo":
-      return MOCK_EXTERNAL_ID;
-  }
+    switch (row.source) {
+      case "stored":
+        if (!row.blob) throw new Error("Connection claims a stored external id but holds none");
+        return decryptSecret(row.blob);
+      case "config":
+        return cfg.AWS_EXTERNAL_ID;
+      case "demo":
+        return MOCK_EXTERNAL_ID;
+    }
+  });
 }
 
 /**
@@ -119,34 +125,36 @@ export async function createConnection(
   tenantId: TenantId,
   params: { kind: ConnectionKind; label: string; createdBy?: string | undefined },
 ): Promise<{ id: ConnectionId; externalId: string }> {
-  const id = asConnectionId(randomUUID());
+  return withTenant(tenantId, async () => {
+    const id = asConnectionId(randomUUID());
 
-  if (params.kind === "demo") {
+    if (params.kind === "demo") {
+      await db.insert(connections).values({
+        id,
+        tenantId,
+        kind: "demo",
+        label: params.label,
+        externalIdSource: "demo",
+        status: "verified",
+        lastVerifiedAt: new Date(),
+        ...(params.createdBy ? { createdBy: params.createdBy } : {}),
+      });
+      return { id, externalId: MOCK_EXTERNAL_ID };
+    }
+
+    const externalId = generateExternalId();
     await db.insert(connections).values({
       id,
       tenantId,
-      kind: "demo",
+      kind: "real",
       label: params.label,
-      externalIdSource: "demo",
-      status: "verified",
-      lastVerifiedAt: new Date(),
+      externalIdSource: "stored",
+      externalIdEncrypted: await encryptSecret(externalId),
+      status: "pending",
       ...(params.createdBy ? { createdBy: params.createdBy } : {}),
     });
-    return { id, externalId: MOCK_EXTERNAL_ID };
-  }
-
-  const externalId = generateExternalId();
-  await db.insert(connections).values({
-    id,
-    tenantId,
-    kind: "real",
-    label: params.label,
-    externalIdSource: "stored",
-    externalIdEncrypted: await encryptSecret(externalId),
-    status: "pending",
-    ...(params.createdBy ? { createdBy: params.createdBy } : {}),
+    return { id, externalId };
   });
-  return { id, externalId };
 }
 
 /**
@@ -161,47 +169,55 @@ export async function setTargetAccount(
   scope: Scope,
   params: { accountId: string; templateVersion?: string | undefined },
 ): Promise<void> {
-  if (!/^\d{12}$/.test(params.accountId)) {
-    throw new Error("An AWS account id is twelve digits");
-  }
-  await db
-    .update(connections)
-    .set({
-      roleArn: readOnlyRoleArn(params.accountId),
-      // Deliberately *not* set as `accountId`: that column is what the role
-      // actually reached, written only once an assume-role has proved it. A
-      // typed-in value is a claim, not evidence.
-      status: "pending",
-      lastError: null,
-      ...(params.templateVersion ? { templateVersion: params.templateVersion } : {}),
-      updatedAt: new Date(),
-    })
-    .where(owned(scope));
+  return withTenant(scope.tenantId, async () => {
+    if (!/^\d{12}$/.test(params.accountId)) {
+      throw new Error("An AWS account id is twelve digits");
+    }
+    await db
+      .update(connections)
+      .set({
+        roleArn: readOnlyRoleArn(params.accountId),
+        // Deliberately *not* set as `accountId`: that column is what the role
+        // actually reached, written only once an assume-role has proved it. A
+        // typed-in value is a claim, not evidence.
+        status: "pending",
+        lastError: null,
+        ...(params.templateVersion ? { templateVersion: params.templateVersion } : {}),
+        updatedAt: new Date(),
+      })
+      .where(owned(scope));
+  });
 }
 
 /** Record a successful assume-role, pinning the account it reached. */
 export async function markVerified(scope: Scope, accountId: string): Promise<void> {
-  await db
-    .update(connections)
-    .set({
-      status: "verified",
-      accountId,
-      lastVerifiedAt: new Date(),
-      lastError: null,
-      updatedAt: new Date(),
-    })
-    .where(owned(scope));
+  return withTenant(scope.tenantId, async () => {
+    await db
+      .update(connections)
+      .set({
+        status: "verified",
+        accountId,
+        lastVerifiedAt: new Date(),
+        lastError: null,
+        updatedAt: new Date(),
+      })
+      .where(owned(scope));
+  });
 }
 
 export async function markFailed(scope: Scope, error: string): Promise<void> {
-  await db
-    .update(connections)
-    .set({ status: "failed", lastError: error, updatedAt: new Date() })
-    .where(owned(scope));
+  return withTenant(scope.tenantId, async () => {
+    await db
+      .update(connections)
+      .set({ status: "failed", lastError: error, updatedAt: new Date() })
+      .where(owned(scope));
+  });
 }
 
 export async function markScanned(scope: Scope): Promise<void> {
-  await db.update(connections).set({ lastScanAt: new Date() }).where(owned(scope));
+  return withTenant(scope.tenantId, async () => {
+    await db.update(connections).set({ lastScanAt: new Date() }).where(owned(scope));
+  });
 }
 
 /**
@@ -239,18 +255,20 @@ export function accountMismatch(pinned: string | null, reached: string): string 
  * otherwise would leave standing access nobody believed was there.
  */
 export async function deleteConnection(scope: Scope): Promise<void> {
-  const scans = await db
-    .select({ id: scanRuns.id })
-    .from(scanRuns)
-    .where(
-      and(eq(scanRuns.tenantId, scope.tenantId), eq(scanRuns.connectionId, scope.connectionId)),
-    );
+  return withTenant(scope.tenantId, async () => {
+    const scans = await db
+      .select({ id: scanRuns.id })
+      .from(scanRuns)
+      .where(
+        and(eq(scanRuns.tenantId, scope.tenantId), eq(scanRuns.connectionId, scope.connectionId)),
+      );
 
-  if (scans.length > 0) {
-    await dropScanScopes(
-      scope.tenantId,
-      scans.map((s) => s.id),
-    );
-  }
-  await db.delete(connections).where(owned(scope));
+    if (scans.length > 0) {
+      await dropScanScopes(
+        scope.tenantId,
+        scans.map((s) => s.id),
+      );
+    }
+    await db.delete(connections).where(owned(scope));
+  });
 }

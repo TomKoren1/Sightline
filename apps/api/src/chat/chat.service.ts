@@ -12,7 +12,7 @@ import { and, asc, eq } from "drizzle-orm";
 import type { AgentEvent, AgentMessage } from "@sightline/shared";
 
 import { ask } from "../agent/agent.js";
-import { db } from "../db/postgres.js";
+import { db, withTenant } from "../db/postgres.js";
 import { conversations, messages } from "../db/schema.js";
 import { getLatestScan } from "../db/repository.js";
 import { requireGraphScope } from "../tenancy/graphScope.js";
@@ -65,55 +65,59 @@ export class ChatService {
     question: string;
     message: AgentMessage;
   }) {
-    await db
-      .insert(conversations)
-      .values({
-        id: params.conversationId,
-        tenantId: params.scope.tenantId,
-        connectionId: params.scope.connectionId,
-        accountId: params.accountId,
-      })
-      .onConflictDoNothing();
-    await db.insert(messages).values([
-      {
-        id: randomUUID(),
-        tenantId: params.scope.tenantId,
-        conversationId: params.conversationId,
-        role: "user",
-        content: params.question,
-        scanId: params.scanId,
-      },
-      {
-        id: params.message.id,
-        tenantId: params.scope.tenantId,
-        conversationId: params.conversationId,
-        role: "assistant",
-        content: params.message.content,
-        toolCalls: params.message.toolCalls ?? [],
-        citations: params.message.citations ?? [],
-        warnings: params.message.warnings ?? [],
-        scanId: params.scanId,
-      },
-    ]);
+    return withTenant(params.scope.tenantId, async () => {
+      await db
+        .insert(conversations)
+        .values({
+          id: params.conversationId,
+          tenantId: params.scope.tenantId,
+          connectionId: params.scope.connectionId,
+          accountId: params.accountId,
+        })
+        .onConflictDoNothing();
+      await db.insert(messages).values([
+        {
+          id: randomUUID(),
+          tenantId: params.scope.tenantId,
+          conversationId: params.conversationId,
+          role: "user",
+          content: params.question,
+          scanId: params.scanId,
+        },
+        {
+          id: params.message.id,
+          tenantId: params.scope.tenantId,
+          conversationId: params.conversationId,
+          role: "assistant",
+          content: params.message.content,
+          toolCalls: params.message.toolCalls ?? [],
+          citations: params.message.citations ?? [],
+          warnings: params.message.warnings ?? [],
+          scanId: params.scanId,
+        },
+      ]);
+    });
   }
 
   async conversation(scope: Scope, id: ConversationId) {
-    const rows = await db
-      .select({
-        id: messages.id,
-        role: messages.role,
-        content: messages.content,
-        toolCalls: messages.toolCalls,
-        citations: messages.citations,
-        warnings: messages.warnings,
-        createdAt: messages.createdAt,
-      })
-      .from(messages)
-      // Scoped as well as keyed: a conversation id is a uuid, which is an
-      // argument for convenience and not for access control.
-      .where(and(eq(messages.conversationId, id), eq(messages.tenantId, scope.tenantId)))
-      .orderBy(asc(messages.createdAt));
+    return withTenant(scope.tenantId, async () => {
+      const rows = await db
+        .select({
+          id: messages.id,
+          role: messages.role,
+          content: messages.content,
+          toolCalls: messages.toolCalls,
+          citations: messages.citations,
+          warnings: messages.warnings,
+          createdAt: messages.createdAt,
+        })
+        .from(messages)
+        // Scoped as well as keyed: a conversation id is a uuid, which is an
+        // argument for convenience and not for access control.
+        .where(and(eq(messages.conversationId, id), eq(messages.tenantId, scope.tenantId)))
+        .orderBy(asc(messages.createdAt));
 
-    return { messages: rows.map((r) => ({ ...r, createdAt: r.createdAt.toISOString() })) };
+      return { messages: rows.map((r) => ({ ...r, createdAt: r.createdAt.toISOString() })) };
+    });
   }
 }

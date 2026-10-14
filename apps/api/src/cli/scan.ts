@@ -18,7 +18,7 @@
 
 import { randomUUID } from "node:crypto";
 
-import { closePool, migrate } from "../db/postgres.js";
+import { closePool, migrate, withTenant } from "../db/postgres.js";
 import { closeDriver } from "../db/neo4j.js";
 import { runScanJob } from "../jobs/runScanJob.js";
 import { ensureLocalTenant, localScope } from "../tenancy/local.js";
@@ -31,27 +31,32 @@ try {
   await ensureLocalTenant();
   const scope = localScope();
 
-  const outcome = await runScanJob({
-    scope,
-    // No job row to correlate against, so a fresh id. Only ever seen in an
-    // event emitted before the run row exists.
-    correlationId: randomUUID(),
-    onEvent: (event) => {
-      if (event.type === "unit.finished") {
-        const where = `${event.unit.service}/${event.unit.region ?? "global"}`;
-        const result =
-          event.unit.status === "succeeded"
-            ? `${event.unit.resourceCount} resources`
-            : `FAILED - ${event.unit.error}`;
-        console.log(`  ${where.padEnd(26)} ${result}`);
-      }
-    },
-    logError: (err) => {
-      // The message is printed from the outcome below; this is the stack, which
-      // is what a developer running the command actually wants.
-      if (err instanceof Error && err.stack) console.error(err.stack);
-    },
-  });
+  // One tenant context for the whole run, for the same reason the worker uses
+  // one: a scan makes thousands of statements and they should share a
+  // connection rather than each acquiring and resetting one.
+  const outcome = await withTenant(scope.tenantId, () =>
+    runScanJob({
+      scope,
+      // No job row to correlate against, so a fresh id. Only ever seen in an
+      // event emitted before the run row exists.
+      correlationId: randomUUID(),
+      onEvent: (event) => {
+        if (event.type === "unit.finished") {
+          const where = `${event.unit.service}/${event.unit.region ?? "global"}`;
+          const result =
+            event.unit.status === "succeeded"
+              ? `${event.unit.resourceCount} resources`
+              : `FAILED - ${event.unit.error}`;
+          console.log(`  ${where.padEnd(26)} ${result}`);
+        }
+      },
+      logError: (err) => {
+        // The message is printed from the outcome below; this is the stack,
+        // which is what a developer running the command actually wants.
+        if (err instanceof Error && err.stack) console.error(err.stack);
+      },
+    }),
+  );
 
   if (!outcome.summary) {
     console.error(`\nScan failed: ${outcome.error ?? "no reason was recorded"}`);

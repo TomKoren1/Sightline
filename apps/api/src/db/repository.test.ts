@@ -17,7 +17,15 @@ import { randomUUID } from "node:crypto";
 import { eq } from "drizzle-orm";
 import type { Relationship, Resource } from "@sightline/shared";
 
-import { db } from "./postgres.js";
+/**
+ * Fixtures run on `system`, the owner connection.
+ *
+ * Setting up rows is not the thing under test, and under row-level security the
+ * restricted role can only write rows for the tenant its connection names. The
+ * functions under test open their own tenant context, so what they do is still
+ * exercised exactly as production does it.
+ */
+import { system } from "./postgres.js";
 import { connections, tenants } from "./schema.js";
 import {
   createScanRun,
@@ -86,13 +94,13 @@ let available = false;
 
 beforeAll(async () => {
   try {
-    await db.execute("SELECT 1");
+    await system.execute("SELECT 1");
   } catch {
     return;
   }
 
-  await db.insert(tenants).values({ id: scope.tenantId, name: "repository.test" });
-  await db.insert(connections).values({
+  await system.insert(tenants).values({ id: scope.tenantId, name: "repository.test" });
+  await system.insert(connections).values({
     id: scope.connectionId,
     tenantId: scope.tenantId,
     kind: "demo",
@@ -141,13 +149,27 @@ beforeAll(async () => {
 afterAll(async () => {
   // One delete, and the cascade takes the scans, units, snapshots and the
   // connection with it.
-  await db
+  await system
     .delete(tenants)
     .where(eq(tenants.id, scope.tenantId))
     .catch(() => {});
 });
 
 describe.runIf(HAS_INFRA)("saving and reading a scan", () => {
+  it("has a database to talk to", () => {
+    /**
+     * Without this the whole file passes *vacuously* when the probe above
+     * fails: `available` stays false, every test returns on its first line, and
+     * vitest reports them all green.
+     *
+     * Not hypothetical. Introducing the tenant-scoped connection made this
+     * file's probe throw, and it silently stopped testing anything - while the
+     * three files that did carry this assertion failed loudly and are the only
+     * reason it was noticed at all.
+     */
+    expect(available, "Postgres is not reachable, so none of this was checked").toBe(true);
+  });
+
   it("writes every resource, across the batching boundary", async () => {
     if (!available) return;
     const back = await loadResources(scope, scanId);

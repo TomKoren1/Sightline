@@ -19,6 +19,8 @@ const valid: Env = {
   GOOGLE_CLIENT_ID: "client-id",
   GOOGLE_CLIENT_SECRET: "client-secret",
   PUBLIC_BASE_URL: "https://sightline.example",
+  DATABASE_URL: "postgres://sightline:owner@db:5432/sightline",
+  DATABASE_URL_APP: "postgres://sightline_app:restricted@db:5432/sightline",
 };
 
 const reasons = (env: Env) => hostedInvariantViolations(env).join("\n");
@@ -49,6 +51,29 @@ describe("hosted invariants", () => {
         PUBLIC_BASE_URL: "http://localhost:5173",
       }),
     ).toEqual([]);
+  });
+
+  describe("the restricted database role", () => {
+    it("is required, because the owner bypasses every policy", () => {
+      const { DATABASE_URL_APP: _omitted, ...withoutIt } = valid;
+      /**
+       * The failure this refuses is entirely silent: the policies are
+       * installed, they show up in `\d`, and they filter nothing because the
+       * owner here is a superuser - for whom even FORCE ROW LEVEL SECURITY does
+       * not apply. There is no symptom until a tenant sees another's inventory.
+       */
+      expect(reasons(withoutIt)).toMatch(/DATABASE_URL_APP is required/);
+      // And it says what to run, because "configure a role" is not an action.
+      expect(reasons(withoutIt)).toMatch(/db:app-role/);
+    });
+
+    it("must not simply repeat the owner's connection string", () => {
+      // The way somebody satisfies the check above without satisfying the
+      // requirement: set it, to the same thing.
+      expect(reasons({ ...valid, DATABASE_URL_APP: valid.DATABASE_URL })).toMatch(
+        /same as DATABASE_URL/,
+      );
+    });
   });
 
   it("refuses an SDK-wide endpoint override", () => {

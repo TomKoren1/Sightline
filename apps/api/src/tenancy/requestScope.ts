@@ -19,7 +19,7 @@ import { BadRequestException, ConflictException } from "@nestjs/common";
 import { and, asc, eq } from "drizzle-orm";
 
 import { isHosted } from "../config.js";
-import { db } from "../db/postgres.js";
+import { db, withTenant } from "../db/postgres.js";
 import { connections } from "../db/schema.js";
 import { asConnectionId, asTenantId, type ConnectionId, type TenantId } from "./ids.js";
 import { localScope } from "./local.js";
@@ -118,10 +118,24 @@ export async function resolveScope(req: ScopedRequest): Promise<Scope> {
      * thing "one tenant that always exists" was meant to avoid.
      */
     const scope = localScope();
-    return {
+    /**
+     * The lookup runs inside a tenant context of its own.
+     *
+     * `connections` is one of the row-level-security tables, and this runs in
+     * the guard - before the interceptor that opens the context for the
+     * handler. Without this the very query that decides *which* connection a
+     * request is about would be the one query not scoped to a tenant, and
+     * under RLS it would return nothing: every request would report having no
+     * connection at all.
+     *
+     * The tenant is known here even though the connection is not, which is
+     * what makes this possible at all. `withTenant` reuses an outer context
+     * when one exists, so the extra acquisition only happens on this path.
+     */
+    return withTenant(scope.tenantId, async () => ({
       ...scope,
       connectionId: await connectionFor(req, scope.tenantId, scope.connectionId),
-    };
+    }));
   }
 
   const tenantId = req.tenantId;
@@ -132,5 +146,8 @@ export async function resolveScope(req: ScopedRequest): Promise<Scope> {
       error: "This route has no tenant, so it cannot read tenant data.",
     });
   }
-  return { tenantId: asTenantId(tenantId), connectionId: await connectionFor(req, tenantId) };
+  return withTenant(tenantId, async () => ({
+    tenantId: asTenantId(tenantId),
+    connectionId: await connectionFor(req, tenantId),
+  }));
 }

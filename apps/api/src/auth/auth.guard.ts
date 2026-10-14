@@ -60,7 +60,18 @@ export interface AuthedRequest extends ScopedRequest {
 
 async function attachScope(req: AuthedRequest): Promise<void> {
   try {
-    req.scopeOutcome = { ok: true, scope: await resolveScope(req) };
+    const scope = await resolveScope(req);
+    req.scopeOutcome = { ok: true, scope };
+    /**
+     * Recorded on the request so `TenantScopeInterceptor` can open the
+     * connection context without resolving the scope a second time.
+     *
+     * Hosted sets this from the session above; self-hosted has no session and
+     * derives the tenant from the local one, so without this line the
+     * interceptor found no tenant in a clone and every handler's query ran
+     * outside a context.
+     */
+    req.tenantId = scope.tenantId;
   } catch (error) {
     req.scopeOutcome = { ok: false, error };
   }

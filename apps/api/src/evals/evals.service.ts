@@ -15,7 +15,7 @@ import { ConflictException, Injectable } from "@nestjs/common";
 import { desc } from "drizzle-orm";
 
 import { cfg } from "../config.js";
-import { db } from "../db/postgres.js";
+import { system } from "../db/postgres.js";
 import { evalRuns } from "../db/schema.js";
 import { getLatestScan, loadRelationships, loadResources } from "../db/repository.js";
 import { getConnection } from "../tenancy/connections.js";
@@ -128,7 +128,7 @@ export class EvalsService {
 
   /** The most recent agent eval run, if one has been recorded. */
   async latest() {
-    const [row] = await db.select().from(evalRuns).orderBy(desc(evalRuns.startedAt)).limit(1);
+    const [row] = await system.select().from(evalRuns).orderBy(desc(evalRuns.startedAt)).limit(1);
     if (!row) {
       return {
         run: null,

@@ -55,6 +55,30 @@ export function hostedInvariantViolations(env: Env): string[] {
     );
   }
 
+  /**
+   * Row-level security is only real against a role the policies apply to.
+   *
+   * `DATABASE_URL` in this project's own compose file is a superuser, and
+   * superusers ignore RLS entirely - `FORCE ROW LEVEL SECURITY` does not change
+   * that, because FORCE only binds the table *owner*. So a hosted deployment
+   * without this would have the policies installed, visible in `\d`, filtering
+   * nothing, with nothing anywhere to say so. That is the exact shape of
+   * failure every rule in this file exists to refuse.
+   */
+  if (!set(env, "DATABASE_URL_APP")) {
+    problems.push(
+      "DATABASE_URL_APP is required in hosted mode: it is the restricted role the row-level " +
+        "security policies apply to. DATABASE_URL is the owner, and in this deployment a " +
+        "superuser, which bypasses every policy - so without this the isolation guarantee is " +
+        "decoration. Run `npm run db:app-role -w @sightline/api` to set the role's password.",
+    );
+  } else if (env["DATABASE_URL_APP"]?.trim() === env["DATABASE_URL"]?.trim()) {
+    problems.push(
+      "DATABASE_URL_APP is the same as DATABASE_URL, so the application connects as the owner " +
+        "and row-level security does nothing. They must be different roles.",
+    );
+  }
+
   if (!set(env, "AWS_KMS_KEY_ID")) {
     problems.push(
       "AWS_KMS_KEY_ID is required in hosted mode: an external id is half a credential for a " +

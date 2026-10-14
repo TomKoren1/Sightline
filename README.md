@@ -353,6 +353,7 @@ the API and nginx containers are left running against databases that no longer e
 | `npm run verify`                               | Everything CI's static job runs — use before pushing         |
 | `npm run evals:ground-truth -w @sightline/api` | Tier-1 evals — no API key needed                             |
 | `npm run evals -w @sightline/api`              | Tier-2 agent evals — needs a key                             |
+| `npm run db:app-role -w @sightline/api`        | Set the restricted role's password, for row-level security   |
 | `npm run db:generate -w @sightline/api`        | Generate a migration after editing `src/db/schema.ts`        |
 | `npm run db:migrate -w @sightline/api`         | Apply pending migrations — the server also does this on boot |
 | `npm run db:studio -w @sightline/api`          | Browse the database in Drizzle Studio                        |

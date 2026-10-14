@@ -16,7 +16,21 @@ import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
 import { and, eq, lt, sql } from "drizzle-orm";
 
 import { cfg, useSecureCookies } from "../config.js";
-import { db } from "../db/postgres.js";
+/**
+ * `system`, not `db`, throughout this file.
+ *
+ * A session is looked up by the hash of its token, and the whole point of that
+ * lookup is to *discover* which tenant is asking - there is no tenant context
+ * to run it in, because this is what establishes one. The same is true of
+ * creating a session at sign-in and of revoking one by its owner's user id, and
+ * pruning expired sessions deliberately crosses every tenant.
+ *
+ * `sessions`, `users`, `identities` and `tenants` carry no row-level security
+ * policy for exactly this reason: a policy comparing against `app.tenant_id`
+ * would make signing in impossible. They are reached only from here and from
+ * `users.ts`, which is a small enough surface to hold in one's head.
+ */
+import { system } from "../db/postgres.js";
 import { sessions, tenants, users } from "../db/schema.js";
 import { asTenantId, type TenantId } from "../tenancy/ids.js";
 
@@ -73,7 +87,7 @@ export async function issueSession(
   context: { userAgent?: string | undefined; ip?: string | undefined } = {},
 ): Promise<string> {
   const token = randomBytes(32).toString("base64url");
-  await db.insert(sessions).values({
+  await system.insert(sessions).values({
     id: crypto.randomUUID(),
     tokenHash: hash(token),
     userId,
@@ -99,7 +113,7 @@ export async function issueSession(
 export async function readSession(token: string | undefined): Promise<Session | null> {
   if (!token) return null;
 
-  const [row] = await db
+  const [row] = await system
     .select({
       id: sessions.id,
       tokenHash: sessions.tokenHash,
@@ -136,7 +150,7 @@ export async function readSession(token: string | undefined): Promise<Session | 
   // to the second.
   const stale = !row.lastUsedAt || Date.now() - row.lastUsedAt.getTime() > 5 * 60 * 1000;
   if (stale) {
-    await db
+    await system
       .update(sessions)
       .set({ lastUsedAt: new Date() })
       .where(eq(sessions.id, row.id))
@@ -155,12 +169,12 @@ export async function readSession(token: string | undefined): Promise<Session | 
 
 export async function revokeSession(token: string | undefined): Promise<void> {
   if (!token) return;
-  await db.delete(sessions).where(eq(sessions.tokenHash, hash(token)));
+  await system.delete(sessions).where(eq(sessions.tokenHash, hash(token)));
 }
 
 /** Sign out everywhere, for one user. */
 export async function revokeAllSessions(userId: string): Promise<number> {
-  const deleted = await db.delete(sessions).where(eq(sessions.userId, userId)).returning({
+  const deleted = await system.delete(sessions).where(eq(sessions.userId, userId)).returning({
     id: sessions.id,
   });
   return deleted.length;
@@ -179,7 +193,7 @@ export async function listSessions(
     current: boolean;
   }[]
 > {
-  const rows = await db
+  const rows = await system
     .select({
       id: sessions.id,
       tokenHash: sessions.tokenHash,
@@ -202,7 +216,7 @@ export async function listSessions(
 
 export async function revokeSessionById(userId: string, id: string): Promise<void> {
   // Scoped to the user, so an id from elsewhere revokes nothing.
-  await db.delete(sessions).where(and(eq(sessions.id, id), eq(sessions.userId, userId)));
+  await system.delete(sessions).where(and(eq(sessions.id, id), eq(sessions.userId, userId)));
 }
 
 /**
@@ -213,7 +227,7 @@ export async function revokeSessionById(userId: string, id: string): Promise<voi
  * has to deal with at an inconvenient moment.
  */
 export async function pruneExpiredSessions(): Promise<number> {
-  const deleted = await db
+  const deleted = await system
     .delete(sessions)
     .where(lt(sessions.expiresAt, new Date()))
     .returning({ id: sessions.id });

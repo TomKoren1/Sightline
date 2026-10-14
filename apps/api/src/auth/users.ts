@@ -18,7 +18,15 @@
 import { randomUUID } from "node:crypto";
 import { and, eq } from "drizzle-orm";
 
-import { db } from "../db/postgres.js";
+/**
+ * `system`, not `db`: sign-in runs before the tenant exists.
+ *
+ * A provider hands back a subject and an email; this finds or creates the user
+ * and, for a new one, creates the tenant itself. There is no tenant context to
+ * run in at that point, and the `identities`/`users`/`tenants` tables carry no
+ * row-level security policy for the same reason - see the note in `session.ts`.
+ */
+import { system } from "../db/postgres.js";
 import { identities, tenants, users } from "../db/schema.js";
 import { asTenantId, type TenantId } from "../tenancy/ids.js";
 import type { ExternalIdentity } from "./oauth.js";
@@ -43,7 +51,7 @@ export class SignInRefused extends Error {}
  * guessing.
  */
 export async function findOrCreateUser(identity: ExternalIdentity): Promise<SignedInUser> {
-  return db.transaction(async (tx) => {
+  return system.transaction(async (tx) => {
     const [existing] = await tx
       .select({
         id: users.id,
@@ -142,7 +150,7 @@ export async function findOrCreateUser(identity: ExternalIdentity): Promise<Sign
 
 /** The signed-in user, for `/api/me`. */
 export async function getUser(userId: string): Promise<SignedInUser | null> {
-  const [row] = await db
+  const [row] = await system
     .select({
       id: users.id,
       tenantId: users.tenantId,
@@ -159,7 +167,7 @@ export async function getUser(userId: string): Promise<SignedInUser | null> {
 
 /** Which providers this user has linked, so the UI can say so. */
 export async function linkedProviders(userId: string): Promise<string[]> {
-  const rows = await db
+  const rows = await system
     .select({ provider: identities.provider })
     .from(identities)
     .where(eq(identities.userId, userId));

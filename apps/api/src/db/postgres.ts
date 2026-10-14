@@ -1,5 +1,36 @@
-/** Postgres connection, Drizzle client, and schema migration. */
+/**
+ * Postgres connections, Drizzle clients, and schema migration.
+ *
+ * There are **two** of each, and the difference is the whole of row-level
+ * security.
+ *
+ * `db` runs as a role the database applies RLS policies to, and every query
+ * through it must be inside `withTenant` - the connection carries
+ * `app.tenant_id`, and the policies compare every row against it. A query that
+ * escapes that context throws here rather than running, and a query that runs
+ * but forgets its `WHERE tenant_id` returns nothing rather than another
+ * tenant's rows. Both failures are loud, and in that order.
+ *
+ * `system` runs as the owner and bypasses all of it. It exists because a few
+ * operations genuinely cannot be tenant-scoped - finding out *which* tenant is
+ * asking, for one - and naming them is better than a flag the tenant path could
+ * set. Grepping for `system` is the audit.
+ *
+ * ## Why two roles rather than one plus a setting
+ *
+ * The configured `DATABASE_URL` user here is a **superuser with BYPASSRLS**, and
+ * superusers ignore RLS entirely - `FORCE ROW LEVEL SECURITY` does not change
+ * that, because FORCE only binds the table *owner*. So policies installed
+ * against that role are decoration: they exist, they are visible in `\d`, and
+ * they filter nothing. A separate non-superuser role is not a nicety, it is the
+ * only thing that makes any of this real.
+ *
+ * Two connection strings also mean the bypass is not reachable from the request
+ * path: an injected or mistaken query running on `db` cannot opt out of RLS,
+ * because opting out would require a different connection.
+ */
 
+import { AsyncLocalStorage } from "node:async_hooks";
 import { createHash } from "node:crypto";
 import { fileURLToPath } from "node:url";
 import { drizzle } from "drizzle-orm/node-postgres";
@@ -10,24 +41,149 @@ import type { Resource } from "@sightline/shared";
 import { cfg } from "../config.js";
 import * as schema from "./schema.js";
 
-export const pool = new pg.Pool({
-  connectionString: cfg.DATABASE_URL,
+/** The setting the policies read. Also in the migration; they must agree. */
+export const TENANT_SETTING = "app.tenant_id";
+
+const poolOptions = {
   max: 10,
   // A scan writes thousands of rows; a slow query here means something is
   // wrong, and failing fast beats a request hanging forever.
   statement_timeout: 30_000,
-});
+} as const;
 
 /**
- * The Drizzle client. Every query in this package goes through it.
+ * The owner connection: migrations, and the few operations that cross tenants.
  *
- * `pool` is still exported because the health check issues a bare `SELECT 1`
- * to prove the connection works, which is a liveness probe rather than a query
- * about the domain and gains nothing from the query builder.
+ * Still called `pool` because the health check issues a bare `SELECT 1` through
+ * it to prove the connection works, which is a liveness probe rather than a
+ * query about the domain and gains nothing from the query builder.
  */
-export const db = drizzle(pool, { schema });
+export const pool = new pg.Pool({ connectionString: cfg.DATABASE_URL, ...poolOptions });
+
+/**
+ * The restricted connection every tenant-scoped query uses.
+ *
+ * Falls back to `DATABASE_URL` when `DATABASE_URL_APP` is unset, which leaves
+ * RLS inert because that role is a superuser. That is a deliberate convenience
+ * for a clone with one tenant and no sign-in - and hosted mode refuses to start
+ * without it, so the fallback cannot be how a public deployment ends up with
+ * decorative policies.
+ */
+export const appPool = new pg.Pool({
+  connectionString: cfg.DATABASE_URL_APP ?? cfg.DATABASE_URL,
+  ...poolOptions,
+});
+
+/** Whether a role separate from the owner is actually configured. */
+export const rlsRoleConfigured = (): boolean =>
+  Boolean(cfg.DATABASE_URL_APP && cfg.DATABASE_URL_APP !== cfg.DATABASE_URL);
+
+const bound = new AsyncLocalStorage<{ client: pg.PoolClient; tenantId: string }>();
+
+/**
+ * Dispatches each query to the connection bound to the current async context.
+ *
+ * Deliberately **not** named `...Pool`: Drizzle checks
+ * `constructor.name.includes("Pool")` to decide whether to call `connect()` for
+ * a transaction. Matching that would hand transactions a fresh connection with
+ * no `app.tenant_id` set, so every statement inside one would see zero rows -
+ * and `saveScanResult` is a transaction, so the first scan would silently
+ * persist nothing.
+ */
+class TenantRouter {
+  async query(...args: unknown[]): Promise<unknown> {
+    const store = bound.getStore();
+    if (!store) {
+      throw new Error(
+        "A tenant-scoped query ran outside `withTenant`. Every query through `db` carries " +
+          `${TENANT_SETTING} on its connection, because the row-level security policies compare ` +
+          "each row against it. Wrap the work in `withTenant(tenantId, ...)`, or use the " +
+          "`system` handle if it genuinely cannot be scoped to one tenant - and say why.",
+      );
+    }
+    return (store.client.query as (...a: unknown[]) => Promise<unknown>)(...args);
+  }
+}
+
+/** Tenant-scoped. Requires `withTenant`; throws outside one. */
+export const db = drizzle(new TenantRouter() as unknown as pg.Pool, { schema });
+
+/**
+ * Crosses tenants, as the owner. Every use needs a reason in a comment.
+ *
+ * The legitimate ones are all "find out who is asking" or "serve everybody": a
+ * session lookup by token hash, which is how the tenant is discovered in the
+ * first place; sign-in, which runs before the tenant exists; the worker's claim,
+ * because one worker serves every tenant; and housekeeping.
+ */
+export const system = drizzle(pool, { schema });
 
 export type Database = typeof db;
+
+/**
+ * Run `fn` with every `db` query scoped to one tenant.
+ *
+ * Holds one connection for the duration, with the setting applied at session
+ * level rather than transaction level. The alternative - a transaction per
+ * query - would cost a BEGIN and a COMMIT per statement, and wrapping the whole
+ * request in one transaction would hold it open across AWS and Neo4j calls that
+ * take minutes.
+ *
+ * Nested calls reuse the outer connection rather than taking another. With a
+ * pool of ten and a scan holding one for minutes, nesting that acquired would
+ * eventually deadlock against itself.
+ *
+ * `set_config(..., false)` is session-scoped, so it **must** be cleared before
+ * the connection goes back to the pool - the `finally` is load-bearing, not
+ * tidiness. `SET LOCAL` would be transaction-scoped and self-clearing, and
+ * cannot be used: it takes no bind parameter, so the tenant id would have to be
+ * interpolated into SQL.
+ */
+export async function withTenant<T>(tenantId: string, fn: () => Promise<T>): Promise<T> {
+  const existing = bound.getStore();
+  if (existing) {
+    if (existing.tenantId === tenantId) return fn();
+    // Two tenants in one call stack is either a bug or an attempt. Refusing is
+    // the only safe answer: the inner one would otherwise run with the outer
+    // one's connection setting and read the wrong account's data.
+    throw new Error(
+      `Refusing to run work for tenant ${tenantId} inside work already scoped to ` +
+        `${existing.tenantId}. One request acts for one tenant.`,
+    );
+  }
+
+  const client = await appPool.connect();
+  try {
+    await client.query(`SELECT set_config('${TENANT_SETTING}', $1, false)`, [tenantId]);
+    return await bound.run({ client, tenantId }, fn);
+  } finally {
+    /**
+     * Clear the setting, and destroy the connection if that fails.
+     *
+     * A client whose setting could not be cleared cannot safely be reused:
+     * the next request to borrow it would inherit this tenant's id and read
+     * their data. `release(true)` discards it instead, which costs one
+     * reconnection and is the only answer that is not a leak.
+     *
+     * Deliberately no `return` in here. An early version had one, and a
+     * `return` inside `finally` replaces whatever the `try` was returning - so
+     * every successful call whose reset failed would have quietly answered
+     * `undefined` instead of its result. TypeScript caught it; it would have
+     * been a miserable thing to debug.
+     */
+    let reset = false;
+    try {
+      await client.query(`SELECT set_config('${TENANT_SETTING}', '', false)`);
+      reset = true;
+    } catch {
+      // Falls through to the discarding release below.
+    }
+    client.release(!reset);
+  }
+}
+
+/** The tenant the current context is scoped to, if any. For diagnostics. */
+export const currentTenant = (): string | null => bound.getStore()?.tenantId ?? null;
 
 /**
  * Apply any migrations the database has not seen.
@@ -37,12 +193,15 @@ export type Database = typeof db;
  * `schema.ts`, and changes to it produce a reviewable migration instead of an
  * edit to a file that was applied by being re-read.
  *
+ * On `system`, because migrations create and alter tables: the restricted role
+ * has DML only, which is the point of it.
+ *
  * `fileURLToPath`, not `URL.pathname`: on Windows the latter yields
  * `/C:/projects/app/drizzle` and any directory containing a space arrives
  * percent-encoded.
  */
 export async function migrate(): Promise<void> {
-  await runMigrations(db, {
+  await runMigrations(system, {
     migrationsFolder: fileURLToPath(new URL("../../drizzle", import.meta.url)),
   });
 }
@@ -85,5 +244,5 @@ function sortKeys(value: unknown): unknown {
 }
 
 export async function closePool(): Promise<void> {
-  await pool.end();
+  await Promise.all([pool.end(), appPool.end()]);
 }

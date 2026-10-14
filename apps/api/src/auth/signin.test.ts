@@ -15,7 +15,17 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { randomUUID } from "node:crypto";
 import { eq, inArray } from "drizzle-orm";
 
-import { db } from "../db/postgres.js";
+/**
+ * Fixtures run on `system`, the owner connection.
+ *
+ * Setting up rows is not the thing under test, and under row-level security the
+ * restricted role can only write rows for the tenant its connection names -
+ * which makes seeding *two* tenants impossible on that path, and seeding two
+ * tenants is the whole point of an isolation fixture. The functions under test
+ * open their own tenant context, so what they do is still exercised exactly as
+ * production does it.
+ */
+import { system } from "../db/postgres.js";
 import { identities, sessions, tenants, users } from "../db/schema.js";
 import {
   findOrCreateUser,
@@ -61,7 +71,7 @@ let available = false;
 
 beforeAll(async () => {
   try {
-    await db.execute("SELECT 1");
+    await system.execute("SELECT 1");
     available = true;
   } catch {
     console.warn("Sign-in suite skipped: Postgres was not reachable.");
@@ -70,7 +80,7 @@ beforeAll(async () => {
 
 afterAll(async () => {
   if (!available || created.length === 0) return;
-  await db
+  await system
     .delete(tenants)
     .where(inArray(tenants.id, created))
     .catch(() => undefined);
@@ -83,6 +93,20 @@ async function signIn(id: ExternalIdentity): Promise<SignedInUser> {
 }
 
 describe.runIf(HAS_INFRA)("a first sign-in", () => {
+  it("has a database to talk to", () => {
+    /**
+     * Without this the whole file passes *vacuously* when the probe above
+     * fails: `available` stays false, every test returns on its first line, and
+     * vitest reports them all green.
+     *
+     * Not hypothetical. Introducing the tenant-scoped connection made this
+     * file's probe throw, and it silently stopped testing anything - while the
+     * three files that did carry this assertion failed loudly and are the only
+     * reason it was noticed at all.
+     */
+    expect(available, "Postgres is not reachable, so none of this was checked").toBe(true);
+  });
+
   it("creates a tenant and a user together", async () => {
     if (!available) return;
     const user = await signIn(identity("first"));
@@ -91,7 +115,7 @@ describe.runIf(HAS_INFRA)("a first sign-in", () => {
     // A tenant with no user is an orphan nobody can reach, and a user with no
     // tenant cannot be given one afterwards without guessing - so both or
     // neither.
-    const [tenant] = await db.select().from(tenants).where(eq(tenants.id, user.tenantId));
+    const [tenant] = await system.select().from(tenants).where(eq(tenants.id, user.tenantId));
     expect(tenant).toBeDefined();
     expect(await linkedProviders(user.id)).toEqual(["google"]);
   });
@@ -137,7 +161,7 @@ describe.runIf(HAS_INFRA)("signing in again", () => {
 
     expect(again.id).toBe(first.id);
     expect(again.tenantId).toBe(first.tenantId);
-    const rows = await db.select().from(users).where(eq(users.id, first.id));
+    const rows = await system.select().from(users).where(eq(users.id, first.id));
     expect(rows).toHaveLength(1);
     // The display name is refreshed from the provider, because the UI should
     // show what they expect to see.
@@ -189,7 +213,7 @@ describe.runIf(HAS_INFRA)("sessions", () => {
     const user = await signIn(identity("hashed"));
     const token = await issueSession(user.id);
 
-    const rows = await db.select().from(sessions).where(eq(sessions.userId, user.id));
+    const rows = await system.select().from(sessions).where(eq(sessions.userId, user.id));
     expect(rows).toHaveLength(1);
     const stored = rows[0]!.tokenHash.toString("utf8");
     expect(stored).not.toContain(token);
@@ -237,7 +261,7 @@ describe.runIf(HAS_INFRA)("sessions", () => {
     if (!available) return;
     const user = await signIn(identity("expired"));
     const token = await issueSession(user.id);
-    await db
+    await system
       .update(sessions)
       .set({ expiresAt: new Date(Date.now() - 1000) })
       .where(eq(sessions.userId, user.id));
@@ -249,15 +273,15 @@ describe.runIf(HAS_INFRA)("sessions", () => {
     if (!available) return;
     const user = await signIn(identity("cascade"));
     const token = await issueSession(user.id);
-    await db.delete(users).where(eq(users.id, user.id));
+    await system.delete(users).where(eq(users.id, user.id));
 
     // Cascade, not cleanup code: a deleted account must not leave a live
     // session behind, and a foreign key is the only version of that which
     // cannot be forgotten.
     expect(await readSession(token)).toBeNull();
     expect(await getUser(user.id)).toBeNull();
-    expect(await db.select().from(identities).where(eq(identities.userId, user.id))).toHaveLength(
-      0,
-    );
+    expect(
+      await system.select().from(identities).where(eq(identities.userId, user.id)),
+    ).toHaveLength(0);
   });
 });

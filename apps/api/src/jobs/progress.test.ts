@@ -21,7 +21,17 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { eq, sql } from "drizzle-orm";
 import type { ScanEvent, ScanUnit } from "@sightline/shared";
 
-import { db } from "../db/postgres.js";
+/**
+ * Fixtures run on `system`, the owner connection.
+ *
+ * Setting up rows is not the thing under test, and under row-level security the
+ * restricted role can only write rows for the tenant its connection names -
+ * which makes seeding *two* tenants impossible on that path, and seeding two
+ * tenants is the whole point of an isolation fixture. The functions under test
+ * open their own tenant context, so what they do is still exercised exactly as
+ * production does it.
+ */
+import { system } from "../db/postgres.js";
 import { connections, scanJobs, scanRuns, scanUnits, tenants } from "../db/schema.js";
 import { asConnectionId, asJobId, asTenantId } from "../tenancy/ids.js";
 import type { Scope } from "../tenancy/scope.js";
@@ -45,7 +55,7 @@ let releaseLock: (() => Promise<void>) | null = null;
 beforeAll(async () => {
   if (!HAS_INFRA) return;
   try {
-    await db.execute("SELECT 1");
+    await system.execute("SELECT 1");
   } catch {
     return;
   }
@@ -58,10 +68,10 @@ beforeAll(async () => {
     [tenantId, "progress.test"],
     [otherTenantId, "progress.test.other"],
   ] as const) {
-    await db.insert(tenants).values({ id, name });
+    await system.insert(tenants).values({ id, name });
   }
   for (const s of [scope, otherScope]) {
-    await db.insert(connections).values({
+    await system.insert(connections).values({
       id: s.connectionId,
       tenantId: s.tenantId,
       kind: "demo",
@@ -74,7 +84,7 @@ beforeAll(async () => {
 afterAll(async () => {
   if (available) {
     for (const id of [tenantId, otherTenantId]) {
-      await db.delete(tenants).where(eq(tenants.id, id));
+      await system.delete(tenants).where(eq(tenants.id, id));
     }
   }
   await releaseLock?.();
@@ -88,15 +98,15 @@ async function seed(options: {
   jobError?: string;
   run?: { status: "running" | "succeeded" | "partial" | "failed"; units: UnitStatus[] };
 }) {
-  await db.execute(sql`DELETE FROM scan_jobs`);
-  await db.execute(sql`DELETE FROM scan_runs WHERE tenant_id = ${tenantId}`);
+  await system.execute(sql`DELETE FROM scan_jobs`);
+  await system.execute(sql`DELETE FROM scan_runs WHERE tenant_id = ${tenantId}`);
 
   const jobId = asJobId(randomUUID());
   let scanId: string | null = null;
 
   if (options.run) {
     scanId = randomUUID();
-    await db.insert(scanRuns).values({
+    await system.insert(scanRuns).values({
       id: scanId,
       tenantId,
       connectionId: scope.connectionId,
@@ -106,7 +116,7 @@ async function seed(options: {
       regions: ["us-east-1"],
     });
     // One unit per status asked for, named so they are distinguishable.
-    await db.insert(scanUnits).values(
+    await system.insert(scanUnits).values(
       options.run.units.map((status, i) => ({
         tenantId,
         scanId: scanId!,
@@ -120,7 +130,7 @@ async function seed(options: {
     );
   }
 
-  await db.insert(scanJobs).values({
+  await system.insert(scanJobs).values({
     id: jobId,
     tenantId,
     connectionId: scope.connectionId,

@@ -28,7 +28,7 @@
 import { randomUUID } from "node:crypto";
 import { and, eq, sql } from "drizzle-orm";
 
-import { db } from "../db/postgres.js";
+import { db, system, withTenant } from "../db/postgres.js";
 import { scanJobs } from "../db/schema.js";
 import type { ConnectionId, JobId, ScanId, TenantId } from "../tenancy/ids.js";
 import { asConnectionId, asJobId, asTenantId } from "../tenancy/ids.js";
@@ -137,28 +137,30 @@ export async function enqueueScan(
   scope: Scope,
   requestedBy: string | null = null,
 ): Promise<ScanJob> {
-  const id = asJobId(randomUUID());
-  try {
-    await db.insert(scanJobs).values({
-      id,
-      tenantId: scope.tenantId,
-      connectionId: scope.connectionId,
-      status: "queued",
-      requestedBy,
-    });
-  } catch (err) {
-    if (isDuplicateActiveJob(err)) throw new ScanAlreadyQueued(await activeJobId(scope));
-    throw err;
-  }
+  return withTenant(scope.tenantId, async () => {
+    const id = asJobId(randomUUID());
+    try {
+      await db.insert(scanJobs).values({
+        id,
+        tenantId: scope.tenantId,
+        connectionId: scope.connectionId,
+        status: "queued",
+        requestedBy,
+      });
+    } catch (err) {
+      if (isDuplicateActiveJob(err)) throw new ScanAlreadyQueued(await activeJobId(scope));
+      throw err;
+    }
 
-  await notifyQueued();
+    await notifyQueued();
 
-  const job = await getJob(scope, id);
-  // The row was just inserted in this function, so its absence would mean a
-  // tenant mismatch in `getJob` rather than a missing row - worth saying
-  // plainly instead of returning a null the caller cannot interpret.
-  if (!job) throw new Error("The scan job was created but could not be read back.");
-  return job;
+    const job = await getJob(scope, id);
+    // The row was just inserted in this function, so its absence would mean a
+    // tenant mismatch in `getJob` rather than a missing row - worth saying
+    // plainly instead of returning a null the caller cannot interpret.
+    if (!job) throw new Error("The scan job was created but could not be read back.");
+    return job;
+  });
 }
 
 /**
@@ -172,7 +174,9 @@ export async function enqueueScan(
  */
 async function notifyQueued(): Promise<void> {
   try {
-    await db.execute(sql`SELECT pg_notify(${SCAN_QUEUE_CHANNEL}, '')`);
+    // `system`, because this is called from the cross-tenant paths too and
+    // `pg_notify` reads no rows - there is nothing for a policy to filter.
+    await system.execute(sql`SELECT pg_notify(${SCAN_QUEUE_CHANNEL}, '')`);
   } catch {
     // The poll is the fallback, and it is the reason this can be ignored.
   }
@@ -180,18 +184,20 @@ async function notifyQueued(): Promise<void> {
 
 /** The job currently queued or running for this connection, if any. */
 export async function activeJobId(scope: Scope): Promise<JobId | null> {
-  const [row] = await db
-    .select({ id: scanJobs.id })
-    .from(scanJobs)
-    .where(
-      and(
-        eq(scanJobs.tenantId, scope.tenantId),
-        eq(scanJobs.connectionId, scope.connectionId),
-        sql`${scanJobs.status} IN ('queued','running')`,
-      ),
-    )
-    .limit(1);
-  return row?.id ? asJobId(row.id) : null;
+  return withTenant(scope.tenantId, async () => {
+    const [row] = await db
+      .select({ id: scanJobs.id })
+      .from(scanJobs)
+      .where(
+        and(
+          eq(scanJobs.tenantId, scope.tenantId),
+          eq(scanJobs.connectionId, scope.connectionId),
+          sql`${scanJobs.status} IN ('queued','running')`,
+        ),
+      )
+      .limit(1);
+    return row?.id ? asJobId(row.id) : null;
+  });
 }
 
 function rowToJob(row: Record<string, unknown>): ScanJob {
@@ -222,9 +228,14 @@ function rowToJob(row: Record<string, unknown>): ScanJob {
  * tenant, so this is one of the few queries in the codebase that is allowed to
  * cross the boundary. It returns the tenant id rather than taking one, and
  * everything the worker does afterwards is scoped by what it found here.
+ *
+ * On `system` for exactly that reason. Under row-level security the restricted
+ * role sees only the tenant its connection names, so a claim through `db` could
+ * never find a job - the worker would poll an empty queue forever while jobs
+ * piled up in it.
  */
 export async function claimNextJob(workerId: string): Promise<ScanJob | null> {
-  const { rows } = await db.execute(sql`
+  const { rows } = await system.execute(sql`
     UPDATE scan_jobs
        SET status = 'running',
            locked_by = ${workerId},
@@ -255,7 +266,9 @@ export async function claimNextJob(workerId: string): Promise<ScanJob | null> {
  * a false means abandon the work in progress.
  */
 export async function heartbeat(jobId: JobId, workerId: string): Promise<boolean> {
-  const { rowCount } = await db.execute(sql`
+  // `system`: the worker holds a job id, not a tenant. Same for the three
+  // below - they are the lifecycle of a claim, and a claim is cross-tenant.
+  const { rowCount } = await system.execute(sql`
     UPDATE scan_jobs
        SET heartbeat_at = now()
      WHERE id = ${jobId}
@@ -267,7 +280,7 @@ export async function heartbeat(jobId: JobId, workerId: string): Promise<boolean
 
 /** Record which scan run a claimed job produced, so progress can be read. */
 export async function attachScanRun(jobId: JobId, scanId: ScanId): Promise<void> {
-  await db.update(scanJobs).set({ scanId }).where(eq(scanJobs.id, jobId));
+  await system.update(scanJobs).set({ scanId }).where(eq(scanJobs.id, jobId));
 }
 
 /**
@@ -283,7 +296,7 @@ export async function finishJob(
   workerId: string,
   outcome: { status: Exclude<JobStatus, "queued" | "running">; error?: string | null },
 ): Promise<boolean> {
-  const { rowCount } = await db.execute(sql`
+  const { rowCount } = await system.execute(sql`
     UPDATE scan_jobs
        SET status = ${outcome.status},
            finished_at = now(),
@@ -319,7 +332,7 @@ export interface ReclaimOutcome {
 export async function reclaimStale(staleAfterMs = STALE_AFTER_MS): Promise<ReclaimOutcome> {
   const cutoff = sql`now() - ${`${Math.floor(staleAfterMs / 1000)} seconds`}::interval`;
 
-  const abandoned = await db.execute(sql`
+  const abandoned = await system.execute(sql`
     UPDATE scan_jobs
        SET status = 'failed',
            finished_at = now(),
@@ -331,7 +344,7 @@ export async function reclaimStale(staleAfterMs = STALE_AFTER_MS): Promise<Recla
        AND attempts >= max_attempts
   `);
 
-  const requeued = await db.execute(sql`
+  const requeued = await system.execute(sql`
     UPDATE scan_jobs
        SET status = 'queued',
            locked_by = NULL,
@@ -349,25 +362,27 @@ export async function reclaimStale(staleAfterMs = STALE_AFTER_MS): Promise<Recla
 
 /** One of this tenant's jobs, or null. Never another tenant's. */
 export async function getJob(scope: Scope, jobId: JobId): Promise<ScanJob | null> {
-  const [row] = await db
-    .select()
-    .from(scanJobs)
-    .where(and(eq(scanJobs.id, jobId), eq(scanJobs.tenantId, scope.tenantId)))
-    .limit(1);
-  if (!row) return null;
-  return {
-    id: asJobId(row.id),
-    tenantId: asTenantId(row.tenantId),
-    connectionId: asConnectionId(row.connectionId),
-    status: row.status,
-    attempts: row.attempts,
-    maxAttempts: row.maxAttempts,
-    scanId: (row.scanId as ScanId | null) ?? null,
-    queuedAt: row.queuedAt,
-    startedAt: row.startedAt,
-    finishedAt: row.finishedAt,
-    error: row.error,
-  };
+  return withTenant(scope.tenantId, async () => {
+    const [row] = await db
+      .select()
+      .from(scanJobs)
+      .where(and(eq(scanJobs.id, jobId), eq(scanJobs.tenantId, scope.tenantId)))
+      .limit(1);
+    if (!row) return null;
+    return {
+      id: asJobId(row.id),
+      tenantId: asTenantId(row.tenantId),
+      connectionId: asConnectionId(row.connectionId),
+      status: row.status,
+      attempts: row.attempts,
+      maxAttempts: row.maxAttempts,
+      scanId: (row.scanId as ScanId | null) ?? null,
+      queuedAt: row.queuedAt,
+      startedAt: row.startedAt,
+      finishedAt: row.finishedAt,
+      error: row.error,
+    };
+  });
 }
 
 /**
@@ -379,12 +394,14 @@ export async function getJob(scope: Scope, jobId: JobId): Promise<ScanJob | null
  * anything was cancelled, so the caller can say which happened.
  */
 export async function cancelQueuedJob(scope: Scope, jobId: JobId): Promise<boolean> {
-  const { rowCount } = await db.execute(sql`
-    UPDATE scan_jobs
-       SET status = 'cancelled', finished_at = now()
-     WHERE id = ${jobId}
-       AND tenant_id = ${scope.tenantId}
-       AND status = 'queued'
-  `);
-  return (rowCount ?? 0) > 0;
+  return withTenant(scope.tenantId, async () => {
+    const { rowCount } = await db.execute(sql`
+      UPDATE scan_jobs
+         SET status = 'cancelled', finished_at = now()
+       WHERE id = ${jobId}
+         AND tenant_id = ${scope.tenantId}
+         AND status = 'queued'
+    `);
+    return (rowCount ?? 0) > 0;
+  });
 }

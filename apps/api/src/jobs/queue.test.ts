@@ -25,7 +25,17 @@ import { randomUUID } from "node:crypto";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { eq, sql } from "drizzle-orm";
 
-import { db, pool } from "../db/postgres.js";
+/**
+ * Fixtures run on `system`, the owner connection.
+ *
+ * Setting up rows is not the thing under test, and under row-level security the
+ * restricted role can only write rows for the tenant its connection names -
+ * which makes seeding *two* tenants impossible on that path, and seeding two
+ * tenants is the whole point of an isolation fixture. The functions under test
+ * open their own tenant context, so what they do is still exercised exactly as
+ * production does it.
+ */
+import { pool, system } from "../db/postgres.js";
 import { connections, scanJobs, tenants } from "../db/schema.js";
 import { asConnectionId, asTenantId } from "../tenancy/ids.js";
 import type { Scope } from "../tenancy/scope.js";
@@ -71,7 +81,7 @@ let releaseLock: (() => Promise<void>) | null = null;
 
 beforeAll(async () => {
   try {
-    await db.execute("SELECT 1");
+    await system.execute("SELECT 1");
   } catch {
     return;
   }
@@ -84,10 +94,10 @@ beforeAll(async () => {
     [tenantId, "queue.test"],
     [otherTenantId, "queue.test.other"],
   ] as const) {
-    await db.insert(tenants).values({ id, name });
+    await system.insert(tenants).values({ id, name });
   }
   for (const scope of [...scopes, otherScope]) {
-    await db.insert(connections).values({
+    await system.insert(connections).values({
       id: scope.connectionId,
       tenantId: scope.tenantId,
       kind: "demo",
@@ -101,7 +111,7 @@ afterAll(async () => {
   if (available) {
     // Tenants cascade to connections and jobs.
     for (const id of [tenantId, otherTenantId]) {
-      await db.delete(tenants).where(eq(tenants.id, id));
+      await system.delete(tenants).where(eq(tenants.id, id));
     }
   }
   await releaseLock?.();
@@ -109,12 +119,12 @@ afterAll(async () => {
 
 /** Clear the queue between tests, so each starts from a known state. */
 async function drain(): Promise<void> {
-  await db.execute(sql`DELETE FROM scan_jobs`);
+  await system.execute(sql`DELETE FROM scan_jobs`);
 }
 
 /** Pretend the worker holding this job stopped responding. */
 async function silenceHeartbeat(jobId: string): Promise<void> {
-  await db.execute(sql`
+  await system.execute(sql`
     UPDATE scan_jobs
        SET heartbeat_at = now() - ${`${Math.floor(STALE_AFTER_MS / 1000) + 60} seconds`}::interval
      WHERE id = ${jobId}
@@ -268,7 +278,7 @@ describe.runIf(HAS_INFRA)("the scan queue", () => {
     // `queued_at` defaults to now(), and two inserts in the same statement
     // timestamp would tie; nudging the first one back makes the order real
     // rather than incidental.
-    await db.execute(
+    await system.execute(
       sql`UPDATE scan_jobs SET queued_at = now() - interval '1 minute' WHERE id = ${first.id}`,
     );
     await enqueueScan(scopes[1]!);
@@ -346,7 +356,7 @@ describe.runIf(HAS_INFRA)("the scan queue", () => {
       if (!available) return;
       await drain();
       const job = await enqueueScan(scopes[0]!);
-      await db.update(scanJobs).set({ maxAttempts: 1 }).where(eq(scanJobs.id, job.id));
+      await system.update(scanJobs).set({ maxAttempts: 1 }).where(eq(scanJobs.id, job.id));
 
       const claimed = await claimNextJob("worker-a");
       await silenceHeartbeat(claimed!.id);

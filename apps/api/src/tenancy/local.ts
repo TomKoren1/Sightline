@@ -14,7 +14,15 @@
 import { and, eq, ne } from "drizzle-orm";
 
 import { cfg, configuredMode, isHosted, targetRoleProblem } from "../config.js";
-import { db } from "../db/postgres.js";
+/**
+ * `system`, not `db`: this creates the tenant everything else is scoped to.
+ *
+ * It runs on boot, before any request, and it inserts the local tenant row
+ * itself - so there is no tenant context to be inside, and the thing it is
+ * creating is the context. Self-hosted only; in hosted mode tenants arrive by
+ * signing up.
+ */
+import { system } from "../db/postgres.js";
 import { connections, tenants } from "../db/schema.js";
 import { asConnectionId, asTenantId, type ConnectionId } from "./ids.js";
 import type { Scope } from "./scope.js";
@@ -71,12 +79,12 @@ export function localScope(): Scope {
 export async function ensureLocalTenant(): Promise<void> {
   if (isHosted()) return;
 
-  await db
+  await system
     .insert(tenants)
     .values({ id: LOCAL_TENANT_ID, name: "Local", isAdmin: true })
     .onConflictDoNothing();
 
-  await db
+  await system
     .insert(connections)
     .values({
       id: LOCAL_DEMO_CONNECTION_ID,
@@ -91,7 +99,7 @@ export async function ensureLocalTenant(): Promise<void> {
 
   if (!realAccountConfigured()) return;
 
-  await db
+  await system
     .insert(connections)
     .values({
       id: LOCAL_REAL_CONNECTION_ID,
@@ -116,7 +124,7 @@ export async function ensureLocalTenant(): Promise<void> {
    * misleading state this column exists to avoid. Conditional, so a boot that
    * changed nothing writes nothing.
    */
-  await db
+  await system
     .update(connections)
     .set({
       roleArn: cfg.AWS_TARGET_ROLE_ARN,
