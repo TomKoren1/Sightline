@@ -1,0 +1,217 @@
+# The application: migrate, then api, worker and web.
+#
+# Three processes rather than one, and the split is not cosmetic. A scan holds
+# an account's whole inventory in memory and then projects it, so it is the one
+# thing here that can consume an unbounded amount of memory - in its own
+# deployment it takes down a worker rather than the API serving everybody else.
+---
+# Migrations, as a Job rather than on boot.
+#
+# `server.ts` migrates on boot in a clone, which is right for one process and
+# wrong for two: both replicas would race to apply the same migration. Here
+# `MIGRATE_ON_BOOT=false` and this Job is the only thing that writes schema -
+# and the api and worker *refuse to start* against a schema that is behind,
+# rather than serving requests against one where a table added for row-level
+# security would silently not exist.
+#
+# The Argo annotations make it a PreSync hook, so it completes before the
+# Deployments roll. Without Argo, apply this and wait for it before the rest;
+# `kubectl wait --for=condition=complete job/sightline-migrate` is the command.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: sightline-migrate
+  annotations:
+    argocd.argoproj.io/hook: PreSync
+    # Replaced on every sync rather than left behind: a completed Job with the
+    # same name blocks the next one, and the previous run's logs are not worth
+    # that.
+    argocd.argoproj.io/hook-delete-policy: BeforeHookCreation
+spec:
+  # A migration that fails twice will fail a third time; retrying forever just
+  # hides the error in a crash loop.
+  backoffLimit: 2
+  template:
+    metadata:
+      labels: { app.kubernetes.io/name: migrate }
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: migrate
+          image: sightline-api
+          command: ["npm", "run", "db:migrate", "-w", "@sightline/api"]
+          envFrom:
+            - configMapRef: { name: sightline-config }
+            - secretRef: { name: sightline-app }
+          resources:
+            requests: { cpu: 50m, memory: 256Mi }
+            limits: { memory: 512Mi }
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: api
+  labels: { app.kubernetes.io/name: api }
+spec:
+  selector: { app.kubernetes.io/name: api }
+  ports: [{ name: http, port: 3000, targetPort: http }]
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: api
+  labels: { app.kubernetes.io/name: api }
+spec:
+  replicas: 2
+  selector:
+    matchLabels: { app.kubernetes.io/name: api }
+  template:
+    metadata:
+      labels: { app.kubernetes.io/name: api }
+    spec:
+      # A scan or an agent answer can be streaming when a rollout starts.
+      # Long enough for an in-flight response to finish rather than being cut.
+      terminationGracePeriodSeconds: 90
+      containers:
+        - name: api
+          image: sightline-api
+          ports: [{ name: http, containerPort: 3000 }]
+          envFrom:
+            - configMapRef: { name: sightline-config }
+            - secretRef: { name: sightline-app }
+          env:
+            # Fastify must accept connections from the web pods, not loopback.
+            - { name: BACKEND_HOST, value: "0.0.0.0" }
+            # This process serves requests and runs no scans.
+            - { name: SCAN_WORKER, value: separate }
+            # The Job above owns the schema; see its comment.
+            - { name: MIGRATE_ON_BOOT, value: "false" }
+          readinessProbe:
+            # `/api/health` reports on Postgres and Neo4j, so a pod whose
+            # databases are unreachable stops receiving traffic rather than
+            # answering every request with a 500.
+            httpGet: { path: /api/health, port: http }
+            initialDelaySeconds: 15
+            periodSeconds: 10
+            failureThreshold: 3
+          livenessProbe:
+            httpGet: { path: /api/health, port: http }
+            initialDelaySeconds: 60
+            periodSeconds: 30
+            # Deliberately slacker than readiness: a database blip should take
+            # a pod out of rotation, not restart it. Restarting on a dependency
+            # being slow turns one slow dependency into a crash loop.
+            failureThreshold: 6
+          resources:
+            requests: { cpu: 100m, memory: 512Mi }
+            limits: { memory: 1Gi }
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: worker
+  labels: { app.kubernetes.io/name: worker }
+spec:
+  # One. A scan holds a whole inventory in memory and then projects it, so
+  # worker count multiplies the peak memory of both this and Neo4j.
+  replicas: 1
+  # Recreate, not RollingUpdate: during a rolling update the old and new pods
+  # overlap, and the overlap is two workers claiming jobs - which the queue
+  # handles correctly but which doubles peak memory for no benefit.
+  strategy: { type: Recreate }
+  selector:
+    matchLabels: { app.kubernetes.io/name: worker }
+  template:
+    metadata:
+      labels: { app.kubernetes.io/name: worker }
+    spec:
+      # A scan takes minutes. On SIGTERM the worker stops claiming and waits for
+      # what is already running, so this is the window for that to finish - and
+      # if it is not enough, the job's heartbeat stops and another worker
+      # reclaims it, which costs one stale-detection interval rather than data.
+      terminationGracePeriodSeconds: 300
+      containers:
+        - name: worker
+          image: sightline-api
+          command: ["npm", "run", "worker", "-w", "@sightline/api"]
+          envFrom:
+            - configMapRef: { name: sightline-config }
+            - secretRef: { name: sightline-app }
+          env:
+            - { name: SCAN_WORKER, value: separate }
+          # No probes, and that is a decision rather than an omission. This
+          # process serves no port, so there is nothing to probe over HTTP -
+          # and its liveness is already expressed as `scan_jobs.heartbeat_at`,
+          # which another worker acts on by reclaiming the job. A probe here
+          # would be a second, less informed opinion about the same thing.
+          resources:
+            requests: { cpu: 200m, memory: 768Mi }
+            # Higher than the api's: this is the process that holds an
+            # account's inventory. A scan that exceeds it is killed here, which
+            # is the whole point of it being a separate deployment.
+            limits: { memory: 2Gi }
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: web
+  labels: { app.kubernetes.io/name: web }
+spec:
+  selector: { app.kubernetes.io/name: web }
+  ports: [{ name: http, port: 80, targetPort: http }]
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: web
+  labels: { app.kubernetes.io/name: web }
+spec:
+  replicas: 2
+  selector:
+    matchLabels: { app.kubernetes.io/name: web }
+  template:
+    metadata:
+      labels: { app.kubernetes.io/name: web }
+    spec:
+      containers:
+        - name: web
+          image: sightline-web
+          ports: [{ name: http, containerPort: 80 }]
+          # `deploy/nginx.conf` proxies `/api/` to `http://api:3000`, which
+          # resolves to the Service above unchanged - the same config serves
+          # compose and this. nginx resolves that name once at startup, so a
+          # web pod that starts before the api Service exists will crash-loop
+          # until it does; self-correcting, and worth knowing before reading it
+          # as a failure.
+          readinessProbe:
+            httpGet: { path: /, port: http }
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            httpGet: { path: /, port: http }
+            initialDelaySeconds: 20
+            periodSeconds: 30
+          resources:
+            requests: { cpu: 20m, memory: 32Mi }
+            limits: { memory: 128Mi }
+---
+# Keep one of each serving through a node drain.
+#
+# Only for the things that have more than one replica. A PDB on the worker or on
+# a datastore with `replicas: 1` and `minAvailable: 1` would block every drain
+# for ever, which is not high availability, it is a stuck node.
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata: { name: api }
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels: { app.kubernetes.io/name: api }
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata: { name: web }
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels: { app.kubernetes.io/name: web }

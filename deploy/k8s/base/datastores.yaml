@@ -1,0 +1,165 @@
+# Postgres and Neo4j: the two things that hold state.
+#
+# StatefulSets rather than Deployments, for the property that actually matters
+# here: a StatefulSet will not start a second pod while the first still holds
+# the volume. A Deployment's rolling update happily starts the replacement
+# before the original is gone, and two Postgres processes on one data directory
+# is not a race, it is corruption.
+#
+# One replica each, and no attempt at hiding that. Neither of these is
+# replicated, so this is a single point of failure for the whole service, and
+# the honest mitigation is the backup CronJob plus a restore that has been
+# tested - not a `replicas: 2` that would make it worse.
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgres
+  labels: { app.kubernetes.io/name: postgres }
+spec:
+  # Headless: a StatefulSet pod gets a stable DNS name from this, and nothing
+  # needs to load-balance across one replica.
+  clusterIP: None
+  selector: { app.kubernetes.io/name: postgres }
+  ports: [{ name: postgres, port: 5432, targetPort: 5432 }]
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: postgres
+  labels: { app.kubernetes.io/name: postgres }
+spec:
+  serviceName: postgres
+  replicas: 1
+  selector:
+    matchLabels: { app.kubernetes.io/name: postgres }
+  template:
+    metadata:
+      labels: { app.kubernetes.io/name: postgres }
+    spec:
+      # Data must not be lost to a hasty eviction; 60s is enough for a clean
+      # shutdown and checkpoint.
+      terminationGracePeriodSeconds: 60
+      securityContext:
+        # The postgres image's own uid. Set on the pod so the mounted volume is
+        # group-owned correctly on first creation - local-path hands over a
+        # root-owned directory otherwise and initdb refuses to start in it.
+        fsGroup: 999
+      containers:
+        - name: postgres
+          image: postgres:16-alpine
+          ports: [{ name: postgres, containerPort: 5432 }]
+          env:
+            # PGDATA in a subdirectory of the mount, not at its root. A
+            # local-path volume's root can contain a `lost+found`, and initdb
+            # refuses to initialise a directory that is not empty.
+            - { name: PGDATA, value: /var/lib/postgresql/data/pgdata }
+            - name: POSTGRES_DB
+              valueFrom: { secretKeyRef: { name: sightline-db, key: POSTGRES_DB } }
+            - name: POSTGRES_USER
+              valueFrom: { secretKeyRef: { name: sightline-db, key: POSTGRES_USER } }
+            - name: POSTGRES_PASSWORD
+              valueFrom: { secretKeyRef: { name: sightline-db, key: POSTGRES_PASSWORD } }
+          readinessProbe:
+            # `pg_isready` with the configured user, not a TCP check: the port
+            # is open while the server is still replaying WAL and refusing
+            # connections, and a TCP probe would call that ready.
+            exec: { command: ["sh", "-c", 'pg_isready -U "$POSTGRES_USER" -d "$POSTGRES_DB"'] }
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          livenessProbe:
+            exec: { command: ["sh", "-c", 'pg_isready -U "$POSTGRES_USER" -d "$POSTGRES_DB"'] }
+            initialDelaySeconds: 60
+            periodSeconds: 20
+            # Generous: a long checkpoint can make it briefly unresponsive, and
+            # restarting a database for being slow is how you turn latency into
+            # an outage.
+            failureThreshold: 6
+          volumeMounts:
+            - { name: data, mountPath: /var/lib/postgresql/data }
+  volumeClaimTemplates:
+    - metadata: { name: data }
+      spec:
+        accessModes: [ReadWriteOnce]
+        resources: { requests: { storage: 10Gi } }
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: neo4j
+  labels: { app.kubernetes.io/name: neo4j }
+spec:
+  clusterIP: None
+  selector: { app.kubernetes.io/name: neo4j }
+  ports:
+    - { name: bolt, port: 7687, targetPort: 7687 }
+    # HTTP is here for the readiness probe and for port-forwarding the browser
+    # during an investigation. It is never exposed through the ingress.
+    - { name: http, port: 7474, targetPort: 7474 }
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: neo4j
+  labels: { app.kubernetes.io/name: neo4j }
+spec:
+  serviceName: neo4j
+  replicas: 1
+  selector:
+    matchLabels: { app.kubernetes.io/name: neo4j }
+  template:
+    metadata:
+      labels: { app.kubernetes.io/name: neo4j }
+    spec:
+      terminationGracePeriodSeconds: 60
+      securityContext:
+        fsGroup: 7474
+      containers:
+        - name: neo4j
+          image: neo4j:5-community
+          ports:
+            - { name: bolt, containerPort: 7687 }
+            - { name: http, containerPort: 7474 }
+          env:
+            - name: NEO4J_AUTH
+              valueFrom: { secretKeyRef: { name: sightline-db, key: NEO4J_AUTH } }
+            # `server.memory.*`, not `dbms.memory.*`. 5.x honours the Neo4j 4
+            # names with a deprecation warning and a later version will not
+            # honour them at all, at which point the memory configuration
+            # silently stops applying. Same reasoning, and the same values'
+            # justification, as docker-compose.yml.
+            #
+            # Initial equals max so the JVM does not resize the heap mid-scan,
+            # which presents as the scan being slow rather than as a setting.
+            - { name: NEO4J_server_memory_heap_initial__size, value: "2G" }
+            - { name: NEO4J_server_memory_heap_max__size, value: "2G" }
+            - { name: NEO4J_server_memory_pagecache_size, value: "1G" }
+            # No plugins, and no unrestricted procedures. APOC was loaded with
+            # `dbms.security.procedures.unrestricted=apoc.*` and called by
+            # nothing; the agent's escape hatch forbids `CALL` outright, so it
+            # was unreachable surface on the database holding every tenant's
+            # inventory.
+          readinessProbe:
+            # The HTTP port answers only once the database is actually
+            # available, which Bolt accepting a connection does not imply.
+            httpGet: { path: /, port: http }
+            initialDelaySeconds: 20
+            periodSeconds: 10
+            failureThreshold: 12
+          livenessProbe:
+            httpGet: { path: /, port: http }
+            initialDelaySeconds: 120
+            periodSeconds: 30
+            failureThreshold: 6
+          volumeMounts:
+            - { name: data, mountPath: /data }
+            - { name: logs, mountPath: /logs }
+  volumeClaimTemplates:
+    - metadata: { name: data }
+      spec:
+        accessModes: [ReadWriteOnce]
+        resources: { requests: { storage: 10Gi } }
+    - metadata: { name: logs }
+      spec:
+        accessModes: [ReadWriteOnce]
+        resources: { requests: { storage: 2Gi } }

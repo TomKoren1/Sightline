@@ -1,8 +1,8 @@
 /** HTTP server: builds the app, migrates, listens. */
 
 import { buildApp } from "./app.js";
-import { cfg, scanWorkerMode } from "./config.js";
-import { migrate, closePool } from "./db/postgres.js";
+import { cfg, migrateOnBoot, scanWorkerMode } from "./config.js";
+import { assertSchemaCurrent, migrate, closePool } from "./db/postgres.js";
 import { closeDriver } from "./db/neo4j.js";
 import { assertHostedInvariants } from "./hostedMode.js";
 import { ScanWorker } from "./jobs/worker.js";
@@ -34,7 +34,21 @@ const log = app.getHttpAdapter().getInstance().log;
 const worker = new ScanWorker({ log });
 
 try {
-  await migrate();
+  /**
+   * Migrate, or refuse to start against a schema that is behind.
+   *
+   * A clone is one process, so migrating on boot is simply convenient. Hosted
+   * runs two replicas, which would race to apply the same migration, so there
+   * a Job does it and this only checks - and a pod that started before the Job
+   * finished fails its readiness probe instead of serving requests against an
+   * older schema, where a table added for row-level security would silently not
+   * be there.
+   */
+  if (migrateOnBoot()) {
+    await migrate();
+  } else {
+    await assertSchemaCurrent();
+  }
   // A clone is one tenant with two connections. No-op in hosted mode, where
   // tenants arrive by signing up.
   await ensureLocalTenant();

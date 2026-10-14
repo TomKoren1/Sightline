@@ -88,6 +88,19 @@ const schema = z.object({
    */
   DATABASE_URL_APP: blankAsUnset(z.string().optional()),
 
+  /**
+   * Whether this process applies migrations before it starts listening.
+   *
+   * On for a clone, where one process is the whole deployment and a migration
+   * on boot is simply convenient. Off in hosted mode, where two replicas would
+   * race to apply the same migration - and where a Job is the thing that runs
+   * them. A process with this off refuses to start against a schema that is
+   * behind, rather than serving requests against one.
+   *
+   * Defaulted below rather than here, because it depends on DEPLOYMENT_MODE.
+   */
+  MIGRATE_ON_BOOT: blankAsUnset(z.enum(["true", "false"]).optional()),
+
   NEO4J_URI: blankAsUnset(z.string().default("bolt://localhost:7687")),
   NEO4J_USER: blankAsUnset(z.string().default("neo4j")),
   NEO4J_PASSWORD: blankAsUnset(z.string().default("neo4jneo4j")),
@@ -309,6 +322,10 @@ export const scanCooldownSeconds = (): number =>
 
 export const chatQuestionsPerHour = (): number | null =>
   cfg.CHAT_QUESTIONS_PER_HOUR ?? (isHosted() ? 60 : null);
+
+/** Whether this process migrates on boot. See `MIGRATE_ON_BOOT`. */
+export const migrateOnBoot = (): boolean =>
+  cfg.MIGRATE_ON_BOOT ? cfg.MIGRATE_ON_BOOT === "true" : !isHosted();
 
 /**
  * Should the session cookie be `Secure`?

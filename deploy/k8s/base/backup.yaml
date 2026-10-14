@@ -1,0 +1,129 @@
+# Postgres backups, encrypted with a key the cluster does not hold.
+#
+# The most important object in this directory. Losing the scan history is bad;
+# losing `connections.external_id_encrypted` means **every customer has to
+# redeploy their CloudFormation stack**, because the ExternalId is half of the
+# agreement that lets Sightline into their account and the other half is in
+# their trust policy. There is no recovering that from AWS.
+#
+# ## Public-key encryption, on purpose
+#
+# The dump is encrypted to an X.509 certificate held in a ConfigMap. The
+# certificate is public; the private key lives off the cluster. So this pod can
+# *write* a backup it cannot *read*, and an attacker who takes the whole
+# namespace gets the live database - which they already had - and a pile of
+# backups they cannot decrypt. A symmetric passphrase in a Secret would hand
+# them the history as well.
+#
+# `openssl smime` rather than gpg or age because the postgres image already has
+# openssl and adding a package to a backup job is adding a way for the backup
+# job to fail.
+#
+# ## Restoring
+#
+# `deploy/k8s/README.md` has the procedure, and `scripts/backup-restore-test.sh`
+# runs it end to end against a scratch database and checks that an ExternalId
+# still decrypts afterwards. An untested backup is not a backup, and the thing
+# that usually fails is not the dump - it is the `pg_restore` flags.
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata: { name: backups }
+spec:
+  accessModes: [ReadWriteOnce]
+  resources: { requests: { storage: 20Gi } }
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata: { name: postgres-backup }
+spec:
+  # 03:15, not 03:00. Every cron on every machine fires on the hour.
+  schedule: "15 3 * * *"
+  # If a run is still going, skip rather than start a second `pg_dump` beside
+  # it - two concurrent dumps of the same database is load for no gain.
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 7
+  # So a run that hangs on a lock does not sit there until the next one.
+  startingDeadlineSeconds: 3600
+  jobTemplate:
+    spec:
+      backoffLimit: 2
+      template:
+        metadata:
+          labels: { app.kubernetes.io/name: backup }
+        spec:
+          restartPolicy: Never
+          securityContext: { fsGroup: 999 }
+          containers:
+            - name: backup
+              # The same major version as the server: `pg_dump` from an older
+              # client refuses to dump a newer server, which would present as
+              # the backup having silently stopped working after an upgrade.
+              image: postgres:16-alpine
+              env:
+                - name: PGHOST
+                  value: postgres
+                - name: PGDATABASE
+                  valueFrom: { secretKeyRef: { name: sightline-db, key: POSTGRES_DB } }
+                - name: PGUSER
+                  valueFrom: { secretKeyRef: { name: sightline-db, key: POSTGRES_USER } }
+                - name: PGPASSWORD
+                  valueFrom: { secretKeyRef: { name: sightline-db, key: POSTGRES_PASSWORD } }
+                # Optional. With these set the encrypted dump is also copied off
+                # the cluster, which is the difference between surviving a lost
+                # database and surviving a lost machine.
+                - name: S3_DESTINATION
+                  valueFrom:
+                    configMapKeyRef:
+                      { name: sightline-config, key: BACKUP_S3_DESTINATION, optional: true }
+              command: ["/bin/sh", "-eu", "-c"]
+              args:
+                - |
+                  stamp="$(date -u +%Y%m%dT%H%M%SZ)"
+                  out="/backups/sightline-${stamp}.dump.enc"
+
+                  # -Fc: the custom format, which `pg_restore` can read
+                  # selectively and which compresses. A plain SQL dump restores
+                  # only by being replayed in full, which is exactly what you do
+                  # not want when recovering one table.
+                  #
+                  # Piped straight into openssl so the plaintext dump never
+                  # touches the disk - a readable copy beside the encrypted one
+                  # would make the encryption decorative.
+                  pg_dump -Fc --no-owner --no-privileges \
+                    | openssl smime -encrypt -binary -aes-256-cbc -outform DER \
+                        -out "$out" /keys/backup-cert.pem
+
+                  size="$(wc -c < "$out")"
+                  echo "wrote $out ($size bytes)"
+
+                  # A dump of an empty or failed database is a few hundred bytes
+                  # and would otherwise be kept, and then rotate out the last
+                  # good one. Failing loudly is the point.
+                  if [ "$size" -lt 10000 ]; then
+                    echo "refusing a suspiciously small backup; leaving earlier ones alone" >&2
+                    rm -f "$out"
+                    exit 1
+                  fi
+
+                  if [ -n "${S3_DESTINATION:-}" ]; then
+                    # aws-cli is not in this image; the copy is deliberately a
+                    # separate concern. See the README for the sidecar form.
+                    echo "S3_DESTINATION is set but this image has no aws CLI; see README" >&2
+                  fi
+
+                  # Retention last, and only after a good backup exists: pruning
+                  # before writing would turn one failed run into no backups.
+                  find /backups -name 'sightline-*.dump.enc' -mtime +30 -print -delete
+              volumeMounts:
+                - { name: backups, mountPath: /backups }
+                - { name: keys, mountPath: /keys, readOnly: true }
+              resources:
+                requests: { cpu: 100m, memory: 128Mi }
+                limits: { memory: 512Mi }
+          volumes:
+            - name: backups
+              persistentVolumeClaim: { claimName: backups }
+            - name: keys
+              configMap: { name: sightline-backup-key }

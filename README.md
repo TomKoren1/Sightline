@@ -187,6 +187,10 @@ rejoins it. To run scans in their own process as a hosted deployment does, set
 Both paths are covered by CI, and nothing about the product differs between them.
 Run `npm run verify` before pushing — it is everything CI's static job runs.
 
+For a hosted deployment on Kubernetes — kustomize manifests, a Cloudflare tunnel,
+sealed secrets, and an encrypted backup with a restore procedure that is tested
+rather than described — see [`deploy/k8s/README.md`](deploy/k8s/README.md).
+
 The agent uses Anthropic. `ANTHROPIC_MODEL` defaults to `claude-sonnet-5`.
 `/api/health` says whether a key is configured rather than making you discover it
 through a failed request, and names the `.env` it read if the key is missing.
@@ -354,6 +358,7 @@ the API and nginx containers are left running against databases that no longer e
 | `npm run evals:ground-truth -w @sightline/api` | Tier-1 evals — no API key needed                             |
 | `npm run evals -w @sightline/api`              | Tier-2 agent evals — needs a key                             |
 | `npm run db:app-role -w @sightline/api`        | Set the restricted role's password, for row-level security   |
+| `./scripts/backup-restore-test.sh`             | Back up, restore, and check an ExternalId still decrypts     |
 | `npm run db:generate -w @sightline/api`        | Generate a migration after editing `src/db/schema.ts`        |
 | `npm run db:migrate -w @sightline/api`         | Apply pending migrations — the server also does this on boot |
 | `npm run db:studio -w @sightline/api`          | Browse the database in Drizzle Studio                        |

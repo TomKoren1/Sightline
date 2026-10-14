@@ -61,7 +61,7 @@ try {
      BEGIN
        EXECUTE format('ALTER ROLE %I PASSWORD %L', ${quoteLiteral(role)}, ${quoteLiteral(password)});
      END
-     $$;` as never,
+     $$;`,
   );
 
   // Proved rather than assumed: the role existing and the password being set

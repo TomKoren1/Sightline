@@ -1,0 +1,96 @@
+# Default-deny, then name the flows that exist.
+#
+# The same argument as the auth guard being global: a policy listed per
+# workload is one a new workload can omit, and nothing fails when it does.
+# Here the deny-all comes first and anything unlisted simply cannot be reached.
+#
+# **Check this is enforced before relying on it.** NetworkPolicy is implemented
+# by the CNI, and a cluster whose CNI ignores it will accept every one of these
+# objects and enforce none of them - the single most misleading failure mode in
+# Kubernetes networking, because `kubectl get netpol` looks identical either
+# way. k3s ships a policy controller unless started with
+# `--disable-network-policy`; `deploy/k8s/README.md` has a two-pod test that
+# answers the question for a given cluster rather than assuming.
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata: { name: default-deny-ingress }
+spec:
+  # Every pod in the namespace, including ones added later.
+  podSelector: {}
+  policyTypes: [Ingress]
+---
+# The datastores accept connections from the api and the worker, and from
+# nothing else.
+#
+# This is the policy that matters. Postgres holds the encrypted ExternalIds and
+# every tenant's scan history; Neo4j holds every tenant's inventory. Neither has
+# any business being reachable from the web pods, from the tunnel, or from
+# whatever else ends up in this namespace later.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata: { name: datastores-from-app-only }
+spec:
+  podSelector:
+    matchExpressions:
+      - { key: app.kubernetes.io/name, operator: In, values: [postgres, neo4j] }
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - podSelector:
+            matchExpressions:
+              - key: app.kubernetes.io/name
+                operator: In
+                # `migrate` and `backup` are here because they are the two
+                # things other than the application that legitimately talk to
+                # Postgres: one writes the schema, one reads it all out.
+                values: [api, worker, migrate, backup]
+      ports:
+        - { protocol: TCP, port: 5432 }
+        - { protocol: TCP, port: 7687 }
+---
+# The API accepts requests from the web pods only.
+#
+# Nothing outside reaches the API directly: the tunnel terminates at `web`,
+# which serves the SPA and proxies `/api/`. One entry point rather than two
+# means the proxy's streaming and timeout settings apply to every request that
+# reaches a handler, rather than to the ones that happened to come the long way.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata: { name: api-from-web-only }
+spec:
+  podSelector:
+    matchLabels: { app.kubernetes.io/name: api }
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels: { app.kubernetes.io/name: web }
+      ports: [{ protocol: TCP, port: 3000 }]
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata: { name: web-from-tunnel-only }
+spec:
+  podSelector:
+    matchLabels: { app.kubernetes.io/name: web }
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels: { app.kubernetes.io/name: cloudflared }
+      ports: [{ protocol: TCP, port: 80 }]
+---
+# Egress is deliberately **not** restricted, and this is the one place in these
+# manifests where the permissive choice is the right one.
+#
+# The whole product is outbound calls to AWS: `sts:AssumeRole` and then a
+# Describe or List against every regional endpoint of six services, for accounts
+# whose regions are not known in advance. An egress allowlist would have to name
+# every AWS endpoint in every region a customer might enable, and the failure
+# mode of getting it wrong is a scan that reports a region as unreadable - which
+# looks exactly like a missing IAM permission and would be diagnosed as one.
+#
+# What egress rules would buy is containment after a compromise. That is worth
+# having, and the way to get it here is DNS-aware egress filtering rather than
+# a CIDR list that is wrong the week AWS adds a region.

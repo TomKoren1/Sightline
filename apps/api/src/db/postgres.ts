@@ -32,6 +32,7 @@
 
 import { AsyncLocalStorage } from "node:async_hooks";
 import { createHash } from "node:crypto";
+import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { drizzle } from "drizzle-orm/node-postgres";
 import { migrate as runMigrations } from "drizzle-orm/node-postgres/migrator";
@@ -201,9 +202,57 @@ export const currentTenant = (): string | null => bound.getStore()?.tenantId ?? 
  * percent-encoded.
  */
 export async function migrate(): Promise<void> {
-  await runMigrations(system, {
-    migrationsFolder: fileURLToPath(new URL("../../drizzle", import.meta.url)),
-  });
+  await runMigrations(system, { migrationsFolder: MIGRATIONS_FOLDER });
+}
+
+const MIGRATIONS_FOLDER = fileURLToPath(new URL("../../drizzle", import.meta.url));
+
+/**
+ * Migrations this build carries that the database has not applied.
+ *
+ * Compared on the journal's `when` timestamp, which is the key drizzle's own
+ * migrator uses to decide what to run - so this answers the same question the
+ * migrator would, rather than a similar one that could disagree.
+ */
+export async function pendingMigrations(): Promise<string[]> {
+  const journal = JSON.parse(readFileSync(`${MIGRATIONS_FOLDER}/meta/_journal.json`, "utf8")) as {
+    entries: { when: number; tag: string }[];
+  };
+
+  let applied: Set<string>;
+  try {
+    const { rows } = await system.execute("SELECT created_at FROM drizzle.__drizzle_migrations");
+    applied = new Set((rows as { created_at: string }[]).map((r) => String(r.created_at)));
+  } catch {
+    // No table means nothing has ever been applied, which makes every
+    // migration pending - not an error to swallow quietly.
+    applied = new Set();
+  }
+
+  return journal.entries.filter((e) => !applied.has(String(e.when))).map((e) => e.tag);
+}
+
+/**
+ * Refuse to start against a database whose schema is behind this build.
+ *
+ * For the deployment where migrations run as their own Job rather than on boot.
+ * Without this, a pod that started before the Job finished would serve requests
+ * against an older schema: reads would fail on missing columns, and - worse -
+ * a table added for row-level security would simply not be there, so nothing
+ * would be policed and nothing would say so.
+ *
+ * Names the pending migrations and the command, because "the schema is behind"
+ * is a diagnosis and not an action.
+ */
+export async function assertSchemaCurrent(): Promise<void> {
+  const pending = await pendingMigrations();
+  if (pending.length === 0) return;
+  throw new Error(
+    `The database is missing ${pending.length} migration(s): ${pending.join(", ")}.\n` +
+      "This deployment runs migrations as a separate Job rather than on boot, so that two " +
+      "replicas cannot race to apply them. Run `npm run db:migrate -w @sightline/api` (or let " +
+      "the migrate Job complete) before starting the API.",
+  );
 }
 
 /**

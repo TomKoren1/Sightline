@@ -19,7 +19,7 @@
 import pino from "pino";
 
 import { cfg, scanWorkerMode } from "./config.js";
-import { closePool } from "./db/postgres.js";
+import { assertSchemaCurrent, closePool } from "./db/postgres.js";
 import { closeDriver } from "./db/neo4j.js";
 import { assertHostedInvariants } from "./hostedMode.js";
 import { ScanWorker } from "./jobs/worker.js";
@@ -40,6 +40,16 @@ if (scanWorkerMode() === "off") {
 const worker = new ScanWorker({ log });
 
 try {
+  /**
+   * Checked, never applied.
+   *
+   * Two processes racing to migrate on boot is the problem the migrate Job
+   * exists to solve, and a worker that migrated would reintroduce it from the
+   * other side. But a worker claiming jobs against a schema that is behind
+   * would fail every scan with a column error, so it refuses rather than
+   * starting - the same answer the API gives.
+   */
+  await assertSchemaCurrent();
   await worker.start();
   log.info(
     { deployment: cfg.DEPLOYMENT_MODE, concurrency: cfg.SCAN_WORKER_CONCURRENCY },

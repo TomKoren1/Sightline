@@ -1,0 +1,26 @@
+# Neo4j's memory, for the node this actually runs on.
+#
+# The base asks for 2G heap and a 1G page cache, which is what docker-compose
+# uses and what the store size justifies. A `limits.memory` has to leave room
+# above the sum of those for the JVM's own non-heap use - metaspace, thread
+# stacks, direct buffers - or the container is killed while the JVM believes it
+# is within its heap, which presents as Neo4j dying for no reason that appears
+# in its logs.
+#
+# 3.5Gi for 3G of configured memory. Raising the heap means raising this too,
+# and the two are easy to change independently and wrong to.
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: neo4j
+spec:
+  template:
+    spec:
+      containers:
+        - name: neo4j
+          resources:
+            requests:
+              cpu: 200m
+              memory: 3Gi
+            limits:
+              memory: 3584Mi
