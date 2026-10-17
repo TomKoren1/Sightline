@@ -42,11 +42,12 @@ export interface ScanBannerProps {
   onScan: () => void;
   onOpenTrust: () => void;
   onOpenConnection: () => void;
-  switchNote: string | null;
   connections: ConnectionSummary[];
   /** Null means the server picks the oldest, which is what the switcher shows. */
   selectedConnectionId: string | null;
   onSelectConnection: (id: string) => void;
+  /** Asks to remove one account; the confirmation lives in a dialog above. */
+  onDisconnectConnection: (connection: ConnectionSummary) => void;
   /** Null in a self-hosted deployment, which has no sign-in. */
   signedInAs: string | null;
   onSignOut: () => void;
@@ -63,10 +64,10 @@ export function ScanBanner({
   onScan,
   onOpenTrust,
   onOpenConnection,
-  switchNote,
   connections,
   selectedConnectionId,
   onSelectConnection,
+  onDisconnectConnection,
   signedInAs,
   onSignOut,
   onDeleteAccount,
@@ -124,6 +125,7 @@ export function ScanBanner({
             selectedId={selectedConnectionId}
             onSelect={onSelectConnection}
             onConnect={onOpenConnection}
+            onDisconnect={onDisconnectConnection}
           />
           {signedInAs && (
             <>
@@ -179,13 +181,6 @@ export function ScanBanner({
           </button>
         </div>
       </div>
-
-      {/* After a switch the graph still holds the previous account's scan. */}
-      {switchNote && !scanning && (
-        <div className="border-t border-accent/30 bg-accent/10 px-3 py-1.5 text-[11px] text-accent">
-          {switchNote}
-        </div>
-      )}
 
       {error && (
         <div className="border-t border-danger/30 bg-danger/10 px-3 py-1.5 text-[11px] text-danger">

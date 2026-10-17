@@ -13,11 +13,13 @@ import { ReactFlowProvider } from "@xyflow/react";
 import type { ScanEvent, ScanUnit } from "@sightline/shared";
 
 import { api, selectConnection, startScan, watchScan } from "./api.js";
+import type { ConnectionSummary } from "./api.js";
 import { DEFAULT_VISIBLE_KINDS, KIND_STYLES, styleFor } from "./kinds.js";
 import { Chat } from "./components/Chat.js";
 import { ConnectAccount } from "./components/ConnectAccount.js";
 import { ConnectionGuide } from "./components/ConnectionGuide.js";
 import { DeleteAccount } from "./components/DeleteAccount.js";
+import { DisconnectAccount } from "./components/DisconnectAccount.js";
 import { Modal } from "./components/Modal.js";
 import { TrustPanel } from "./components/TrustPanel.js";
 import { Findings } from "./components/Findings.js";
@@ -43,8 +45,15 @@ export function App() {
   const [visibleKinds, setVisibleKinds] = useState<string[]>(DEFAULT_VISIBLE_KINDS);
   const [showFilters, setShowFilters] = useState(false);
   const [modal, setModal] = useState<"trust" | "connection" | "delete" | null>(null);
-  const [switchNote, setSwitchNote] = useState<string | null>(null);
   const [connectionId, setConnectionId] = useState<string | null>(null);
+  /**
+   * The account a disconnect has been asked for, pending confirmation.
+   *
+   * Held as the row rather than its id, because the dialog names the account
+   * and asks for its label back - and the row is gone from `me` by the time
+   * the dialog closes.
+   */
+  const [disconnecting, setDisconnecting] = useState<ConnectionSummary | null>(null);
 
   /**
    * Who is asking, and which accounts they have. One request before the first
@@ -89,11 +98,21 @@ export function App() {
       setConnectionId(id);
       setCitedArns([]);
       setSelectedArn(null);
-      // Switching does not rescan, so say so rather than letting someone read
-      // one account's inventory under another's name.
-      setSwitchNote(
-        "Switched account. The graph still shows the previous scan — run one to load this account.",
-      );
+      /**
+       * No note about the graph being stale, because it is not.
+       *
+       * Each connection's graph is its own latest projected scan, looked up
+       * per request, and every query here is keyed by the connection - so this
+       * invalidation loads the account being switched to. The banner then says
+       * what that account actually has, from its own data: a resource count
+       * and the age of its scan, or "No scan yet".
+       *
+       * The note this replaces said the graph still showed the previous scan
+       * and told the reader to run one. That was true of the process-wide
+       * demo/real toggle it was written for, and false here - and it sent
+       * people to rescan an account whose inventory was already loaded, which
+       * a cooldown then refused.
+       */
       void queryClient.invalidateQueries();
     },
     [queryClient],
@@ -158,7 +177,6 @@ export function App() {
   const runScan = useCallback(async () => {
     setScanning(true);
     setScanError(null);
-    setSwitchNote(null);
     setLiveUnits([]);
     setProgress(null);
     setCitedArns([]);
@@ -254,10 +272,10 @@ export function App() {
         onScan={() => void runScan()}
         onOpenTrust={() => setModal("trust")}
         onOpenConnection={() => setModal("connection")}
-        switchNote={switchNote}
         connections={connections}
         selectedConnectionId={conn}
         onSelectConnection={switchConnection}
+        onDisconnectConnection={setDisconnecting}
         signedInAs={me.data?.user?.email ?? null}
         onSignOut={() => {
           void api.logout().then(() => window.location.reload());
@@ -281,6 +299,36 @@ export function App() {
              * shortest way to one that cannot leave a stale cache behind.
              */
             onDeleted={() => window.location.assign("/")}
+          />
+        </Modal>
+      )}
+
+      {disconnecting && (
+        <Modal
+          title="Disconnect this account"
+          subtitle="Everything Sightline holds about this AWS account, removed"
+          onClose={() => setDisconnecting(null)}
+        >
+          <DisconnectAccount
+            connection={disconnecting}
+            onDisconnected={() => {
+              /**
+               * Back to the server's default rather than to another row.
+               *
+               * `connectionId` may name the account just removed, and a
+               * request carrying a dead id is a 404 on every panel at once.
+               * Clearing it lets the server pick the oldest remaining
+               * connection, which is what a tenant with one account left
+               * expects to be looking at.
+               */
+              setDisconnecting(null);
+              setConnectionId(null);
+              setCitedArns([]);
+              setSelectedArn(null);
+              // Everything on screen belonged to an account that no longer
+              // exists, `me` included.
+              void queryClient.invalidateQueries();
+            }}
           />
         </Modal>
       )}
