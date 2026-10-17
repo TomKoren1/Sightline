@@ -21,10 +21,13 @@ import {
   SIGHTLINE_PREFIX,
   OTHER_MANAGED_ENV_KEYS,
   READ_ONLY_ROLE_NAME,
-  STACK_NAME,
+  LEGACY_SINGLE_TENANT,
   TEMPLATE_PATH,
   TEMPLATE_VERSION,
   deployCommandArgs,
+  readOnlyRoleName,
+  stackNameFor,
+  tenantSuffix,
   formatDeployCommand,
   quickCreateUrl,
   readOnlyRoleArn,
@@ -34,10 +37,15 @@ import {
 const root = fileURLToPath(new URL("../../../", import.meta.url));
 const template = readFileSync(root + TEMPLATE_PATH, "utf8");
 
+/** Two real-shaped tenant ids, because what matters is that they differ. */
+const TENANT_A = "970bfaa9-143e-4ecd-9f27-0a1f6c92017e";
+const TENANT_B = "5d1f28d8-cf62-4691-a111-d6ea8dacfa45";
+
 const input = {
   scannerPrincipalArn: "arn:aws:iam::111122223333:user/terraform-bootstrap",
   externalId: "sightline-abc123",
   region: "us-east-1",
+  tenantId: TENANT_A,
 };
 
 describe("the recipe agrees with the template", () => {
@@ -63,16 +71,23 @@ describe("the recipe agrees with the template", () => {
   });
 
   it("builds the role ARN the template's output will report", () => {
-    expect(readOnlyRoleArn("111122223333")).toBe(
+    expect(readOnlyRoleArn("111122223333", LEGACY_SINGLE_TENANT)).toBe(
       `arn:aws:iam::111122223333:role/${READ_ONLY_ROLE_NAME}`,
     );
+  });
+
+  it("declares the RoleName parameter the per-tenant link passes", () => {
+    // The whole reason per-tenant names needed no new template version: this
+    // parameter was already there, with a default and no AllowedPattern.
+    expect(template).toMatch(/^ {2}RoleName:$/m);
+    expect(template).toContain("RoleName: !Ref RoleName");
   });
 });
 
 describe("deployCommandArgs", () => {
   it("passes the stack name, region and capability the template needs", () => {
     const args = deployCommandArgs(input);
-    expect(args).toContain(STACK_NAME);
+    expect(args).toContain(stackNameFor(TENANT_A));
     expect(args).toContain("us-east-1");
     // A named-IAM role cannot be created without it.
     expect(args).toContain("CAPABILITY_NAMED_IAM");
@@ -158,6 +173,7 @@ const published = {
   scannerPrincipalArn: input.scannerPrincipalArn,
   externalId: input.externalId,
   region: "us-east-1",
+  tenantId: TENANT_A,
 };
 
 describe("the one-click link", () => {
@@ -178,7 +194,7 @@ describe("the one-click link", () => {
     expect(params.get("param_ExternalId")).toBe(input.externalId);
     expect(params.get("param_SightlineScannerRoleArn")).toBe(input.scannerPrincipalArn);
     expect(params.get("templateURL")).toBe(published.templateUrl);
-    expect(params.get("stackName")).toBe(STACK_NAME);
+    expect(params.get("stackName")).toBe(stackNameFor(TENANT_A));
   });
 
   it("names every template parameter that has no default", () => {
@@ -242,7 +258,7 @@ describe("the one-click link", () => {
 describe("the Terraform form", () => {
   it("deploys the same stack, with the same parameters", () => {
     const snippet = terraformSnippet(published);
-    expect(snippet).toContain(`name         = "${STACK_NAME}"`);
+    expect(snippet).toContain(`name         = "${stackNameFor(TENANT_A)}"`);
     expect(snippet).toContain(`ExternalId              = "${input.externalId}"`);
     expect(snippet).toContain(`SightlineScannerRoleArn = "${input.scannerPrincipalArn}"`);
     // The acknowledgement the console asks for as a checkbox.
@@ -265,5 +281,96 @@ describe("the template version", () => {
     // a SourceIdentity pattern no legal value could satisfy, and the assume was
     // refused with an AccessDenied that mentioned nothing relevant.
     expect(TEMPLATE_VERSION).toMatch(/^v\d+$/);
+  });
+});
+
+describe("per-tenant names", () => {
+  /**
+   * The defect these exist for, stated once: an AWS account holds one role of a
+   * given name, that role has one trust policy, and a trust policy carries one
+   * ExternalId. Two tenants naming the same role therefore could not both
+   * connect one account - whichever deployed last owned it, and the other was
+   * refused for ever with "the role exists but refused to be assumed", which
+   * reads as a broken deployment rather than as a collision.
+   *
+   * Found by connecting the same account from two Google accounts on a live
+   * deployment, twice, after a day of diagnosing it as an ExternalId mismatch.
+   */
+  it("gives two tenants different names in the same account", () => {
+    expect(readOnlyRoleName(TENANT_A)).not.toBe(readOnlyRoleName(TENANT_B));
+    expect(stackNameFor(TENANT_A)).not.toBe(stackNameFor(TENANT_B));
+    expect(readOnlyRoleArn("111122223333", TENANT_A)).not.toBe(
+      readOnlyRoleArn("111122223333", TENANT_B),
+    );
+  });
+
+  it("gives one tenant the same name every time", () => {
+    // Derived, not stored: the name has to come out identical on the screen
+    // that shows the link, the row that pins the ARN, and the verify that
+    // assumes it.
+    expect(readOnlyRoleName(TENANT_A)).toBe(readOnlyRoleName(TENANT_A));
+    expect(readOnlyRoleName(TENANT_A.toUpperCase())).toBe(readOnlyRoleName(TENANT_A));
+  });
+
+  it("leaves the single-tenant deployment's names exactly as they were", () => {
+    /**
+     * Not cosmetic. A clone's `.env` holds the role ARN it deployed, and
+     * `npm run setup --disconnect` deletes that role *by name* - so changing
+     * the name here would orphan every role already deployed and make the
+     * teardown silently delete nothing.
+     */
+    expect(readOnlyRoleName(LEGACY_SINGLE_TENANT)).toBe("SightlineReadOnlyRole");
+    expect(stackNameFor(LEGACY_SINGLE_TENANT)).toBe("sightline-readonly");
+  });
+
+  it("fits what AWS will accept as a role name", () => {
+    // 64 characters, and only these characters. A name AWS rejects fails at
+    // stack-create time, in the customer's console, after they have agreed to
+    // the IAM acknowledgement.
+    for (const tenant of [TENANT_A, TENANT_B, LEGACY_SINGLE_TENANT]) {
+      const name = readOnlyRoleName(tenant);
+      expect(name.length, name).toBeLessThanOrEqual(64);
+      expect(name, name).toMatch(/^[A-Za-z0-9+=,.@_-]+$/);
+      // And a stack name: letters, digits and hyphens, starting with a letter.
+      expect(stackNameFor(tenant)).toMatch(/^[A-Za-z][A-Za-z0-9-]{0,127}$/);
+    }
+  });
+
+  it("refuses anything that is not a tenant id", () => {
+    /**
+     * Rather than naming a customer's role after a typo. The empty string is
+     * the one that matters: it is what an unset variable looks like, and
+     * `SightlineReadOnlyRole-` would deploy, work, and collide with every
+     * other caller that passed nothing.
+     */
+    for (const bad of ["", "   ", "tenant-1", "ZZZZ"]) {
+      expect(() => tenantSuffix(bad), JSON.stringify(bad)).toThrow(/tenant id/);
+      expect(() => readOnlyRoleName(bad), JSON.stringify(bad)).toThrow(/tenant id/);
+    }
+  });
+
+  it("names the same role in the link, the CLI command and the Terraform", () => {
+    /**
+     * The cross-artefact check this file exists for, extended to the new
+     * parameter. Three things a customer might each use, one of which being
+     * wrong means the role they deploy is not the one that gets assumed - and
+     * the symptom is an AccessDenied naming nothing.
+     */
+    const role = readOnlyRoleName(TENANT_B);
+    const stack = stackNameFor(TENANT_B);
+    const forB = { ...published, tenantId: TENANT_B };
+
+    const fragment = quickCreateUrl(forB).split("#")[1]!;
+    const params = new URLSearchParams(fragment.slice(fragment.indexOf("?") + 1));
+    expect(params.get("param_RoleName")).toBe(role);
+    expect(params.get("stackName")).toBe(stack);
+
+    const args = deployCommandArgs({ ...input, tenantId: TENANT_B });
+    expect(args).toContain(`RoleName=${role}`);
+    expect(args[args.indexOf("--stack-name") + 1]).toBe(stack);
+
+    const snippet = terraformSnippet(forB);
+    expect(snippet).toContain(`RoleName                = "${role}"`);
+    expect(snippet).toContain(`name         = "${stack}"`);
   });
 });

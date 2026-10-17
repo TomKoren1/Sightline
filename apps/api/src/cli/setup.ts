@@ -7,18 +7,13 @@
  *   npm run setup -- --mock          configure the demo account and stop
  *   npm run setup -- --disconnect    delete the role and go back to the demo account
  *
- * Runs on the host deliberately: the API is in a container with no AWS CLI, no
- * write permissions and no access to `.env`, so an in-product form could not
- * have done the step that takes effort.
+ * On the host deliberately: the API container has no AWS CLI, no write
+ * permissions and no access to `.env`.
  *
- * Safety rules, in order of importance:
- *
- *  1. Nothing that writes runs before the plan is shown and accepted.
- *  2. `.env` is backed up, then rewritten touching only declared keys -
- *     verified against the produced content, not merely intended.
- *  3. Credentials are never printed, and no access key can be written.
- *  4. Every AWS call passes an argument vector, so no value is shell syntax.
- *  5. Re-running is safe; deleting anything needs an explicit flag.
+ * Nothing that writes runs before the plan is accepted; `.env` is backed up and
+ * rewritten touching only declared keys, verified against the produced content;
+ * credentials are never printed; every AWS call passes an argument vector, so
+ * no value is shell syntax; re-running is safe and deleting needs a flag.
  */
 
 import { randomBytes } from "node:crypto";
@@ -28,7 +23,12 @@ import { fileURLToPath } from "node:url";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 
-import { SIGHTLINE_PREFIX, formatDeployCommand, READ_ONLY_ROLE_NAME } from "@sightline/shared";
+import {
+  LEGACY_SINGLE_TENANT,
+  READ_ONLY_ROLE_NAME,
+  SIGHTLINE_PREFIX,
+  formatDeployCommand,
+} from "@sightline/shared";
 
 import { assumablePrincipalArn } from "../aws/principal.js";
 import { apiReachable } from "../setup/reachable.js";
@@ -496,7 +496,13 @@ async function runReal(current: string, opts: Options, extra: EnvEdit[]): Promis
     console.log(`\n${bold("  The command this would run")}`);
     console.log(
       dim(
-        formatDeployCommand({ scannerPrincipalArn: principal, externalId, region, profile })
+        formatDeployCommand({
+          scannerPrincipalArn: principal,
+          externalId,
+          region,
+          profile,
+          tenantId: LEGACY_SINGLE_TENANT,
+        })
           .split("\n")
           .map((l) => `    ${l}`)
           .join("\n"),
@@ -527,6 +533,10 @@ async function runReal(current: string, opts: Options, extra: EnvEdit[]): Promis
     externalId,
     region,
     profile,
+    // A clone is one tenant, and keeps the original role and stack names: the
+    // suffix exists to stop two tenants naming one role, and renaming here
+    // would orphan the role every existing install already deployed.
+    tenantId: LEGACY_SINGLE_TENANT,
   });
   if (!deployed.ok) {
     console.log(`  ${red("✗")} the stack did not deploy.`);

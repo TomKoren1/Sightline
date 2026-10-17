@@ -124,12 +124,36 @@ export async function onboardingPlan(scope: Scope): Promise<OnboardingPlan> {
     scannerPrincipalArn: principal,
     templateUrl,
     templateVersion: TEMPLATE_VERSION,
-    launchUrl: quickCreateUrl({ templateUrl, scannerPrincipalArn: principal, externalId, region }),
-    cliCommand: formatDeployCommand({ scannerPrincipalArn: principal, externalId, region }),
-    terraform: terraformSnippet({ templateUrl, scannerPrincipalArn: principal, externalId }),
+    /**
+     * All three carry the tenant, so the role and stack they name are this
+     * tenant's own.
+     *
+     * Without it two tenants connecting one AWS account would name one role,
+     * and a role has one trust policy and therefore one ExternalId - so the
+     * second to deploy owned it and the first was refused permanently.
+     */
+    launchUrl: quickCreateUrl({
+      templateUrl,
+      scannerPrincipalArn: principal,
+      externalId,
+      region,
+      tenantId: scope.tenantId,
+    }),
+    cliCommand: formatDeployCommand({
+      scannerPrincipalArn: principal,
+      externalId,
+      region,
+      tenantId: scope.tenantId,
+    }),
+    terraform: terraformSnippet({
+      templateUrl,
+      scannerPrincipalArn: principal,
+      externalId,
+      tenantId: scope.tenantId,
+    }),
     // Shown so the customer can see what we will derive, rather than being
     // asked to paste it.
-    roleArnPattern: readOnlyRoleArn("<your account id>"),
+    roleArnPattern: readOnlyRoleArn("<your account id>", scope.tenantId),
   };
 }
 

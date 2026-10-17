@@ -6,7 +6,12 @@
  * ask, and then carry it out; everything judgemental lives here.
  */
 
-import { CONNECTION_ENV_KEYS, OTHER_MANAGED_ENV_KEYS, readOnlyRoleArn } from "@sightline/shared";
+import {
+  CONNECTION_ENV_KEYS,
+  LEGACY_SINGLE_TENANT,
+  OTHER_MANAGED_ENV_KEYS,
+  readOnlyRoleArn,
+} from "@sightline/shared";
 
 import type { EnvEdit } from "./envFile.js";
 
@@ -76,7 +81,7 @@ export interface RealConnectionInput {
 export function realConnectionEdits(input: RealConnectionInput): EnvEdit[] {
   return [
     { key: "AWS_MODE", value: "real" },
-    { key: "AWS_TARGET_ROLE_ARN", value: readOnlyRoleArn(input.accountId) },
+    { key: "AWS_TARGET_ROLE_ARN", value: readOnlyRoleArn(input.accountId, LEGACY_SINGLE_TENANT) },
     { key: "AWS_EXTERNAL_ID", value: input.externalId },
     { key: "AWS_REGION", value: input.region },
     { key: "AWS_SCAN_REGIONS", value: input.scanRegions },

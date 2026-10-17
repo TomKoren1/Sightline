@@ -15,7 +15,7 @@
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { useState } from "react";
 
-import { formatDeployCommand, readOnlyRoleArn } from "@sightline/shared";
+import { LEGACY_SINGLE_TENANT, formatDeployCommand, readOnlyRoleArn } from "@sightline/shared";
 
 import { api, type Connection, type ConnectionTest } from "../api.js";
 import { Copyable } from "./Copyable.js";
@@ -32,7 +32,7 @@ import { Copyable } from "./Copyable.js";
 const EXTERNAL_ID_PENDING = "PASTE_EXTERNAL_ID_FROM_STEP_2";
 
 /** The one value in step 3 the reader must replace, shaped like a real ARN. */
-const ROLE_ARN_TEMPLATE = readOnlyRoleArn("<your-12-digit-account-id>");
+const ROLE_ARN_TEMPLATE = readOnlyRoleArn("<your-12-digit-account-id>", LEGACY_SINGLE_TENANT);
 
 function Step({
   n,
@@ -172,6 +172,12 @@ export function ConnectionGuide() {
     scannerPrincipalArn: scannerPrincipal,
     externalId: suggestedId,
     region: c.homeRegion,
+    /**
+     * This guide describes a clone, which is one tenant - so the role keeps
+     * the original name. The hosted flow renders its own command, per tenant,
+     * from the server; see `ConnectAccount`.
+     */
+    tenantId: LEGACY_SINGLE_TENANT,
   });
 
   const envSnippet = [

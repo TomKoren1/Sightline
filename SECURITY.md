@@ -42,6 +42,34 @@ The trust policy requires the deployment's own role ARN as the principal, a
 matching ExternalId, and a `SourceIdentity` matching `sightline-*` — the last
 of which makes attribution mandatory rather than optional.
 
+**One role per tenant, not one role per account.** A hosted deployment names
+the role it asks for after the tenant asking —
+`SightlineReadOnlyRole-<first 12 hex of the tenant id>` — and names the stack
+the same way. Without that, two tenants connecting the same AWS account named
+one role, and a role has one trust policy carrying one ExternalId: whichever
+deployed its stack last owned the role and the other was refused permanently.
+Two engineers at one company connecting their shared production account is the
+first thing a real service meets. It failed safe — the second tenant could not
+connect at all, rather than reading the first one's inventory — but a
+limitation that presents as `AccessDenied` is one people diagnose as a bug for
+an afternoon.
+
+The platform's scanner identity therefore needs both forms in its policy,
+because a role deployed before this change keeps the name it was created with
+and connections pin the ARN they verified:
+
+```json
+"Resource": [
+  "arn:aws:iam::*:role/SightlineReadOnlyRole",
+  "arn:aws:iam::*:role/SightlineReadOnlyRole-*"
+]
+```
+
+A self-hosted clone keeps the unsuffixed name. It has one tenant, so there is
+nothing to disambiguate, and renaming would orphan the role every existing
+install already deployed — including the one `npm run setup --disconnect`
+deletes by name.
+
 Remediation commands are _generated as text for an operator to run_ and are
 never executed by the product.
 

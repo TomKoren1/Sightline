@@ -7,7 +7,12 @@
  */
 
 import { describe, expect, it } from "vitest";
-import { CONNECTION_ENV_KEYS, OTHER_MANAGED_ENV_KEYS, readOnlyRoleArn } from "@sightline/shared";
+import {
+  CONNECTION_ENV_KEYS,
+  LEGACY_SINGLE_TENANT,
+  OTHER_MANAGED_ENV_KEYS,
+  readOnlyRoleArn,
+} from "@sightline/shared";
 
 import {
   chooseExternalId,
@@ -74,7 +79,7 @@ describe("maskForDisplay", () => {
 
   it("leaves non-secret values readable", () => {
     // The point of the diff is that the user can check it.
-    const arn = readOnlyRoleArn(input.accountId);
+    const arn = readOnlyRoleArn(input.accountId, LEGACY_SINGLE_TENANT);
     expect(maskForDisplay("AWS_TARGET_ROLE_ARN", arn)).toBe(arn);
     expect(maskForDisplay("AWS_MODE", "real")).toBe("real");
   });
@@ -151,7 +156,7 @@ describe("the edits the script produces", () => {
     // Pasting the wrong ARN here is what produced `Invalid principal in policy`
     // on a real account (#46); building it removes the opportunity.
     const arn = realConnectionEdits(input).find((e) => e.key === "AWS_TARGET_ROLE_ARN");
-    expect(arn!.value).toBe(readOnlyRoleArn(input.accountId));
+    expect(arn!.value).toBe(readOnlyRoleArn(input.accountId, LEGACY_SINGLE_TENANT));
   });
 
   it("switches to real mode and keeps the region it was given", () => {

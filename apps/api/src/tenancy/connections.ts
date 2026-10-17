@@ -160,10 +160,16 @@ export async function createConnection(
 /**
  * Point a pending connection at an account.
  *
- * Only the twelve digits are asked for; the role ARN is derived, because the
- * role's name is fixed by the template we publish. One field is the whole
- * difference between an onboarding flow people finish and one they abandon,
- * and a hand-pasted ARN is the step where they mistype.
+ * Only the twelve digits are asked for; the role ARN is derived from them and
+ * from the tenant, because the role's name is the one this tenant's own
+ * quick-create link deploys. One field is the whole difference between an
+ * onboarding flow people finish and one they abandon, and a hand-pasted ARN is
+ * the step where they mistype.
+ *
+ * Per-tenant, so two tenants may connect the same AWS account: one role of a
+ * given name holds one trust policy and therefore one ExternalId, so a shared
+ * name meant the second tenant to deploy owned the role and the first was
+ * refused for ever.
  */
 export async function setTargetAccount(
   scope: Scope,
@@ -176,7 +182,7 @@ export async function setTargetAccount(
     await db
       .update(connections)
       .set({
-        roleArn: readOnlyRoleArn(params.accountId),
+        roleArn: readOnlyRoleArn(params.accountId, scope.tenantId),
         // Deliberately *not* set as `accountId`: that column is what the role
         // actually reached, written only once an assume-role has proved it. A
         // typed-in value is a claim, not evidence.
