@@ -2,23 +2,17 @@
  * Every route is protected unless it says otherwise, and the list of exceptions
  * is accurate.
  *
- * This is the most important test in the project after the tenant-isolation
- * one, and it is deliberately **behavioural**: it drives the real application,
- * takes the **real** route table from Fastify, and asks each route a question
- * without a session. The question is not whether `readSession` works - it is
- * whether somebody can read an inventory without signing in.
+ * Deliberately behavioural: it drives the real application, takes the real
+ * route table from Fastify, and asks each route a question with no session. Not
+ * whether `readSession` works - whether somebody can read an inventory without
+ * signing in.
  *
- * Both directions are checked, which is what makes the published list
- * checkable rather than a claim:
+ * Both directions, which is what makes the published list checkable: a route
+ * not on it must answer 401, and a route on it must not - so an entry left
+ * behind after a route stopped being public fails too.
  *
- *   - a route not on the list must answer 401, so a route added later without
- *     thinking about authentication fails here;
- *   - a route on the list must answer something other than 401, so an entry
- *     left behind after the route stopped being public also fails.
- *
- * Runs in **hosted** mode, because that is the mode where the question has an
- * answer. Self-hosted has one tenant and no sign-in, and is covered by its own
- * case at the bottom.
+ * Runs in hosted mode, where the question has an answer; self-hosted has its
+ * own case at the bottom.
  */
 
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";

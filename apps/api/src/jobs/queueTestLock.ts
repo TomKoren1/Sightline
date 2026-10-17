@@ -1,27 +1,16 @@
 /**
  * Serialises the test files that exercise the real `scan_jobs` table.
  *
- * Test-only, and here rather than inside one of the test files because two of
- * them need the same lock and a copy in each is a copy that drifts.
- *
- * ## Why a lock and not better cleanup
- *
- * `claimNextJob` takes the oldest queued job **across every tenant**, which is
+ * Test-only, and shared rather than copied into each of the two files needing
+ * it. `claimNextJob` takes the oldest queued job across every tenant, which is
  * correct - one worker serves everybody - and makes any test that claims
- * inherently exclusive. Scoping each test's deletes to its own tenant is not
- * enough: `queue.test.ts` claiming would still take a job `progress.test.ts`
- * had seeded, turning it `running` and locked by a worker that never finishes.
- * Both files then fail, intermittently, depending on which worker got there
- * first - and they did: five queue tests passed alone and failed in the full
- * suite.
+ * inherently exclusive: scoping deletes per tenant is not enough, because one
+ * file's claim takes another's seeded job and leaves it running for ever. Both
+ * then fail intermittently, and did.
  *
- * Vitest runs test *files* in parallel workers, so no amount of ordering within
- * a file fixes this. An advisory lock is the mechanism the shared resource
- * already provides: whoever holds it runs, the other waits in `beforeAll`.
- *
- * Session-scoped, so it needs a connection of its own held for the file's
- * lifetime - a pooled one would be handed back between statements and the lock
- * released with it.
+ * Vitest parallelises test *files*, so ordering within a file cannot fix it.
+ * Session-scoped, so it holds a connection of its own: a pooled one would be
+ * handed back between statements and the lock released with it.
  */
 
 import pg from "pg";

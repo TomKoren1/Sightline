@@ -1,47 +1,14 @@
 /**
  * The database itself refuses to return another tenant's rows.
  *
- * The second of the two mechanisms, and the one that holds when the first
- * fails. Phase 1 made every query name whose data it reads, enforced by branded
- * ids and a compile error; this asserts that a query which forgets anyway gets
- * nothing rather than somebody else's inventory. The two fail differently,
- * which is the only reason having both is worth anything.
+ * Branded ids make a query name whose data it reads; this asserts that one
+ * which forgets anyway gets nothing instead of somebody else's inventory.
  *
- * ## This test provisions its own role
- *
- * It does not depend on `DATABASE_URL_APP` being configured, and that is
- * deliberate: a deployment that has not configured it would simply skip, which
- * is the one outcome a security test must not have. So the test makes a login
- * role of its own and connects as that. CI then exercises RLS in the
- * integration job whether or not CI is set up for it, which is where this check
- * is worth the most.
- *
- * The test role is a **member of** `sightline_app` rather than a hand-made
- * approximation of it, so it inherits exactly the privileges the application
- * has - a copied set of grants is one that drifts from the real one silently.
- *
- * It is a separate role because the first version simply set a password on
- * `sightline_app` itself, which rotated the credential the application is
- * configured with: with `DATABASE_URL_APP` set, every other test file running
- * at the same time started failing with `password authentication failed`. A
- * test must not change the thing it is testing out from under everything else.
- * Whether the configured role is *suitable* is asserted separately, by reading
- * `pg_roles` and changing nothing.
- *
- * ## What it would catch
- *
- * A superuser connection. `DATABASE_URL` in this project's compose file is a
- * superuser, and superusers ignore RLS completely - `FORCE ROW LEVEL SECURITY`
- * does not change that, because FORCE only binds the table *owner*. Policies
- * installed against that role are decoration: visible in `\\d`, filtering
- * nothing, with nothing to say so. The first assertion below is that the owner
- * can see both tenants, which is what makes the rest mean something.
- *
- * Coverage is computed from the **information schema**, not from a list: a
- * table added later with a `tenant_id` and no policy fails this file for not
- * being covered, before it can ever fail for leaking.
- *
- * Requires Postgres; skipped without it.
+ * Provisions its own login role, a member of `sightline_app`: an unconfigured
+ * `DATABASE_URL_APP` would otherwise skip a security test, and setting a
+ * password on the app role rotated the credential other test files were using.
+ * Coverage comes from the information schema, so a new `tenant_id` table with
+ * no policy fails for not being covered. Requires Postgres.
  */
 
 import { randomUUID } from "node:crypto";

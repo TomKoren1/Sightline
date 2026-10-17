@@ -1,34 +1,16 @@
 /**
  * What the logs say, and what they must never say.
  *
- * Two jobs. Every line carries the tenant and the connection it was about, so
- * a support question has an answer; and no line ever carries an ExternalId, an
- * encrypted secret, a session token or a cookie, however it got into the object
- * being logged.
+ * Every line carries the tenant and connection it was about; none ever carries
+ * an ExternalId, an encrypted secret, a session token or a cookie.
  *
- * ## Why redaction rather than care
+ * Enforced by the logger, not by care: care works until somebody logs an
+ * object, and `log.error({ err })` on an AWS SDK error carries the whole
+ * request. Pino's `redact` matches nested paths, so a field added later is
+ * covered anyway.
  *
- * Care works until somebody logs an object. `req.log.error({ err }, "...")`
- * where `err` is an AWS SDK error carries the whole request it failed on; a
- * well-meant `{ connection }` carries whatever that row holds. Neither author
- * is being careless - they are logging a thing, not a field - and the field
- * arrives anyway.
- *
- * So the rule is enforced by the logger rather than by the people using it.
- * Pino's `redact` replaces matching paths before anything is serialised, with
- * wildcards that reach into nested objects, so a value added to a payload later
- * is covered without anybody remembering this file exists.
- *
- * ## What is deliberately *not* redacted
- *
- * The AWS account id. It is not a secret - every ARN contains it, and the
- * customer's own console shows it - and it is the single most useful thing to
- * have in a log when somebody asks why their scan found nothing. Redacting it
- * would be security theatre with a real cost. It is customer-identifying, so it
- * stays out of URLs, but a log line is a different trade.
- *
- * Tenant and connection ids are uuids we issued. They identify a row, not a
- * person, and they are the whole point of having structured logs.
+ * The AWS account id is deliberately not redacted - every ARN contains it, and
+ * it is the most useful thing in a log when a scan finds nothing.
  */
 
 /**

@@ -1,24 +1,16 @@
 /**
  * The privacy policy and the terms, at their own URLs.
  *
- * They need to be reachable at a stable address on this deployment's own
- * domain: Google's OAuth consent screen requires a privacy-policy URL and
- * checks it against the application's domain, so a link to the rendered
- * markdown on GitHub does not satisfy it. More importantly, a policy somebody
- * has to go and find in a repository is a policy nobody reads.
+ * Google's OAuth consent screen requires a privacy-policy URL on the
+ * application's own domain, so a link to GitHub does not satisfy it - and a
+ * policy somebody has to go and find is a policy nobody reads.
  *
- * ## Rendered from the markdown, not retyped
+ * Imported with Vite's `?raw` so there is exactly one copy of each document;
+ * the same text in a `.tsx` is two copies, and the stale one is the one nobody
+ * is looking at. `infra/legalPages.test.ts` holds the halves together.
  *
- * `PRIVACY.md` and `TERMS.md` are imported with Vite's `?raw` and rendered
- * here, so there is exactly one copy of each. The alternative - the same text
- * in a `.tsx` - is two copies that drift, and the one that drifts is the one
- * nobody is looking at. `infra/legalPages.test.ts` holds the two halves
- * together.
- *
- * `dangerouslySetInnerHTML` is used knowingly and is safe *here specifically*:
- * the input is two files from this repository, resolved at build time, with no
- * user content anywhere near it. It would not be safe for anything a request
- * could influence.
+ * `dangerouslySetInnerHTML` is safe *here specifically*: two files from this
+ * repository, resolved at build time, with no user content near it.
  */
 
 import { useMemo } from "react";

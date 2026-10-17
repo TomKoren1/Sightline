@@ -2,20 +2,17 @@
  * A scan's progress, reconstructed from the database.
  *
  * The old stream existed only in the request that started it: closing the tab
- * orphaned the scan, and a reload showed nothing until it finished. Here the
- * events are *derived* from `scan_jobs`, `scan_runs` and `scan_units`, so any
- * number of clients can watch one scan, a reload rejoins it, and the process
- * doing the work needs no connection to the browser at all.
+ * orphaned the scan. These events are derived from `scan_jobs`, `scan_runs` and
+ * `scan_units`, so many clients can watch one scan, a reload rejoins it, and
+ * the process doing the work needs no connection to any browser.
  *
- * Polling rather than `LISTEN/NOTIFY`. A scan takes minutes and its units
- * finish seconds apart, so a one-second poll is indistinguishable from push at
- * the only resolution a human can see - and it costs two indexed queries, which
- * is cheaper than a dedicated Postgres connection per watching browser tab.
+ * Polling, not `LISTEN/NOTIFY`: units finish seconds apart, so a one-second
+ * poll is indistinguishable from push at human resolution and costs two indexed
+ * queries rather than a connection per watching tab.
  *
- * What is emitted is a function of the rows and of what this stream has already
- * sent, which is why the sent-set is local to the generator: two tabs watching
- * one scan each get a complete picture from where they joined, rather than one
- * of them seeing only the half that arrived after it connected.
+ * What is emitted depends on what this stream has already sent, which is why
+ * the sent-set is local to the generator - two tabs each get a complete picture
+ * from where they joined.
  */
 
 import type { ScanEvent, ScanRun, ScanUnit } from "@sightline/shared";

@@ -1,24 +1,15 @@
 /**
  * The queue, exercised against a real Postgres.
  *
- * Mocking the database here would test nothing: every property worth having is
- * a property of Postgres' concurrency control, not of this TypeScript. The
- * claim must not hand one job to two workers, and that is a statement about
- * `FOR UPDATE SKIP LOCKED` - a fake would simply agree with whatever the code
- * believes.
+ * Mocking it would test nothing: every property worth having belongs to
+ * Postgres' concurrency control, and a fake would agree with whatever the code
+ * believes. The three that matter are the held-row skip, the double enqueue
+ * (the partial unique index, not a check-then-insert), and bounded reclaim.
  *
- * The three that matter are the held-row skip, the double enqueue (the partial
- * unique index, not a check-then-insert), and reclaim (a job whose worker
- * stopped heartbeating comes back, but only as many times as it has attempts).
- * The rest is bookkeeping.
- *
- * The first of those was rewritten after measuring it. It began as two
- * claimers racing for one job, which reads like a concurrency test and is
- * really a coin toss: a deliberately naive `SELECT` then `UPDATE` passes it,
- * because the two statements do not reliably interleave. Holding the row in an
- * uncommitted transaction tests `SKIP LOCKED` itself and cannot be lucky.
- *
- * Requires Postgres; skipped without it.
+ * The first was rewritten after measuring it: two claimers racing for one job
+ * reads like a concurrency test and is a coin toss - a naive `SELECT` then
+ * `UPDATE` passes it. Holding the row in an uncommitted transaction tests
+ * `SKIP LOCKED` itself and cannot be lucky. Requires Postgres.
  */
 
 import { randomUUID } from "node:crypto";

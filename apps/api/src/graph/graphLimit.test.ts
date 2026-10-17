@@ -1,24 +1,14 @@
 /**
  * A bad `?limit` is refused, and a good one is honoured.
  *
- * Added after a scepticism pass over this API's own inputs found that
- * `?limit=abc` answered **200 with an empty graph**. The value arrived as
- * `Number("abc")`, which is `NaN`, and every clamp preserved it -
- * `Math.max(1, NaN)` is `NaN`, not 1 - so it reached Neo4j as `LIMIT 0`. A
- * customer who mistyped a query parameter was told their AWS account held
- * nothing in it.
+ * `?limit=abc` answered **200 with an empty graph**: `Number("abc")` is `NaN`,
+ * every clamp preserved it - `Math.max(1, NaN)` is `NaN` - and it reached Neo4j
+ * as `LIMIT 0`. Worse than a 500, because an empty result looks like an answer
+ * and sends the reader to look for a problem in their AWS account.
  *
- * That is the same failure as the mistyped connection id from an earlier phase,
- * and it is worse than a 500: an empty result looks like an answer. Nothing
- * failed, nothing logged, and the person's next move is to go and look for a
- * problem in their AWS account.
- *
- * So both halves are asserted - that nonsense is refused, and that a real limit
- * still limits, because a guard that refused everything would also pass the
- * first half.
- *
- * Requires Postgres and Neo4j: the assertion is about how many nodes come back,
- * and there have to be some.
+ * Both halves are asserted, since a guard that refused everything would also
+ * pass the first. Requires Postgres and Neo4j: the assertion counts nodes, so
+ * there have to be some.
  */
 
 import { afterAll, beforeAll, describe, expect, it } from "vitest";

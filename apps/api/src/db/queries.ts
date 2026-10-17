@@ -21,21 +21,16 @@ const MAX_LIMIT = 500;
 /**
  * Bound a caller-supplied limit and hand it to the driver as a Neo4j integer.
  *
- * `LIMIT` requires an INTEGER. A plain JS number crosses the wire as a float
- * and Neo4j rejects it with "found 100.0", so the conversion is done here
- * rather than remembered at fifteen call sites.
+ * `LIMIT` requires an INTEGER; a plain JS number crosses the wire as a float
+ * and Neo4j rejects it with "found 100.0".
  *
- * `NaN` is treated as absent, which it was not. `?limit=abc` reaches here as
- * `Number("abc")`, and every arithmetic step preserved it - `Math.max(1, NaN)`
- * is `NaN`, not 1 - so `neo4j.int(NaN)` became `LIMIT 0` and the graph endpoint
- * answered with **no nodes at all**. A customer who mistyped a query parameter
- * was told their AWS account was empty. Exactly the shape of failure a mistyped
- * connection id had, and the reason that one is now a 400: an empty result is
- * indistinguishable from a true answer.
+ * `NaN` is treated as absent, which it was not. `?limit=abc` arrives as
+ * `Number("abc")` and every step preserved it - `Math.max(1, NaN)` is `NaN` -
+ * so it became `LIMIT 0` and the endpoint answered with no nodes at all,
+ * telling a customer their account was empty.
  *
- * The boundary refuses a non-numeric limit outright, so this fallback should be
- * unreachable from a request. It is here anyway, because being total is cheap
- * and the next caller may not come through a controller.
+ * The boundary now refuses a non-numeric limit, so this fallback should be
+ * unreachable from a request; being total is cheap.
  */
 const clamp = (n: number | undefined, fallback = DEFAULT_LIMIT) => {
   const requested = Number.isFinite(n) ? n! : fallback;
@@ -127,16 +122,12 @@ export async function findPublicResources(
  * Principals with effective administrator access, and what uses them.
  *
  * "What uses them" is the half that makes the answer actionable: an admin role
- * attached to a running instance is an incident, and an admin role nothing
- * references is cleanup.
+ * on a running instance is an incident, one nothing references is cleanup.
  *
  * Matches roles **and** users. It matched only roles until a real account
  * reported no administrators while two IAM users held `AdministratorAccess`.
- * A user has no instance profile or Lambda to be used
- * by, so `usedBy` is empty for them - which is itself the point: a standing
- * admin user with long-lived credentials and nothing attaching it to a
- * workload is a different risk from an admin role a service assumes, not a
- * lesser one.
+ * A user has nothing to be used by, so `usedBy` is empty - which is itself the
+ * point: a standing admin user with long-lived credentials is the finding.
  */
 export async function findAdminPrincipals(scope: GraphScope, params: { limit?: number } = {}) {
   return readScoped<ResourceRow>(

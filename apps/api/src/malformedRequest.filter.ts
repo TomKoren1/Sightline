@@ -1,23 +1,14 @@
 /**
  * A request that could never have succeeded is the client's error, not a 500.
  *
- * Two filters, one rationale. `500` tells an operator to go and look at the
- * server and tells a client to retry; both are wrong when the request can never
- * succeed as sent, and both cost real time - a 500 in a log is a thing somebody
- * investigates.
+ * Two filters, one rationale: a 500 tells an operator to investigate and a
+ * client to retry, and both are wrong when the request cannot succeed as sent.
  *
- * Registered globally rather than handled per route, which is the whole point.
- * Every instance of this found so far was a route that forgot:
- *
- *   - five routes answered 500 to a mistyped uuid, and one of them had the same
- *     problem fixed on a different code path into the same handler - the header
- *     was validated, the path parameter was not;
- *   - both routes that validate a body with Zod answered 500 to an invalid one,
- *     while a third route that happened to use `safeParse` answered 400.
- *
- * A per-route fix would have left the next route to take an id, or to parse a
- * body, with the bug again and nothing failing in the meantime. The same
- * argument as the auth guard being global: forgetting must not be silent.
+ * Registered globally, which is the point. Five routes answered 500 to a
+ * mistyped uuid - one of them already fixed on a different path into the same
+ * handler - and both routes that validate a body with Zod answered 500 to an
+ * invalid one. A per-route fix leaves the next route to take an id with the bug
+ * again and nothing failing meanwhile.
  *
  * `tenancy/invalidId.test.ts` holds it to that over the real route table.
  */

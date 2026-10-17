@@ -1,31 +1,15 @@
 /**
  * Deleting an account, and everything Sightline holds about it.
  *
- * Asking strangers to trust a service with read access to their cloud means
- * being able to say exactly what leaving looks like - and "email us" is not an
- * answer when the thing being held is an inventory of somebody's production
- * estate. So this is a route, it is irreversible, and it reports what it
- * actually deleted rather than returning 200 and a hope.
+ * Neo4j first, then Postgres, and the order is the whole correctness of it:
+ * Postgres cascades from the tenant row, scan ids included, so dropping the
+ * graph second and failing would orphan nodes with nothing left to identify
+ * them by. This way a failure is recoverable, and a partial graph deletion is
+ * harmless because the next attempt finishes it.
  *
- * ## Neo4j first, then Postgres
- *
- * The order is the whole correctness of this. Postgres cascades from the tenant
- * row, so deleting it removes every scan, snapshot, conversation and connection
- * in one statement - including the scan ids. If the graph were dropped second
- * and failed, those nodes would be orphaned with nothing left to identify them
- * by: no tenant row, no scan rows, just a tenant id nobody has any more.
- *
- * Dropping the graph first makes a failure recoverable instead. Nothing has
- * been lost, the account still exists, and the customer can try again - and a
- * partial graph deletion is harmless, because the rows that remain are the
- * tenant's own and the next attempt deletes them.
- *
- * ## What it does not do
- *
- * It cannot delete the CloudFormation stack in the customer's AWS account.
- * Only they can, and the response says so plainly - telling somebody their
- * access has been withdrawn when a role still trusts us would be the single
- * worst thing to be wrong about here.
+ * It cannot delete the CloudFormation stack in the customer's account. Only
+ * they can, and the response says so: telling somebody their access was
+ * withdrawn while a role still trusts us is the worst thing to be wrong about.
  */
 
 import { eq, inArray } from "drizzle-orm";

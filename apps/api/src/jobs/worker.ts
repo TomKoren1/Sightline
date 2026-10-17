@@ -2,30 +2,15 @@
  * The loop that drains the scan queue.
  *
  * Claim a job, run it, heartbeat while it runs, record the outcome, repeat.
- * Deliberately small: everything about *not* racing lives in `queue.ts`, and
- * everything about what a scan does lives in `runScanJob.ts`.
+ * Not racing lives in `queue.ts`; what a scan does lives in `runScanJob.ts`.
  *
- * ## Waking up
+ * Wakes on `LISTEN` *and* a poll, not either: `NOTIFY` only reaches sessions
+ * listening at the moment it fires, so a job enqueued while this worker was
+ * starting or busy would otherwise sit in the table. The listener takes its own
+ * client - a pooled connection held for the process's lifetime is a leak.
  *
- * `LISTEN` on a dedicated connection, plus a poll. Both, not either: `NOTIFY`
- * only reaches sessions that are listening at the moment it fires, so a job
- * enqueued while this worker was starting, reconnecting, or busy with the
- * previous scan would otherwise sit in the table until something else happened.
- * The poll is what makes the queue eventually-correct regardless; the listen is
- * what makes it feel immediate.
- *
- * The listener takes its own client rather than borrowing from the pool. A
- * pooled connection held open for the process's lifetime is a leak wearing a
- * pool's clothing, and with `max: 10` it would be ten percent of the API's
- * capacity spent on waiting.
- *
- * ## Where this runs
- *
- * In hosted mode, in its own deployment: a scan that exhausts memory or wedges
- * on a slow account then takes down a worker rather than the API serving
- * everybody else. In self-hosted mode it runs inside the API process, because
- * requiring an operator to run two containers to scan their own account would
- * be a worse tool for no benefit they can observe.
+ * Hosted runs it in its own deployment, so a scan that exhausts memory takes
+ * down a worker rather than the API; self-hosted runs it in the API process.
  */
 
 import { randomUUID } from "node:crypto";

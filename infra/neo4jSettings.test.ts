@@ -1,25 +1,17 @@
 /**
  * Neo4j's configuration, checked against the version we actually run.
  *
- * Two things here have already gone wrong in ways nothing failed for.
+ * Two things here have gone wrong without anything failing. The heap settings
+ * were spelled `dbms.memory.heap.*`, the Neo4j 4 name: 5.26 honours it with a
+ * deprecation warning nobody reads, one major version from silently not
+ * applying - and a memory setting that stops applying changes how the whole
+ * database fails under load.
  *
- * The heap settings were spelled `dbms.memory.heap.*`, which is the Neo4j 4
- * name. 5.26 honours it and prints a deprecation warning on every boot - so the
- * setting worked, the warning scrolled past in container logs nobody reads, and
- * the configuration was one major version away from silently not applying. A
- * memory setting that stops applying does not fail; it changes the failure mode
- * of the whole database under load.
- *
- * APOC was loaded with `dbms.security.procedures.unrestricted=apoc.*`, the
- * widest setting available, and called by nothing. The only mentions of it in
- * the repository are in `cypherGuard.test.ts`, as examples of calls the guard
- * must reject - and that guard forbids `CALL` outright, so the procedures were
- * unreachable through the product and present purely as surface on the database
+ * APOC was loaded `unrestricted` and called by nothing; the Cypher guard
+ * forbids `CALL` outright, so it was unreachable surface on the database
  * holding every tenant's inventory.
  *
- * A string scan of the compose file, in `infra/` with the other cross-artefact
- * checks, because it needs no running database - which means it runs in the
- * fast CI job, where a configuration mistake is cheapest to find.
+ * A string scan, so it needs no running database and lands in the fast CI job.
  */
 
 import { readFileSync } from "node:fs";

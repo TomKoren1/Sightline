@@ -1,29 +1,21 @@
 /**
  * The Neo4j projection: derived, not authoritative. Replayed from one scan's
- * Postgres snapshots, so a lost or corrupted graph is rebuilt rather than
- * recovered.
+ * Postgres snapshots, so a lost graph is rebuilt rather than recovered.
  *
- * Every node carries `:Resource`, which the uniqueness constraint hangs off,
- * plus its kind (`:Ec2Instance`) - so a query can be generic or specific
- * without two sets of queries. Labels cannot be parameterised in Cypher, so
- * writes are grouped by kind and the label interpolated - safely, since it
- * comes from a closed enum.
+ * Every node carries `:Resource` plus its kind, so a query can be generic or
+ * specific. Labels cannot be parameterised, so writes are grouped by kind and
+ * the label interpolated - safely, from a closed enum.
  *
  * **Node identity is `(scanId, arn)`, not `arn`.** An ARN is unique within an
- * AWS account, not across this database. Two tenants collide immediately on
- * the synthetic `Internet` node, whose ARN is a constant for everyone, and
- * completely if they connect the same AWS account. Under a plain constraint on
- * `arn` the edge projection below - which matches endpoints by ARN - would
- * attach one tenant's relationships to another tenant's nodes. That is not a
- * query bug a filter could fix later: the edge would genuinely exist, and
- * every path query would traverse it.
+ * account, not across this database, and two tenants collide immediately on the
+ * synthetic `Internet` node. Under a plain `arn` constraint the edge projection
+ * below would attach one tenant's relationships to another's nodes - an edge
+ * that genuinely exists, which every path query would then traverse.
  *
  * **Write-then-flip.** A scan projects into its own scope while the previous
- * graph stays readable, and `scan_runs.projected_at` is what makes the new one
- * current. Nothing is deleted first, so there is no window in which a reader
- * sees a half-built graph, a failed projection costs nothing, and the writes
- * can be committed in batches instead of held in one transaction whose size
- * grows with the customer's estate.
+ * graph stays readable, and `scan_runs.projected_at` makes the new one current.
+ * So there is no half-built graph to read, a failed projection costs nothing,
+ * and writes commit in batches rather than one estate-sized transaction.
  */
 
 import neo4j, { type Driver, type Session } from "neo4j-driver";
@@ -88,20 +80,17 @@ export async function probeNeo4j(): Promise<void> {
 /**
  * Run a scoped read that must not modify anything.
  *
- * The one place tenant scoping can be enforced rather than remembered. A query
- * that does not bind both parameters is **refused**, not silently corrected: a
- * query written without them is a query whose author did not think about
- * tenancy, and appending a predicate would hide that until the day the
- * correction is missing.
+ * The one place tenant scoping is enforced rather than remembered. A query that
+ * does not bind both parameters is **refused**, not silently corrected: its
+ * author did not think about tenancy, and appending a predicate would hide that
+ * until the day the correction is missing.
  *
- * `executeRead` is not merely advisory either: Neo4j routes it as a read
- * transaction and a write inside one fails. That is the outermost guard behind
- * the agent's Cypher escape hatch, and the reason a validator alone is not
- * relied upon.
+ * `executeRead` is not merely advisory - Neo4j routes it as a read transaction
+ * and a write inside one fails, which is the outermost guard behind the agent's
+ * Cypher escape hatch.
  *
- * Note for production: Neo4j **Community has no role-based access control**,
- * so a genuinely read-only database *user* is not available. On Enterprise this
- * would additionally run as a user granted only `MATCH`.
+ * Neo4j Community has no role-based access control, so a read-only database
+ * *user* is not available; on Enterprise this would also run as one.
  */
 export async function readScoped<T = Record<string, unknown>>(
   scope: GraphScope,

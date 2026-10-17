@@ -1,25 +1,17 @@
 /**
  * What a tenant is allowed to spend.
  *
- * Every limit here exists because the thing it bounds costs somebody real
- * money: a scan spends AWS API calls and worker memory, a question spends
- * Anthropic tokens. In a single-operator clone that somebody is the operator,
- * who needs no protection from themselves - which is why the defaults move with
- * the deployment mode rather than being the same number everywhere.
+ * Every limit bounds something that costs real money - AWS calls and worker
+ * memory for a scan, Anthropic tokens for a question - so the defaults move
+ * with the deployment mode: a clone's operator needs no protection from
+ * themselves.
  *
- * ## Decisions, not exceptions
+ * These return a decision rather than throwing. A refusal is an ordinary answer
+ * ("not yet, and here is when"), and the caller turns it into the right status;
+ * throwing invites one escaping as a 500 to somebody who is merely early.
  *
- * These return a value rather than throwing. A refusal here is an ordinary
- * answer - "not yet, and here is when" - and the caller turns it into the right
- * status with the right wording. Throwing would make every call site a
- * try/catch and would make it tempting to let one escape as a 500, which is the
- * wrong thing to tell somebody who is simply early.
- *
- * ## Counted in Postgres
- *
- * Not in memory, for the same reason the queue is not: a count held in one
- * process is wrong the moment there are two, and "wrong" here means a tenant
- * gets double the quota per replica. The queries are small and indexed.
+ * Counted in Postgres, not in memory, for the same reason the queue is: a count
+ * held in one process gives each replica its own quota.
  */
 
 import { and, count, eq, gte, sql } from "drizzle-orm";

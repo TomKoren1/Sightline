@@ -1,27 +1,19 @@
 /**
  * Two tenants in one graph, and nothing of one may reach the other.
  *
- * This is the control the whole tenancy design rests on. The other two guards
- * fail differently and neither is sufficient: the **static** one (every query's
- * text binds `$tenantId` and `$scanId`) and the **runtime** one (`readScoped`
- * refuses Cypher that does not) both pass a query that binds the parameters and
- * still leaks - a pattern scoped on one side of a relationship but not the
- * other, say. Only running two tenants and looking at what comes back catches
- * that.
+ * The control the tenancy design rests on. The static guard (every query binds
+ * `$tenantId` and `$scanId`) and the runtime one (`readScoped` refuses Cypher
+ * that does not) both pass a query that binds them and still leaks - a pattern
+ * scoped on one side of a relationship only. Running two tenants is what
+ * catches that.
  *
- * The query list is discovered **by reflection**, so adding a fourteenth query
- * and forgetting to cover it fails this file for *not being covered*, before it
- * can ever fail for leaking. That is the part that makes the test survive
- * contact with future changes.
+ * Queries are discovered **by reflection**, so a new one that nobody covered
+ * fails this file for not being covered before it can fail for leaking.
  *
- * Both tenants deliberately hold the synthetic `Internet` node, whose ARN is
- * the same constant for everyone. Under the old `arn IS UNIQUE` constraint the
- * second tenant could not have been projected at all, and under a plain ARN
- * match the edge projection would have joined one tenant's relationships to the
- * other's nodes - an edge that genuinely exists, which every path query would
- * then traverse.
- *
- * Requires Postgres and Neo4j; skipped without them.
+ * Both tenants hold the synthetic `Internet` node, whose ARN is a constant for
+ * everyone: under a plain `arn` constraint the second could not be projected at
+ * all, and ARN-matched edges would join one tenant's relationships to the
+ * other's nodes. Requires Postgres and Neo4j.
  */
 
 import { afterAll, beforeAll, describe, expect, it } from "vitest";

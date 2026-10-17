@@ -1,26 +1,17 @@
 /**
  * No route answers 500 to a mistyped id.
  *
- * Behavioural, and over the **real** route table rather than a list of the
- * routes somebody remembered take an id - because the bug this guards was
- * exactly a forgotten one. Five routes returned 500 for a malformed uuid, and
- * one of them, `connections/:id/onboarding`, had already had the same problem
- * fixed on a different code path into the same handler: the header was
- * validated and the path parameter was not. A per-route fix is opt-in, and the
- * next route to take an id would have had the bug again with nothing failing.
+ * Over the **real** route table rather than the routes somebody remembered take
+ * an id, because the bug was a forgotten one: five routes returned 500 for a
+ * malformed uuid, and `connections/:id/onboarding` had already had it fixed on
+ * another path into the same handler - header validated, path parameter not.
  *
- * The invariant is deliberately phrased as "not 500" rather than "exactly 400",
- * because it has to hold for every parameter and not only for uuids. A route
- * taking an ARN should answer 400 or 404 for junk - what it must never do is
- * claim the service is broken when the request was.
+ * Phrased as "not 500" rather than "exactly 400" so it holds for every
+ * parameter, not only uuids. 500 is the one wrong answer: it tells an operator
+ * to investigate and a client to retry.
  *
- * 500 is the one wrong answer here. It tells an operator to go and look at the
- * server, and it tells a client to retry; both are wrong when the request can
- * never succeed as sent.
- *
- * Requires Postgres and Neo4j: a route that cannot reach its database answers
- * 500 for a reason that has nothing to do with the id, which would make this
- * pass or fail for the wrong reason.
+ * Requires Postgres and Neo4j - a route that cannot reach its database answers
+ * 500 for reasons unrelated to the id.
  */
 
 import { afterAll, beforeAll, describe, expect, it } from "vitest";

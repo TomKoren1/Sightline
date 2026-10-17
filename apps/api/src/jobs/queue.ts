@@ -1,28 +1,19 @@
 /**
  * The scan queue.
  *
- * Postgres rather than Redis. The queue is then transactional with the data it
- * produces, it is covered by the same backup, and there is one fewer thing to
- * deploy and lose. `SELECT … FOR UPDATE SKIP LOCKED` is the mechanism: the
- * claim is a row lock taken inside the UPDATE, so two workers racing for the
- * same job cannot both get it, and a claimer never waits behind another
- * claimer - it skips to the next unlocked row.
+ * Postgres rather than Redis: transactional with the data it produces, covered
+ * by the same backup, one fewer thing to deploy. `SELECT … FOR UPDATE SKIP
+ * LOCKED` is the mechanism - the claim is a row lock taken inside the UPDATE,
+ * so two workers racing cannot both win and neither waits behind the other.
  *
- * What this replaces is `ScanStateService`, an in-process `Set`. That was
- * correct for exactly one API process and silently stops being correct at two:
- * two replicas, or an API and a worker, would each believe no scan of a
- * connection was running and start one, racing on the same snapshot rows and
- * the same graph scope. The guarantee now lives in a partial unique index,
- * which no amount of concurrency can talk its way around.
+ * It replaces an in-process `Set`, which was correct for exactly one API
+ * process: two replicas would each believe no scan was running and start one,
+ * racing on the same snapshot rows. That guarantee now lives in a partial
+ * unique index, which concurrency cannot talk its way around.
  *
- * ## Liveness
- *
- * A worker that dies mid-scan leaves a `running` row that nothing will ever
- * finish. `heartbeat_at` is what makes that recoverable: the worker touches it
- * while it works, and `reclaimStale` returns jobs whose heartbeat has stopped.
- * Reclaim is bounded by `max_attempts`, because a job that kills its worker
- * will kill the next one too, and an unbounded retry turns one poisonous scan
- * into an outage.
+ * `heartbeat_at` makes a dead worker's job recoverable, bounded by
+ * `max_attempts` - a job that kills one worker will kill the next, and
+ * unbounded retry turns one poisonous scan into an outage.
  */
 
 import { randomUUID } from "node:crypto";
@@ -101,17 +92,13 @@ const UNIQUE_VIOLATION = "23505";
 /**
  * Whether this is the index refusing a second active job.
  *
- * The cause chain is walked rather than the error inspected directly, because
- * Drizzle wraps driver errors: the `code` lives on the wrapped `cause`, and a
- * check against the top-level object finds `undefined`. That is not a
- * hypothetical - the first version of this read `err.code`, and the test for a
- * double enqueue failed with the driver's own error reaching the caller. In
- * production that would have been a 500 where the UI expected a 409, on the
- * entirely normal path of someone pressing Scan twice.
+ * The cause chain is walked because Drizzle wraps driver errors: `code` lives
+ * on the wrapped `cause`, and the first version read `err.code`, found
+ * `undefined`, and let the driver's error reach the caller - a 500 on the
+ * entirely normal path of pressing Scan twice.
  *
- * The constraint is named as well as the code. Any unique violation reaching
- * this `try` is this one today, but a column made unique later would otherwise
- * be reported to the user as "a scan is already running".
+ * The constraint is named as well as the code, so a column made unique later is
+ * not reported to the user as "a scan is already running".
  */
 function isDuplicateActiveJob(err: unknown): boolean {
   for (let e: unknown = err; e != null; e = (e as { cause?: unknown }).cause) {
@@ -219,20 +206,15 @@ function rowToJob(row: Record<string, unknown>): ScanJob {
 /**
  * Take the oldest queued job, or return null if there is none.
  *
- * Raw SQL, not the query builder: the whole correctness of this rests on the
- * `FOR UPDATE SKIP LOCKED` subquery being inside the UPDATE, so that selecting
- * a row and claiming it are one statement. Expressing it as a select followed
- * by an update would reintroduce precisely the race the clause exists to close.
+ * Raw SQL: the correctness rests on the `FOR UPDATE SKIP LOCKED` subquery being
+ * inside the UPDATE, so selecting a row and claiming it are one statement. A
+ * select followed by an update reintroduces the race.
  *
- * Not scoped to a tenant, and that is not an oversight: a worker serves every
- * tenant, so this is one of the few queries in the codebase that is allowed to
- * cross the boundary. It returns the tenant id rather than taking one, and
- * everything the worker does afterwards is scoped by what it found here.
- *
- * On `system` for exactly that reason. Under row-level security the restricted
- * role sees only the tenant its connection names, so a claim through `db` could
- * never find a job - the worker would poll an empty queue forever while jobs
- * piled up in it.
+ * Not tenant-scoped, and on `system` for that reason: a worker serves every
+ * tenant, so this is one of the few queries allowed to cross the boundary. It
+ * returns the tenant id rather than taking one. Through `db` the restricted
+ * role would see only its own connection's tenant and poll an empty queue for
+ * ever while jobs piled up.
  */
 export async function claimNextJob(workerId: string): Promise<ScanJob | null> {
   const { rows } = await system.execute(sql`

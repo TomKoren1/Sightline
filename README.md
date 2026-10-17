@@ -16,6 +16,9 @@ AWS (real or mock) ──▶ scanner ──▶ Postgres ──▶ Neo4j ──�
                        assume-role  system of   graph     curated   graph +
                        per service  record      projection tools    chat
                        per region
+
+                       a scan is a queued job; Postgres is the queue, and
+                       every row above is scoped to one tenant's connection
 ```
 
 **Contents** — [Try it](#try-it) · [What it answers](#what-it-answers) ·
@@ -127,6 +130,16 @@ those miss, and an explicit **Deny** on data-plane reads that is attached by def
 A Deny cannot be overridden by any Allow, including one a future AWS update might add
 to a managed policy. See [SECURITY.md](SECURITY.md).
 
+**One deployment serves many tenants, and the database refuses to mix them.**
+Every tenant-scoped table has row-level security, and the application connects as a
+restricted role the policies apply to — not the table owner, which would bypass them.
+The graph is one Neo4j database partitioned by scan id, with four independent
+enforcement layers rather than a convention: a composite uniqueness constraint, a
+single read chokepoint, a query that refuses Cypher without the scope bound, and a
+check on the rows that come back. A two-tenant leak test enumerates the query layer
+**by reflection**, so a query added later fails for not being covered before it can
+fail for leaking. See [SECURITY.md](SECURITY.md).
+
 ### How the answers are checked
 
 Two eval tiers that fail for different reasons: **fifteen ground-truth checks**
@@ -142,24 +155,37 @@ same checks run inside the product, under **Trust**.
 ## Repository layout
 
 ```
-apps/api            backend: scanner, analysers, graph, agent, HTTP API
-  src/aws/          credentials, instrumented clients, region discovery
-  src/scan/         collectors, analysers, orchestration
-  src/db/           Drizzle schema and migrations, repository, Neo4j projection
-  src/agent/        tools, Cypher guard, citation validation, the loop
-  src/evals/        tier-1 ground truth, tier-2 cases and grading
+apps/api              backend: scanner, analysers, graph, agent, HTTP API
+  src/config.ts       every setting, with the reason for each default
+  src/hostedMode.ts   configuration the public service refuses to start with
+  src/aws/            credentials, instrumented clients, region discovery
+  src/scan/           collectors, analysers, orchestration
+  src/db/             Drizzle schema and migrations, repository, Neo4j projection
+  src/agent/          tools, Cypher guard, citation validation, the loop
+  src/auth/           OIDC against Google and GitHub, sessions, route guard
+  src/tenancy/        tenants, connections, onboarding, limits, branded ids
+  src/jobs/           the Postgres queue, the worker, scan progress
+  src/observability/  structured logs, and what they redact
+  src/remediation/    generated fix commands, never executed
+  src/setup/          what `npm run setup` plans and does
+  src/evals/          tier-1 ground truth, tier-2 cases and grading
   src/health/ graph/ scans/ chat/ connection/
-                    one NestJS module each: a controller over a service
-apps/web            React frontend: graph, chat, findings, UX states
-packages/shared     domain model shared by every package
-packages/mock-aws   the seeded customer account and its answer key
-infra/              the read-only role template, and guards on it
-deploy/             nginx config, and the AWS profile mount for containers
-scripts/            the dependency guard every npm script runs first
-Dockerfile          API and frontend images, used only by the `app` profile
-eslint.config.mjs   lint rules, with the reason for each exception
-tsconfig.tools.json type-checking for everything outside a workspace
+                      one NestJS module each: a controller over a service
+apps/web              React frontend: graph, chat, findings, UX states
+  src/api.ts          the only place that calls the API, so headers cannot be missed
+packages/shared       domain model shared by every package
+packages/mock-aws     the seeded customer account and its answer key
+infra/                the read-only role template, and guards on things nothing runs
+deploy/k8s/           kustomize manifests for a hosted deployment, and their README
+deploy/               nginx config, and the AWS profile mount for containers
+scripts/              the dependency guard every npm script runs first
+Dockerfile            API and frontend images, used only by the `app` profile
 ```
+
+`infra/` deserves a word: it holds tests over artefacts **no test executes** — the
+CloudFormation template, the Kubernetes manifests, the Dockerfile, the legal pages.
+Each guards an agreement between two files that nothing else connects, which is the
+defect class this repository keeps meeting.
 
 ---
 
@@ -195,6 +221,27 @@ What a hosted deployment holds, shares and deletes is in
 [`PRIVACY.md`](PRIVACY.md); the terms are in [`TERMS.md`](TERMS.md); and the
 security properties, including how one customer's data is kept from another's,
 are in [`SECURITY.md`](SECURITY.md).
+
+### House style
+
+Four things, because they are the ones that have actually gone wrong here:
+
+- **Comments carry the non-obvious _why_, and nothing else.** The bug a line
+  prevents, the alternative that was rejected, the AWS behaviour that is not in the
+  docs. Not a restatement of the code, not a second example, not build-up. Roughly
+  ten lines is the ceiling for a genuinely subtle module header; most want two.
+  `infra/commentBudget.test.ts` measures it, because this has drifted twice.
+- **A guard for every agreement between two files.** If editing one file can
+  silently invalidate another — a manifest and the code that reads it, a template
+  and the ARN derived from it — the test goes in `infra/`. Write it so that
+  _forgetting_ trips it, and break it once to watch it go red.
+- **Derive, don't enumerate.** Lists in code go stale: the leak test enumerates
+  queries by reflection, the purge enumerates tenant-scoped tables from the schema,
+  and the graph sweep derives what to keep from the database. Each of those caught a
+  real bug that a hand-written list would have missed.
+- **Refuse rather than guess.** Ambiguous configuration, a mistyped id, an
+  unparseable limit — fail loudly at the edge. Every silent fallback in this
+  repository's history produced a working system with a quietly wrong answer.
 
 The agent uses Anthropic. `ANTHROPIC_MODEL` defaults to `claude-sonnet-5`.
 `/api/health` says whether a key is configured rather than making you discover it
@@ -355,7 +402,7 @@ the API and nginx containers are left running against databases that no longer e
 | `npm run inspect -w @sightline/api`            | Scan and print findings without touching the databases       |
 | `npm run query -w @sightline/api`              | Run every curated query against the graph                    |
 | `npm run dev:worker`                           | Run scans in their own process, as a hosted deployment does  |
-| `npm test`                                     | 715 unit tests                                               |
+| `npm test`                                     | 754 unit tests — integration ones skip without databases     |
 | `npm run lint`                                 | Prettier and ESLint, both in check mode                      |
 | `npm run format`                               | Fix everything those two can fix automatically               |
 | `npm run typecheck`                            | `tsc` over every workspace, and over `infra/` and `scripts/` |
@@ -365,7 +412,7 @@ the API and nginx containers are left running against databases that no longer e
 | `npm run db:app-role -w @sightline/api`        | Set the restricted role's password, for row-level security   |
 | `./scripts/backup-restore-test.sh`             | Back up, restore, and check an ExternalId still decrypts     |
 | `npm run db:generate -w @sightline/api`        | Generate a migration after editing `src/db/schema.ts`        |
-| `npm run db:migrate -w @sightline/api`         | Apply pending migrations — the server also does this on boot |
+| `npm run db:migrate -w @sightline/api`         | Apply pending migrations — a clone also does this on boot    |
 | `npm run db:studio -w @sightline/api`          | Browse the database in Drizzle Studio                        |
 
 ---

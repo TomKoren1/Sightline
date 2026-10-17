@@ -1,22 +1,18 @@
 /**
  * Tenant secrets at rest.
  *
- * One secret matters here: the **external id** that authorises an AssumeRole
- * into a customer's AWS account. It is not a preference, it is half of a
- * credential for somebody else's cloud, and it must not be readable from a
- * database dump alone.
+ * One secret matters: the **external id** that authorises an AssumeRole into a
+ * customer's account. Half a credential for somebody else's cloud, so it must
+ * not be readable from a database dump alone.
  *
- * Two backends behind one interface. `kms` is the hosted path - the key never
- * leaves KMS, every decryption lands in CloudTrail, and a key in the
- * environment beside the database it protects is not a meaningful boundary.
- * `local` is AES-256-GCM with a key from the environment, for a self-hosted
- * deployment that has no KMS; authenticated encryption, so a tampered
- * ciphertext fails to decrypt rather than decrypting to rubbish.
+ * `kms` is the hosted path - the key never leaves KMS and every decryption
+ * lands in CloudTrail. `local` is AES-256-GCM with a key from the environment,
+ * for a deployment that has no KMS; authenticated, so a tampered ciphertext
+ * fails rather than decrypting to rubbish.
  *
- * Every ciphertext carries a version prefix (`k1:`, `l1:`) and decryption
- * dispatches on what the ciphertext says it is, never on what is configured
- * now - otherwise moving from one backend to the other is a flag day. That is
- * cheap to arrange in advance and impossible to arrange afterwards.
+ * Every ciphertext carries a version prefix and decryption dispatches on what
+ * the ciphertext says it is, never on what is configured now - otherwise
+ * changing backend is a flag day.
  */
 
 import { createCipheriv, createDecipheriv, createHash, randomBytes } from "node:crypto";

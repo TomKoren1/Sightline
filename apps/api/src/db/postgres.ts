@@ -1,33 +1,19 @@
 /**
  * Postgres connections, Drizzle clients, and schema migration.
  *
- * There are **two** of each, and the difference is the whole of row-level
- * security.
+ * Two of each, and the difference is the whole of row-level security.
  *
- * `db` runs as a role the database applies RLS policies to, and every query
- * through it must be inside `withTenant` - the connection carries
- * `app.tenant_id`, and the policies compare every row against it. A query that
- * escapes that context throws here rather than running, and a query that runs
- * but forgets its `WHERE tenant_id` returns nothing rather than another
- * tenant's rows. Both failures are loud, and in that order.
+ * `db` runs as a role the policies apply to, and every query through it must be
+ * inside `withTenant`: escaping that context throws, and a query that forgets
+ * its `WHERE tenant_id` returns nothing rather than another tenant's rows.
  *
- * `system` runs as the owner and bypasses all of it. It exists because a few
- * operations genuinely cannot be tenant-scoped - finding out *which* tenant is
- * asking, for one - and naming them is better than a flag the tenant path could
- * set. Grepping for `system` is the audit.
+ * `system` runs as the owner and bypasses all of it, for the few operations
+ * that genuinely cannot be tenant-scoped - finding out which tenant is asking,
+ * for one. Grepping for `system` is the audit.
  *
- * ## Why two roles rather than one plus a setting
- *
- * The configured `DATABASE_URL` user here is a **superuser with BYPASSRLS**, and
- * superusers ignore RLS entirely - `FORCE ROW LEVEL SECURITY` does not change
- * that, because FORCE only binds the table *owner*. So policies installed
- * against that role are decoration: they exist, they are visible in `\d`, and
- * they filter nothing. A separate non-superuser role is not a nicety, it is the
- * only thing that makes any of this real.
- *
- * Two connection strings also mean the bypass is not reachable from the request
- * path: an injected or mistaken query running on `db` cannot opt out of RLS,
- * because opting out would require a different connection.
+ * Two roles rather than one plus a setting because `DATABASE_URL` here is a
+ * superuser, and superusers ignore RLS entirely. Two connection strings also
+ * put the bypass out of reach of the request path.
  */
 
 import { AsyncLocalStorage } from "node:async_hooks";
@@ -124,21 +110,17 @@ export type Database = typeof db;
 /**
  * Run `fn` with every `db` query scoped to one tenant.
  *
- * Holds one connection for the duration, with the setting applied at session
- * level rather than transaction level. The alternative - a transaction per
- * query - would cost a BEGIN and a COMMIT per statement, and wrapping the whole
- * request in one transaction would hold it open across AWS and Neo4j calls that
- * take minutes.
+ * Holds one connection for the duration, set at session level: a transaction
+ * per query would cost a BEGIN and COMMIT each, and one transaction per request
+ * would stay open across AWS and Neo4j calls that take minutes.
  *
- * Nested calls reuse the outer connection rather than taking another. With a
- * pool of ten and a scan holding one for minutes, nesting that acquired would
- * eventually deadlock against itself.
+ * Nested calls reuse the outer connection - with a pool of ten and a scan
+ * holding one for minutes, nesting that acquired would deadlock against itself.
  *
- * `set_config(..., false)` is session-scoped, so it **must** be cleared before
- * the connection goes back to the pool - the `finally` is load-bearing, not
- * tidiness. `SET LOCAL` would be transaction-scoped and self-clearing, and
- * cannot be used: it takes no bind parameter, so the tenant id would have to be
- * interpolated into SQL.
+ * Session-scoped means the setting **must** be cleared before the connection
+ * returns to the pool, so the `finally` is load-bearing. `SET LOCAL` would
+ * self-clear but takes no bind parameter, which would mean interpolating a
+ * tenant id into SQL.
  */
 export async function withTenant<T>(tenantId: string, fn: () => Promise<T>): Promise<T> {
   const existing = bound.getStore();
@@ -189,17 +171,14 @@ export const currentTenant = (): string | null => bound.getStore()?.tenantId ?? 
 /**
  * Apply any migrations the database has not seen.
  *
- * Runs on boot, as the idempotent schema file it replaced did, so nothing about
- * how the project starts has changed — but the schema is now defined once, in
- * `schema.ts`, and changes to it produce a reviewable migration instead of an
- * edit to a file that was applied by being re-read.
+ * On boot, as the idempotent schema file it replaced did - but the schema is
+ * now defined once in `schema.ts` and changes produce a reviewable migration.
  *
  * On `system`, because migrations create and alter tables: the restricted role
  * has DML only, which is the point of it.
  *
- * `fileURLToPath`, not `URL.pathname`: on Windows the latter yields
- * `/C:/projects/app/drizzle` and any directory containing a space arrives
- * percent-encoded.
+ * `fileURLToPath`, not `URL.pathname`: the latter yields `/C:/…` on Windows and
+ * percent-encodes a directory containing a space.
  */
 export async function migrate(): Promise<void> {
   await runMigrations(system, { migrationsFolder: MIGRATIONS_FOLDER });

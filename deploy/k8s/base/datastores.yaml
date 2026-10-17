@@ -131,9 +131,16 @@ spec:
             #
             # Initial equals max so the JVM does not resize the heap mid-scan,
             # which presents as the scan being slow rather than as a setting.
-            - { name: NEO4J_server_memory_heap_initial__size, value: "2G" }
-            - { name: NEO4J_server_memory_heap_max__size, value: "2G" }
-            - { name: NEO4J_server_memory_pagecache_size, value: "1G" }
+            #
+            # 1G and 512M, not compose's 2G and 1G: this runs on a 9 GB node
+            # that also hosts other workloads, and Neo4j is the one component
+            # here that will take every byte it is offered. It is enough for a
+            # few hundred thousand nodes; raise it - with the limit in
+            # `prod/sizing.yaml`, never without - once `du -sh` on the store
+            # says the page cache is the thing being missed.
+            - { name: NEO4J_server_memory_heap_initial__size, value: "1G" }
+            - { name: NEO4J_server_memory_heap_max__size, value: "1G" }
+            - { name: NEO4J_server_memory_pagecache_size, value: "512M" }
             # No plugins, and no unrestricted procedures. APOC was loaded with
             # `dbms.security.procedures.unrestricted=apoc.*` and called by
             # nothing; the agent's escape hatch forbids `CALL` outright, so it

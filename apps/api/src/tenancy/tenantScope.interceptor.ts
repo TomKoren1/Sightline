@@ -1,27 +1,16 @@
 /**
  * Every request's work runs on a connection scoped to its tenant.
  *
- * The one place the HTTP side opens a tenant context, so that no route has to
+ * The one place the HTTP side opens a tenant context, so no route has to
  * remember. An interceptor rather than a guard because only an interceptor
- * *wraps* the handler: guards run before it and cannot hold anything open
- * around it, and the connection has to live as long as the response does.
+ * *wraps* the handler, and the connection has to live as long as the response.
  *
- * ## Why it holds the connection to the end
+ * It holds the connection until the handler completes because a streaming
+ * response keeps querying after the handler returns - the scan progress stream
+ * polls for as long as the scan runs - and an unscoped query sees nothing.
  *
- * `withTenant` sets `app.tenant_id` on one connection at session level, and the
- * row-level security policies compare every row against it. A streaming
- * response keeps querying after the handler has started writing - the scan
- * progress stream polls Postgres once per tick for as long as the scan runs -
- * so releasing the connection when `intercept` returns would leave those
- * queries unscoped, and an unscoped query sees nothing. Awaiting the handler's
- * completion is what makes the stream work at all.
- *
- * ## Requests with no tenant
- *
- * Sign-in, the provider callback, health: there is no tenant yet, and the
- * things they read - a session by token hash, a user by provider subject - are
- * how the tenant gets discovered in the first place. Those run on the `system`
- * handle and are named individually there. Here they simply pass through.
+ * Requests with no tenant yet (sign-in, the provider callback, health) pass
+ * through; what they read runs on the `system` handle and is named there.
  */
 
 import { CallHandler, ExecutionContext, Injectable, NestInterceptor } from "@nestjs/common";

@@ -19,20 +19,22 @@ What is where:
 | `base/backup.yaml`        | nightly `pg_dump`, encrypted to a key the cluster does not hold |
 | `prod/cloudflared.yaml`   | the tunnel — no inbound port, no static IP                      |
 
-## Before you deploy: this needs about 5 GB
+## Before you deploy: this needs about 3 GB
 
-Neo4j alone is configured for a 2 GB heap and a 1 GB page cache, and its pod
-limit is 3.5 GB to leave room for the JVM's non-heap use. Add Postgres, two API
-replicas and a worker and the namespace wants roughly 5 GB.
+Neo4j is configured for a 1 GB heap and a 512 MB page cache, with a 2 GB pod
+limit to leave room for the JVM's non-heap use. Add Postgres, two API replicas
+and a worker and the namespace wants roughly 3 GB.
 
-**Measured on this machine, not estimated:** at the time of writing it was at
-6.1 GB of 9 GB used with k3s, ArgoCD and the development `docker compose` stack
-all running — about 2 GB free. Deploying this alongside that will not fit. Stop
-the compose stack (`docker compose down`) first, or lower Neo4j's heap in
-`prod/sizing.yaml` and the matching `NEO4J_server_memory_*` values in
-`base/datastores.yaml` — both, because changing the limit without the heap
-gets the container killed while the JVM believes it is fine, and changing the
-heap without the limit wastes the difference.
+**Measured on this machine, not estimated:** 9 GB total, of which other
+workloads hold about 2.5 GB and the development `docker compose` stack another
+2 GB while it is up — so **stop the compose stack first** (`docker compose
+down`) and this fits with room to spare. It does not fit alongside it.
+
+To give Neo4j more, raise the heap and page cache in `base/datastores.yaml`
+_and_ the limit in `prod/sizing.yaml` — both, because changing the limit
+without the heap wastes the difference, and changing the heap without the limit
+gets the container killed while the JVM believes it is fine.
+`infra/k8sManifests.test.ts` fails if they disagree.
 
 ## Images
 
@@ -55,6 +57,50 @@ Re-importing an image with the same tag does **not** restart the pods. Either
 bump the tag in `base/kustomization.yaml` (`images:`) or
 `kubectl -n sightline rollout restart deploy/api deploy/worker deploy/web`.
 
+## Reaching it without a domain (testing only)
+
+`prod/cloudflared.yaml` runs a **named** tunnel, which needs a domain on
+Cloudflare. To try the hosted path before buying one, a **quick** tunnel gives
+a random `https://<words>.trycloudflare.com` hostname for free:
+
+```bash
+# The named tunnel has no token yet, so stop it trying.
+kubectl -n sightline scale deploy/cloudflared --replicas=0
+
+# A quick tunnel, wearing BOTH labels the NetworkPolicy expects.
+kubectl -n sightline run quicktunnel --image=cloudflare/cloudflared:latest \
+  --labels='app.kubernetes.io/name=cloudflared,app.kubernetes.io/part-of=sightline' \
+  --restart=Never -- tunnel --no-autoupdate --url http://web:80
+
+kubectl -n sightline logs -f quicktunnel | grep -m1 trycloudflare.com
+```
+
+Two things about it that are easy to lose an hour to:
+
+- **Both labels, and the second is easy to miss.** `web-from-tunnel-only`
+  permits ingress to the web pods only from pods matching its `from` selector -
+  and `commonLabels` injects `app.kubernetes.io/part-of: sightline` into that
+  selector as well, so it matches on _both_ labels. The deployed `cloudflared`
+  gets both from kustomize; a pod created by hand gets only what `--labels`
+  passes, which replaces the default `run=` label rather than adding to it. With
+  one label the tunnel registers with Cloudflare and every request is a 502.
+  Read the tunnel's own log first: k3s's policy controller REJECTs rather than
+  drops, so a denial appears as `connect: connection refused`, which is how you
+  tell it from an origin that is actually down. A pod already running with the
+  wrong labels can be fixed in place - labels are mutable and the policy
+  re-evaluates in about a second, so the hostname survives:
+  `kubectl -n sightline label pod quicktunnel app.kubernetes.io/part-of=sightline`.
+- **The hostname is not known until it starts**, and `PUBLIC_BASE_URL` has to
+  match it exactly — it is the OAuth redirect's origin. So the order is: start
+  the tunnel, read the hostname from the log, put it in the secret, restart the
+  API. And a quick tunnel gets a _new_ hostname every restart, which is the
+  reason production uses a named one: the redirect URI an OAuth provider has
+  registered cannot change every time a pod moves.
+
+Google accepts a `trycloudflare.com` subdomain as a redirect URI —
+`trycloudflare.com` is on the Public Suffix List, so `<words>.trycloudflare.com`
+is a registrable domain rather than somebody else's subdomain.
+
 ## Secrets
 
 `sealed-secrets` is already installed in `kube-system`, and `kubeseal` is on
@@ -65,6 +111,12 @@ first sign-in with an error about Google rather than about configuration.
 
 Three secrets are needed. Create each locally, seal it, commit the sealed
 version, and delete the plaintext:
+
+**For a throwaway test, skip `kubeseal`.** Drop the `--dry-run=client -o yaml`
+and the pipe, and `kubectl create secret generic` applies the secret straight
+to the cluster, committing nothing. Sealing is for when these manifests are the
+source of truth and a rebuilt cluster has to reproduce them; the secret names
+and keys are identical either way.
 
 ```bash
 # 1. The datastores' own credentials.
