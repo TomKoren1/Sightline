@@ -334,6 +334,21 @@ export const api = {
     }),
 
   connections: () => get<{ connections: ConnectionSummary[] }>("/api/connections"),
+
+  /**
+   * One resource, and what fixes it.
+   *
+   * Through this client rather than a bare `fetch`, which is how these two
+   * started life. A bare `fetch` sends no `X-Sightline-Connection`, so the
+   * server fell back to the tenant's *oldest* connection - and the detail
+   * panel then answered about a different AWS account than the one on screen.
+   * It presented as clicking a node showing nothing, because the ARN being
+   * asked about does not exist in the account that got resolved.
+   *
+   * Typed by the caller: each component owns the shape it renders.
+   */
+  resource: <T>(arn: string) => get<T>(`/api/resources/${encodeURIComponent(arn)}`),
+  remediation: <T>(arn: string) => get<T>(`/api/resources/${encodeURIComponent(arn)}/remediation`),
   createConnection: (input: { label: string; kind?: "real" | "demo" }) =>
     send<{ id: string; externalId: string; note: string }>("/api/connections", asJson(input)),
   setConnectionTarget: (id: string, accountId: string) =>
