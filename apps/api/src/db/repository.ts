@@ -31,7 +31,7 @@ import { db, fingerprint, withTenant, type Database } from "./postgres.js";
  */
 type Writer = Database | Parameters<Parameters<Database["transaction"]>[0]>[0];
 import { relationshipSnapshots, resourceSnapshots, scanRuns, scanUnits } from "./schema.js";
-import type { ScanId } from "../tenancy/ids.js";
+import type { ScanId, TenantId } from "../tenancy/ids.js";
 import type { Scope } from "../tenancy/scope.js";
 
 /**
@@ -97,6 +97,36 @@ export async function failScanRun(scope: Scope, scanId: string, error: string): 
 export async function markProjected(scope: Scope, scanId: string): Promise<void> {
   return withTenant(scope.tenantId, async () => {
     await db.update(scanRuns).set({ projectedAt: new Date() }).where(ownedScan(scope, scanId));
+  });
+}
+
+/**
+ * Every graph scope this tenant still reads, across all of its accounts.
+ *
+ * The sweep matches on `tenantId`, so what it keeps has to be every
+ * connection's current graph. Assembling that list at the call site is what
+ * went wrong: a scan passed its own scan id and the previous one, and the sweep
+ * deleted the graphs of every other account the tenant had connected - while
+ * Postgres went on calling them projected, so those accounts rendered as an
+ * empty graph rather than an error.
+ *
+ * Two per connection, so a request that resolved a scan id just before a flip
+ * still finds its graph. Derived here rather than by the caller, so a
+ * connection added later is covered without anybody remembering.
+ */
+export async function projectedScanIdsToKeep(tenantId: TenantId): Promise<string[]> {
+  return withTenant(tenantId, async () => {
+    const { rows } = await db.execute<{ id: string }>(sql`
+      SELECT id FROM (
+        SELECT
+          id,
+          ROW_NUMBER() OVER (PARTITION BY connection_id ORDER BY projected_at DESC) AS recency
+        FROM scan_runs
+        WHERE tenant_id = ${tenantId} AND projected_at IS NOT NULL
+      ) ranked
+      WHERE recency <= 2
+    `);
+    return rows.map((r) => r.id);
   });
 }
 

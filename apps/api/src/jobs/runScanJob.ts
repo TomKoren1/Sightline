@@ -28,10 +28,10 @@ import { CallCounter } from "../aws/clients.js";
 import { projectGraph, sweepSupersededScans } from "../db/neo4j.js";
 import {
   createScanRun,
-  currentScanId,
   failScanRun,
   getScan,
   markProjected,
+  projectedScanIdsToKeep,
   recordScanUnit,
   saveScanResult,
   startScanUnits,
@@ -105,9 +105,6 @@ export async function runScanJob(options: RunScanJobOptions): Promise<ScanJobOut
 
   try {
     const target = await resolveScanTarget(scope);
-    // Captured before the flip: afterwards `currentScanId` is the new scan, and
-    // the outgoing one would be unrecoverable.
-    const previousScanId = await currentScanId(scope);
     const counter = new CallCounter();
 
     /**
@@ -250,7 +247,15 @@ export async function runScanJob(options: RunScanJobOptions): Promise<ScanJobOut
     await markVerified(scope, result.accountId);
     await markScanned(scope);
 
-    await sweep(scope, [scanId, ...(previousScanId ? [previousScanId] : [])]);
+    /**
+     * Every account's current graph, not just this one's.
+     *
+     * The sweep matches on the tenant, so a keep-list of only this
+     * connection's scans deleted every other connected account's graph - and
+     * Postgres went on claiming those scans were projected, so switching
+     * account showed an empty graph instead of an error.
+     */
+    await sweep(scope, await projectedScanIdsToKeep(scope.tenantId));
 
     const run = await getScan(scope, scanId);
     if (run) emit({ type: "scan.finished", scanId, run });
@@ -292,10 +297,12 @@ export async function runScanJob(options: RunScanJobOptions): Promise<ScanJobOut
 /**
  * Drop graph scopes nobody reads any more.
  *
- * The previous scan is kept alongside the current one, so a request that
- * resolved the old scan id a moment before the flip still finds its graph
- * rather than an empty one. Failures are swallowed: a scan that succeeded must
- * not be reported as failed because tidying up afterwards did not.
+ * The keep-list comes from `projectedScanIdsToKeep`, which returns the two
+ * most recent projected scans of *every* connection this tenant has - the
+ * current graph of each, plus the one before it so that a request which
+ * resolved a scan id a moment before the flip still finds its graph. Failures
+ * are swallowed: a scan that succeeded must not be reported as failed because
+ * tidying up afterwards did not.
  */
 async function sweep(scope: Scope, keep: string[]): Promise<void> {
   try {
