@@ -1,0 +1,1 @@
+CREATE INDEX "messages_tenant_asked" ON "messages" USING btree ("tenant_id","created_at");

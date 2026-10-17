@@ -22,6 +22,25 @@ import { ask } from "./agent.js";
 import * as queries from "../db/queries.js";
 import * as repository from "../db/repository.js";
 import * as tools from "./tools.js";
+import { asConnectionId, asScanId, asTenantId } from "../tenancy/ids.js";
+
+/**
+ * A scope, because `ask` requires one.
+ *
+ * The queries are stubbed in these tests, so the ids only have to exist. What
+ * is under test is the citation ledger, which must hold for any model output
+ * and any tenant.
+ */
+const TOOLS: tools.ToolContext = {
+  scope: {
+    tenantId: asTenantId("00000000-0000-0000-0000-0000000000aa"),
+    connectionId: asConnectionId("00000000-0000-0000-0000-0000000000bb"),
+  },
+  graph: {
+    tenantId: asTenantId("00000000-0000-0000-0000-0000000000aa"),
+    scanId: asScanId("00000000-0000-0000-0000-0000000000cc"),
+  },
+};
 
 const REAL_ARN = "arn:aws:rds:us-east-1:123456789012:db:northwind-prod-db";
 const INVENTED_ARN = "arn:aws:rds:us-east-1:123456789012:db:does-not-exist";
@@ -125,6 +144,7 @@ function stubTool() {
 async function askWith(answer: string) {
   const events: AgentEvent[] = [];
   const message = await ask({
+    tools: TOOLS,
     question: "what is public?",
     model: scriptedModel(answer),
     onEvent: (e) => events.push(e),
@@ -212,6 +232,7 @@ describe("the read-only guard still runs on the way out", () => {
     try {
       const events: AgentEvent[] = [];
       const message = await ask({
+        tools: TOOLS,
         // A request aimed at the agent to change something. The model is
         // scripted to answer as if it had complied, which is what it really
         // did when this was a prompt instruction rather than code.

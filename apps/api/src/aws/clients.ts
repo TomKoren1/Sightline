@@ -2,9 +2,14 @@
  * AWS client construction.
  *
  * Every client is built the same way, and the only difference between scanning
- * a mock and scanning a real account is the endpoint override. Assume-role,
- * retries, throttling behaviour and pagination are identical in both, which is
- * the whole point of using a mock that speaks the real API.
+ * the demo fixture and scanning a real account is the endpoint override.
+ * Assume-role, retries, throttling behaviour and pagination are identical in
+ * both, which is the whole point of using a mock that speaks the real API.
+ *
+ * **A client cannot be constructed without naming whose account it will talk
+ * to.** The target and the call counter arrive together as an `AwsContext`,
+ * passed rather than read, because ambient state is a value that is correct
+ * when there is one of something and silently wrong when there are many.
  */
 
 import { EC2Client } from "@aws-sdk/client-ec2";
@@ -14,15 +19,15 @@ import { RDSClient } from "@aws-sdk/client-rds";
 import { LambdaClient } from "@aws-sdk/client-lambda";
 import { ResourceExplorer2Client } from "@aws-sdk/client-resource-explorer-2";
 
-import { activeConnection, isMock } from "../config.js";
 import { credentialProvider } from "./credentials.js";
+import type { ScanTarget } from "../tenancy/scanTarget.js";
 
 /**
- * Counts AWS API calls per scan, so a scan can report what it cost.
+ * Counts AWS API calls, so a scan can report what it cost.
  *
- * On a real account this is the number that matters when a customer asks why
- * their CloudTrail is busy, and it is the first thing to look at when a scan
- * starts getting throttled.
+ * One per scan rather than one per process: on a real account this is the
+ * number that matters when a customer asks why their CloudTrail is busy, and a
+ * shared counter would attribute one tenant's calls to another's scan.
  */
 export class CallCounter {
   private counts = new Map<string, number>();
@@ -42,12 +47,16 @@ export class CallCounter {
   }
 }
 
-export const callCounter = new CallCounter();
+/** Everything a client needs that is not the region. */
+export interface AwsContext {
+  target: ScanTarget;
+  counter: CallCounter;
+}
 
-function baseConfig(region: string) {
+function baseConfig(ctx: AwsContext, region: string) {
   return {
     region,
-    credentials: credentialProvider,
+    credentials: credentialProvider(ctx.target),
     /**
      * `adaptive` adds a client-side rate limiter that backs off when AWS
      * starts returning throttling errors, on top of the standard exponential
@@ -56,19 +65,13 @@ function baseConfig(region: string) {
      */
     retryMode: "adaptive" as const,
     maxAttempts: 5,
-    // Explicit, never via AWS_ENDPOINT_URL: that variable is stripped from the
-    // environment at startup so a mode switch cannot leave one behind.
-    ...(activeConnection().endpoint ? { endpoint: activeConnection().endpoint! } : {}),
+    // Explicit, and from the target rather than the environment: that variable
+    // is stripped at startup so one connection's endpoint cannot leak into
+    // another's requests.
+    ...(ctx.target.endpoint ? { endpoint: ctx.target.endpoint } : {}),
   };
 }
 
-/**
- * Attach a middleware that counts every request the client makes.
- *
- * Sits at the `deserialize` step so it counts attempts that reach the wire,
- * including retries - which is what we want, since retries are exactly what
- * costs us when throttled.
- */
 /**
  * The middleware stack, structurally.
  *
@@ -83,11 +86,18 @@ interface MiddlewareStack {
   ) => void;
 }
 
-function instrument<T extends object>(client: T, key: string): T {
+/**
+ * Attach a middleware that counts every request the client makes.
+ *
+ * Sits at the `deserialize` step so it counts attempts that reach the wire,
+ * including retries - which is what we want, since retries are exactly what
+ * costs us when throttled.
+ */
+function instrument<T extends object>(client: T, counter: CallCounter, key: string): T {
   const { middlewareStack } = client as unknown as { middlewareStack: MiddlewareStack };
   middlewareStack.add(
     (next) => async (args) => {
-      callCounter.record(key);
+      counter.record(key);
       return next(args);
     },
     { step: "deserialize", name: "sightlineCallCounter", override: true },
@@ -95,24 +105,33 @@ function instrument<T extends object>(client: T, key: string): T {
   return client;
 }
 
-export const ec2Client = (region: string) =>
-  instrument(new EC2Client(baseConfig(region)), `ec2:${region}`);
+export const ec2Client = (ctx: AwsContext, region: string) =>
+  instrument(new EC2Client(baseConfig(ctx, region)), ctx.counter, `ec2:${region}`);
 
-export const rdsClient = (region: string) =>
-  instrument(new RDSClient(baseConfig(region)), `rds:${region}`);
+export const rdsClient = (ctx: AwsContext, region: string) =>
+  instrument(new RDSClient(baseConfig(ctx, region)), ctx.counter, `rds:${region}`);
 
-export const lambdaClient = (region: string) =>
-  instrument(new LambdaClient(baseConfig(region)), `lambda:${region}`);
+export const lambdaClient = (ctx: AwsContext, region: string) =>
+  instrument(new LambdaClient(baseConfig(ctx, region)), ctx.counter, `lambda:${region}`);
 
-export const resourceExplorerClient = (region: string) =>
-  instrument(new ResourceExplorer2Client(baseConfig(region)), `resource-explorer:${region}`);
+export const resourceExplorerClient = (ctx: AwsContext, region: string) =>
+  instrument(
+    new ResourceExplorer2Client(baseConfig(ctx, region)),
+    ctx.counter,
+    `resource-explorer:${region}`,
+  );
 
 /** moto serves S3 from a single host, so path-style addressing is required. */
-export const s3Client = (region: string) =>
+export const s3Client = (ctx: AwsContext, region: string) =>
   instrument(
-    new S3Client({ ...baseConfig(region), ...(isMock() ? { forcePathStyle: true } : {}) }),
+    new S3Client({
+      ...baseConfig(ctx, region),
+      ...(ctx.target.kind === "demo" ? { forcePathStyle: true } : {}),
+    }),
+    ctx.counter,
     `s3:${region}`,
   );
 
 /** IAM is global. Its endpoint lives in us-east-1 regardless of where we scan. */
-export const iamClient = () => instrument(new IAMClient(baseConfig("us-east-1")), "iam:global");
+export const iamClient = (ctx: AwsContext) =>
+  instrument(new IAMClient(baseConfig(ctx, "us-east-1")), ctx.counter, "iam:global");

@@ -197,12 +197,12 @@ export function TrustPanel() {
                 >
                   {/* A third state: "did not run" is not a failure. */}
                   <span
-                    className={c.errored ? "text-ink-500" : c.passed ? "text-good" : "text-danger"}
+                    className={c.errored ? "text-ink-400" : c.passed ? "text-good" : "text-danger"}
                   >
                     {c.errored ? "—" : c.passed ? "✓" : "✗"}
                   </span>
                   <span
-                    className={`flex-1 truncate ${c.errored ? "text-ink-500" : "text-ink-300"}`}
+                    className={`flex-1 truncate ${c.errored ? "text-ink-400" : "text-ink-300"}`}
                     title={c.errored ? `did not run — ${c.errored}` : c.question}
                   >
                     {c.question}

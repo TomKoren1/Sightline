@@ -3,6 +3,7 @@
 import { useQuery } from "@tanstack/react-query";
 
 import { Remediation } from "./Remediation.js";
+import { api } from "../api.js";
 import { styleFor } from "../kinds.js";
 import { asText } from "@sightline/shared";
 
@@ -39,11 +40,9 @@ export function ResourceDetail({
 }) {
   const { data, isLoading, error } = useQuery({
     queryKey: ["resource", arn],
-    queryFn: async () => {
-      const res = await fetch(`/api/resources/${encodeURIComponent(arn)}`);
-      if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
-      return res.json() as Promise<ResourceDetailResponse>;
-    },
+    // Through the client, which sends the selected connection. A bare `fetch`
+    // here asked about whichever account happened to be the tenant's oldest.
+    queryFn: () => api.resource<ResourceDetailResponse>(arn),
   });
 
   const resource = data?.resource;

@@ -14,10 +14,12 @@
 import { ConflictException, Injectable } from "@nestjs/common";
 import { desc } from "drizzle-orm";
 
-import { cfg, isMock } from "../config.js";
-import { db } from "../db/postgres.js";
+import { cfg } from "../config.js";
+import { system } from "../db/postgres.js";
 import { evalRuns } from "../db/schema.js";
 import { getLatestScan, loadRelationships, loadResources } from "../db/repository.js";
+import { getConnection } from "../tenancy/connections.js";
+import type { Scope } from "../tenancy/scope.js";
 import { DRIFT_EXPECTED_CHECK_FAILURES, DRIFT_MARKER_RESOURCES } from "@sightline/mock-aws";
 
 import { CHECKS, runChecks } from "../evals/checks.js";
@@ -37,8 +39,8 @@ export class EvalsService {
    * Reads from Postgres rather than rescanning: it is the data the UI is
    * showing that we want to validate, and it makes the call free and instant.
    */
-  async groundTruth() {
-    const latest = await getLatestScan();
+  async groundTruth(scope: Scope) {
+    const latest = await getLatestScan(scope);
     if (!latest) {
       throw new ConflictException({
         error: "No scan has completed yet, so there is nothing to check.",
@@ -46,10 +48,11 @@ export class EvalsService {
       });
     }
 
-    // The expected answers describe the seeded mock account. Against a real
-    // customer they are meaningless, and pretending otherwise would be worse
-    // than not offering the check at all.
-    if (!isMock()) {
+    // The expected answers describe the seeded demo fixture. Against a real
+    // customer account they are meaningless, and pretending otherwise would be
+    // worse than not offering the check at all.
+    const connection = await getConnection(scope);
+    if (connection?.kind !== "demo") {
       throw new ConflictException({
         error:
           "Ground-truth checks are defined against the seeded mock account and do not apply to a real AWS account.",
@@ -59,8 +62,8 @@ export class EvalsService {
 
     const started = Date.now();
     const [resources, relationships] = await Promise.all([
-      loadResources(latest.id),
-      loadRelationships(latest.id),
+      loadResources(scope, latest.id),
+      loadRelationships(scope, latest.id),
     ]);
     const results = runChecks({ resources, relationships });
 
@@ -125,7 +128,7 @@ export class EvalsService {
 
   /** The most recent agent eval run, if one has been recorded. */
   async latest() {
-    const [row] = await db.select().from(evalRuns).orderBy(desc(evalRuns.startedAt)).limit(1);
+    const [row] = await system.select().from(evalRuns).orderBy(desc(evalRuns.startedAt)).limit(1);
     if (!row) {
       return {
         run: null,

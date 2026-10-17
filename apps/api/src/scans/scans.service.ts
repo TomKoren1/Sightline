@@ -1,103 +1,112 @@
 /**
- * Scan reads, and running one.
+ * Scan reads, and asking for one.
  *
- * A scan is long-running, so the interesting one streams. `runStreaming` opens
- * a server-sent event stream and reports each `(service, region)` unit as it
- * finishes - which is what lets the UI show real progress and, more
- * importantly, show a failure the moment it happens rather than at the end.
+ * Running a scan used to happen here, inside the request that asked for it.
+ * That had two consequences worth naming: closing the tab orphaned the scan,
+ * and a scan heavy enough to exhaust memory took the API down with it. Both are
+ * gone - this enqueues, and a worker runs it. What the request streams is a
+ * *view* of the job, read back from Postgres, which is why a reload can rejoin
+ * one and why several tabs can watch the same scan.
  */
 
-import { randomUUID } from "node:crypto";
-import { Inject, Injectable, NotFoundException } from "@nestjs/common";
-import { rollUpStatus, type ScanEvent, errorMessage } from "@sightline/shared";
+import { Injectable, NotFoundException } from "@nestjs/common";
 
-import { callCounter } from "../aws/clients.js";
-import { projectGraph } from "../db/neo4j.js";
-import {
-  createScanRun,
-  diffScans,
-  failScanRun,
-  getLatestScan,
-  getScan,
-  listScans,
-  saveScanResult,
-} from "../db/repository.js";
-import { runScan } from "../scan/runner.js";
-import { ScanStateService } from "./scanState.service.js";
+import { diffScans, getLatestScan, getScan, listScans } from "../db/repository.js";
+import { activeJobId, cancelQueuedJob, enqueueScan, getJob, type ScanJob } from "../jobs/queue.js";
+import { readProgress, streamScanEvents } from "../jobs/progress.js";
+import { mayScan } from "../tenancy/limits.js";
+import { ScanRefused } from "./scanRefused.js";
+import { asScanId, type JobId, type ScanId } from "../tenancy/ids.js";
+import type { Scope } from "../tenancy/scope.js";
 
 @Injectable()
 export class ScansService {
-  constructor(@Inject(ScanStateService) private readonly state: ScanStateService) {}
-
-  async list() {
-    return { scans: await listScans(20) };
+  async list(scope: Scope) {
+    return { scans: await listScans(scope, 20) };
   }
 
-  async latest() {
-    // A null scan is not an error: an account that has never been scanned is a
-    // normal first-run state, and the UI renders an empty state from this.
-    return { scan: await getLatestScan(), scanning: this.state.isRunning };
+  async latest(scope: Scope) {
+    /**
+     * The active job's id, not just a boolean.
+     *
+     * `scanning: true` was enough when the scan lived in the request that
+     * started it, because the only client that could be watching was the one
+     * holding that response open. Now a page that reloads mid-scan has to be
+     * able to *find* the scan again, and an id is the difference between
+     * rejoining it and showing a spinner that never resolves.
+     */
+    const jobId = await activeJobId(scope);
+    // A null scan is not an error: a connection nobody has scanned is a normal
+    // first-run state, and the UI renders an empty state from this.
+    return {
+      scan: await getLatestScan(scope),
+      scanning: jobId !== null,
+      activeJobId: jobId,
+    };
   }
 
-  async byId(id: string) {
-    const scan = await getScan(id);
+  async byId(scope: Scope, id: ScanId) {
+    const scan = await getScan(scope, id);
+    // Tenant-scoped, so a scan belonging to someone else is indistinguishable
+    // from one that does not exist. That is the right answer to give.
     if (!scan) throw new NotFoundException({ error: "No such scan" });
     return { scan };
   }
 
-  async diff(query: { from?: string; to?: string }) {
+  async diff(scope: Scope, query: { from?: ScanId; to?: ScanId }) {
     let { from, to } = query;
     if (!from || !to) {
-      const scans = await listScans(2);
+      const scans = await listScans(scope, 2);
       if (scans.length < 2) {
         return { diff: null, reason: "Only one scan exists; nothing to compare yet." };
       }
-      to ??= scans[0]!.id;
-      from ??= scans[1]!.id;
+      // Branded on the way out of the database as well as on the way in from
+      // a request. These came from `scan_runs.id` so they cannot fail, and
+      // saying so costs a regex rather than a reader working out which ids on
+      // this path were checked.
+      to ??= asScanId(scans[0]!.id);
+      from ??= asScanId(scans[1]!.id);
     }
-    return { diff: await diffScans(from, to) };
+    return { diff: await diffScans(scope, from, to) };
   }
 
   /**
-   * Run a scan, reporting progress through `send`.
+   * Queue a scan.
    *
-   * Returns false without doing anything if one is already running, so the
-   * caller can answer 409 before it has written a single byte of the stream.
+   * Throws `ScanAlreadyQueued` if one is already in flight - that one is the
+   * database's answer, from the partial unique index - and `ScanRefused` for
+   * the limits a schema cannot express: a kill switch, a cooldown, a cap across
+   * the tenant's accounts.
    */
-  async run(send: (event: ScanEvent) => void, logError: (err: unknown) => void): Promise<void> {
-    // The id used in events before the real row exists. The client only uses
-    // it to correlate, and the final event carries the persisted run.
-    const streamId = randomUUID();
-    let scanId: string | null = null;
-
-    try {
-      const result = await runScan({ scanId: streamId, onEvent: send });
-
-      scanId = await createScanRun(result.accountId, result.regions);
-      const status = rollUpStatus(result.units);
-
-      await saveScanResult(scanId, {
-        status,
-        units: result.units,
-        resources: result.resources,
-        relationships: result.relationships,
-        apiCalls: callCounter.total(),
-      });
-      await projectGraph(scanId, result.resources, result.relationships);
-
-      const run = await getScan(scanId);
-      if (run) send({ type: "scan.finished", scanId, run });
-    } catch (err) {
-      const message = errorMessage(err);
-      logError(err);
-      if (scanId) await failScanRun(scanId, message);
-      send({ type: "scan.failed", scanId: scanId ?? streamId, error: message });
-    } finally {
-      this.state.release();
-    }
+  async enqueue(scope: Scope, requestedBy: string | null): Promise<ScanJob> {
+    const decision = await mayScan(scope);
+    if (!decision.allowed) throw new ScanRefused(decision);
+    return enqueueScan(scope, requestedBy);
   }
 
-  claim(): boolean {
-    return this.state.claim();
+  /** Progress for one job, or null if it is not this tenant's. */
+  async progress(scope: Scope, jobId: JobId) {
+    const progress = await readProgress(scope, jobId);
+    if (!progress) throw new NotFoundException({ error: "No such scan job" });
+    return progress;
+  }
+
+  /**
+   * Events for a job, from wherever it has got to.
+   *
+   * Returns the generator rather than consuming it, so the controller owns the
+   * socket and this stays testable without one.
+   */
+  events(scope: Scope, jobId: JobId) {
+    return streamScanEvents(scope, jobId);
+  }
+
+  async job(scope: Scope, jobId: JobId): Promise<ScanJob | null> {
+    return getJob(scope, jobId);
+  }
+
+  /** Cancel a job that has not started. Returns false if it already has. */
+  async cancel(scope: Scope, jobId: JobId): Promise<boolean> {
+    return cancelQueuedJob(scope, jobId);
   }
 }

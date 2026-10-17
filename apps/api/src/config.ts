@@ -29,10 +29,78 @@ loadDotenv({ path: ENV_FILE, quiet: true });
 const blankAsUnset = <T extends z.ZodTypeAny>(inner: T) =>
   z.preprocess((value) => (value === "" ? undefined : value), inner);
 
+/**
+ * A yes/no environment variable, with no coercion.
+ *
+ * **Not** `z.coerce.boolean()`. That applies JavaScript's `Boolean()`, under
+ * which every non-empty string is true - so `SCANS_ENABLED=false` enables
+ * scans. A kill switch that cannot be switched off is worse than no kill
+ * switch: it fails silently, during an incident, in the direction nobody wants.
+ *
+ * Unrecognised values are **refused** rather than guessed at. Configuration
+ * that means one thing and does another is the whole failure mode here, and a
+ * startup error naming the variable costs an operator seconds; a switch that
+ * quietly stayed on costs whatever the incident costs.
+ */
+const TRUE = new Set(["1", "true", "yes", "on"]);
+const FALSE = new Set(["0", "false", "no", "off"]);
+
+const flag = (fallback: boolean) =>
+  blankAsUnset(
+    z
+      .union([z.boolean(), z.string()])
+      .optional()
+      .transform((value, ctx) => {
+        if (value === undefined) return fallback;
+        if (typeof value === "boolean") return value;
+        const normalised = value.trim().toLowerCase();
+        if (TRUE.has(normalised)) return true;
+        if (FALSE.has(normalised)) return false;
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message:
+            `"${value}" is not a yes or a no. Use one of ` +
+            `${[...TRUE].join(", ")} or ${[...FALSE].join(", ")}.`,
+        });
+        return z.NEVER;
+      }),
+  );
+
+/**
+ * The external id the mock fixture accepts. Published, not secret: moto
+ * accepts any AssumeRole, and pretending this is a credential would be
+ * theatre. Named so the demo path has one definition rather than three
+ * string literals that have to agree.
+ */
+export const MOCK_EXTERNAL_ID = "local-dev-external-id-0000";
+
 const schema = z.object({
   DATABASE_URL: blankAsUnset(
     z.string().default("postgres://sightline:sightline@localhost:5432/sightline"),
   ),
+  /**
+   * The restricted role every tenant-scoped query uses.
+   *
+   * Separate from `DATABASE_URL`, which is the owner and in this project's own
+   * compose file is a superuser - and superusers ignore row-level security
+   * entirely, `FORCE ROW LEVEL SECURITY` included. So without this the policies
+   * exist and filter nothing. Hosted mode refuses to start without it.
+   */
+  DATABASE_URL_APP: blankAsUnset(z.string().optional()),
+
+  /**
+   * Whether this process applies migrations before it starts listening.
+   *
+   * On for a clone, where one process is the whole deployment and a migration
+   * on boot is simply convenient. Off in hosted mode, where two replicas would
+   * race to apply the same migration - and where a Job is the thing that runs
+   * them. A process with this off refuses to start against a schema that is
+   * behind, rather than serving requests against one.
+   *
+   * Defaulted below rather than here, because it depends on DEPLOYMENT_MODE.
+   */
+  MIGRATE_ON_BOOT: blankAsUnset(z.enum(["true", "false"]).optional()),
+
   NEO4J_URI: blankAsUnset(z.string().default("bolt://localhost:7687")),
   NEO4J_USER: blankAsUnset(z.string().default("neo4j")),
   NEO4J_PASSWORD: blankAsUnset(z.string().default("neo4jneo4j")),
@@ -47,7 +115,7 @@ const schema = z.object({
   AWS_TARGET_ROLE_ARN: blankAsUnset(
     z.string().default("arn:aws:iam::123456789012:role/SightlineReadOnlyRole"),
   ),
-  AWS_EXTERNAL_ID: blankAsUnset(z.string().default("local-dev-external-id-0000")),
+  AWS_EXTERNAL_ID: blankAsUnset(z.string().default(MOCK_EXTERNAL_ID)),
   AWS_REGION: blankAsUnset(z.string().default("us-east-1")),
 
   /**
@@ -69,6 +137,82 @@ const schema = z.object({
   SCAN_CONCURRENCY: blankAsUnset(z.coerce.number().int().positive().default(6)),
 
   /**
+   * Where scans run.
+   *
+   * `embedded` runs the queue worker inside the API process, which is what a
+   * self-hosted operator wants: one container, `npm run dev` scans, nothing
+   * else to start. `separate` means this process serves requests and runs no
+   * worker, so a scan that exhausts memory or wedges on a slow account takes
+   * down a worker rather than the API serving everybody else - and a hosted
+   * deployment then has to actually run one, which `/api/health` reports on.
+   * `off` is for a process that should never scan, such as a migration job.
+   *
+   * Defaulted below rather than here, because the right default depends on
+   * DEPLOYMENT_MODE and a Zod default cannot see another field.
+   */
+  SCAN_WORKER: blankAsUnset(z.enum(["embedded", "separate", "off"]).optional()),
+
+  /**
+   * How many scans one worker runs at once.
+   *
+   * One, and the default is the point: a scan holds an account's whole
+   * inventory in memory and then projects it, so this multiplies the peak
+   * memory of both the worker and Neo4j. Raising it is a statement about the
+   * machine, which is why it is configuration rather than a constant.
+   */
+  SCAN_WORKER_CONCURRENCY: blankAsUnset(z.coerce.number().int().positive().default(1)),
+
+  /**
+   * Kill switches.
+   *
+   * Environment variables rather than a database row, which means flipping one
+   * restarts the process. That is the right trade here: in Kubernetes an env
+   * change is a rollout, which is how an operator turns a feature off anyway,
+   * and a database-backed switch costs a read on the path of every request to
+   * protect against an incident that happens approximately never. The cost is
+   * that it is not instant - roughly a rollout - and the comment says so rather
+   * than leaving somebody to discover it mid-incident.
+   *
+   * Scans stop at both ends when disabled: the API refuses to enqueue and the
+   * worker refuses to claim, so the queue drains rather than building up.
+   */
+  SCANS_ENABLED: flag(true),
+  CHAT_ENABLED: flag(true),
+
+  /**
+   * Minimum gap between finishing one scan of an account and starting the next.
+   *
+   * Defaulted below rather than here, because the right answer depends on whose
+   * money is being spent: in a self-hosted clone it is the operator's own
+   * account and their own AWS bill, and a cooldown would only get in their way.
+   */
+  SCAN_COOLDOWN_SECONDS: blankAsUnset(z.coerce.number().int().nonnegative().optional()),
+
+  /** Scans one tenant may have queued or running across all their accounts. */
+  MAX_ACTIVE_SCANS_PER_TENANT: blankAsUnset(z.coerce.number().int().positive().default(3)),
+
+  /**
+   * Resources one scan may produce before it is refused.
+   *
+   * Bounds the *graph*, not the scan's own peak memory: by the time this is
+   * checked the collectors have already held every resource in an array, so an
+   * account large enough to exhaust the worker exhausts it before this fires.
+   * Fixing that needs streaming collection, which this is not. What it does buy
+   * is a clear message instead of a projection that runs Neo4j out of heap, and
+   * that is worth having on its own.
+   */
+  MAX_RESOURCES_PER_SCAN: blankAsUnset(z.coerce.number().int().positive().default(100_000)),
+
+  /**
+   * Questions one tenant may ask the agent per hour.
+   *
+   * Without this the Anthropic key is a free Claude proxy for anyone who signs
+   * up. Defaulted below: self-hosted uses the operator's own key, so a quota
+   * there limits nobody but them.
+   */
+  CHAT_QUESTIONS_PER_HOUR: blankAsUnset(z.coerce.number().int().positive().optional()),
+
+  /**
    * Testing hook: comma-separated `service:region` pairs that should fail.
    * Used to demonstrate partial-failure handling without breaking the mock.
    * Example: `rds:eu-west-1,lambda:ap-southeast-1`
@@ -85,6 +229,56 @@ const schema = z.object({
    * when the UI is served to another machine.
    */
   BACKEND_HOST: blankAsUnset(z.string().default("127.0.0.1")),
+
+  /**
+   * `self-hosted` is one operator, one account, no sign-in - the default, and
+   * what a clone of this repository runs. `hosted` is the public service: many
+   * tenants, sign-in required, and the capabilities that are harmless with one
+   * operator but dangerous with many are removed rather than guarded. See
+   * `hostedMode.ts`.
+   */
+  DEPLOYMENT_MODE: blankAsUnset(z.enum(["self-hosted", "hosted"]).default("self-hosted")),
+
+  /** Where the service is reachable. Decides the OAuth redirect and the cookie's Secure flag. */
+  PUBLIC_BASE_URL: blankAsUnset(z.string().default("http://localhost:5173")),
+
+  /**
+   * Tenant secrets at rest: KMS where there is one, else a local key. Hosted
+   * mode requires KMS - a key in the environment is not an acceptable place to
+   * hold half a credential for someone else's cloud.
+   */
+  AWS_KMS_KEY_ID: blankAsUnset(z.string().optional()),
+  SECRETS_LOCAL_KEY: blankAsUnset(z.string().optional()),
+
+  /**
+   * The demo fixture's endpoint, for tenants who choose the demo account.
+   *
+   * Deliberately not `AWS_ENDPOINT_URL`, which is an SDK-wide override that
+   * would redirect every signed call the process makes - including calls made
+   * with credentials assumed inside a customer's account. This one names a
+   * fixture the operator deployed and applies only to demo connections. Unset,
+   * no demo connection can be created at all.
+   */
+  DEMO_AWS_ENDPOINT_URL: blankAsUnset(z.string().optional()),
+
+  /**
+   * The principal every customer's trust policy names: this service's own
+   * identity. One value for the whole deployment, pre-filled into the
+   * CloudFormation link a customer deploys.
+   */
+  SCANNER_PRINCIPAL_ARN: blankAsUnset(z.string().optional()),
+
+  /** Where the read-only role template is published, for the one-click link. */
+  ROLE_TEMPLATE_URL: blankAsUnset(z.string().optional()),
+
+  GOOGLE_CLIENT_ID: blankAsUnset(z.string().optional()),
+  GOOGLE_CLIENT_SECRET: blankAsUnset(z.string().optional()),
+  GITHUB_CLIENT_ID: blankAsUnset(z.string().optional()),
+  GITHUB_CLIENT_SECRET: blankAsUnset(z.string().optional()),
+
+  /** Signing key for the OAuth `state` parameter and session cookies. */
+  SESSION_SECRET: blankAsUnset(z.string().optional()),
+  SESSION_TTL_HOURS: blankAsUnset(z.coerce.number().int().positive().default(8)),
 });
 
 const parsed = schema.safeParse(process.env);
@@ -94,6 +288,54 @@ if (!parsed.success) {
 }
 
 export const cfg = parsed.data;
+
+/** The public multi-tenant service, as opposed to a single-operator clone. */
+export const isHosted = (): boolean => cfg.DEPLOYMENT_MODE === "hosted";
+
+/**
+ * Whether this process should run the scan worker, and the default if unset.
+ *
+ * Hosted defaults to `separate`: a scan is the one thing in this system that
+ * can consume an unbounded amount of memory, and in a multi-tenant deployment
+ * it must not be able to take the API down with it. Self-hosted defaults to
+ * `embedded`, because asking one operator to run a second container to scan
+ * their own account is a worse tool with no benefit they can observe.
+ *
+ * A function rather than a constant so tests can set the variable and see the
+ * effect without re-importing the module.
+ */
+export const scanWorkerMode = (): "embedded" | "separate" | "off" =>
+  cfg.SCAN_WORKER ?? (isHosted() ? "separate" : "embedded");
+
+/**
+ * Limits whose sensible default depends on whose resources are being spent.
+ *
+ * A self-hosted clone scans the operator's own account with the operator's own
+ * API key, so a cooldown and a chat quota there restrict nobody but them - and
+ * a tool that rations its single user is just a worse tool. In a hosted
+ * deployment the same numbers are what stand between one signup and an
+ * unbounded AWS and Anthropic bill. Both are overridable; only the default
+ * moves.
+ */
+export const scanCooldownSeconds = (): number =>
+  cfg.SCAN_COOLDOWN_SECONDS ?? (isHosted() ? 300 : 0);
+
+export const chatQuestionsPerHour = (): number | null =>
+  cfg.CHAT_QUESTIONS_PER_HOUR ?? (isHosted() ? 60 : null);
+
+/** Whether this process migrates on boot. See `MIGRATE_ON_BOOT`. */
+export const migrateOnBoot = (): boolean =>
+  cfg.MIGRATE_ON_BOOT ? cfg.MIGRATE_ON_BOOT === "true" : !isHosted();
+
+/**
+ * Should the session cookie be `Secure`?
+ *
+ * Follows the scheme rather than the mode. A Secure cookie over plain http is
+ * dropped silently, which presents as "signing in does nothing" - and a
+ * developer testing the hosted path over `http://<lan-ip>`, which unlike
+ * `localhost` is not a secure context, would hit exactly that.
+ */
+export const useSecureCookies = (): boolean => cfg.PUBLIC_BASE_URL.startsWith("https://");
 
 /**
  * The mode the process started in. `.env` decides this; the toggle does not
@@ -108,7 +350,21 @@ export const configuredMode: "mock" | "real" = cfg.AWS_MODE;
  */
 let activeMode: "mock" | "real" = cfg.AWS_MODE;
 
-export const isMock = (): boolean => activeMode === "mock";
+/**
+ * Never true in hosted mode, whatever `AWS_MODE` says.
+ *
+ * The hosted invariants refuse `AWS_MODE=mock`, but they read the *raw*
+ * environment - so an **unset** `AWS_MODE` passes them and then parses to the
+ * `mock` default, leaving `isMock()` true on a public deployment. Found by
+ * booting hosted mode and watching the legacy connection test aim its STS
+ * calls at `http://localhost:5000`, which is the stale default
+ * `AWS_ENDPOINT_URL` carries for the same reason.
+ *
+ * A mock path has no meaning in hosted mode - a demo account is a property of a
+ * connection there - so the honest answer is no, and this is the one place that
+ * can give it once for every caller.
+ */
+export const isMock = (): boolean => !isHosted() && activeMode === "mock";
 export const currentMode = (): "mock" | "real" => activeMode;
 
 export function setMode(mode: "mock" | "real"): void {
@@ -181,7 +437,7 @@ export function activeConnection(): {
 
     return {
       roleArn: `arn:aws:iam::${account}:role/SightlineReadOnlyRole`,
-      externalId: "local-dev-external-id-0000",
+      externalId: MOCK_EXTERNAL_ID,
       endpoint: cfg.AWS_ENDPOINT_URL,
     };
   }
@@ -288,11 +544,17 @@ const SDK_ENV_OVERRIDES = [
  * Source credentials to call `sts:AssumeRole` with, or `undefined` to use the
  * standard AWS credential chain.
  *
- * In `mock` mode these are the static placeholders moto accepts. In `real` mode
- * they are only honoured if they look like genuine AWS keys.
+ * For a demo connection these are the static placeholders moto accepts. For a
+ * real account they are only honoured if they look like genuine AWS keys, so a
+ * placeholder left in `.env` cannot shadow the platform identity.
+ *
+ * Takes the connection's kind as an argument rather than reading a process-wide
+ * mode: one process serves demo and real connections at the same time.
  */
-export function sourceCredentials(): { accessKeyId: string; secretAccessKey: string } | undefined {
-  if (isMock()) {
+export function sourceCredentials(
+  isDemo: boolean,
+): { accessKeyId: string; secretAccessKey: string } | undefined {
+  if (isDemo) {
     return cfg.AWS_ACCESS_KEY_ID && cfg.AWS_SECRET_ACCESS_KEY
       ? { accessKeyId: cfg.AWS_ACCESS_KEY_ID, secretAccessKey: cfg.AWS_SECRET_ACCESS_KEY }
       : { accessKeyId: "mock", secretAccessKey: "mock" };

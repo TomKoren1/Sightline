@@ -46,10 +46,32 @@ services:
     environment:
       # Format is user/password. Neo4j requires the password to be 8+ chars.
       NEO4J_AUTH: ${NEO4J_USER:-neo4j}/${NEO4J_PASSWORD:-neo4jneo4j}
-      NEO4J_PLUGINS: '["apoc"]'
-      NEO4J_dbms_security_procedures_unrestricted: apoc.*
-      NEO4J_dbms_memory_heap_initial__size: 512m
-      NEO4J_dbms_memory_heap_max__size: 1G
+      #
+      # No APOC. It was loaded with `dbms.security.procedures.unrestricted=apoc.*`
+      # - the widest setting there is - and used by nothing: the only mentions in
+      # the repository are in `cypherGuard.test.ts`, as examples of calls the
+      # guard must reject. The agent's escape hatch forbids `CALL` outright, so
+      # the procedures were unreachable through the product and present only as
+      # standing surface on the database holding every tenant's inventory.
+      #
+      # `server.memory.*`, not `dbms.memory.*`. 5.26 honours the old names with a
+      # deprecation warning on every boot, which is how a setting survives being
+      # renamed out from under it and then silently stops applying on an upgrade.
+      #
+      # Sized against this machine and this store rather than by reflex. The
+      # store is a few megabytes, so a page cache larger than this buys nothing
+      # except memory the host does not have - 1G holds a store far bigger than
+      # anything a single-node deployment of this will hold. Heap is driven by
+      # transaction working set, and projection commits in batches of a couple of
+      # thousand nodes with bounded concurrency, so it does not grow with the
+      # size of the account being scanned. Initial equals max to keep the JVM
+      # from resizing the heap under load, which shows up as GC pauses mid-scan.
+      #
+      # Production sizing belongs in the k8s overlay, where the node's memory and
+      # the real store size are known. These are the development and CI numbers.
+      NEO4J_server_memory_heap_initial__size: ${NEO4J_HEAP:-2G}
+      NEO4J_server_memory_heap_max__size: ${NEO4J_HEAP:-2G}
+      NEO4J_server_memory_pagecache_size: ${NEO4J_PAGE_CACHE:-1G}
     ports:
       - "${NEO4J_HTTP_PORT:-7474}:7474" # browser UI
       - "${NEO4J_BOLT_PORT:-7687}:7687" # driver protocol
@@ -150,6 +172,14 @@ services:
       # Loopback would accept nothing from the nginx container.
       BACKEND_HOST: "0.0.0.0"
       BACKEND_PORT: "3000"
+      # Scans run in the `worker` service below, not here.
+      #
+      # Self-hosted would default to `embedded`, and this profile deliberately
+      # overrides it: the two-process topology is what a hosted deployment runs,
+      # it is the arrangement most likely to be subtly wrong, and this is the
+      # only place that exercises it end to end. Running the worker in-process
+      # here would test the same path twice and the real one never.
+      SCAN_WORKER: separate
     depends_on:
       postgres:
         condition: service_healthy
@@ -170,6 +200,46 @@ services:
       retries: 20
       # tsx compiles on boot, and the server applies the schema before listening.
       start_period: 30s
+
+  # Scans, out of the request path.
+  #
+  # The same image as the API - it already carries the whole workspace and runs
+  # through tsx - with a different command. A scan holds an account's inventory
+  # in memory and then projects it, so it is the one thing here that can consume
+  # an unbounded amount of memory; in its own process it takes down a worker
+  # rather than the API serving everybody else.
+  #
+  # No ports and no healthcheck: it serves nothing. Work arrives through the
+  # `scan_jobs` table and `heartbeat_at` is how anything else learns it is
+  # alive, which makes liveness a question for the database rather than a probe.
+  worker:
+    profiles: ["app"]
+    build:
+      context: .
+      target: api
+    container_name: sightline-worker
+    restart: unless-stopped
+    command: ["npm", "run", "worker", "-w", "@sightline/api"]
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      DATABASE_URL: postgres://${POSTGRES_USER:-sightline}:${POSTGRES_PASSWORD:-sightline}@postgres:5432/${POSTGRES_DB:-sightline}
+      NEO4J_URI: bolt://neo4j:7687
+      AWS_ENDPOINT_URL: http://moto:5000
+      SCAN_WORKER: separate
+    depends_on:
+      postgres:
+        condition: service_healthy
+      neo4j:
+        condition: service_healthy
+      moto:
+        condition: service_healthy
+      # The API applies the schema on boot, and the worker deliberately does
+      # not migrate - two processes racing to migrate is the problem a migration
+      # Job exists to solve. So it waits for the one that does.
+      api:
+        condition: service_healthy
 
   web:
     profiles: ["app"]

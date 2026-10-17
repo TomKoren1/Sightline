@@ -1,0 +1,8 @@
+# The namespace, in the overlay rather than the base, so the base can be
+# deployed twice - into a scratch namespace to rehearse an upgrade, say.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: sightline
+  labels:
+    app.kubernetes.io/part-of: sightline

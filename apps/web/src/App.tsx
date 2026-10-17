@@ -7,27 +7,35 @@
  * like the same thing rather than two features.
  */
 
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { ReactFlowProvider } from "@xyflow/react";
 import type { ScanEvent, ScanUnit } from "@sightline/shared";
 
-import { api, startScan } from "./api.js";
+import { api, selectConnection, startScan, watchScan } from "./api.js";
+import type { ConnectionSummary } from "./api.js";
 import { DEFAULT_VISIBLE_KINDS, KIND_STYLES, styleFor } from "./kinds.js";
 import { Chat } from "./components/Chat.js";
+import { ConnectAccount } from "./components/ConnectAccount.js";
 import { ConnectionGuide } from "./components/ConnectionGuide.js";
+import { DeleteAccount } from "./components/DeleteAccount.js";
+import { DisconnectAccount } from "./components/DisconnectAccount.js";
 import { Modal } from "./components/Modal.js";
 import { TrustPanel } from "./components/TrustPanel.js";
 import { Findings } from "./components/Findings.js";
 import { GraphView } from "./components/GraphView.js";
+import { LegalPage, legalPathFor } from "./components/LegalPage.js";
 import { ResourceDetail } from "./components/ResourceDetail.js";
 import { ScanBanner } from "./components/ScanBanner.js";
+import { SignIn } from "./components/SignIn.js";
 import { errorMessage } from "@sightline/shared";
 
 export function App() {
   const queryClient = useQueryClient();
 
   const [scanning, setScanning] = useState(false);
+  /** Accepted, but no worker has picked it up yet. */
+  const [queued, setQueued] = useState(false);
   const [progress, setProgress] = useState<{ completed: number; total: number } | null>(null);
   const [liveUnits, setLiveUnits] = useState<ScanUnit[]>([]);
   const [scanError, setScanError] = useState<string | null>(null);
@@ -36,65 +44,217 @@ export function App() {
   const [selectedArn, setSelectedArn] = useState<string | null>(null);
   const [visibleKinds, setVisibleKinds] = useState<string[]>(DEFAULT_VISIBLE_KINDS);
   const [showFilters, setShowFilters] = useState(false);
-  const [modal, setModal] = useState<"trust" | "connection" | null>(null);
-  const [modeNote, setModeNote] = useState<string | null>(null);
+  const [modal, setModal] = useState<"trust" | "connection" | "delete" | null>(null);
+  const [connectionId, setConnectionId] = useState<string | null>(null);
+  /**
+   * The account a disconnect has been asked for, pending confirmation.
+   *
+   * Held as the row rather than its id, because the dialog names the account
+   * and asks for its label back - and the row is gone from `me` by the time
+   * the dialog closes.
+   */
+  const [disconnecting, setDisconnecting] = useState<ConnectionSummary | null>(null);
 
-  const latest = useQuery({ queryKey: ["latestScan"], queryFn: api.latestScan });
+  /**
+   * Who is asking, and which accounts they have. One request before the first
+   * frame, so there is no flash of an empty app for a signed-out visitor.
+   */
+  const me = useQuery({ queryKey: ["me"], queryFn: api.me });
+  const connections = me.data?.connections ?? [];
+
+  /**
+   * Every tenant-data query is keyed by the connection.
+   *
+   * Without this, switching accounts would show the previous account's cached
+   * graph under the new account's name - which is the specific confusion the
+   * banner exists to prevent, arriving by a different route.
+   */
+  const conn = connectionId ?? connections[0]?.id ?? null;
+
+  const latest = useQuery({
+    queryKey: ["latestScan", conn],
+    queryFn: api.latestScan,
+    enabled: Boolean(conn),
+  });
   const hasScan = Boolean(latest.data?.scan);
 
   // The graph and findings are meaningless before a scan, so they are not
   // fetched until there is one - which also keeps the empty state clean.
-  const graph = useQuery({ queryKey: ["graph"], queryFn: () => api.graph(), enabled: hasScan });
-  const summary = useQuery({ queryKey: ["summary"], queryFn: api.summary, enabled: hasScan });
-  const findings = useQuery({ queryKey: ["findings"], queryFn: api.findings, enabled: hasScan });
+  const graph = useQuery({
+    queryKey: ["graph", conn],
+    queryFn: () => api.graph(),
+    enabled: hasScan,
+  });
+  const summary = useQuery({ queryKey: ["summary", conn], queryFn: api.summary, enabled: hasScan });
+  const findings = useQuery({
+    queryKey: ["findings", conn],
+    queryFn: api.findings,
+    enabled: hasScan,
+  });
+
+  const switchConnection = useCallback(
+    (id: string) => {
+      selectConnection(id);
+      setConnectionId(id);
+      setCitedArns([]);
+      setSelectedArn(null);
+      /**
+       * No note about the graph being stale, because it is not.
+       *
+       * Each connection's graph is its own latest projected scan, looked up
+       * per request, and every query here is keyed by the connection - so this
+       * invalidation loads the account being switched to. The banner then says
+       * what that account actually has, from its own data: a resource count
+       * and the age of its scan, or "No scan yet".
+       *
+       * The note this replaces said the graph still showed the previous scan
+       * and told the reader to run one. That was true of the process-wide
+       * demo/real toggle it was written for, and false here - and it sent
+       * people to rescan an account whose inventory was already loaded, which
+       * a cooldown then refused.
+       */
+      void queryClient.invalidateQueries();
+    },
+    [queryClient],
+  );
+
+  /**
+   * One handler, whether this page started the scan or joined one in progress.
+   *
+   * Both paths receive the same events from the same place - the server derives
+   * them from the database rather than from whichever request happened to start
+   * the scan - so there is no reason for two copies of this, and a second copy
+   * is how a rejoined scan ends up rendering slightly differently.
+   */
+  const onScanEvent = useCallback((event: ScanEvent) => {
+    switch (event.type) {
+      case "scan.queued":
+        // Waiting for a worker. Saying so beats an idle progress bar, which is
+        // indistinguishable from the scan having failed to start.
+        setQueued(true);
+        break;
+      case "scan.started":
+        setQueued(false);
+        // The full plan arrives up front, so the UI shows every service it
+        // intends to scan rather than growing a list as work completes. On a
+        // rejoin these carry the statuses they already have.
+        setLiveUnits(event.units);
+        setProgress({
+          completed: event.units.filter((u) => u.status === "succeeded" || u.status === "failed")
+            .length,
+          total: event.units.length,
+        });
+        break;
+      case "unit.finished":
+        setLiveUnits((prev) =>
+          prev.map((u) =>
+            u.service === event.unit.service && u.region === event.unit.region ? event.unit : u,
+          ),
+        );
+        break;
+      case "scan.progress":
+        setProgress({ completed: event.completed, total: event.total });
+        break;
+      case "scan.failed":
+        setScanError(event.error);
+        break;
+      default:
+        break;
+    }
+  }, []);
+
+  const refreshAfterScan = useCallback(
+    () =>
+      Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["latestScan"] }),
+        queryClient.invalidateQueries({ queryKey: ["graph"] }),
+        queryClient.invalidateQueries({ queryKey: ["summary"] }),
+        queryClient.invalidateQueries({ queryKey: ["findings"] }),
+      ]),
+    [queryClient],
+  );
 
   const runScan = useCallback(async () => {
     setScanning(true);
     setScanError(null);
-    setModeNote(null);
     setLiveUnits([]);
     setProgress(null);
     setCitedArns([]);
 
     try {
-      await startScan((event: ScanEvent) => {
-        switch (event.type) {
-          case "scan.started":
-            // The full plan arrives up front, so the UI shows every service it
-            // intends to scan rather than growing a list as work completes.
-            setLiveUnits(event.units);
-            setProgress({ completed: 0, total: event.units.length });
-            break;
-          case "unit.finished":
-            setLiveUnits((prev) =>
-              prev.map((u) =>
-                u.service === event.unit.service && u.region === event.unit.region ? event.unit : u,
-              ),
-            );
-            break;
-          case "scan.progress":
-            setProgress({ completed: event.completed, total: event.total });
-            break;
-          case "scan.failed":
-            setScanError(event.error);
-            break;
-          default:
-            break;
-        }
-      });
-
-      await Promise.all([
-        queryClient.invalidateQueries({ queryKey: ["latestScan"] }),
-        queryClient.invalidateQueries({ queryKey: ["graph"] }),
-        queryClient.invalidateQueries({ queryKey: ["summary"] }),
-        queryClient.invalidateQueries({ queryKey: ["findings"] }),
-      ]);
+      await startScan(onScanEvent);
+      await refreshAfterScan();
     } catch (err) {
       setScanError(errorMessage(err));
     } finally {
       setScanning(false);
+      setQueued(false);
     }
-  }, [queryClient]);
+  }, [onScanEvent, refreshAfterScan]);
+
+  /**
+   * Rejoin a scan that was already running when this page loaded.
+   *
+   * The thing the job queue bought. A scan used to live inside the request that
+   * started it, so reloading mid-scan orphaned it and left the page showing
+   * nothing until it finished. Now the server names the active job and this
+   * attaches to it, from wherever it has got to.
+   *
+   * The ref is what stops it attaching twice: this effect re-runs whenever the
+   * `latestScan` query refetches, and without it every refetch would open
+   * another stream onto the same scan.
+   */
+  const watching = useRef<string | null>(null);
+  const activeJobId = latest.data?.activeJobId ?? null;
+
+  useEffect(() => {
+    if (!activeJobId || scanning || watching.current === activeJobId) return;
+    watching.current = activeJobId;
+    setScanning(true);
+    setScanError(null);
+
+    const controller = new AbortController();
+    void (async () => {
+      try {
+        await watchScan(activeJobId, onScanEvent, controller.signal);
+        await refreshAfterScan();
+      } catch (err) {
+        // An aborted stream is this component unmounting, not a failure.
+        if (!controller.signal.aborted) setScanError(errorMessage(err));
+      } finally {
+        setScanning(false);
+        setQueued(false);
+        watching.current = null;
+      }
+    })();
+
+    return () => controller.abort();
+  }, [activeJobId, scanning, onScanEvent, refreshAfterScan]);
+
+  /**
+   * The privacy policy and the terms, before anything else.
+   *
+   * Ahead of the signed-out check deliberately: these have to be readable
+   * *without* an account, both because Google's consent screen fetches the
+   * privacy URL and because being asked to sign in before you can read what a
+   * service does with your data is the wrong way round.
+   *
+   * Pathname matching rather than a router. Two static pages do not justify
+   * one, nginx already serves every path to this bundle, and a router would
+   * own how the rest of the application navigates.
+   */
+  const legal = legalPathFor(window.location.pathname);
+  if (legal) return <LegalPage path={legal} />;
+
+  /**
+   * A signed-out visitor sees the sign-in screen and nothing else.
+   *
+   * Checked before the first frame rather than after, so there is no flash of
+   * an empty application - and so a request is never made on behalf of nobody.
+   */
+  if (me.data?.hosted && !me.data.signedIn) {
+    return <SignIn providers={me.data.providers} />;
+  }
 
   const nodes = graph.data?.nodes ?? [];
   const edges = graph.data?.edges ?? [];
@@ -105,19 +265,73 @@ export function App() {
       <ScanBanner
         scan={latest.data?.scan ?? null}
         scanning={scanning}
+        queued={queued}
         progress={progress}
         liveUnits={liveUnits}
         error={scanError}
         onScan={() => void runScan()}
         onOpenTrust={() => setModal("trust")}
         onOpenConnection={() => setModal("connection")}
-        modeNote={modeNote}
-        onModeSwitched={(note) => {
-          setModeNote(note);
-          setCitedArns([]);
-          setSelectedArn(null);
+        connections={connections}
+        selectedConnectionId={conn}
+        onSelectConnection={switchConnection}
+        onDisconnectConnection={setDisconnecting}
+        signedInAs={me.data?.user?.email ?? null}
+        onSignOut={() => {
+          void api.logout().then(() => window.location.reload());
         }}
+        onDeleteAccount={() => setModal("delete")}
       />
+
+      {modal === "delete" && me.data?.user?.email && (
+        <Modal
+          title="Delete this account"
+          subtitle="Everything Sightline holds about you, removed immediately"
+          onClose={() => setModal(null)}
+        >
+          <DeleteAccount
+            email={me.data.user.email}
+            /**
+             * A full reload rather than clearing state.
+             *
+             * The session row is gone, so every query would now fail; the
+             * honest next frame is the sign-in screen, and a reload is the
+             * shortest way to one that cannot leave a stale cache behind.
+             */
+            onDeleted={() => window.location.assign("/")}
+          />
+        </Modal>
+      )}
+
+      {disconnecting && (
+        <Modal
+          title="Disconnect this account"
+          subtitle="Everything Sightline holds about this AWS account, removed"
+          onClose={() => setDisconnecting(null)}
+        >
+          <DisconnectAccount
+            connection={disconnecting}
+            onDisconnected={() => {
+              /**
+               * Back to the server's default rather than to another row.
+               *
+               * `connectionId` may name the account just removed, and a
+               * request carrying a dead id is a 404 on every panel at once.
+               * Clearing it lets the server pick the oldest remaining
+               * connection, which is what a tenant with one account left
+               * expects to be looking at.
+               */
+              setDisconnecting(null);
+              setConnectionId(null);
+              setCitedArns([]);
+              setSelectedArn(null);
+              // Everything on screen belonged to an account that no longer
+              // exists, `me` included.
+              void queryClient.invalidateQueries();
+            }}
+          />
+        </Modal>
+      )}
 
       {modal === "trust" && (
         <Modal
@@ -135,7 +349,25 @@ export function App() {
           subtitle="Read-only access to your account, in about five minutes"
           onClose={() => setModal(null)}
         >
-          <ConnectionGuide />
+          {/*
+            `ConnectionGuide` describes the one connection a *process* has and
+            reads endpoints a hosted deployment refuses by design, so hosted
+            gets the per-connection flow instead. A self-hosted clone keeps the
+            guide: its connection genuinely is a property of the deployment, and
+            the guide explains the `.env` values that describe it.
+          */}
+          {me.data?.hosted ? (
+            <ConnectAccount
+              onConnected={(id) => {
+                // The new connection is not in `me` yet, and it is almost
+                // certainly what they now want to be looking at.
+                void queryClient.invalidateQueries({ queryKey: ["me"] });
+                switchConnection(id);
+              }}
+            />
+          ) : (
+            <ConnectionGuide />
+          )}
         </Modal>
       )}
 

@@ -13,6 +13,8 @@
 
 import { Controller, Get, HttpCode, Inject, Post } from "@nestjs/common";
 
+import { CurrentScope } from "../tenancy/currentScope.decorator.js";
+import type { Scope } from "../tenancy/scope.js";
 import { EvalsService } from "./evals.service.js";
 
 @Controller("api/evals")
@@ -29,8 +31,8 @@ export class EvalsController {
   // and the contract tests both expect the status this returned before.
   @Post("ground-truth")
   @HttpCode(200)
-  groundTruth() {
-    return this.evals.groundTruth();
+  groundTruth(@CurrentScope() scope: Scope) {
+    return this.evals.groundTruth(scope);
   }
 
   @Get("latest")

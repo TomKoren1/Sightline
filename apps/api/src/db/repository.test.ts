@@ -13,11 +13,20 @@
  */
 
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { randomUUID } from "node:crypto";
 import { eq } from "drizzle-orm";
 import type { Relationship, Resource } from "@sightline/shared";
 
-import { db } from "./postgres.js";
-import { scanRuns } from "./schema.js";
+/**
+ * Fixtures run on `system`, the owner connection.
+ *
+ * Setting up rows is not the thing under test, and under row-level security the
+ * restricted role can only write rows for the tenant its connection names. The
+ * functions under test open their own tenant context, so what they do is still
+ * exercised exactly as production does it.
+ */
+import { system } from "./postgres.js";
+import { connections, tenants } from "./schema.js";
 import {
   createScanRun,
   diffScans,
@@ -27,10 +36,24 @@ import {
   loadResources,
   saveScanResult,
 } from "./repository.js";
+import { asConnectionId, asScanId, asTenantId, type ScanId } from "../tenancy/ids.js";
+import type { Scope } from "../tenancy/scope.js";
 
 const HAS_INFRA = !process.env["SKIP_INTEGRATION"];
 
 const ACCOUNT = "000000000000";
+
+/**
+ * A tenant of its own, created and dropped by this file.
+ *
+ * Cleanup is a single `DELETE FROM tenants`, because every table below it
+ * cascades - which is both less code than tracking ids and a check that the
+ * cascade is wired the way the schema claims.
+ */
+const scope: Scope = {
+  tenantId: asTenantId(randomUUID()),
+  connectionId: asConnectionId(randomUUID()),
+};
 
 /** More than one batch of 500, so the chunking boundary is actually crossed. */
 const COUNT = 1_200;
@@ -48,25 +71,42 @@ function resourceAt(i: number, publicFlag = false): Resource {
   };
 }
 
-const created: string[] = [];
+const created: ScanId[] = [];
 
-async function newScan(): Promise<string> {
-  const id = await createScanRun(ACCOUNT, ["us-east-1", "eu-west-1"]);
+/**
+ * `ScanId`, not `string`.
+ *
+ * It declared `string`, which widened what `createScanRun` returns and meant
+ * every `getScan` in this file was passing an unbranded id - so the branding
+ * that exists to catch an unvalidated id reaching a uuid column was switched
+ * off for the whole suite by one return type.
+ */
+async function newScan(): Promise<ScanId> {
+  const id = await createScanRun(scope, ACCOUNT, ["us-east-1", "eu-west-1"]);
   created.push(id);
   return id;
 }
 
-let scanId = "";
+let scanId = asScanId("00000000-0000-0000-0000-000000000000");
 let resources: Resource[] = [];
 let relationships: Relationship[] = [];
 let available = false;
 
 beforeAll(async () => {
   try {
-    await db.execute("SELECT 1");
+    await system.execute("SELECT 1");
   } catch {
     return;
   }
+
+  await system.insert(tenants).values({ id: scope.tenantId, name: "repository.test" });
+  await system.insert(connections).values({
+    id: scope.connectionId,
+    tenantId: scope.tenantId,
+    kind: "demo",
+    label: "repository.test",
+    externalIdSource: "demo",
+  });
 
   resources = Array.from({ length: COUNT }, (_, i) => resourceAt(i));
   relationships = resources.slice(1).map((r, i) => ({
@@ -77,7 +117,7 @@ beforeAll(async () => {
   }));
 
   scanId = await newScan();
-  await saveScanResult(scanId, {
+  await saveScanResult(scope, scanId, {
     status: "succeeded",
     units: [
       {
@@ -107,18 +147,32 @@ beforeAll(async () => {
 }, 120_000);
 
 afterAll(async () => {
-  for (const id of created) {
-    await db
-      .delete(scanRuns)
-      .where(eq(scanRuns.id, id))
-      .catch(() => {});
-  }
+  // One delete, and the cascade takes the scans, units, snapshots and the
+  // connection with it.
+  await system
+    .delete(tenants)
+    .where(eq(tenants.id, scope.tenantId))
+    .catch(() => {});
 });
 
 describe.runIf(HAS_INFRA)("saving and reading a scan", () => {
+  it("has a database to talk to", () => {
+    /**
+     * Without this the whole file passes *vacuously* when the probe above
+     * fails: `available` stays false, every test returns on its first line, and
+     * vitest reports them all green.
+     *
+     * Not hypothetical. Introducing the tenant-scoped connection made this
+     * file's probe throw, and it silently stopped testing anything - while the
+     * three files that did carry this assertion failed loudly and are the only
+     * reason it was noticed at all.
+     */
+    expect(available, "Postgres is not reachable, so none of this was checked").toBe(true);
+  });
+
   it("writes every resource, across the batching boundary", async () => {
     if (!available) return;
-    const back = await loadResources(scanId);
+    const back = await loadResources(scope, scanId);
     expect(back).toHaveLength(COUNT);
 
     // Compared by content, not by count: a batching bug can write the right
@@ -131,7 +185,7 @@ describe.runIf(HAS_INFRA)("saving and reading a scan", () => {
 
   it("writes every relationship", async () => {
     if (!available) return;
-    const back = await loadRelationships(scanId);
+    const back = await loadRelationships(scope, scanId);
     expect(back).toHaveLength(relationships.length);
     const seen = new Set(back.map((r) => `${r.from}|${r.to}|${r.type}`));
     for (const rel of relationships) {
@@ -141,7 +195,7 @@ describe.runIf(HAS_INFRA)("saving and reading a scan", () => {
 
   it("records the run and both units, with null restored for a global service", async () => {
     if (!available) return;
-    const run = await getScan(scanId);
+    const run = await getScan(scope, scanId);
     expect(run).not.toBeNull();
     expect(run!.status).toBe("succeeded");
     expect(run!.resourceCount).toBe(COUNT);
@@ -159,7 +213,7 @@ describe.runIf(HAS_INFRA)("saving and reading a scan", () => {
     if (!available) return;
     const id = await newScan();
     await expect(
-      saveScanResult(id, {
+      saveScanResult(scope, id, {
         status: "succeeded",
         units: [],
         // A resource with no ARN violates NOT NULL, and it is in the second
@@ -174,18 +228,18 @@ describe.runIf(HAS_INFRA)("saving and reading a scan", () => {
     ).rejects.toThrow();
 
     expect(
-      await loadResources(id),
+      await loadResources(scope, id),
       "the first batch survived a failure in the second, so the transaction is not covering both",
     ).toHaveLength(0);
-    const run = await getScan(id);
+    const run = await getScan(scope, id);
     expect(run?.status, "the run was marked succeeded despite the failure").toBe("running");
   });
 
   it("marks a failed run", async () => {
     if (!available) return;
     const id = await newScan();
-    await failScanRun(id, "something went wrong");
-    const run = await getScan(id);
+    await failScanRun(scope, id, "something went wrong");
+    const run = await getScan(scope, id);
     expect(run?.status).toBe("failed");
     expect(run?.error).toBe("something went wrong");
   });
@@ -199,7 +253,7 @@ describe.runIf(HAS_INFRA)("diffing two scans", () => {
     const second = await newScan();
 
     const base = Array.from({ length: 5 }, (_, i) => resourceAt(2_000 + i));
-    await saveScanResult(first, {
+    await saveScanResult(scope, first, {
       status: "succeeded",
       units: [],
       resources: base,
@@ -215,7 +269,7 @@ describe.runIf(HAS_INFRA)("diffing two scans", () => {
       { ...base[3]!, derived: { isPublic: true } },
       resourceAt(2_100),
     ];
-    await saveScanResult(second, {
+    await saveScanResult(scope, second, {
       status: "succeeded",
       units: [],
       resources: next,
@@ -223,7 +277,7 @@ describe.runIf(HAS_INFRA)("diffing two scans", () => {
       apiCalls: 0,
     });
 
-    const diff = await diffScans(first, second);
+    const diff = await diffScans(scope, first, second);
     expect(diff.added.map((r) => r.name)).toEqual(["repo-test-2100"]);
     expect(diff.removed.map((r) => r.name)).toEqual(["repo-test-2004"]);
     expect(diff.modified.map((r) => r.name)).toEqual(["repo-test-2003"]);

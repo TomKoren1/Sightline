@@ -8,6 +8,41 @@
       "when": 1791521793216,
       "tag": "0000_graceful_wrecking_crew",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1791853847613,
+      "tag": "0001_fluffy_joshua_kane",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1791898669921,
+      "tag": "0002_wealthy_spirit",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1791950826035,
+      "tag": "0003_clear_madelyne_pryor",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1791950826036,
+      "tag": "0004_row_level_security",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1791950826037,
+      "tag": "0005_rls_empty_setting",
+      "breakpoints": true
     }
   ]
 }

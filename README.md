@@ -16,6 +16,9 @@ AWS (real or mock) ──▶ scanner ──▶ Postgres ──▶ Neo4j ──�
                        assume-role  system of   graph     curated   graph +
                        per service  record      projection tools    chat
                        per region
+
+                       a scan is a queued job; Postgres is the queue, and
+                       every row above is scoped to one tenant's connection
 ```
 
 **Contents** — [Try it](#try-it) · [What it answers](#what-it-answers) ·
@@ -127,6 +130,16 @@ those miss, and an explicit **Deny** on data-plane reads that is attached by def
 A Deny cannot be overridden by any Allow, including one a future AWS update might add
 to a managed policy. See [SECURITY.md](SECURITY.md).
 
+**One deployment serves many tenants, and the database refuses to mix them.**
+Every tenant-scoped table has row-level security, and the application connects as a
+restricted role the policies apply to — not the table owner, which would bypass them.
+The graph is one Neo4j database partitioned by scan id, with four independent
+enforcement layers rather than a convention: a composite uniqueness constraint, a
+single read chokepoint, a query that refuses Cypher without the scope bound, and a
+check on the rows that come back. A two-tenant leak test enumerates the query layer
+**by reflection**, so a query added later fails for not being covered before it can
+fail for leaking. See [SECURITY.md](SECURITY.md).
+
 ### How the answers are checked
 
 Two eval tiers that fail for different reasons: **fifteen ground-truth checks**
@@ -142,24 +155,37 @@ same checks run inside the product, under **Trust**.
 ## Repository layout
 
 ```
-apps/api            backend: scanner, analysers, graph, agent, HTTP API
-  src/aws/          credentials, instrumented clients, region discovery
-  src/scan/         collectors, analysers, orchestration
-  src/db/           Drizzle schema and migrations, repository, Neo4j projection
-  src/agent/        tools, Cypher guard, citation validation, the loop
-  src/evals/        tier-1 ground truth, tier-2 cases and grading
+apps/api              backend: scanner, analysers, graph, agent, HTTP API
+  src/config.ts       every setting, with the reason for each default
+  src/hostedMode.ts   configuration the public service refuses to start with
+  src/aws/            credentials, instrumented clients, region discovery
+  src/scan/           collectors, analysers, orchestration
+  src/db/             Drizzle schema and migrations, repository, Neo4j projection
+  src/agent/          tools, Cypher guard, citation validation, the loop
+  src/auth/           OIDC against Google and GitHub, sessions, route guard
+  src/tenancy/        tenants, connections, onboarding, limits, branded ids
+  src/jobs/           the Postgres queue, the worker, scan progress
+  src/observability/  structured logs, and what they redact
+  src/remediation/    generated fix commands, never executed
+  src/setup/          what `npm run setup` plans and does
+  src/evals/          tier-1 ground truth, tier-2 cases and grading
   src/health/ graph/ scans/ chat/ connection/
-                    one NestJS module each: a controller over a service
-apps/web            React frontend: graph, chat, findings, UX states
-packages/shared     domain model shared by every package
-packages/mock-aws   the seeded customer account and its answer key
-infra/              the read-only role template, and guards on it
-deploy/             nginx config, and the AWS profile mount for containers
-scripts/            the dependency guard every npm script runs first
-Dockerfile          API and frontend images, used only by the `app` profile
-eslint.config.mjs   lint rules, with the reason for each exception
-tsconfig.tools.json type-checking for everything outside a workspace
+                      one NestJS module each: a controller over a service
+apps/web              React frontend: graph, chat, findings, UX states
+  src/api.ts          the only place that calls the API, so headers cannot be missed
+packages/shared       domain model shared by every package
+packages/mock-aws     the seeded customer account and its answer key
+infra/                the read-only role template, and guards on things nothing runs
+deploy/k8s/           kustomize manifests for a hosted deployment, and their README
+deploy/               nginx config, and the AWS profile mount for containers
+scripts/              the dependency guard every npm script runs first
+Dockerfile            API and frontend images, used only by the `app` profile
 ```
+
+`infra/` deserves a word: it holds tests over artefacts **no test executes** — the
+CloudFormation template, the Kubernetes manifests, the Dockerfile, the legal pages.
+Each guards an agreement between two files that nothing else connects, which is the
+defect class this repository keeps meeting.
 
 ---
 
@@ -179,8 +205,43 @@ npm run dev:api               # http://localhost:3000
 npm run dev:web               # http://localhost:5173   ← open this
 ```
 
+Scans run on a Postgres-backed queue. The API process drains it itself, so this is
+all you need — closing the tab no longer orphans a scan, and reloading mid-scan
+rejoins it. To run scans in their own process as a hosted deployment does, set
+`SCAN_WORKER=separate` and also run `npm run dev:worker`.
+
 Both paths are covered by CI, and nothing about the product differs between them.
 Run `npm run verify` before pushing — it is everything CI's static job runs.
+
+For a hosted deployment on Kubernetes — kustomize manifests, a Cloudflare tunnel,
+sealed secrets, and an encrypted backup with a restore procedure that is tested
+rather than described — see [`deploy/k8s/README.md`](deploy/k8s/README.md).
+
+What a hosted deployment holds, shares and deletes is in
+[`PRIVACY.md`](PRIVACY.md); the terms are in [`TERMS.md`](TERMS.md); and the
+security properties, including how one customer's data is kept from another's,
+are in [`SECURITY.md`](SECURITY.md).
+
+### House style
+
+Four things, because they are the ones that have actually gone wrong here:
+
+- **Comments carry the non-obvious _why_, and nothing else.** The bug a line
+  prevents, the alternative that was rejected, the AWS behaviour that is not in the
+  docs. Not a restatement of the code, not a second example, not build-up. Roughly
+  ten lines is the ceiling for a genuinely subtle module header; most want two.
+  `infra/commentBudget.test.ts` measures it, because this has drifted twice.
+- **A guard for every agreement between two files.** If editing one file can
+  silently invalidate another — a manifest and the code that reads it, a template
+  and the ARN derived from it — the test goes in `infra/`. Write it so that
+  _forgetting_ trips it, and break it once to watch it go red.
+- **Derive, don't enumerate.** Lists in code go stale: the leak test enumerates
+  queries by reflection, the purge enumerates tenant-scoped tables from the schema,
+  and the graph sweep derives what to keep from the database. Each of those caught a
+  real bug that a hand-written list would have missed.
+- **Refuse rather than guess.** Ambiguous configuration, a mistyped id, an
+  unparseable limit — fail loudly at the edge. Every silent fallback in this
+  repository's history produced a working system with a quietly wrong answer.
 
 The agent uses Anthropic. `ANTHROPIC_MODEL` defaults to `claude-sonnet-5`.
 `/api/health` says whether a key is configured rather than making you discover it
@@ -208,11 +269,18 @@ ExternalId already in use rather than rotating a working secret.
 It needs the AWS CLI, which is also what creates the role. The demo account needs
 neither it nor Node.
 
-The UI's **Connection** panel walks through the same thing by hand, and the
-**Demo / My AWS** toggle in the header switches between accounts at runtime without
-restarting or rewriting `.env`. Switching does not rescan, so the graph keeps showing
-the previous account until you run one — the banner says so rather than letting you
-read one account's inventory under another's name.
+The UI's **Connection** panel walks through the same thing by hand, and the **account
+switcher** in the header moves between accounts at runtime without restarting or
+rewriting `.env` — a clone has two, the demo fixture and whatever `.env` points at.
+Switching does not rescan, so the graph keeps showing the previous account until you run
+one, and the banner says so rather than letting you read one account's inventory under
+another's name.
+
+It replaced a demo/real toggle that flipped a module-level variable. That was honest for
+one operator and would have been a shared surprise for many: one person clicking it
+would have changed which AWS account every other tenant on the process was looking at.
+The switcher sends a header instead, and the server validates that the connection is
+yours.
 
 By hand: deploy [`infra/readonly-role.yaml`](infra/readonly-role.yaml) and set
 
@@ -333,15 +401,18 @@ the API and nginx containers are left running against databases that no longer e
 | `npm run drift`                                | Change the mock account, so a second scan has a diff         |
 | `npm run inspect -w @sightline/api`            | Scan and print findings without touching the databases       |
 | `npm run query -w @sightline/api`              | Run every curated query against the graph                    |
-| `npm test`                                     | 504 unit tests                                               |
+| `npm run dev:worker`                           | Run scans in their own process, as a hosted deployment does  |
+| `npm test`                                     | 754 unit tests — integration ones skip without databases     |
 | `npm run lint`                                 | Prettier and ESLint, both in check mode                      |
 | `npm run format`                               | Fix everything those two can fix automatically               |
 | `npm run typecheck`                            | `tsc` over every workspace, and over `infra/` and `scripts/` |
 | `npm run verify`                               | Everything CI's static job runs — use before pushing         |
 | `npm run evals:ground-truth -w @sightline/api` | Tier-1 evals — no API key needed                             |
 | `npm run evals -w @sightline/api`              | Tier-2 agent evals — needs a key                             |
+| `npm run db:app-role -w @sightline/api`        | Set the restricted role's password, for row-level security   |
+| `./scripts/backup-restore-test.sh`             | Back up, restore, and check an ExternalId still decrypts     |
 | `npm run db:generate -w @sightline/api`        | Generate a migration after editing `src/db/schema.ts`        |
-| `npm run db:migrate -w @sightline/api`         | Apply pending migrations — the server also does this on boot |
+| `npm run db:migrate -w @sightline/api`         | Apply pending migrations — a clone also does this on boot    |
 | `npm run db:studio -w @sightline/api`          | Browse the database in Drizzle Studio                        |
 
 ---
@@ -353,9 +424,11 @@ already leaves room for.
 
 **What breaks first on a large account,** in the order it would happen:
 
-1. **The graph rebuild, at roughly 50k resources.** Neo4j is rebuilt wholesale in one
-   transaction — simple, leaves no stale nodes, and O(all resources) per scan. _Fix:_
-   diff the Postgres snapshots, which already exist, and `MERGE` only what changed.
+1. **The graph rebuild, at roughly 50k resources.** A scan projects into its own scope
+   and `scan_runs.projected_at` makes it current, so commits are batched and heap use is
+   flat — but it is still O(all resources) per scan, and the superseded scope has to be
+   swept afterwards. _Fix:_ diff the Postgres snapshots, which already exist, and `MERGE`
+   only what changed.
 2. **Scan wall-clock across many regions.** 6 services × 30 regions is 180 units at a
    concurrency of 6, and per-bucket S3 calls are four each. Partly addressed by the
    Resource Explorer fast path, which asks one indexed query which regions hold
@@ -374,11 +447,59 @@ already leaves room for.
 **What does not break:** partial-failure handling and credential renewal both get
 _more_ useful at scale, which is why they were built in from the start.
 
-**Multi-tenancy** is the other axis. Today one module-level flag tracks whether a scan
-is running, and the graph holds one account. Multi-tenant needs an account id on every
-node and query, per-tenant credential caching, and a job queue instead of an in-process
-scan. Every resource already carries `accountId`; the scan orchestration is what would
-change.
+**Multi-tenancy** is built, as far as the data path goes. Every table holding customer
+data carries a tenant id — `NOT NULL`, with no default, so an insert that forgets one
+fails rather than landing in somebody else's account. Graph node identity is
+`(scanId, arn)` rather than `arn`, because two tenants collide immediately on the
+synthetic `Internet` node and completely if they connect the same AWS account. Reads go
+through one chokepoint that **refuses** Cypher not binding both parameters, and
+[`tenantIsolation.test.ts`](apps/api/src/db/tenantIsolation.test.ts) projects two
+tenants into one graph and asserts that no query returns the other's data — discovering
+the query list by reflection, so a new query fails for _not being covered_ before it can
+fail for leaking. Credentials are cached per connection rather than per process, and the
+AWS target comes from a `connections` row with no fallback to configuration.
+
+**Sign-in** is Google and GitHub, written against the protocol rather than through a
+library, with sessions as rows so one can actually be revoked. Matching is on the
+provider's subject and never on an email address, and the same address arriving from a
+second provider is refused rather than silently joined to the first account. Every route
+is protected by one global guard and escapes only by saying `@Public()`;
+[`enforcement.test.ts`](apps/api/src/auth/enforcement.test.ts) takes the real route table
+from Fastify and checks both directions, so a route added later cannot quietly answer an
+unauthenticated request.
+
+`DEPLOYMENT_MODE=hosted` refuses to start on configuration that would produce a working
+system with a silently wrong security property, and names every problem at once rather
+than one per restart. The capabilities that are harmless with one operator and dangerous
+with many are **removed** there rather than guarded: no process-wide endpoint override,
+no process-wide mock, and no raw-Cypher escape hatch for the agent — the existing guards
+on that one defend against writes, and neither of them knows whose data a read touches.
+
+**Connecting an account** is one link and one field. A quick-create CloudFormation link
+arrives with the ExternalId and the trusted principal already filled in, the customer
+ticks the IAM acknowledgement and presses Create stack, and types their twelve-digit
+account id — the role's name is fixed by the template, so Sightline derives the ARN
+rather than asking anyone to paste one. The screen then polls `sts:AssumeRole` and goes
+green on its own, usually while they are still looking at CloudFormation.
+
+Two things it deliberately does not do. The stack creates **one IAM role and calls
+nobody**: a Lambda-backed custom resource could report the ARN back and remove the twelve
+digits entirely, and that would put a function, an execution role and an outbound call to
+a third party into a stack a security reviewer has to approve. And the ExternalId stays
+**readable** to whoever owns the connection rather than being shown once — it grants
+nothing without Sightline's own credentials, their deployed stack holds it in plaintext in
+the trust policy anyway, and hiding it makes a failed deploy unrecoverable without
+rotating a secret the stack already contains. The AWS CLI and Terraform forms sit behind
+the same link, because a console link is useless to anyone whose organisation forbids it.
+
+When it does not work, the diagnosis is the product. `AccessDenied` becomes "the trust
+policy does not name this principal — it names _this_ one, redeploy with that value, and
+here is the command to check", which is the difference between ten minutes and an
+afternoon.
+
+What is still single-process: the scan runs inside the API rather than on a worker behind
+a queue, so a long scan is tied to the request that started it. That is the next piece,
+along with the per-tenant limits that a public deployment needs before it meets anyone.
 
 **What I would build next:** incremental graph updates (removes the first limit and
 makes scans cheap enough to run continuously); real idle detection from CloudWatch and

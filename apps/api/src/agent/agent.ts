@@ -22,7 +22,7 @@ import { getLatestScan } from "../db/repository.js";
 import { summariseAccount } from "../db/queries.js";
 import { CitationTracker, validateCitations } from "./citations.js";
 import { buildSystemPrompt } from "./prompt.js";
-import { TOOL_DEFINITIONS, runTool } from "./tools.js";
+import { availableTools, runTool, type ToolContext } from "./tools.js";
 import { enforceReadOnlyNotice } from "./readOnlyGuard.js";
 import { errorMessage } from "@sightline/shared";
 
@@ -46,6 +46,8 @@ function configuredModel(): LanguageModel {
 }
 
 export interface AskOptions {
+  /** Whose account the question is about. No default: see `tenancy/scope.ts`. */
+  tools: ToolContext;
   question: string;
   /** Prior turns, so follow-up questions work. */
   history?: { role: "user" | "assistant"; content: string }[];
@@ -83,12 +85,15 @@ function serialiseResult(result: { rows: unknown[]; note?: string }): string {
  * opportunities to change what the model is allowed to pass.
  */
 function buildTools(ctx: {
+  tools: ToolContext;
   tracker: CitationTracker;
   traces: ToolCallTrace[];
   emit: (event: AgentEvent) => void;
 }): ToolSet {
   return Object.fromEntries(
-    TOOL_DEFINITIONS.map((definition) => [
+    // `availableTools()`, not the whole list: hosted mode does not offer the
+    // raw-Cypher escape hatch at all (ADR-016), and the dispatch refuses it too.
+    availableTools().map((definition) => [
       definition.name,
       tool({
         description: definition.description,
@@ -100,7 +105,7 @@ function buildTools(ctx: {
 
           const startedAt = Date.now();
           try {
-            const result = await runTool(definition.name, input);
+            const result = await runTool(ctx.tools, definition.name, input);
 
             /**
              * The ledger, recorded here rather than in a framework callback.
@@ -162,7 +167,7 @@ function buildTools(ctx: {
 }
 
 export async function ask(options: AskOptions): Promise<AgentMessage> {
-  const { question, history = [], onEvent } = options;
+  const { question, history = [], onEvent, tools } = options;
   const emit = (event: AgentEvent) => onEvent?.(event);
   const messageId = randomUUID();
 
@@ -171,8 +176,8 @@ export async function ask(options: AskOptions): Promise<AgentMessage> {
   // Freshness and partial-failure context go into the system prompt, so the
   // model can warn about stale or missing data without being asked.
   const [latest, summary] = await Promise.all([
-    getLatestScan(),
-    summariseAccount().catch(() => null),
+    getLatestScan(tools.scope),
+    summariseAccount(tools.graph).catch(() => null),
   ]);
 
   const resourceCount = summary?.byKind.reduce((sum, k) => sum + k.count, 0) ?? 0;
@@ -201,7 +206,7 @@ export async function ask(options: AskOptions): Promise<AgentMessage> {
         content: question,
       },
     ],
-    tools: buildTools({ tracker, traces: toolCalls, emit }),
+    tools: buildTools({ tools, tracker, traces: toolCalls, emit }),
     stopWhen: stepCountIs(MAX_STEPS),
 
     onStepEnd({ text, toolCalls: calls }) {

@@ -8,7 +8,7 @@
  */
 
 import { DescribeRegionsCommand } from "@aws-sdk/client-ec2";
-import { ec2Client } from "./clients.js";
+import { ec2Client, type AwsContext } from "./clients.js";
 import { cfg, configuredRegions } from "../config.js";
 import { errorMessage } from "@sightline/shared";
 
@@ -19,14 +19,19 @@ import { errorMessage } from "@sightline/shared";
  * a scan. With no list configured we ask AWS, and fall back to the home region
  * if even that fails - a scan of one region beats no scan at all.
  */
-export async function resolveRegions(): Promise<{ regions: string[]; discovered: boolean }> {
-  const configured = configuredRegions();
+export async function resolveRegions(
+  ctx: AwsContext,
+  configuredForTarget: string[] | null,
+): Promise<{ regions: string[]; discovered: boolean }> {
+  // The connection's own list wins over the process default: on a hosted
+  // service there is no single configured region set to speak of.
+  const configured = configuredForTarget ?? configuredRegions();
   if (configured && configured.length > 0) {
     return { regions: configured, discovered: false };
   }
 
   try {
-    const client = ec2Client(cfg.AWS_REGION);
+    const client = ec2Client(ctx, cfg.AWS_REGION);
     const res = await client.send(new DescribeRegionsCommand({ AllRegions: false }));
     const regions = (res.Regions ?? [])
       .map((r) => r.RegionName)

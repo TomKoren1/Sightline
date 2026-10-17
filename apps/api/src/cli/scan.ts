@@ -4,66 +4,78 @@
  *
  *   npm run scan
  *
- * The order matters: Postgres is written first and is the system of record, so
- * if the Neo4j projection fails the scan is still durable and can be
- * re-projected without going back to AWS.
+ * Goes through `runScanJob`, the same function a queue worker calls, rather
+ * than keeping its own copy of the sequence. It had one, and the two had
+ * already drifted: this file's version would project and flip a scan that read
+ * nothing, filing an empty inventory as the account's current state. Write-
+ * then-flip is now written down once.
+ *
+ * What stays here is the part that is genuinely about being a command line: a
+ * line per unit as it finishes, and a summary at the end. It queues nothing and
+ * waits for no worker - there is no worker running during `npm run scan`, and
+ * one command that does the work is the right shape for a command.
  */
 
-import { rollUpStatus, errorMessage } from "@sightline/shared";
+import { randomUUID } from "node:crypto";
 
-import { callCounter } from "../aws/clients.js";
-import { closePool, migrate } from "../db/postgres.js";
-import { createScanRun, failScanRun, saveScanResult } from "../db/repository.js";
-import { closeDriver, projectGraph } from "../db/neo4j.js";
-import { runScan } from "../scan/runner.js";
+import { closePool, migrate, withTenant } from "../db/postgres.js";
+import { closeDriver } from "../db/neo4j.js";
+import { runScanJob } from "../jobs/runScanJob.js";
+import { ensureLocalTenant, localScope } from "../tenancy/local.js";
 
 const started = Date.now();
-let scanId: string | null = null;
 
 try {
   await migrate();
+  // A clone is one tenant with two connections; this creates them if absent.
+  await ensureLocalTenant();
+  const scope = localScope();
 
-  const result = await runScan({
-    scanId: "pending",
-    onEvent: (event) => {
-      if (event.type === "unit.finished") {
-        const where = `${event.unit.service}/${event.unit.region ?? "global"}`;
-        const outcome =
-          event.unit.status === "succeeded"
-            ? `${event.unit.resourceCount} resources`
-            : `FAILED - ${event.unit.error}`;
-        console.log(`  ${where.padEnd(26)} ${outcome}`);
-      }
-    },
-  });
-
-  // The run row is created once the account id is known, so a scan that never
-  // got credentials does not leave an orphan row attributed to nobody.
-  scanId = await createScanRun(result.accountId, result.regions);
-
-  const status = rollUpStatus(result.units);
-  await saveScanResult(scanId, {
-    status,
-    units: result.units,
-    resources: result.resources,
-    relationships: result.relationships,
-    apiCalls: callCounter.total(),
-  });
-
-  const projected = await projectGraph(scanId, result.resources, result.relationships);
-
-  const failed = result.units.filter((u) => u.status === "failed").length;
-  console.log(
-    `\nScan ${scanId} ${status}` +
-      (failed > 0 ? ` (${failed}/${result.units.length} units failed)` : "") +
-      `\n  ${result.resources.length} resources, ${result.relationships.length} relationships` +
-      `\n  graph: ${projected.nodes} nodes, ${projected.edges} edges` +
-      `\n  ${callCounter.total()} AWS API calls in ${((Date.now() - started) / 1000).toFixed(1)}s`,
+  // One tenant context for the whole run, for the same reason the worker uses
+  // one: a scan makes thousands of statements and they should share a
+  // connection rather than each acquiring and resetting one.
+  const outcome = await withTenant(scope.tenantId, () =>
+    runScanJob({
+      scope,
+      // No job row to correlate against, so a fresh id. Only ever seen in an
+      // event emitted before the run row exists.
+      correlationId: randomUUID(),
+      onEvent: (event) => {
+        if (event.type === "unit.finished") {
+          const where = `${event.unit.service}/${event.unit.region ?? "global"}`;
+          const result =
+            event.unit.status === "succeeded"
+              ? `${event.unit.resourceCount} resources`
+              : `FAILED - ${event.unit.error}`;
+          console.log(`  ${where.padEnd(26)} ${result}`);
+        }
+      },
+      logError: (err) => {
+        // The message is printed from the outcome below; this is the stack,
+        // which is what a developer running the command actually wants.
+        if (err instanceof Error && err.stack) console.error(err.stack);
+      },
+    }),
   );
+
+  if (!outcome.summary) {
+    console.error(`\nScan failed: ${outcome.error ?? "no reason was recorded"}`);
+    process.exitCode = 1;
+  } else {
+    const { summary } = outcome;
+    const failed = summary.units.filter((u) => u.status === "failed").length;
+    console.log(
+      `\nScan ${outcome.scanId} ${outcome.status}` +
+        (failed > 0 ? ` (${failed}/${summary.units.length} units failed)` : "") +
+        `\n  ${summary.resources} resources, ${summary.relationships} relationships` +
+        `\n  graph: ${summary.graph.nodes} nodes, ${summary.graph.edges} edges` +
+        `\n  ${summary.apiCalls} AWS API calls in ${((Date.now() - started) / 1000).toFixed(1)}s`,
+    );
+  }
 } catch (err) {
-  const message = errorMessage(err);
-  console.error(`\nScan failed: ${message}`);
-  if (scanId) await failScanRun(scanId, message);
+  // `runScanJob` records its own failures and does not throw, so reaching here
+  // means the setup before it did - no database, or no connection to scan.
+  console.error(`\nScan could not start: ${err instanceof Error ? err.message : String(err)}`);
   process.exitCode = 1;
 } finally {
   await closeDriver();

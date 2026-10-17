@@ -1,0 +1,131 @@
+/**
+ * One guard, registered globally, doing the three things a request needs before
+ * a controller sees it: who is asking, whose data this is about, and whether
+ * the request could have been forged by another site.
+ *
+ * Global rather than per-route, because per-route protection is opt-in and a
+ * route added later is then unprotected until somebody remembers — with nothing
+ * failing in the meantime. Here forgetting `@Public()` makes a route refuse
+ * requests, which is noticed at once.
+ */
+
+import {
+  CanActivate,
+  ExecutionContext,
+  ForbiddenException,
+  Inject,
+  Injectable,
+  UnauthorizedException,
+} from "@nestjs/common";
+import { Reflector } from "@nestjs/core";
+
+import { isHosted } from "../config.js";
+import { resolveScope, type ScopedRequest } from "../tenancy/requestScope.js";
+import type { Scope } from "../tenancy/scope.js";
+import { configuredProviders } from "./oauth.js";
+import { IS_PUBLIC } from "./public.decorator.js";
+import { readSession, SESSION_COOKIE, type Session } from "./session.js";
+
+/** Methods that change something, and therefore need forgery protection. */
+const MUTATING = new Set(["POST", "PUT", "PATCH", "DELETE"]);
+
+/**
+ * A header a cross-site form cannot set.
+ *
+ * `SameSite=Lax` on the session cookie is the primary defence and already
+ * refuses a cross-site POST. This is the second layer, for the same reason the
+ * Cypher guard is two: a custom header cannot be produced by a plain HTML form,
+ * and a cross-origin `fetch` that tries triggers a preflight this service's
+ * CORS configuration does not answer.
+ */
+const REQUEST_HEADER = "x-sightline-request";
+
+/**
+ * The scope, or the reason there isn't one, decided here and raised later.
+ *
+ * Resolving a connection can legitimately fail - a tenant who has just signed
+ * up has none yet - and that must not refuse the very routes they need to
+ * create one. So the guard records the outcome and `@CurrentScope()` raises it,
+ * which means the error surfaces exactly on the routes that actually wanted a
+ * connection and nowhere else.
+ */
+export type ScopeOutcome = { ok: true; scope: Scope } | { ok: false; error: unknown };
+
+export interface AuthedRequest extends ScopedRequest {
+  method?: string;
+  session?: Session | null;
+  cookies?: Record<string, string | undefined>;
+  scopeOutcome?: ScopeOutcome;
+}
+
+async function attachScope(req: AuthedRequest): Promise<void> {
+  try {
+    const scope = await resolveScope(req);
+    req.scopeOutcome = { ok: true, scope };
+    /**
+     * Recorded on the request so `TenantScopeInterceptor` can open the
+     * connection context without resolving the scope a second time.
+     *
+     * Hosted sets this from the session above; self-hosted has no session and
+     * derives the tenant from the local one, so without this line the
+     * interceptor found no tenant in a clone and every handler's query ran
+     * outside a context.
+     */
+    req.tenantId = scope.tenantId;
+  } catch (error) {
+    req.scopeOutcome = { ok: false, error };
+  }
+}
+
+@Injectable()
+export class AuthGuard implements CanActivate {
+  // The token is named explicitly: `emitDecoratorMetadata` is deliberately off
+  // in this package, so Nest cannot infer a constructor parameter's type and
+  // an unannotated dependency arrives as `undefined` at the first request
+  // rather than failing at startup.
+  constructor(@Inject(Reflector) private readonly reflector: Reflector) {}
+
+  async canActivate(context: ExecutionContext): Promise<boolean> {
+    const req = context.switchToHttp().getRequest<AuthedRequest>();
+    const isPublic = this.reflector.getAllAndOverride<boolean>(IS_PUBLIC, [
+      context.getHandler(),
+      context.getClass(),
+    ]);
+
+    /**
+     * Self-hosted has one tenant and no sign-in, so there is nobody to
+     * authenticate and nothing to forge a request on behalf of. The scope is
+     * still resolved and attached here, so controllers take the same path in
+     * both modes rather than one that is only exercised in production.
+     */
+    if (!isHosted()) {
+      await attachScope(req);
+      return true;
+    }
+
+    const token = req.cookies?.[SESSION_COOKIE];
+    const session = await readSession(token);
+    req.session = session;
+    if (session) req.tenantId = session.tenantId;
+
+    if (isPublic) return true;
+
+    if (!session) {
+      throw new UnauthorizedException({
+        error: "Not signed in",
+        providers: configuredProviders(),
+      });
+    }
+
+    if (MUTATING.has(req.method ?? "GET") && req.headers?.[REQUEST_HEADER] !== "1") {
+      throw new ForbiddenException({
+        error:
+          "This request is missing the X-Sightline-Request header, which Sightline requires on " +
+          "anything that changes state so that another site cannot make it on your behalf.",
+      });
+    }
+
+    await attachScope(req);
+    return true;
+  }
+}

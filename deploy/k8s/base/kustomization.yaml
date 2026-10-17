@@ -1,0 +1,51 @@
+# The base: everything the service needs except how it is reached and what its
+# secrets are. `prod/` adds the tunnel, the sealed secrets, and the sizing.
+#
+# No namespace is set here, deliberately. An overlay chooses it, and a base that
+# hard-coded one could not be deployed twice - which is what you want the first
+# time you try an upgrade against a copy.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+  - datastores.yaml
+  - app.yaml
+  - networkpolicy.yaml
+  - backup.yaml
+
+commonLabels:
+  app.kubernetes.io/part-of: sightline
+
+configMapGenerator:
+  # Non-secret configuration. Everything here is safe in git; anything that is
+  # not belongs in the sealed secret in `prod/`.
+  - name: sightline-config
+    literals:
+      - DEPLOYMENT_MODE=hosted
+      # Where the datastores are, as Service DNS. The password halves come from
+      # the secret; these are just addresses.
+      - NEO4J_URI=bolt://neo4j:7687
+      # Scans run in the worker deployment, never in the API.
+      - SCAN_WORKER=separate
+      - SCAN_WORKER_CONCURRENCY=1
+      - AWS_REGION=us-east-1
+      # Hosted limits. The defaults in `config.ts` already move with
+      # DEPLOYMENT_MODE; these are written out so the numbers a deployment runs
+      # under are visible here rather than inferred from code.
+      - SCAN_COOLDOWN_SECONDS=300
+      - MAX_ACTIVE_SCANS_PER_TENANT=3
+      - CHAT_QUESTIONS_PER_HOUR=60
+      - MAX_RESOURCES_PER_SCAN=100000
+      - SCANS_ENABLED=true
+      - CHAT_ENABLED=true
+      # The Job owns the schema; see the comment on it in app.yaml.
+      - MIGRATE_ON_BOOT=false
+
+images:
+  # k3s has no registry here, so images are built locally and imported into
+  # containerd directly - see the README. `imagePullPolicy` is left alone
+  # because an explicit tag with a locally-present image does not pull.
+  - name: sightline-api
+    newTag: dev
+  - name: sightline-web
+    newTag: dev

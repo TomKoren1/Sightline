@@ -8,7 +8,8 @@
 
 import type { ScanRun, ScanUnit } from "@sightline/shared";
 
-import { ModeToggle } from "./ModeToggle.js";
+import { AccountSwitcher } from "./AccountSwitcher.js";
+import type { ConnectionSummary } from "../api.js";
 
 /** Beyond this, the inventory is old enough that the user should be told. */
 const STALE_AFTER_MS = 60 * 60 * 1000;
@@ -26,27 +27,50 @@ function relativeAge(iso: string): string {
 export interface ScanBannerProps {
   scan: ScanRun | null;
   scanning: boolean;
+  /**
+   * Accepted, waiting for a worker to pick it up.
+   *
+   * Only reachable when scans run in their own process. It earns a distinct
+   * state because a progress bar sitting at zero is indistinguishable from a
+   * scan that silently failed to start, and "queued" is the difference between
+   * waiting and wondering.
+   */
+  queued: boolean;
   progress: { completed: number; total: number } | null;
   liveUnits: ScanUnit[];
   error: string | null;
   onScan: () => void;
   onOpenTrust: () => void;
   onOpenConnection: () => void;
-  onModeSwitched: (note: string) => void;
-  modeNote: string | null;
+  connections: ConnectionSummary[];
+  /** Null means the server picks the oldest, which is what the switcher shows. */
+  selectedConnectionId: string | null;
+  onSelectConnection: (id: string) => void;
+  /** Asks to remove one account; the confirmation lives in a dialog above. */
+  onDisconnectConnection: (connection: ConnectionSummary) => void;
+  /** Null in a self-hosted deployment, which has no sign-in. */
+  signedInAs: string | null;
+  onSignOut: () => void;
+  onDeleteAccount: () => void;
 }
 
 export function ScanBanner({
   scan,
   scanning,
+  queued,
   progress,
   liveUnits,
   error,
   onScan,
   onOpenTrust,
   onOpenConnection,
-  onModeSwitched,
-  modeNote,
+  connections,
+  selectedConnectionId,
+  onSelectConnection,
+  onDisconnectConnection,
+  signedInAs,
+  onSignOut,
+  onDeleteAccount,
 }: ScanBannerProps) {
   const units = scanning ? liveUnits : (scan?.units ?? []);
   const failed = units.filter((u) => u.status === "failed");
@@ -65,8 +89,9 @@ export function ScanBanner({
             <div className="flex items-center gap-2">
               <span className="pulse h-1.5 w-1.5 rounded-full bg-accent" />
               <span className="text-[11px] text-ink-300">
-                Scanning
-                {progress ? ` — ${progress.completed}/${progress.total} services` : "…"}
+                {queued && !progress
+                  ? "Queued — waiting for a scanner"
+                  : `Scanning${progress ? ` — ${progress.completed}/${progress.total} services` : "…"}`}
               </span>
               <div className="h-1 w-40 overflow-hidden rounded-full bg-ink-800">
                 <div
@@ -95,7 +120,39 @@ export function ScanBanner({
         </div>
 
         <div className="flex items-center gap-1.5">
-          <ModeToggle onSwitched={onModeSwitched} />
+          <AccountSwitcher
+            connections={connections}
+            selectedId={selectedConnectionId}
+            onSelect={onSelectConnection}
+            onConnect={onOpenConnection}
+            onDisconnect={onDisconnectConnection}
+          />
+          {signedInAs && (
+            <>
+              <span className="mx-0.5 h-4 w-px bg-ink-700" aria-hidden />
+              <button
+                onClick={onSignOut}
+                title={`Signed in as ${signedInAs}`}
+                className="rounded border border-ink-700 bg-ink-800 px-2 py-1 text-[11px] text-ink-300 transition hover:border-ink-600 hover:text-ink-100"
+              >
+                Sign out
+              </button>
+              {/*
+                Next to Sign out, not hidden in a settings page nobody opens.
+                A service holding somebody's production inventory should make
+                leaving as findable as arriving - and the destructive step is
+                behind a dialog that asks them to type their own address, so
+                proximity costs nothing.
+              */}
+              <button
+                onClick={onDeleteAccount}
+                title="Delete this account and everything Sightline holds about it"
+                className="rounded border border-ink-700 bg-ink-800 px-2 py-1 text-[11px] text-ink-400 transition hover:border-danger/60 hover:text-danger"
+              >
+                Delete account
+              </button>
+            </>
+          )}
           <span className="mx-0.5 h-4 w-px bg-ink-700" aria-hidden />
           <button
             onClick={onOpenConnection}
@@ -114,17 +171,16 @@ export function ScanBanner({
             disabled={scanning}
             className="rounded border border-ink-700 bg-ink-800 px-2.5 py-1 text-[11px] text-ink-100 transition hover:border-ink-600 disabled:cursor-not-allowed disabled:opacity-40"
           >
-            {scanning ? "Scanning…" : scan ? "Rescan" : "Run scan"}
+            {scanning
+              ? queued && !progress
+                ? "Queued…"
+                : "Scanning…"
+              : scan
+                ? "Rescan"
+                : "Run scan"}
           </button>
         </div>
       </div>
-
-      {/* After a switch the graph still holds the previous account's scan. */}
-      {modeNote && !scanning && (
-        <div className="border-t border-accent/30 bg-accent/10 px-3 py-1.5 text-[11px] text-accent">
-          {modeNote}
-        </div>
-      )}
 
       {error && (
         <div className="border-t border-danger/30 bg-danger/10 px-3 py-1.5 text-[11px] text-danger">

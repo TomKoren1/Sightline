@@ -12,7 +12,7 @@
 
 import neo4j from "neo4j-driver";
 import { INTERNET_ARN } from "@sightline/shared";
-import { readQuery } from "./neo4j.js";
+import { readScoped, type GraphScope } from "./neo4j.js";
 
 /** Cap every query, so one bad question cannot drag the whole estate back. */
 const DEFAULT_LIMIT = 100;
@@ -21,12 +21,21 @@ const MAX_LIMIT = 500;
 /**
  * Bound a caller-supplied limit and hand it to the driver as a Neo4j integer.
  *
- * `LIMIT` requires an INTEGER. A plain JS number crosses the wire as a float
- * and Neo4j rejects it with "found 100.0", so the conversion is done here
- * rather than remembered at fifteen call sites.
+ * `LIMIT` requires an INTEGER; a plain JS number crosses the wire as a float
+ * and Neo4j rejects it with "found 100.0".
+ *
+ * `NaN` is treated as absent, which it was not. `?limit=abc` arrives as
+ * `Number("abc")` and every step preserved it - `Math.max(1, NaN)` is `NaN` -
+ * so it became `LIMIT 0` and the endpoint answered with no nodes at all,
+ * telling a customer their account was empty.
+ *
+ * The boundary now refuses a non-numeric limit, so this fallback should be
+ * unreachable from a request; being total is cheap.
  */
-const clamp = (n: number | undefined, fallback = DEFAULT_LIMIT) =>
-  neo4j.int(Math.min(Math.max(1, Math.floor(n ?? fallback)), MAX_LIMIT));
+const clamp = (n: number | undefined, fallback = DEFAULT_LIMIT) => {
+  const requested = Number.isFinite(n) ? n! : fallback;
+  return neo4j.int(Math.min(Math.max(1, Math.floor(requested)), MAX_LIMIT));
+};
 
 export interface ResourceRow {
   arn: string;
@@ -36,14 +45,18 @@ export interface ResourceRow {
   [key: string]: unknown;
 }
 
-export async function listResources(params: {
-  kind?: string;
-  region?: string;
-  nameContains?: string;
-  limit?: number;
-}): Promise<ResourceRow[]> {
-  return readQuery<ResourceRow>(
-    `MATCH (r:Resource)
+export async function listResources(
+  scope: GraphScope,
+  params: {
+    kind?: string;
+    region?: string;
+    nameContains?: string;
+    limit?: number;
+  },
+): Promise<ResourceRow[]> {
+  return readScoped<ResourceRow>(
+    scope,
+    `MATCH (r:Resource {tenantId: $tenantId, scanId: $scanId})
      WHERE ($kind   IS NULL OR r.kind = $kind)
        AND ($region IS NULL OR r.region = $region)
        AND ($name   IS NULL OR toLower(r.name) CONTAINS toLower($name))
@@ -62,12 +75,16 @@ export async function listResources(params: {
 }
 
 /** Everything known about one resource, plus its immediate neighbours. */
-export async function getResource(arnOrName: string): Promise<ResourceRow | null> {
-  const rows = await readQuery<ResourceRow>(
-    `MATCH (r:Resource)
+export async function getResource(
+  scope: GraphScope,
+  arnOrName: string,
+): Promise<ResourceRow | null> {
+  const rows = await readScoped<ResourceRow>(
+    scope,
+    `MATCH (r:Resource {tenantId: $tenantId, scanId: $scanId})
      WHERE r.arn = $key OR r.name = $key
-     OPTIONAL MATCH (r)-[out]->(o:Resource)
-     OPTIONAL MATCH (i:Resource)-[in]->(r)
+     OPTIONAL MATCH (r)-[out]->(o:Resource {tenantId: $tenantId, scanId: $scanId})
+     OPTIONAL MATCH (i:Resource {tenantId: $tenantId, scanId: $scanId})-[in]->(r)
      RETURN properties(r) AS props, r.arn AS arn, r.kind AS kind, r.name AS name,
             r.region AS region,
             collect(DISTINCT {type: type(out), arn: o.arn, name: o.name, kind: o.kind}) AS outgoing,
@@ -85,9 +102,13 @@ export async function getResource(arnOrName: string): Promise<ResourceRow | null
  * and `publicReason` records the evidence. The agent reads both; it does not
  * re-derive the verdict.
  */
-export async function findPublicResources(params: { kind?: string; limit?: number } = {}) {
-  return readQuery<ResourceRow>(
-    `MATCH (r:Resource)
+export async function findPublicResources(
+  scope: GraphScope,
+  params: { kind?: string; limit?: number } = {},
+) {
+  return readScoped<ResourceRow>(
+    scope,
+    `MATCH (r:Resource {tenantId: $tenantId, scanId: $scanId})
      WHERE r.isPublic = true AND ($kind IS NULL OR r.kind = $kind)
      RETURN r.arn AS arn, r.kind AS kind, r.name AS name, r.region AS region,
             r.publicReason AS reason
@@ -101,24 +122,21 @@ export async function findPublicResources(params: { kind?: string; limit?: numbe
  * Principals with effective administrator access, and what uses them.
  *
  * "What uses them" is the half that makes the answer actionable: an admin role
- * attached to a running instance is an incident, and an admin role nothing
- * references is cleanup.
+ * on a running instance is an incident, one nothing references is cleanup.
  *
  * Matches roles **and** users. It matched only roles until a real account
  * reported no administrators while two IAM users held `AdministratorAccess`.
- * A user has no instance profile or Lambda to be used
- * by, so `usedBy` is empty for them - which is itself the point: a standing
- * admin user with long-lived credentials and nothing attaching it to a
- * workload is a different risk from an admin role a service assumes, not a
- * lesser one.
+ * A user has nothing to be used by, so `usedBy` is empty - which is itself the
+ * point: a standing admin user with long-lived credentials is the finding.
  */
-export async function findAdminPrincipals(params: { limit?: number } = {}) {
-  return readQuery<ResourceRow>(
-    `MATCH (r:Resource)
+export async function findAdminPrincipals(scope: GraphScope, params: { limit?: number } = {}) {
+  return readScoped<ResourceRow>(
+    scope,
+    `MATCH (r:Resource {tenantId: $tenantId, scanId: $scanId})
      WHERE (r:IamRole OR r:IamUser) AND r.isAdmin = true
-     OPTIONAL MATCH (p:InstanceProfile)-[:PROVIDES_ROLE]->(r)
-     OPTIONAL MATCH (i:Ec2Instance)-[:HAS_INSTANCE_PROFILE]->(p)
-     OPTIONAL MATCH (f:LambdaFunction)-[:EXECUTES_AS]->(r)
+     OPTIONAL MATCH (p:InstanceProfile {tenantId: $tenantId, scanId: $scanId})-[:PROVIDES_ROLE]->(r)
+     OPTIONAL MATCH (i:Ec2Instance {tenantId: $tenantId, scanId: $scanId})-[:HAS_INSTANCE_PROFILE]->(p)
+     OPTIONAL MATCH (f:LambdaFunction {tenantId: $tenantId, scanId: $scanId})-[:EXECUTES_AS]->(r)
      WITH r,
           collect(DISTINCT {arn: i.arn, name: i.name, kind: 'Ec2Instance'}) AS instances,
           collect(DISTINCT {arn: f.arn, name: f.name, kind: 'LambdaFunction'}) AS functions
@@ -142,24 +160,28 @@ export async function findAdminPrincipals(params: { limit?: number } = {}) {
  * variable-length match over a dense security group graph is how you hang a
  * Neo4j instance.
  */
-export async function findNetworkPaths(params: {
-  target: string;
-  source?: string;
-  maxHops?: number;
-  limit?: number;
-}) {
+export async function findNetworkPaths(
+  scope: GraphScope,
+  params: {
+    target: string;
+    source?: string;
+    maxHops?: number;
+    limit?: number;
+  },
+) {
   const maxHops = Math.min(Math.max(1, params.maxHops ?? 5), 8);
-  return readQuery<{
+  return readScoped<{
     hops: { arn: string; name: string; kind: string }[];
     edges: { ports: string[]; reason: string; via: string }[];
     length: number;
   }>(
+    scope,
     // The hop bound is interpolated because Cypher does not allow a parameter
     // inside a variable-length pattern. It is clamped to 1..8 immediately
     // above and never reaches here as user text.
-    `MATCH (target:Resource)
+    `MATCH (target:Resource {tenantId: $tenantId, scanId: $scanId})
      WHERE target.arn = $target OR target.name = $target
-     MATCH (source:Resource)
+     MATCH (source:Resource {tenantId: $tenantId, scanId: $scanId})
      WHERE source.arn = $source OR source.name = $source
      MATCH path = (source)-[:CAN_REACH*1..${maxHops}]->(target)
      WITH [n IN nodes(path) | {arn: n.arn, name: n.name, kind: n.kind}] AS hops,
@@ -187,11 +209,14 @@ export async function findNetworkPaths(params: {
 }
 
 /** What a resource can reach, rather than what can reach it. */
-export async function findReachableFrom(params: {
-  source: string;
-  maxHops?: number;
-  limit?: number;
-}) {
+export async function findReachableFrom(
+  scope: GraphScope,
+  params: {
+    source: string;
+    maxHops?: number;
+    limit?: number;
+  },
+) {
   const maxHops = Math.min(Math.max(1, params.maxHops ?? 3), 8);
 
   /**
@@ -206,8 +231,9 @@ export async function findReachableFrom(params: {
    * Two queries rather than a UNION: the source lookup also separates "no such
    * resource" from "reaches nothing", which one query conflated.
    */
-  const [source] = await readQuery<ResourceRow>(
-    `MATCH (source:Resource)
+  const [source] = await readScoped<ResourceRow>(
+    scope,
+    `MATCH (source:Resource {tenantId: $tenantId, scanId: $scanId})
      WHERE source.arn = $source OR source.name = $source
      RETURN source.arn AS arn, source.kind AS kind, source.name AS name,
             source.region AS region, 0 AS hops
@@ -216,10 +242,11 @@ export async function findReachableFrom(params: {
   );
   if (!source) return [];
 
-  const targets = await readQuery<ResourceRow>(
-    `MATCH (source:Resource)
+  const targets = await readScoped<ResourceRow>(
+    scope,
+    `MATCH (source:Resource {tenantId: $tenantId, scanId: $scanId})
      WHERE source.arn = $source OR source.name = $source
-     MATCH path = (source)-[:CAN_REACH*1..${maxHops}]->(t:Resource)
+     MATCH path = (source)-[:CAN_REACH*1..${maxHops}]->(t:Resource {tenantId: $tenantId, scanId: $scanId})
      WITH t, min(length(path)) AS hops
      RETURN t.arn AS arn, t.kind AS kind, t.name AS name, t.region AS region, hops
      ORDER BY hops, t.name
@@ -237,10 +264,14 @@ export async function findReachableFrom(params: {
  * gateway, and instances in no subnet at all - the second is rarer and easier
  * to miss, which is exactly why it is worth returning.
  */
-export async function findInstancesInPublicSubnets(params: { limit?: number } = {}) {
-  return readQuery<ResourceRow>(
-    `MATCH (i:Resource:Ec2Instance)
-     OPTIONAL MATCH (i)-[:IN_SUBNET]->(s:Subnet)
+export async function findInstancesInPublicSubnets(
+  scope: GraphScope,
+  params: { limit?: number } = {},
+) {
+  return readScoped<ResourceRow>(
+    scope,
+    `MATCH (i:Resource:Ec2Instance {tenantId: $tenantId, scanId: $scanId})
+     OPTIONAL MATCH (i)-[:IN_SUBNET]->(s:Subnet {tenantId: $tenantId, scanId: $scanId})
      WITH i, s
      WHERE s IS NULL OR s.isPublic = true
      RETURN i.arn AS arn, 'Ec2Instance' AS kind, i.name AS name, i.region AS region,
@@ -256,9 +287,10 @@ export async function findInstancesInPublicSubnets(params: { limit?: number } = 
 }
 
 /** Billable and doing nothing, most expensive first. */
-export async function findIdleResources(params: { limit?: number } = {}) {
-  return readQuery<ResourceRow>(
-    `MATCH (r:Resource)
+export async function findIdleResources(scope: GraphScope, params: { limit?: number } = {}) {
+  return readScoped<ResourceRow>(
+    scope,
+    `MATCH (r:Resource {tenantId: $tenantId, scanId: $scanId})
      WHERE r.isIdle = true
      RETURN r.arn AS arn, r.kind AS kind, r.name AS name, r.region AS region,
             r.idleReason AS reason,
@@ -277,9 +309,10 @@ export async function findIdleResources(params: { limit?: number } = {}) {
  * the setting that would neutralise a permissive policy if one were added. A
  * posture finding, not an exposure finding.
  */
-export async function findUnprotectedBuckets(params: { limit?: number } = {}) {
-  return readQuery<ResourceRow>(
-    `MATCH (r:Resource:S3Bucket)
+export async function findUnprotectedBuckets(scope: GraphScope, params: { limit?: number } = {}) {
+  return readScoped<ResourceRow>(
+    scope,
+    `MATCH (r:Resource:S3Bucket {tenantId: $tenantId, scanId: $scanId})
      WHERE r.isUnprotected = true
      RETURN r.arn AS arn, 'S3Bucket' AS kind, r.name AS name, r.region AS region,
             r.unprotectedReason AS reason,
@@ -291,9 +324,11 @@ export async function findUnprotectedBuckets(params: { limit?: number } = {}) {
 }
 
 /** Security groups exposing a port to the whole internet. */
-export async function findOpenSecurityGroups(params: { limit?: number } = {}) {
-  return readQuery<ResourceRow>(
-    `MATCH (internet:Internet)-[e:CAN_REACH]->(r:Resource)
+export async function findOpenSecurityGroups(scope: GraphScope, params: { limit?: number } = {}) {
+  return readScoped<ResourceRow>(
+    scope,
+    `MATCH (internet:Internet {tenantId: $tenantId, scanId: $scanId})
+           -[e:CAN_REACH]->(r:Resource {tenantId: $tenantId, scanId: $scanId})
      RETURN DISTINCT r.arn AS arn, r.kind AS kind, r.name AS name, r.region AS region,
             collect(DISTINCT e.ports) AS ports,
             head(collect(e.via)) AS securityGroup,
@@ -305,9 +340,10 @@ export async function findOpenSecurityGroups(params: { limit?: number } = {}) {
 }
 
 /** Free-text search across resource names and tags. */
-export async function searchResources(params: { text: string; limit?: number }) {
-  return readQuery<ResourceRow>(
-    `MATCH (r:Resource)
+export async function searchResources(scope: GraphScope, params: { text: string; limit?: number }) {
+  return readScoped<ResourceRow>(
+    scope,
+    `MATCH (r:Resource {tenantId: $tenantId, scanId: $scanId})
      WHERE toLower(r.name) CONTAINS toLower($text)
         OR toLower(coalesce(r.tagsJson, '')) CONTAINS toLower($text)
         OR toLower(r.arn) CONTAINS toLower($text)
@@ -319,24 +355,27 @@ export async function searchResources(params: { text: string; limit?: number }) 
 }
 
 /** Counts by kind and region - cheap orientation for an opening question. */
-export async function summariseAccount() {
+export async function summariseAccount(scope: GraphScope) {
   const [byKind, byRegion, flags] = await Promise.all([
-    readQuery<{ kind: string; count: number }>(
-      `MATCH (r:Resource) WHERE r.kind <> 'Internet'
+    readScoped<{ kind: string; count: number }>(
+      scope,
+      `MATCH (r:Resource {tenantId: $tenantId, scanId: $scanId}) WHERE r.kind <> 'Internet'
        RETURN r.kind AS kind, count(*) AS count ORDER BY count DESC`,
     ),
-    readQuery<{ region: string; count: number }>(
-      `MATCH (r:Resource) WHERE r.region IS NOT NULL
+    readScoped<{ region: string; count: number }>(
+      scope,
+      `MATCH (r:Resource {tenantId: $tenantId, scanId: $scanId}) WHERE r.region IS NOT NULL
        RETURN r.region AS region, count(*) AS count ORDER BY count DESC`,
     ),
-    readQuery<{
+    readScoped<{
       publicCount: number;
       adminCount: number;
       idleCount: number;
       idleCost: number;
       unprotectedCount: number;
     }>(
-      `MATCH (r:Resource)
+      scope,
+      `MATCH (r:Resource {tenantId: $tenantId, scanId: $scanId})
        RETURN count(CASE WHEN r.isPublic = true THEN 1 END) AS publicCount,
               count(CASE WHEN r.isAdmin  = true THEN 1 END) AS adminCount,
               count(CASE WHEN r.isIdle   = true THEN 1 END) AS idleCount,
@@ -350,10 +389,12 @@ export async function summariseAccount() {
 
 /** The whole graph, for the frontend to lay out. */
 export async function fetchGraph(
+  scope: GraphScope,
   params: { region?: string; kinds?: string[]; limit?: number } = {},
 ) {
-  const nodes = await readQuery<ResourceRow>(
-    `MATCH (r:Resource)
+  const nodes = await readScoped<ResourceRow>(
+    scope,
+    `MATCH (r:Resource {tenantId: $tenantId, scanId: $scanId})
      WHERE ($region IS NULL OR r.region = $region OR r.region IS NULL)
        AND ($kinds  IS NULL OR r.kind IN $kinds)
      RETURN r.arn AS arn, r.kind AS kind, r.name AS name, r.region AS region,
@@ -366,8 +407,9 @@ export async function fetchGraph(
   );
 
   const arns = new Set(nodes.map((n) => n.arn));
-  const edges = await readQuery<{ from: string; to: string; type: string; ports: string | null }>(
-    `MATCH (a:Resource)-[r]->(b:Resource)
+  const edges = await readScoped<{ from: string; to: string; type: string; ports: string | null }>(
+    scope,
+    `MATCH (a:Resource {tenantId: $tenantId, scanId: $scanId})-[r]->(b:Resource {tenantId: $tenantId, scanId: $scanId})
      WHERE a.arn IN $arns AND b.arn IN $arns
      RETURN a.arn AS from, b.arn AS to, type(r) AS type, r.ports AS ports
      LIMIT 2000`,

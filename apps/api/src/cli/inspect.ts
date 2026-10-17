@@ -12,7 +12,9 @@
 
 import { INTERNET_ARN, asText, rollUpStatus } from "@sightline/shared";
 import { runScan } from "../scan/runner.js";
-import { callCounter } from "../aws/clients.js";
+import { CallCounter } from "../aws/clients.js";
+import { ensureLocalTenant, localScope } from "../tenancy/local.js";
+import { resolveScanTarget } from "../tenancy/scanTarget.js";
 
 const bold = (s: string) => `\x1b[1m${s}\x1b[0m`;
 const dim = (s: string) => `\x1b[2m${s}\x1b[0m`;
@@ -20,7 +22,13 @@ const red = (s: string) => `\x1b[31m${s}\x1b[0m`;
 const green = (s: string) => `\x1b[32m${s}\x1b[0m`;
 const yellow = (s: string) => `\x1b[33m${s}\x1b[0m`;
 
-const result = await runScan({ scanId: "inspect" });
+await ensureLocalTenant();
+const counter = new CallCounter();
+const result = await runScan({
+  target: await resolveScanTarget(localScope()),
+  counter,
+  scanId: "inspect",
+});
 
 console.log(
   `\n${bold("Account")} ${result.accountId}  ${dim(`regions: ${result.regions.join(", ")}`)}`,
@@ -32,7 +40,7 @@ const status = rollUpStatus(result.units);
 console.log(
   `${bold("Status")} ${status === "succeeded" ? green(status) : status === "partial" ? yellow(status) : red(status)}` +
     `  ${result.units.length - failed.length}/${result.units.length} units  ` +
-    dim(`${callCounter.total()} AWS API calls`),
+    dim(`${counter.total()} AWS API calls`),
 );
 for (const unit of failed) {
   console.log(`  ${red("FAILED")} ${unit.service}/${unit.region ?? "global"}: ${unit.error}`);

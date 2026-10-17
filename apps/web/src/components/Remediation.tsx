@@ -13,6 +13,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
 
 import { Copyable } from "./Copyable.js";
+import { api } from "../api.js";
 
 interface Remediation {
   id: string;
@@ -93,11 +94,8 @@ function RemediationCard({ remediation }: { remediation: Remediation }) {
 export function Remediation({ arn, hasFindings }: { arn: string; hasFindings: boolean }) {
   const { data, isLoading } = useQuery({
     queryKey: ["remediation", arn],
-    queryFn: async () => {
-      const res = await fetch(`/api/resources/${encodeURIComponent(arn)}/remediation`);
-      if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
-      return res.json() as Promise<RemediationResponse>;
-    },
+    // Through the client, for the connection header; see `api.remediation`.
+    queryFn: () => api.remediation<RemediationResponse>(arn),
     // A resource with no verdict has nothing to fix, so do not ask.
     enabled: hasFindings,
   });

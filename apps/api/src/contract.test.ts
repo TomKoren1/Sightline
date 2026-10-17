@@ -55,7 +55,7 @@ const scan = z.object({
 });
 
 interface Contract {
-  method: "GET" | "POST";
+  method: "GET" | "POST" | "DELETE";
   /** The path as Fastify registers it, with `:params`. Keyed against the router. */
   route: string;
   /** A concrete URL to call. */
@@ -105,7 +105,50 @@ const CONTRACTS: Contract[] = [
     route: "/api/scans/latest",
     url: "/api/scans/latest",
     responses: {
-      200: z.object({ scan: scan.nullable(), scanning: z.boolean() }).strict(),
+      200: z
+        .object({
+          scan: scan.nullable(),
+          scanning: z.boolean(),
+          /**
+           * The job a reloaded page attaches to.
+           *
+           * `scanning` alone was enough while a scan lived inside the request
+           * that started it, because the only client that could be watching
+           * was the one holding that response open.
+           */
+          activeJobId: z.string().nullable(),
+        })
+        .strict(),
+    },
+  },
+  {
+    method: "GET",
+    route: "/api/scans/jobs/:jobId",
+    // A well-formed id nobody owns, which is the declinable path: a real job's
+    // 200 needs a scan to have run, and the 404 is what the UI renders when a
+    // remembered job id has aged out.
+    url: `/api/scans/jobs/${UNKNOWN_ID}`,
+    responses: {
+      200: z
+        .object({
+          status: z.string(),
+          queuedAt: z.string(),
+          scanId: z.string().nullable(),
+          run: scan.nullable(),
+          error: z.string().nullable(),
+        })
+        .strict(),
+      404: error,
+    },
+  },
+  {
+    method: "DELETE",
+    route: "/api/scans/jobs/:jobId",
+    url: `/api/scans/jobs/${UNKNOWN_ID}`,
+    responses: {
+      // Cancelling something that is not queued is not an error: it answers
+      // what actually happened, which is how the UI can say so.
+      200: z.object({ cancelled: z.boolean(), note: z.string().optional() }).strict(),
     },
   },
   {
@@ -370,15 +413,147 @@ const CONTRACTS: Contract[] = [
  * completeness check below accepts an entry here, and a second check refuses an
  * entry whose reason is a placeholder.
  */
+const CONNECTION_SUMMARY = z
+  .object({
+    id: z.string(),
+    kind: z.enum(["real", "demo"]),
+    label: z.string(),
+    accountId: z.string().nullable(),
+    roleArn: z.string().nullable(),
+    status: z.enum(["pending", "verified", "failed", "disconnected"]),
+    lastError: z.string().nullable(),
+    scanRegions: z.array(z.string()),
+    templateVersion: z.string().nullable(),
+    lastVerifiedAt: z.string().nullable(),
+    lastScanAt: z.string().nullable(),
+  })
+  // No external id, encrypted or otherwise. The shape is asserted strictly so
+  // that adding one to the summary fails here rather than in production.
+  .strict();
+
+CONTRACTS.push(
+  {
+    method: "GET",
+    route: "/api/auth/providers",
+    url: "/api/auth/providers",
+    responses: {
+      200: z.object({ providers: z.array(z.string()), hosted: z.boolean() }).strict(),
+    },
+  },
+  {
+    method: "GET",
+    route: "/api/me",
+    url: "/api/me",
+    responses: {
+      200: z
+        .object({
+          hosted: z.boolean(),
+          signedIn: z.boolean(),
+          user: z
+            .object({
+              email: z.string(),
+              name: z.string().nullable(),
+              avatarUrl: z.string().nullable(),
+            })
+            .nullable(),
+          isAdmin: z.boolean(),
+          providers: z.array(z.string()),
+          linked: z.array(z.string()),
+          connections: z.array(CONNECTION_SUMMARY),
+        })
+        .strict(),
+    },
+  },
+  {
+    method: "GET",
+    route: "/api/connections",
+    url: "/api/connections",
+    responses: { 200: z.object({ connections: z.array(CONNECTION_SUMMARY) }).strict() },
+  },
+);
+
 const EXCLUDED = new Map<string, string>([
   [
     "POST /api/scans",
-    "Starts a real scan. Its only refusal is 409 when one is already running, and " +
-      "`scanInProgress` is module-private, so there is no input that makes it decline: " +
-      "calling it would scan whichever AWS account the deployment is pointed at and " +
-      "overwrite the graph. The scan itself is covered by the tier-1 ground-truth " +
-      "suite, which drives `runScan()` directly, and the SSE payloads are typed as " +
-      "`ScanEvent` in @sightline/shared, so a port that changes them fails typecheck.",
+    "Queues a real scan, then streams it. There is no input that makes it decline - its " +
+      "409 needs a scan already queued, and reaching that state means having queued one - " +
+      "so calling it would scan whichever AWS account the deployment is pointed at and " +
+      "overwrite the graph. The events are covered by jobs/progress.test.ts, which seeds " +
+      "the rows they are derived from, and typed as `ScanEvent` in @sightline/shared, so " +
+      "a port that changes them fails typecheck. The queue itself is jobs/queue.test.ts.",
+  ],
+  [
+    "GET /api/scans/jobs/:jobId/stream",
+    "An event stream, so it has no single response body to declare, and it stays open " +
+      "until the scan ends. What it emits is asserted directly in jobs/progress.test.ts " +
+      "by seeding the rows the events are derived from - which is possible precisely " +
+      "because the stream is now a function of the database rather than of a live scan.",
+  ],
+  [
+    "GET /api/auth/:provider",
+    "A 302 to the provider's consent screen. There is no body to have a shape, and the " +
+      "query string it builds is asserted directly in auth/providers.test.ts.",
+  ],
+  [
+    "GET /api/auth/:provider/callback",
+    "A 302 either into the app or back to it with a reason. Every branch is a redirect, " +
+      "and the claim checks behind it are asserted in auth/providers.test.ts without a " +
+      "network.",
+  ],
+  [
+    "POST /api/auth/logout",
+    "204 and a cleared cookie: no body to declare. Revocation is asserted against real " +
+      "rows in auth/signin.test.ts.",
+  ],
+  [
+    "GET /api/auth/sessions",
+    "Session management has no meaning in a self-hosted deployment, which has no " +
+      "sessions, and this suite runs self-hosted. Covered by auth/signin.test.ts.",
+  ],
+  [
+    "DELETE /api/me",
+    "Deletes the account and everything in it. Not exercised here for the obvious reason - " +
+      "this suite runs against a populated database and the refusal path it *can* reach " +
+      "(self-hosted has no account to delete) is the uninteresting half. The purge itself is " +
+      "asserted in tenancy/purge.test.ts, which seeds two tenants, deletes one, and checks both " +
+      "that nothing of it remains and that the other is untouched.",
+  ],
+  [
+    "POST /api/auth/sessions/revoke-all",
+    "Revokes every session for the caller. Covered by auth/signin.test.ts, which asserts " +
+      "each token is dead afterwards.",
+  ],
+  [
+    "DELETE /api/auth/sessions/:id",
+    "Revokes one session, scoped to its owner. Covered by auth/signin.test.ts.",
+  ],
+  [
+    "POST /api/connections",
+    "Creates a connection and returns an ExternalId that is shown once. Calling it here " +
+      "would leave rows behind and put a one-time secret in a test log; the behaviour is " +
+      "covered by the tenancy suites.",
+  ],
+  [
+    "POST /api/connections/:id/target",
+    "Writes a role ARN derived from an account id. Mutating, and the derivation is " +
+      "asserted in packages/shared's onboarding tests.",
+  ],
+  [
+    "GET /api/connections/:id/onboarding",
+    "Returns a one-click link carrying the connection's ExternalId. Needs a real " +
+      "connection to exist and would put that secret in a test log; the link's shape is " +
+      "asserted in packages/shared's onboarding tests, which need no database.",
+  ],
+  [
+    "POST /api/connections/:id/verify",
+    "Attempts a real sts:AssumeRole into a customer account. Read-only, but it is still " +
+      "an outbound call per invocation, and the diagnosis it returns is asserted in " +
+      "connection/credentialDiagnosis.test.ts against the error shapes AWS produces.",
+  ],
+  [
+    "DELETE /api/connections/:id",
+    "Forgets a connection and purges its graph scopes. Destructive by design, so it is " +
+      "exercised where the rows are disposable rather than against the running app.",
   ],
 ]);
 

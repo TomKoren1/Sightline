@@ -1,0 +1,85 @@
+# The Cloudflare tunnel: how the internet reaches this, without an open port.
+#
+# No inbound port, no static IP, and the home IP never appears in DNS -
+# `cloudflared` dials out and Cloudflare routes the hostname down that
+# connection. TLS terminates at Cloudflare, and the WAF and rate limiting come
+# with it.
+#
+# A **named** tunnel, not a quick one. A quick tunnel gets a random
+# `trycloudflare.com` hostname that changes on restart, which cannot be the
+# redirect URI an OAuth provider has registered - so sign-in would break on
+# every pod restart. Named tunnels need a domain on Cloudflare, which is the
+# honest cost of asking strangers to trust this with AWS access.
+#
+# Two replicas: Cloudflare load-balances across every connection registered for
+# a tunnel, so a second replica is genuine redundancy rather than a spare. It
+# also means a rollout does not drop the tunnel.
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: cloudflared
+  labels: { app.kubernetes.io/name: cloudflared }
+spec:
+  replicas: 2
+  selector:
+    matchLabels: { app.kubernetes.io/name: cloudflared }
+  template:
+    metadata:
+      labels: { app.kubernetes.io/name: cloudflared }
+    spec:
+      containers:
+        - name: cloudflared
+          image: cloudflare/cloudflared:latest
+          # `--no-autoupdate`: an unattended binary replacement inside a
+          # container is a surprise, and the image tag is how this gets updated.
+          # The token carries the tunnel's identity and its routing, so there is
+          # no config file to keep in step with the dashboard.
+          args:
+            - tunnel
+            - --no-autoupdate
+            - --metrics
+            - 0.0.0.0:2000
+            - run
+          env:
+            - name: TUNNEL_TOKEN
+              valueFrom: { secretKeyRef: { name: sightline-tunnel, key: TUNNEL_TOKEN } }
+          ports: [{ name: metrics, containerPort: 2000 }]
+          readinessProbe:
+            # cloudflared's own readiness endpoint, which reports whether it has
+            # registered connections with Cloudflare - a process check would
+            # call a tunnel that cannot reach Cloudflare ready.
+            httpGet: { path: /ready, port: metrics }
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          livenessProbe:
+            httpGet: { path: /ready, port: metrics }
+            initialDelaySeconds: 30
+            periodSeconds: 30
+            failureThreshold: 4
+          resources:
+            requests: { cpu: 50m, memory: 64Mi }
+            limits: { memory: 256Mi }
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata: { name: cloudflared }
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels: { app.kubernetes.io/name: cloudflared }
+---
+# cloudflared must reach the web pods, and the default-deny in the base only
+# covers ingress - so nothing here needs opening for it. This policy exists for
+# the other direction: cloudflared itself accepts nothing from inside the
+# namespace except the metrics scrape, and nothing scrapes it yet.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata: { name: cloudflared-no-ingress }
+spec:
+  podSelector:
+    matchLabels: { app.kubernetes.io/name: cloudflared }
+  policyTypes: [Ingress]
+  # No `ingress:` rules at all, which means nothing may connect to it. The
+  # tunnel is outbound-only by design; anything connecting *to* it would be
+  # something that should not exist.

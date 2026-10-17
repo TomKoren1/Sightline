@@ -147,7 +147,17 @@ Parameters:
     Description: >
       A unique, per-customer secret shared between Sightline and this account.
       Sightline issues this at onboarding. Treat it as a credential.
-    NoEcho: true
+
+      Deliberately NOT NoEcho. Two reasons, and the second is the one that
+      decides it. First, NoEcho buys nothing here: the value ends up inside this
+      role's trust policy, where anyone in this account who can call
+      iam:GetRole reads it in plaintext - so hiding it from the CloudFormation
+      console hides it from nobody who could not already see it. Second,
+      CloudFormation's quick-create links silently ignore any parameter whose
+      NoEcho is true, so with it set the one-click link cannot pre-fill this
+      field and every customer has to copy it by hand into the console - which
+      is the step where they mistype it, and a mistyped ExternalId surfaces as
+      AccessDenied with both ends looking correct.
     MinLength: 16
     MaxLength: 128
 

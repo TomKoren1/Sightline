@@ -16,16 +16,19 @@ import { randomUUID } from "node:crypto";
 import { writeFile, mkdir } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 
-import { cfg, isMock } from "../config.js";
+import { cfg } from "../config.js";
 import { ask } from "../agent/agent.js";
 import { EVAL_CASES } from "../evals/cases.js";
 import { gradeCase, summarise, type CaseResult } from "../evals/grade.js";
 import { isTerminalApiError } from "../evals/terminalError.js";
 import { listResources } from "../db/queries.js";
 import { closeDriver } from "../db/neo4j.js";
-import { closePool, db } from "../db/postgres.js";
+import { closePool, system } from "../db/postgres.js";
 import { evalRuns } from "../db/schema.js";
 import { getLatestScan } from "../db/repository.js";
+import { getConnection } from "../tenancy/connections.js";
+import { requireGraphScope } from "../tenancy/graphScope.js";
+import { ensureLocalTenant, localScope } from "../tenancy/local.js";
 import { errorMessage } from "@sightline/shared";
 
 const bold = (s: string) => `\x1b[1m${s}\x1b[0m`;
@@ -52,23 +55,27 @@ try {
    * to get there. Same hazard as the ground-truth suite,
    * which is why it is checked the same way.
    */
-  if (!isMock()) {
+  await ensureLocalTenant();
+  const scope = localScope();
+  const connection = await getConnection(scope);
+  if (connection?.kind !== "demo") {
     console.error(
-      "AWS_MODE is not 'mock'. These cases assert against the seeded fixture, so they\n" +
-        "would fail against a real account after spending money to do it.\n\n" +
-        "Either set AWS_MODE=mock in .env, or use the Demo toggle in the UI and re-scan.",
+      "This connection is not the demo account. These cases assert against the seeded\n" +
+        "fixture, so they would fail against a real account after spending money to do it.\n\n" +
+        "Either set AWS_MODE=mock in .env, or switch to the demo account in the UI and re-scan.",
     );
     process.exit(1);
   }
 
-  const latest = await getLatestScan();
+  const latest = await getLatestScan(scope);
   if (!latest) {
     console.error("No scan found. Run `npm run scan` first.");
     process.exit(1);
   }
 
   // Names are resolved once, so grading does not hit the database per case.
-  const all = await listResources({ limit: 500 });
+  const graph = await requireGraphScope(scope);
+  const all = await listResources(graph, { limit: 500 });
   const arnByName = new Map(all.map((r) => [r.name, r.arn]));
   const resolve = (name: string) => arnByName.get(name) ?? null;
 
@@ -86,7 +93,7 @@ try {
     process.stdout.write(`  ${testCase.id.padEnd(26)}`);
     const started = Date.now();
     try {
-      const message = await ask({ question: testCase.question });
+      const message = await ask({ tools: { scope, graph }, question: testCase.question });
       const result = gradeCase(testCase, message, resolve, Date.now() - started);
       results.push(result);
       console.log(
@@ -189,7 +196,7 @@ try {
     );
     console.log(dim("  The previous recorded run is left as the reference. Re-run when able."));
   } else {
-    await db.insert(evalRuns).values({
+    await system.insert(evalRuns).values({
       id: runId,
       model: cfg.ANTHROPIC_MODEL,
       total: summary.total,

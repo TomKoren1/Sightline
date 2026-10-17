@@ -15,7 +15,7 @@
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { useState } from "react";
 
-import { formatDeployCommand, readOnlyRoleArn } from "@sightline/shared";
+import { LEGACY_SINGLE_TENANT, formatDeployCommand, readOnlyRoleArn } from "@sightline/shared";
 
 import { api, type Connection, type ConnectionTest } from "../api.js";
 import { Copyable } from "./Copyable.js";
@@ -32,7 +32,7 @@ import { Copyable } from "./Copyable.js";
 const EXTERNAL_ID_PENDING = "PASTE_EXTERNAL_ID_FROM_STEP_2";
 
 /** The one value in step 3 the reader must replace, shaped like a real ARN. */
-const ROLE_ARN_TEMPLATE = readOnlyRoleArn("<your-12-digit-account-id>");
+const ROLE_ARN_TEMPLATE = readOnlyRoleArn("<your-12-digit-account-id>", LEGACY_SINGLE_TENANT);
 
 function Step({
   n,
@@ -72,7 +72,7 @@ function Step({
 function Why({ children, label = "Why this way" }: { children: React.ReactNode; label?: string }) {
   return (
     <details className="group">
-      <summary className="cursor-pointer text-[10px] text-ink-500 transition hover:text-ink-300">
+      <summary className="cursor-pointer text-[10px] text-ink-400 transition hover:text-ink-300">
         {label}
       </summary>
       <div className="mt-1 space-y-1 border-l border-ink-800 pl-2 text-[10px] leading-relaxed text-ink-400">
@@ -172,6 +172,12 @@ export function ConnectionGuide() {
     scannerPrincipalArn: scannerPrincipal,
     externalId: suggestedId,
     region: c.homeRegion,
+    /**
+     * This guide describes a clone, which is one tenant - so the role keeps
+     * the original name. The hosted flow renders its own command, per tenant,
+     * from the server; see `ConnectAccount`.
+     */
+    tenantId: LEGACY_SINGLE_TENANT,
   });
 
   const envSnippet = [
@@ -248,7 +254,7 @@ export function ConnectionGuide() {
 
       {/* ---- the long way, for anyone who would rather see every step --- */}
       <details className="group border-t border-ink-800 pt-3">
-        <summary className="cursor-pointer text-[11px] text-ink-400 transition hover:text-ink-200">
+        <summary className="cursor-pointer text-[11px] text-ink-400 transition hover:text-ink-100">
           ▸ Or do it by hand — five steps, about five minutes
         </summary>
         <p className="mt-2 text-[12px] leading-relaxed text-ink-300">
@@ -504,7 +510,7 @@ export function ConnectionGuide() {
       <div className="border-t border-ink-800 pt-3">
         <button
           onClick={() => setShowAccess((v) => !v)}
-          className="text-[11px] text-ink-400 transition hover:text-ink-200"
+          className="text-[11px] text-ink-400 transition hover:text-ink-100"
         >
           {showAccess ? "▾" : "▸"} What access this grants, and how to revoke it
         </button>
