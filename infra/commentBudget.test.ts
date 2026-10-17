@@ -10,7 +10,7 @@
  * downward. Lowering one is how the backlog gets paid down.
  */
 
-import { readFileSync, readdirSync, statSync } from "node:fs";
+import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 
@@ -29,9 +29,17 @@ const OVER_TARGET = 113;
 const MAX_RATIO = 0.275;
 
 const SOURCE = /\.(ts|tsx|mjs)$/;
+
+/**
+ * Where source lives. `evals/` holds only gitignored run output, so on a fresh
+ * checkout it does not exist at all - which is why `sources` tolerates a
+ * missing directory rather than throwing. The floor assertion below is what
+ * stops that tolerance from quietly measuring nothing.
+ */
 const DIRS = ["apps", "packages", "infra", "evals", "scripts"];
 
 function sources(dir: string, into: string[] = []): string[] {
+  if (!existsSync(dir)) return into;
   for (const entry of readdirSync(dir)) {
     if (entry === "node_modules" || entry === "dist") continue;
     const path = `${dir}/${entry}`;
