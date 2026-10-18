@@ -20,6 +20,33 @@ spec:
   podSelector: {}
   policyTypes: [Ingress]
 ---
+# Prometheus may scrape the metrics port, and only that port.
+#
+# Easy to forget, and the symptom if you do is a target that quietly reads
+# `down` - nothing logs, nothing alerts, and the dashboards are simply empty.
+# The default-deny above covers every pod, so without this the monitoring
+# namespace cannot reach 9464 even though both workloads are listening on it.
+#
+# Scoped two ways rather than one: only from the monitoring namespace, and only
+# to the metrics port. The application ports stay reachable from the web pods
+# alone, which is what `api-from-web-only` says below.
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata: { name: metrics-from-monitoring-only }
+spec:
+  podSelector:
+    matchExpressions:
+      - key: app.kubernetes.io/name
+        operator: In
+        values: [api, worker]
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels: { kubernetes.io/metadata.name: monitoring }
+      ports: [{ protocol: TCP, port: 9464 }]
+---
 # The datastores accept connections from the api and the worker, and from
 # nothing else.
 #
