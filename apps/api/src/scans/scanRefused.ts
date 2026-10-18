@@ -10,6 +10,7 @@
  * module, which would drag a database query into a file whose job is HTTP.
  */
 
+import { requestsRefused } from "../observability/metrics.js";
 import { statusFor, type Decision } from "../tenancy/limits.js";
 
 export class ScanRefused extends Error {
@@ -22,5 +23,8 @@ export class ScanRefused extends Error {
     this.name = "ScanRefused";
     this.retryAfterSeconds = decision.retryAfterSeconds;
     this.status = statusFor(decision.kind);
+    // Counted here because constructing this *is* the refusal - one per
+    // request turned away, rather than one per limit evaluated.
+    requestsRefused.inc({ kind: decision.kind, what: "scan" });
   }
 }

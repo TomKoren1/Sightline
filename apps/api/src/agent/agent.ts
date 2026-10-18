@@ -25,6 +25,13 @@ import { buildSystemPrompt } from "./prompt.js";
 import { availableTools, runTool, type ToolContext } from "./tools.js";
 import { enforceReadOnlyNotice } from "./readOnlyGuard.js";
 import { errorMessage } from "@sightline/shared";
+import {
+  agentDuration,
+  agentQuestions,
+  agentTokens,
+  agentToolCalls,
+  agentUnsupportedCitations,
+} from "../observability/metrics.js";
 
 /**
  * Cap the loop. Every step is a model call, so a model that keeps asking for
@@ -194,6 +201,7 @@ export async function ask(options: AskOptions): Promise<AgentMessage> {
 
   const tracker = new CitationTracker();
   const toolCalls: ToolCallTrace[] = [];
+  const askedAt = Date.now();
   let answer = "";
 
   const result = streamText({
@@ -242,6 +250,22 @@ export async function ask(options: AskOptions): Promise<AgentMessage> {
    */
   const guarded = enforceReadOnlyNotice(question, answer);
 
+  /**
+   * What the answer cost and whether it was supportable.
+   *
+   * `usage` is awaited rather than read from the step: the AI SDK resolves it
+   * once the stream is drained, which has happened by here. Tokens are the
+   * only direct measure of what a question costs in money.
+   */
+  try {
+    const usage = await result.usage;
+    if (usage?.inputTokens) agentTokens.inc({ kind: "input" }, usage.inputTokens);
+    if (usage?.outputTokens) agentTokens.inc({ kind: "output" }, usage.outputTokens);
+  } catch {
+    // A question that answered is not a failure because accounting did not.
+  }
+  for (const call of toolCalls) agentToolCalls.inc({ tool: call.name });
+
   const { citations, warnings } = validateCitations(
     guarded.content,
     tracker.allowed,
@@ -257,6 +281,16 @@ export async function ask(options: AskOptions): Promise<AgentMessage> {
     citations,
     ...(warnings.length > 0 ? { warnings } : {}),
   };
+
+  /**
+   * Citations the tools never returned.
+   *
+   * The closest thing to a hallucination rate this product can honestly
+   * measure, and it is already computed per answer for the user's benefit.
+   */
+  if (warnings.length > 0) agentUnsupportedCitations.inc(warnings.length);
+  agentQuestions.inc({ outcome: warnings.length > 0 ? "unsupported_citations" : "answered" });
+  agentDuration.observe((Date.now() - askedAt) / 1000);
 
   emit({ type: "agent.finished", message });
   return message;

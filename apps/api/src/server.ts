@@ -9,6 +9,7 @@ import { ScanWorker } from "./jobs/worker.js";
 import { ensureLocalTenant } from "./tenancy/local.js";
 import { pruneExpiredSessions } from "./auth/session.js";
 import { recordBuild, startMetricsServer } from "./observability/metrics.js";
+import { startSnapshotLoop } from "./observability/snapshot.js";
 import { VERSION } from "./version.js";
 
 /**
@@ -75,6 +76,8 @@ try {
   const mode = scanWorkerMode();
   if (mode === "embedded") {
     await worker.start();
+    // This process is the worker, so it owns the state gauges as well.
+    if (cfg.METRICS_PORT > 0) startSnapshotLoop(log);
   } else {
     log.info(`scan worker: ${mode} (this process will not run scans)`);
   }

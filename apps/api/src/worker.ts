@@ -27,6 +27,7 @@ import { assertHostedInvariants } from "./hostedMode.js";
 import { ScanWorker } from "./jobs/worker.js";
 import { loggerOptions } from "./observability/logging.js";
 import { recordBuild, startMetricsServer } from "./observability/metrics.js";
+import { startSnapshotLoop } from "./observability/snapshot.js";
 import { VERSION } from "./version.js";
 
 // The same invariants the API checks, for the same reason: every one of them is
@@ -62,6 +63,9 @@ try {
   if (cfg.METRICS_PORT > 0) {
     startMetricsServer(cfg.METRICS_PORT);
     recordBuild(VERSION);
+    // The process that owns background work owns the gauges that need a query
+    // to answer. Exactly one process runs this, whichever mode is in force.
+    startSnapshotLoop(log);
   }
   log.info(
     {
