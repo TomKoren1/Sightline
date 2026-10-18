@@ -1,0 +1,23 @@
+{{/*
+  Every dashboard in `dashboards/` becomes a ConfigMap the Grafana sidecar
+  picks up, so the JSON in git is what Grafana serves.
+
+  A ConfigMap each rather than one holding all of them: a ConfigMap is capped
+  at 1 MiB, dashboards grow, and one oversized file would stop every dashboard
+  from loading rather than just its own.
+*/}}
+{{- range $path, $_ := .Files.Glob "dashboards/*.json" }}
+{{- $name := base $path | trimSuffix ".json" }}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ printf "%s-dashboard-%s" $.Release.Name $name | trunc 63 | trimSuffix "-" }}
+  labels:
+    # What `sidecar.dashboards.label` looks for.
+    grafana_dashboard: "1"
+    app.kubernetes.io/part-of: monitoring
+data:
+  {{ base $path }}: |
+{{ $.Files.Get $path | indent 4 }}
+{{- end }}

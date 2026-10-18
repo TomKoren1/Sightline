@@ -1,0 +1,396 @@
+# The observability platform, for every application on this cluster.
+#
+# Deployed as its own release into the `monitoring` namespace, so the service
+# names are `monitoring-prometheus-server`, `monitoring-loki` and so on. That
+# matters in two places below where a URL cannot be templated.
+#
+# Everything in this file was a working configuration in another chart before
+# it was moved here; two of the settings are there because their absence had
+# already cost something, and those say so.
+
+grafana:
+  enabled: true
+  # From a SealedSecret, never a plaintext password in a public repository.
+  admin:
+    existingSecret: monitoring-grafana-admin
+    userKey: admin-user
+    passwordKey: admin-password
+  service:
+    type: ClusterIP
+  persistence:
+    enabled: true
+    size: 1Gi
+
+  datasources:
+    datasources.yaml:
+      apiVersion: 1
+      datasources:
+        - name: Prometheus
+          uid: Prometheus
+          type: prometheus
+          url: http://{{ .Release.Name }}-prometheus-server
+          access: proxy
+          isDefault: true
+        - name: Loki
+          uid: Loki
+          type: loki
+          url: http://{{ .Release.Name }}-loki:3100
+          access: proxy
+        # Powers Grafana's own Alerting pages, so the alerts posted to Slack
+        # are also visible here rather than only in Prometheus.
+        - name: Alertmanager
+          uid: Alertmanager
+          type: alertmanager
+          url: http://{{ .Release.Name }}-alertmanager:9093
+          access: proxy
+          jsonData:
+            implementation: prometheus
+
+  sidecar:
+    dashboards:
+      enabled: true
+      label: grafana_dashboard
+      # Every namespace, not just this one. The point of a shared platform is
+      # that an application ships its own dashboards from its own namespace and
+      # its own repository; without this they would all have to live here.
+      searchNamespace: ALL
+
+  # Community dashboards for the things already being scraped - node-exporter
+  # and kube-state-metrics - pulled by id rather than hand-authored.
+  dashboardProviders:
+    dashboardproviders.yaml:
+      apiVersion: 1
+      providers:
+        - name: default
+          orgId: 1
+          folder: ""
+          type: file
+          disableDeletion: false
+          editable: true
+          options:
+            path: /var/lib/grafana/dashboards/default
+  dashboards:
+    default:
+      node-exporter-full:
+        gnetId: 1860
+        revision: 37
+        datasource: Prometheus
+      kubernetes-cluster-monitoring:
+        gnetId: 315
+        revision: 3
+        datasource: Prometheus
+
+prometheus:
+  enabled: true
+  server:
+    service:
+      type: ClusterIP
+    retention: 15d
+    persistentVolume:
+      enabled: true
+      size: 8Gi
+
+  # Alertmanager is off until its Slack webhooks exist as a sealed secret.
+  #
+  # Deliberate: with it on and the secret missing, the pod waits in
+  # `ContainerCreating` for ever and the first sync looks broken. Prometheus
+  # still evaluates every rule below and Grafana still shows them, so the only
+  # thing waiting is delivery. See README.md, then set this to true.
+  alertmanager:
+    enabled: false
+    config:
+      route:
+        receiver: slack-default
+        group_by: ["alertname"]
+        group_wait: 30s
+        group_interval: 5m
+        repeat_interval: 3h
+        routes:
+          # Sightline's alerts go to their own channel. Matched on the label
+          # every rule in its group carries, so a rule added later is routed
+          # without touching this.
+          - receiver: slack-sightline
+            matchers:
+              - service = "sightline"
+      receivers:
+        - name: slack-default
+          slack_configs:
+            - send_resolved: true
+              api_url_file: /etc/alertmanager/secrets/monitoring-slack/SLACK_WEBHOOK
+              color: '{{ if eq .Status "firing" }}danger{{ else }}good{{ end }}'
+              title: "{{ if eq .Status \"firing\" }}\U0001F534 FIRING{{ else }}✅ RESOLVED{{ end }}: {{ .CommonAnnotations.summary }}"
+              text: "{{ .CommonAnnotations.description }}"
+        - name: slack-sightline
+          slack_configs:
+            - send_resolved: true
+              api_url_file: /etc/alertmanager/secrets/monitoring-slack/SIGHTLINE_SLACK_WEBHOOK
+              color: '{{ if eq .Status "firing" }}danger{{ else }}good{{ end }}'
+              title: "{{ if eq .Status \"firing\" }}\U0001F534 FIRING{{ else }}✅ RESOLVED{{ end }}: {{ .CommonAnnotations.summary }}"
+              text: "{{ .CommonAnnotations.description }}"
+    extraSecretMounts:
+      - name: alertmanager-slack-webhooks
+        mountPath: /etc/alertmanager/secrets/monitoring-slack
+        subPath: ""
+        secretName: monitoring-slack
+        readOnly: true
+
+  serverFiles:
+    alerting_rules.yml:
+      groups:
+        # --- the platform watching itself ------------------------------------
+        - name: monitoring-platform
+          rules:
+            - alert: MonitoringStackDuplicated
+              # Two copies of this chart exist, in two repositories, and exactly
+              # one is meant to be deployed. The failure mode of that
+              # arrangement is two stacks quietly running, each with half the
+              # data, on a node with a gigabyte spare - so it is checked rather
+              # than remembered.
+              expr: count(up{job="prometheus"}) > 1
+              for: 10m
+              labels:
+                severity: critical
+              annotations:
+                summary: "Two Prometheus servers are running"
+                description: "Both copies of the monitoring chart appear to be deployed. Exactly one should be: see helm/monitoring/README.md."
+
+        # --- sightline -------------------------------------------------------
+        #
+        # Every rule carries `service: sightline`, which is what routes it to
+        # its own Slack channel. Symptom alerts, not burn-rate SLOs: an error
+        # budget needs traffic to mean anything, and at single-digit users a
+        # burn rate produces thresholds nobody can calibrate.
+        - name: sightline
+          rules:
+            - alert: SightlineApiDown
+              # `absent(...)` as well as `== 0`, because a pod that is gone
+              # entirely has no `up` series to be zero - the metric simply
+              # disappears. Same idiom as the resume-builder group.
+              expr: absent(up{namespace="sightline", app="api"}) or up{namespace="sightline", app="api"} == 0
+              for: 5m
+              labels:
+                severity: critical
+                service: sightline
+              annotations:
+                summary: "Sightline API is down"
+                description: "No Sightline API pod has been scrapable for 5 minutes."
+
+            - alert: SightlineHighErrorRatio
+              expr: |
+                (
+                  sum(rate(http_requests_total{namespace="sightline", status=~"5.."}[10m]))
+                  /
+                  clamp_min(sum(rate(http_requests_total{namespace="sightline"}[10m])), 0.001)
+                ) > 0.02
+              for: 10m
+              labels:
+                severity: warning
+                service: sightline
+              annotations:
+                summary: "Sightline is answering more than 2% of requests with a 5xx"
+                description: "Over the last 10 minutes more than 2% of requests failed. Check the API logs in Loki for level>=50."
+
+            - alert: SightlineScanQueueStalled
+              # Work waiting with nothing claiming it, which is what a dead
+              # worker looks like from the outside. The queue depth alone is
+              # not enough: a deep queue that is draining is just busy.
+              expr: |
+                sum(sightline_scan_queue_depth{status="queued"}) > 0
+                and on() rate(sightline_scan_queue_wait_seconds_count[15m]) == 0
+              for: 15m
+              labels:
+                severity: critical
+                service: sightline
+              annotations:
+                summary: "Scans are queued but nothing is claiming them"
+                description: "Jobs have been queued for 15 minutes with no claims. The worker is probably dead: kubectl -n sightline get pods -l app.kubernetes.io/name=worker."
+
+            - alert: SightlineGraphMismatch
+              # Postgres and Neo4j disagreeing about a connection's graph. The
+              # signal whose absence let a sweep delete other accounts' graphs
+              # while `projected_at` went on claiming they were there.
+              expr: sightline_graph_reconciliation_mismatches > 0
+              for: 15m
+              labels:
+                severity: critical
+                service: sightline
+              annotations:
+                summary: "A connection's graph does not match what Postgres recorded"
+                description: "At least one connection's Neo4j node count disagrees with its scan's resource_count. That account renders as an empty graph rather than an error - which reads to the customer as an empty AWS account."
+
+            - alert: SightlineBackupStale
+              # Pushed by the backup CronJob on success, so this fires on a job
+              # that never ran at all - which is how it failed once, sitting in
+              # ContainerCreating for thirty hours with nothing looking broken.
+              expr: |
+                absent(sightline_backup_last_success_timestamp_seconds)
+                or time() - sightline_backup_last_success_timestamp_seconds > 129600
+              for: 1h
+              labels:
+                severity: critical
+                service: sightline
+              annotations:
+                summary: "No successful Sightline backup in 36 hours"
+                description: "The nightly pg_dump has not reported success. An untested, absent backup means every customer redeploys their CloudFormation stack if Postgres is lost."
+
+            - alert: SightlineOOMKilled
+              expr: |
+                increase(kube_pod_container_status_restarts_total{namespace="sightline"}[1h]) > 0
+                and on(namespace, pod) kube_pod_container_status_last_terminated_reason{namespace="sightline", reason="OOMKilled"} == 1
+              for: 5m
+              labels:
+                severity: warning
+                service: sightline
+              annotations:
+                summary: "A Sightline container was OOMKilled"
+                description: "Neo4j is limited to 2Gi against a 1G heap and 512M page cache, and the worker to 2Gi while it holds a whole inventory. Raise the limit *and* the heap together, never one alone."
+
+            - alert: SightlineAgentSpendSpike
+              # Wallet, not correctness. Without a chat quota the Anthropic key
+              # is a free Claude proxy for anyone who signs up.
+              expr: sum(rate(sightline_agent_tokens_total[1h])) * 3600 > 2000000
+              for: 30m
+              labels:
+                severity: warning
+                service: sightline
+              annotations:
+                summary: "Sightline is spending Anthropic tokens unusually fast"
+                description: "More than two million tokens an hour. Check CHAT_QUESTIONS_PER_HOUR and whether one tenant is responsible."
+
+            - alert: SightlineOnboardingFailing
+              # Not an outage - a funnel problem, and the reason is the useful
+              # part: `diagnose()` has already reduced it to one of three
+              # things, so this says which.
+              expr: sum(increase(sightline_assume_role_failures_total[6h])) by (reason) > 5
+              for: 1h
+              labels:
+                severity: info
+                service: sightline
+              annotations:
+                summary: "Several customers are failing the same onboarding step"
+                description: "More than five AssumeRole failures with one diagnosed cause in six hours. If it is external_id_mismatch, the instructions are wrong rather than the customers."
+
+        # --- resume-builder --------------------------------------------------
+        #
+        # Carried across verbatim, comments included, when this stack moved out
+        # of that chart. Unlabelled on purpose: the default route is the
+        # catch-all, so these keep going to the channel they always went to and
+        # only Sightline's group is routed elsewhere.
+        #
+        # They live here because the plain Prometheus chart has no
+        # rule-discovery sidecar - rules come from this file or not at all, so
+        # the active chart holds every project's. `PrometheusRule` CRDs are the
+        # fix if that becomes annoying, and cost an Operator.
+        - name: resume-builder
+          rules:
+            - alert: BackendDown
+              # up{...} == 0 alone misses the case where the pod is gone
+              # entirely (e.g. scaled to 0) - kubernetes_sd_configs then has
+              # no target to scrape, so the `up` series just disappears
+              # rather than reporting 0. absent(...) catches that case too.
+              expr: absent(up{app="backend"}) or up{app="backend"} == 0
+              for: 2m
+              labels:
+                severity: critical
+              annotations:
+                summary: "resume-builder backend is down"
+                description: "Prometheus has not been able to scrape the backend pod for 2 minutes."
+            - alert: HighResumeGenerationErrorRate
+              expr: |
+                (
+                  sum(rate(resume_generation_total{status="error"}[5m]))
+                  /
+                  sum(rate(resume_generation_total[5m]))
+                ) > 0.2
+              for: 5m
+              labels:
+                severity: warning
+              annotations:
+                summary: "High resume generation error rate"
+                description: "Over 20% of /generate calls have failed over the last 5 minutes."
+            - alert: HighLLMLatency
+              expr: histogram_quantile(0.95, sum(rate(llm_inference_seconds_bucket[5m])) by (le)) > 30
+              for: 5m
+              labels:
+                severity: warning
+              annotations:
+                summary: "High LLM inference latency"
+                description: "p95 LLM inference latency has been above 30s for 5 minutes."
+            - alert: FrontendDown
+              # Plain nginx has no scrapeable /metrics, so up{app="frontend"}
+              # doesn't exist as a useful signal here (and would misreport
+              # anyway - nginx returning HTML isn't valid exposition format).
+              # kube-state-metrics already tracks every Deployment's
+              # available replica count cluster-wide, so reuse that instead.
+              expr: kube_deployment_status_replicas_available{namespace="resume-builder", deployment="resume-builder-frontend"} < 1
+              for: 2m
+              labels:
+                severity: critical
+              annotations:
+                summary: "resume-builder frontend is down"
+                description: "The frontend Deployment has had zero available replicas for 2 minutes."
+        - name: infrastructure
+          rules:
+            - alert: ArgoCDComponentDown
+              expr: absent(up{namespace="argocd"}) or up{namespace="argocd"} == 0
+              for: 5m
+              labels:
+                severity: critical
+              annotations:
+                summary: "An ArgoCD component is down"
+                description: "{{ $labels.pod }} in the argocd namespace has not been scrapeable for 5 minutes - deploys may be stuck."
+            - alert: ArgoAppOutOfSync
+              expr: argocd_app_info{name="resume-builder", sync_status!="Synced"} == 1
+              for: 10m
+              labels:
+                severity: warning
+              annotations:
+                summary: "resume-builder ArgoCD app is out of sync"
+                description: "The resume-builder Application has been out of sync for 10 minutes - a deploy likely failed to apply. Check the ArgoCD UI."
+            - alert: ArgoAppDegraded
+              expr: argocd_app_info{name="resume-builder", health_status="Degraded"} == 1
+              for: 5m
+              labels:
+                severity: critical
+              annotations:
+                summary: "resume-builder ArgoCD app is degraded"
+                description: "ArgoCD reports the resume-builder app as Degraded for 5 minutes. Check the ArgoCD UI."
+            - alert: NodeDiskSpaceLow
+              # Single-node k3s cluster using local-path (hostPath-backed) PVCs
+              # for everything - Prometheus/Loki/Alertmanager/backend data all
+              # share this one disk, so node-level free space stands in for
+              # per-PVC usage.
+              expr: node_filesystem_avail_bytes{mountpoint="/", fstype="ext4"} / node_filesystem_size_bytes{mountpoint="/", fstype="ext4"} < 0.15
+              for: 15m
+              labels:
+                severity: warning
+              annotations:
+                summary: "Node root disk space is low"
+                description: "Less than 15% free space left on / for 15 minutes - Prometheus, Loki, Alertmanager, and the backend's SQLite DB all share this disk."
+
+loki-stack:
+  enabled: true
+  loki:
+    isDefault: false
+    # Persistence, because the default is emptyDir and every pod restart
+    # silently wiped the log history. Retention, because the PVC would
+    # otherwise grow without bound on a single-node disk shared with
+    # Prometheus.
+    persistence:
+      enabled: true
+      size: 5Gi
+    config:
+      table_manager:
+        retention_deletes_enabled: true
+        retention_period: 336h
+  promtail:
+    enabled: true
+    config:
+      clients:
+        # Hardcoded, and it has to be. loki-stack's default is
+        # `http://{{ .Release.Name }}:3100`, which assumes it was installed as
+        # its own release; as a dependency, `.Release.Name` is the parent - so
+        # the URL resolved to the umbrella release and promtail silently pushed
+        # nothing at all. This must be the actual service name of the loki
+        # statefulset, which for a release called `monitoring` is this.
+        - url: http://monitoring-loki:3100/loki/api/v1/push
