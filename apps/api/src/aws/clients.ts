@@ -21,6 +21,7 @@ import { ResourceExplorer2Client } from "@aws-sdk/client-resource-explorer-2";
 
 import { credentialProvider } from "./credentials.js";
 import type { ScanTarget } from "../tenancy/scanTarget.js";
+import { awsApiCalls, awsThrottles } from "../observability/metrics.js";
 
 /**
  * Counts AWS API calls, so a scan can report what it cost.
@@ -81,10 +82,16 @@ function baseConfig(ctx: AwsContext, region: string) {
  */
 interface MiddlewareStack {
   add: (
-    middleware: (next: (args: unknown) => Promise<unknown>) => (args: unknown) => Promise<unknown>,
+    middleware: (
+      next: (args: unknown) => Promise<unknown>,
+      context: { commandName?: string },
+    ) => (args: unknown) => Promise<unknown>,
     options: { step: "deserialize"; name: string; override: boolean },
   ) => void;
 }
+
+/** AWS says "slow down" under several names, and none of them is an error we caused. */
+const THROTTLE = /throttl|RequestLimitExceeded|TooManyRequests|SlowDown|ProvisionedThroughput/i;
 
 /**
  * Attach a middleware that counts every request the client makes.
@@ -95,10 +102,31 @@ interface MiddlewareStack {
  */
 function instrument<T extends object>(client: T, counter: CallCounter, key: string): T {
   const { middlewareStack } = client as unknown as { middlewareStack: MiddlewareStack };
+  // `ec2:us-east-1` - the service half is the metric label, because a region
+  // label here would duplicate what the scan unit already reports.
+  const service = key.split(":")[0] ?? key;
+
   middlewareStack.add(
-    (next) => async (args) => {
+    (next, context) => async (args) => {
       counter.record(key);
-      return next(args);
+      /**
+       * The operation, from the SDK's own context: `DescribeInstancesCommand`.
+       * A closed set per service, so it is a safe label - and it is the
+       * difference between "the scan made 4,000 calls" and "it made 4,000
+       * GetBucketPolicy calls, one per bucket".
+       */
+      const operation = (context.commandName ?? "unknown").replace(/Command$/, "");
+      awsApiCalls.inc({ service, operation });
+
+      try {
+        return await next(args);
+      } catch (err) {
+        // Counted separately because throttling is not our error: it is the
+        // signal that a scan is competing with the customer's own workloads.
+        const name = err instanceof Error ? err.name : String(err);
+        if (THROTTLE.test(name)) awsThrottles.inc({ service });
+        throw err;
+      }
     },
     { step: "deserialize", name: "sightlineCallCounter", override: true },
   );

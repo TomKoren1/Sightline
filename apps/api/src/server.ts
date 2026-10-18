@@ -8,6 +8,8 @@ import { assertHostedInvariants } from "./hostedMode.js";
 import { ScanWorker } from "./jobs/worker.js";
 import { ensureLocalTenant } from "./tenancy/local.js";
 import { pruneExpiredSessions } from "./auth/session.js";
+import { recordBuild, startMetricsServer } from "./observability/metrics.js";
+import { VERSION } from "./version.js";
 
 /**
  * Before anything else, and before the app is even built.
@@ -75,6 +77,17 @@ try {
     await worker.start();
   } else {
     log.info(`scan worker: ${mode} (this process will not run scans)`);
+  }
+
+  /**
+   * Metrics on their own port, after the app is built so the registry is
+   * populated. `0` turns it off, which is what tests and a clone that does not
+   * care about Prometheus want.
+   */
+  if (cfg.METRICS_PORT > 0) {
+    startMetricsServer(cfg.METRICS_PORT);
+    recordBuild(VERSION);
+    log.info(`metrics on :${cfg.METRICS_PORT}/metrics`);
   }
 
   await app.listen(cfg.BACKEND_PORT, cfg.BACKEND_HOST);

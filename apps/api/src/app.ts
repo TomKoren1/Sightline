@@ -18,6 +18,7 @@ import cookie from "@fastify/cookie";
 import cors from "@fastify/cors";
 import { NestFactory } from "@nestjs/core";
 import { FastifyAdapter, type NestFastifyApplication } from "@nestjs/platform-fastify";
+import { httpDuration, httpInFlight, httpRequests } from "./observability/metrics.js";
 
 import { AppModule } from "./app.module.js";
 import { cfg, isHosted } from "./config.js";
@@ -98,6 +99,29 @@ export async function buildApp(options: BuildOptions = {}): Promise<NestFastifyA
   await instance.register(cors, {
     origin: isHosted() ? [cfg.PUBLIC_BASE_URL.replace(/\/$/, "")] : true,
     credentials: isHosted(),
+  });
+
+  /**
+   * Request rate, errors and duration, by route *template*.
+   *
+   * `routeOptions.url` is `/api/scans/jobs/:id`, not the path - a label of the
+   * path would make every job id its own time series. An unmatched request is
+   * labelled once rather than by whatever was probed, for the same reason.
+   *
+   * `reply.elapsedTime` is Fastify's own measurement, so this adds no clock of
+   * its own and cannot disagree with the access log.
+   */
+  instance.addHook("onRequest", (_req, _reply, done) => {
+    httpInFlight.inc();
+    done();
+  });
+  instance.addHook("onResponse", (req, reply, done) => {
+    httpInFlight.dec();
+    const route = req.routeOptions?.url ?? "unmatched";
+    const labels = { method: req.method, route };
+    httpDuration.observe(labels, reply.elapsedTime / 1000);
+    httpRequests.inc({ ...labels, status: String(reply.statusCode) });
+    done();
   });
 
   /**
