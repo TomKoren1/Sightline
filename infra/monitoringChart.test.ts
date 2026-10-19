@@ -309,6 +309,37 @@ describe("the monitoring chart", () => {
     ).toEqual([]);
   });
 
+  it("has nothing but real ciphertext in its sealed secrets", () => {
+    /**
+     * `.gitleaks.toml` exempts `*sealedsecret.yaml` by path, because a
+     * SealedSecret's `encryptedData` is base64 ciphertext and every entropy
+     * rule fires on it. That exemption is safe only while those files really
+     * are sealed - a plain Secret named the same way would inherit the
+     * silence, which is the one way a path allowlist goes wrong.
+     */
+    const dir = `${root}helm/monitoring/templates`;
+    const sealed = existsSync(dir)
+      ? readdirSync(dir).filter((f) => f.endsWith("sealedsecret.yaml"))
+      : [];
+    expect(sealed.length, "no sealed secrets found to check").toBeGreaterThan(1);
+
+    for (const file of sealed) {
+      const doc = parse(readFileSync(`${dir}/${file}`, "utf8")) as {
+        kind?: string;
+        spec?: { encryptedData?: Record<string, string> };
+        stringData?: unknown;
+        data?: unknown;
+      };
+      expect(doc.kind, `${file} is not a SealedSecret`).toBe("SealedSecret");
+      expect(doc.stringData, `${file} has plaintext stringData`).toBeUndefined();
+      expect(doc.data, `${file} has plaintext data`).toBeUndefined();
+      expect(
+        Object.keys(doc.spec?.encryptedData ?? {}).length,
+        `${file} has no encryptedData, so it is sealing nothing`,
+      ).toBeGreaterThan(0);
+    }
+  });
+
   it("pins the same dependency versions as the other copy of this chart", () => {
     /**
      * Two complete copies exist, in two repositories, and exactly one is

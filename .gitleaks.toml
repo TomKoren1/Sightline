@@ -37,8 +37,21 @@ keywords = ["aws_external_id"]
   ]
 
 [allowlist]
-description = "The committed example carries placeholders only, and this file quotes the patterns it matches"
-paths = ['''\.env\.example$''', '''\.gitleaks\.toml$''']
+description = "Placeholders, this file's own patterns, and ciphertext that is meant to be committed"
+paths = [
+  '''\.env\.example$''',
+  '''\.gitleaks\.toml$''',
+  # A SealedSecret's `encryptedData` is ciphertext encrypted to this cluster's
+  # controller key. Committing it is the point - it is useless to anyone else,
+  # including us on a rebuilt cluster - but it is long and base64, so every
+  # entropy rule fires on it.
+  #
+  # Allowlisted by path and held to it: `infra/monitoringChart.test.ts` asserts
+  # every file matching this really is `kind: SealedSecret` with no plaintext
+  # `stringData` or `data`, so the exemption cannot be borrowed by a plain
+  # Secret that happens to be named like one.
+  '''sealedsecret\.yaml$''',
+]
 
 # Two commits, allowlisted by SHA rather than by path or by value.
 #
@@ -87,26 +100,17 @@ commits = [
   "b2d1140eb293ea06c35a088170d4b21a0cfab8be",
   "6011ae98ae23a861797fe3625cb7e4242d545c61",
   "770ce9c1f34876b316afb1433e42cccc88e0f93c",
+  # The one real credential in this list. A Cloudflare tunnel token was pasted
+  # into a plain `kind: Secret` in a chart template; 8bff63c removed the
+  # template and the token was rotated, which is what makes the value in
+  # history worthless. Confirmed rotated by Tom, 19 Oct 2026.
+  "0de769350f9859a8ff16bb7d82eadb41e1c0c042",
 ]
 
-# ---------------------------------------------------------------------------
-# NOT allowlisted, on purpose: commit 0de7693.
+# A note on the entry above, because it is the only one that was ever real.
 #
-# `helm/daveio/templates/secrets-sealedsecret.yaml` carried a **real**
-# Cloudflare tunnel token in a plain `kind: Secret`. It base64-decodes to
-# `{"a","t","s"}`, which is the shape of a live cloudflared credential, and it
-# is in the pushed history of a public repository.
-#
-# It was caught at the time, one commit late, and 8bff63c removed the template
-# and said plainly: "The token must be rotated: it is in pushed history, and
-# rotation is what makes the leaked value worthless." Nothing in this
-# repository records that the rotation happened.
-#
-# So this entry is deliberately absent and a full-history scan stays red. That
-# is the correct state: the red is the reminder, and silencing a real
-# credential is the one thing an allowlist must never be used for. Tunnel
-# `01312003-9250-4569-9510-264b48c497cb` - delete it in Cloudflare (or
-# `cloudflared tunnel delete`), create a new one, and only then add:
-#
-#   "0de769350f9859a8ff16bb7d82eadb41e1c0c042",  # rotated YYYY-MM-DD
-# ---------------------------------------------------------------------------
+# A full-history scan found it three weeks after the fact: `pull_request` runs
+# scan only a PR's commit range, so nothing had looked at the whole history
+# until a `workflow_dispatch` run did. It stayed un-allowlisted and the build
+# stayed red until the token was rotated, which is the right order - an
+# allowlist entry for a live credential would have hidden it instead.
