@@ -41,6 +41,27 @@ configMapGenerator:
       # The Job owns the schema; see the comment on it in app.yaml.
       - MIGRATE_ON_BOOT=false
 
+  # Grafana's sidecar discovers dashboards by label, in any namespace, so this
+  # project's dashboards ship with this project rather than with the monitoring
+  # chart - which is what lets either copy of that chart be the active one
+  # without carrying another repository's panels.
+  #
+  # `disableNameSuffixHash`, because a hashed name on every edit leaves the
+  # sidecar with both the old and the new ConfigMap and two copies of the
+  # dashboard in Grafana. The JSON lives under `base/` because kustomize
+  # refuses file sources outside the kustomization's own directory.
+  - name: sightline-dashboards
+    namespace: sightline
+    options:
+      disableNameSuffixHash: true
+      labels:
+        grafana_dashboard: "1"
+    files:
+      - dashboards/sightline-health.json
+      - dashboards/sightline-pipeline.json
+      - dashboards/sightline-tenants.json
+      - dashboards/sightline-logs.json
+
 images:
   # k3s has no registry here, so images are built locally and imported into
   # containerd directly - see the README. `imagePullPolicy` is left alone

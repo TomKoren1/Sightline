@@ -52,9 +52,19 @@ kind: Service
 metadata:
   name: api
   labels: { app.kubernetes.io/name: api }
+  # That Prometheus has no Operator CRDs - no ServiceMonitor - so discovery is
+  # by annotation, which its `kubernetes-service-endpoints` job already honours.
+  annotations:
+    prometheus.io/scrape: "true"
+    prometheus.io/port: "9464"
+    prometheus.io/path: /metrics
 spec:
   selector: { app.kubernetes.io/name: api }
-  ports: [{ name: http, port: 3000, targetPort: http }]
+  ports:
+    - { name: http, port: 3000, targetPort: http }
+    # Named so the scrape annotation above resolves to a real endpoint. Not
+    # routed by nginx, so it stays unreachable through the tunnel.
+    - { name: metrics, port: 9464, targetPort: metrics }
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -75,7 +85,9 @@ spec:
       containers:
         - name: api
           image: sightline-api
-          ports: [{ name: http, containerPort: 3000 }]
+          ports:
+            - { name: http, containerPort: 3000 }
+            - { name: metrics, containerPort: 9464 }
           envFrom:
             - configMapRef: { name: sightline-config }
             - secretRef: { name: sightline-app }
@@ -124,6 +136,14 @@ spec:
   template:
     metadata:
       labels: { app.kubernetes.io/name: worker }
+      # The worker serves no application HTTP and has no Service, so it is
+      # discovered by pod annotation instead - the `kubernetes-pods` job. It is
+      # also the process that holds an inventory in memory and the one that
+      # gets OOMKilled, so it is the one most worth scraping.
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "9464"
+        prometheus.io/path: /metrics
     spec:
       # A scan takes minutes. On SIGTERM the worker stops claiming and waits for
       # what is already running, so this is the window for that to finish - and
@@ -134,6 +154,7 @@ spec:
         - name: worker
           image: sightline-api
           command: ["npm", "run", "worker", "-w", "@sightline/api"]
+          ports: [{ name: metrics, containerPort: 9464 }]
           envFrom:
             - configMapRef: { name: sightline-config }
             - secretRef: { name: sightline-app }

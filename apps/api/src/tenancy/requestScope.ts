@@ -24,6 +24,7 @@ import { connections } from "../db/schema.js";
 import { asConnectionId, asTenantId, type ConnectionId, type TenantId } from "./ids.js";
 import { localScope } from "./local.js";
 import type { Scope } from "./scope.js";
+import { requestsWithoutConnection } from "../observability/metrics.js";
 
 /** What the guard has put on the request by the time a scope is wanted. */
 export interface ScopedRequest {
@@ -79,6 +80,16 @@ async function connectionFor(req: ScopedRequest, tenantId: TenantId, fallback?: 
   }
 
   if (fallback) return fallback;
+
+  /**
+   * Nobody named a connection, so the tenant's oldest is used.
+   *
+   * Safe - it only ever picks among this tenant's own accounts - but it is
+   * also what made two resource panels answer about the wrong AWS account
+   * after a bare `fetch` dropped the header. A number climbing here means a
+   * client is not sending it.
+   */
+  requestsWithoutConnection.inc();
 
   const [first] = await db
     .select({ id: connections.id })

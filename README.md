@@ -116,6 +116,15 @@ checked against what the tools actually returned, and anything unsupported is fl
 to the user — because a confident, plausible, invented resource id is the failure a
 reader cannot catch themselves.
 
+**It says what it is doing, and the metrics carry no customer in them.** Logs are
+structured and redact an ExternalId by field name at every nesting depth; metrics are
+served on their own port, which nginx does not proxy, so they are unreachable from the
+internet by construction rather than by a rule. No metric may be labelled with a tenant,
+connection, user, ARN or account id — Prometheus has no tenant isolation, so a tenant
+label would put customer identity outside everything that design covers, and multiply
+every series by the customer count. A test enumerates the registry and refuses one.
+See [`helm/monitoring/README.md`](helm/monitoring/README.md).
+
 **It cannot change anything.** No tool can express a mutation and the IAM role holds
 no write permissions. Asked to fix something, it says what it would run and why it
 will not run it. Remediation is generated as text for an operator to run, and every
@@ -178,9 +187,16 @@ packages/mock-aws     the seeded customer account and its answer key
 infra/                the read-only role template, and guards on things nothing runs
 deploy/k8s/           kustomize manifests for a hosted deployment, and their README
 deploy/               nginx config, and the AWS profile mount for containers
+helm/monitoring/      Prometheus, Grafana and Loki, with this project's dashboards
+argocd/               the Application that deploys that chart
 scripts/              the dependency guard every npm script runs first
 Dockerfile            API and frontend images, used only by the `app` profile
 ```
+
+Two deployment tools, and the boundary is deliberate: **kustomize deploys the
+application, Helm deploys the platform.** The monitoring stack is three upstream
+community charts with pinned versions and hundreds of values, which is Helm's
+natural unit; re-expressing it in kustomize would mean vendoring rendered output.
 
 `infra/` deserves a word: it holds tests over artefacts **no test executes** — the
 CloudFormation template, the Kubernetes manifests, the Dockerfile, the legal pages.
@@ -411,6 +427,7 @@ the API and nginx containers are left running against databases that no longer e
 | `npm run evals -w @sightline/api`              | Tier-2 agent evals — needs a key                             |
 | `npm run db:app-role -w @sightline/api`        | Set the restricted role's password, for row-level security   |
 | `./scripts/backup-restore-test.sh`             | Back up, restore, and check an ExternalId still decrypts     |
+| `helm template monitoring helm/monitoring`     | Render the monitoring stack without deploying it             |
 | `npm run db:generate -w @sightline/api`        | Generate a migration after editing `src/db/schema.ts`        |
 | `npm run db:migrate -w @sightline/api`         | Apply pending migrations — a clone also does this on boot    |
 | `npm run db:studio -w @sightline/api`          | Browse the database in Drizzle Studio                        |

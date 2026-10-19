@@ -24,6 +24,11 @@ import { scanJobs } from "../db/schema.js";
 import type { ConnectionId, JobId, ScanId, TenantId } from "../tenancy/ids.js";
 import { asConnectionId, asJobId, asTenantId } from "../tenancy/ids.js";
 import type { Scope } from "../tenancy/scope.js";
+import {
+  scanJobs as scanJobsTotal,
+  scanJobsReclaimed,
+  scanQueueWait,
+} from "../observability/metrics.js";
 
 /**
  * The channel workers listen on.
@@ -236,7 +241,18 @@ export async function claimNextJob(workerId: string): Promise<ScanJob | null> {
     RETURNING *
   `);
   const row = rows[0];
-  return row ? rowToJob(row) : null;
+  if (!row) return null;
+
+  const job = rowToJob(row);
+  /**
+   * Enqueue to claim, which is the wait a person actually feels.
+   *
+   * Observed here rather than in the worker because this is the moment the
+   * waiting ends, and because a worker that crashes between claiming and
+   * starting would otherwise never report it.
+   */
+  scanQueueWait.observe((Date.now() - job.queuedAt.getTime()) / 1000);
+  return job;
 }
 
 /**
@@ -278,6 +294,7 @@ export async function finishJob(
   workerId: string,
   outcome: { status: Exclude<JobStatus, "queued" | "running">; error?: string | null },
 ): Promise<boolean> {
+  scanJobsTotal.inc({ outcome: outcome.status });
   const { rowCount } = await system.execute(sql`
     UPDATE scan_jobs
        SET status = ${outcome.status},
@@ -339,7 +356,12 @@ export async function reclaimStale(staleAfterMs = STALE_AFTER_MS): Promise<Recla
 
   if ((requeued.rowCount ?? 0) > 0) await notifyQueued();
 
-  return { requeued: requeued.rowCount ?? 0, abandoned: abandoned.rowCount ?? 0 };
+  const outcome = { requeued: requeued.rowCount ?? 0, abandoned: abandoned.rowCount ?? 0 };
+  // Both, separately: a requeued job is a worker that died, an abandoned one is
+  // a job that has now killed `max_attempts` workers.
+  if (outcome.requeued) scanJobsReclaimed.inc(outcome.requeued);
+  if (outcome.abandoned) scanJobsTotal.inc({ outcome: "abandoned" }, outcome.abandoned);
+  return outcome;
 }
 
 /** One of this tenant's jobs, or null. Never another tenant's. */

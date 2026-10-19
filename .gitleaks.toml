@@ -37,8 +37,21 @@ keywords = ["aws_external_id"]
   ]
 
 [allowlist]
-description = "The committed example carries placeholders only, and this file quotes the patterns it matches"
-paths = ['''\.env\.example$''', '''\.gitleaks\.toml$''']
+description = "Placeholders, this file's own patterns, and ciphertext that is meant to be committed"
+paths = [
+  '''\.env\.example$''',
+  '''\.gitleaks\.toml$''',
+  # A SealedSecret's `encryptedData` is ciphertext encrypted to this cluster's
+  # controller key. Committing it is the point - it is useless to anyone else,
+  # including us on a rebuilt cluster - but it is long and base64, so every
+  # entropy rule fires on it.
+  #
+  # Allowlisted by path and held to it: `infra/monitoringChart.test.ts` asserts
+  # every file matching this really is `kind: SealedSecret` with no plaintext
+  # `stringData` or `data`, so the exemption cannot be borrowed by a plain
+  # Secret that happens to be named like one.
+  '''sealedsecret\.yaml$''',
+]
 
 # Two commits, allowlisted by SHA rather than by path or by value.
 #
@@ -65,8 +78,39 @@ paths = ['''\.env\.example$''', '''\.gitleaks\.toml$''']
 # By SHA, not by path: allowlisting `fixtures.test.ts` would silence that file for
 # ever, including the day something real is pasted into it. These two entries
 # silence exactly two reviewed commits. A key committed tomorrow still fails.
+#
+# The three below were added later, when a full-history scan surfaced them.
+# `pull_request` runs scan only the PR's commit range and `push` only the
+# pushed range, so nothing had ever looked at the whole history until a
+# `workflow_dispatch` run did - a blind spot worth closing, because a scanner
+# that cannot be run over everything is a scanner with a shape of leak it never
+# sees.
+#
+#   b2d1140  `apiKey: "fake-anthropic-key"` in the logging redaction test. A
+#            test proving a field is redacted needs a value to redact.
+#   6011ae9  two synthetic `sk-ant-` strings in the secrets tests, one of them
+#            asserted on by `not.toContain("abcdefgh")` - the value's shape is
+#            the fixture.
+#   770ce9c  the ExternalId pattern quoted in ci.yml, which is this repository's
+#            recurring own-goal: a file describing the rule matching the rule.
 commits = [
   "48b292c0266dd7f4b2c9fcc1a3260b3126ae5cc5",
   "b74f1d5c6c1ea7941a4d0e49435af5919591db69",
   "e07e702dfec8a4db3631b1c510b75360fd155e62",
+  "b2d1140eb293ea06c35a088170d4b21a0cfab8be",
+  "6011ae98ae23a861797fe3625cb7e4242d545c61",
+  "770ce9c1f34876b316afb1433e42cccc88e0f93c",
+  # The one real credential in this list. A Cloudflare tunnel token was pasted
+  # into a plain `kind: Secret` in a chart template; 8bff63c removed the
+  # template and the token was rotated, which is what makes the value in
+  # history worthless. Confirmed rotated by Tom, 19 Oct 2026.
+  "0de769350f9859a8ff16bb7d82eadb41e1c0c042",
 ]
+
+# A note on the entry above, because it is the only one that was ever real.
+#
+# A full-history scan found it three weeks after the fact: `pull_request` runs
+# scan only a PR's commit range, so nothing had looked at the whole history
+# until a `workflow_dispatch` run did. It stayed un-allowlisted and the build
+# stayed red until the token was rotated, which is the right order - an
+# allowlist entry for a live credential would have hidden it instead.

@@ -23,3 +23,8 @@ apps/api/drizzle/meta
 
 # No parser, and nothing to format.
 LICENSE
+
+# Helm templates are YAML with Go templating interleaved, which no YAML parser
+# can read - `{{- range }}` is not a key. The chart's values and dashboards are
+# still formatted; only `templates/` is exempt.
+helm/*/templates/

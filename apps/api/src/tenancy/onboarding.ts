@@ -38,6 +38,7 @@ import {
 } from "./connections.js";
 import { resolveScanTarget } from "./scanTarget.js";
 import type { Scope } from "./scope.js";
+import { assumeRoleFailures, verifyDuration } from "../observability/metrics.js";
 
 export interface OnboardingPlan {
   connection: ConnectionSummary;
@@ -230,10 +231,12 @@ export async function verifyConnection(scope: Scope): Promise<VerifyResult> {
     const mismatch = accountMismatch(connection.accountId, session.accountId);
     if (mismatch) {
       await markFailed(scope, mismatch);
+      verifyDuration.observe({ outcome: "mismatch" }, (Date.now() - started) / 1000);
       return { ok: false, durationMs: Date.now() - started, problem: mismatch };
     }
 
     await markVerified(scope, session.accountId);
+    verifyDuration.observe({ outcome: "verified" }, (Date.now() - started) / 1000);
     return {
       ok: true,
       accountId: session.accountId,
@@ -243,6 +246,16 @@ export async function verifyConnection(scope: Scope): Promise<VerifyResult> {
   } catch (err) {
     // The customer has a Connect screen, not a `.env`.
     const diagnosis = diagnose(err, callerIdentity, "connect-screen");
+    /**
+     * By diagnosed cause, not by AWS's message.
+     *
+     * `diagnose()` already reduces an AccessDenied to which of the three
+     * things it actually is - wrong principal, ExternalId mismatch, or a stack
+     * predating SourceIdentity - and the code is a closed set. That turns
+     * "onboarding is hard" into "they are all failing on the ExternalId".
+     */
+    assumeRoleFailures.inc({ reason: diagnosis.code });
+    verifyDuration.observe({ outcome: "failed" }, (Date.now() - started) / 1000);
     await markFailed(scope, `${diagnosis.problem} ${diagnosis.fix}`.slice(0, 2000));
     return { ok: false, durationMs: Date.now() - started, diagnosis };
   }

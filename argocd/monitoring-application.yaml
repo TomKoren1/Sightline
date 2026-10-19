@@ -1,0 +1,35 @@
+# The observability platform, as its own ArgoCD application.
+#
+# Separate from any application it watches, which is the whole point of moving
+# it here: a chart bundled into one project's release cannot be the platform
+# for two. Mirrors the convention in the resume_builder repository's
+# `argocd/application.yaml`.
+#
+# `syncPolicy` is deliberately absent on the first apply. Sync it by hand once,
+# look at what it created, then add:
+#
+#   syncPolicy:
+#     automated: { prune: true, selfHeal: true }
+#     syncOptions: [CreateNamespace=true]
+#
+# Automated sync with `prune` on a stack that owns 15 Gi of PVCs is not
+# something to turn on before seeing it work once.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: monitoring
+  namespace: argocd
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/TomKoren1/Sightline.git
+    targetRevision: main
+    path: helm/monitoring
+    helm:
+      # The chart's own values.yaml is always loaded; nothing else to list.
+      releaseName: monitoring
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: monitoring
+  syncOptions:
+    - CreateNamespace=true

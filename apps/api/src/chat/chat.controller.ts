@@ -24,6 +24,7 @@ import type { AgentEvent } from "@sightline/shared";
 
 import { CurrentScope } from "../tenancy/currentScope.decorator.js";
 import { asConversationId } from "../tenancy/ids.js";
+import { requestsRefused } from "../observability/metrics.js";
 import { mayChat, statusFor } from "../tenancy/limits.js";
 import type { Scope } from "../tenancy/scope.js";
 import { askSchema } from "./chat.dto.js";
@@ -67,6 +68,7 @@ export class ChatController {
       // 429 when they have asked a lot of questions in an hour, 503 when an
       // operator has turned the assistant off. Never 403: nothing about this
       // caller is forbidden, and both of these stop being true.
+      requestsRefused.inc({ kind: quota.kind, what: "chat" });
       return reply.code(statusFor(quota.kind)).send({
         error: quota.reason,
         ...(quota.retryAfterSeconds !== undefined

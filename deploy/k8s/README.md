@@ -273,6 +273,21 @@ tenants.
 Run it after any change to the backup command. It is verified to fail when
 encryption is accidentally a passthrough, and when the restore loses a policy.
 
+## Monitoring
+
+Prometheus, Grafana and Loki are a separate chart in a separate namespace —
+[`helm/monitoring/README.md`](../../helm/monitoring/README.md) — because the
+platform serves every application on the cluster rather than this one. What is
+_here_ is the application's half: the scrape annotations on the `api` Service
+and the `worker` pods, a NetworkPolicy opening port 9464 to the monitoring
+namespace and nothing else, the dashboards generated into a labelled ConfigMap
+by `base/kustomization.yaml`, and the backup job's push to the Pushgateway.
+
+The metrics port is deliberately not the application port and is not proxied by
+nginx, so it is unreachable through the tunnel by construction.
+`infra/metricsScrape.test.ts` holds those four files to one port number and
+fails if nginx ever starts routing it.
+
 ## Not in these manifests
 
 - **Cloudflare WAF and rate limits** on `/api/auth/*` and `/api/scans`, and

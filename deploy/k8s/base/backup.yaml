@@ -77,6 +77,12 @@ spec:
                   valueFrom:
                     configMapKeyRef:
                       { name: sightline-config, key: BACKUP_S3_DESTINATION, optional: true }
+                - name: PUSHGATEWAY_URL
+                  valueFrom:
+                    configMapKeyRef:
+                      # Optional: a deployment with no Pushgateway simply does
+                      # not push, and the alert on staleness is what notices.
+                      { name: sightline-config, key: PUSHGATEWAY_URL, optional: true }
               command: ["/bin/sh", "-eu", "-c"]
               args:
                 - |
@@ -116,6 +122,39 @@ spec:
                   # Retention last, and only after a good backup exists: pruning
                   # before writing would turn one failed run into no backups.
                   find /backups -name 'sightline-*.dump.enc' -mtime +30 -print -delete
+
+                  # Tell Prometheus this run succeeded.
+                  #
+                  # A CronJob has no endpoint to scrape, which is what the
+                  # Pushgateway is for: the gauge persists after the pod exits,
+                  # so "when did this last work" survives the job that answered
+                  # it. The alternative is noticing by eye, and this job once
+                  # sat in ContainerCreating for thirty hours - not Error, not
+                  # CrashLoopBackOff, so nothing looked broken.
+                  #
+                  # Last, and only on the success path: `-eu` means any failure
+                  # above exits before here, which is precisely the condition
+                  # that should leave the timestamp stale.
+                  #
+                  # Failure to push is swallowed. A backup that was written is
+                  # not a backup that failed because the metrics sink was down.
+                  if [ -n "${PUSHGATEWAY_URL:-}" ]; then
+                    # A file, not `--post-data="$(...)"`. Command substitution
+                    # strips the trailing newline and the Pushgateway's text
+                    # parser requires one, so the string form is answered with
+                    # `400 Bad Request` - measured against the running
+                    # Pushgateway, not reasoned about. `--post-file` needs
+                    # busybox 1.33+; this image has 1.37.
+                    printf '%s\n' \
+                      "# TYPE sightline_backup_last_success_timestamp_seconds gauge" \
+                      "sightline_backup_last_success_timestamp_seconds $(date -u +%s)" \
+                      "# TYPE sightline_backup_size_bytes gauge" \
+                      "sightline_backup_size_bytes $size" > /tmp/backup.prom
+
+                    wget -q -O- --post-file=/tmp/backup.prom \
+                      "${PUSHGATEWAY_URL}/metrics/job/sightline_backup" \
+                      || echo "backup written, but the pushgateway did not accept it" >&2
+                  fi
               volumeMounts:
                 - { name: backups, mountPath: /backups }
                 - { name: keys, mountPath: /keys, readOnly: true }

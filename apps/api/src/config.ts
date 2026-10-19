@@ -223,6 +223,15 @@ const schema = z.object({
   ANTHROPIC_MODEL: blankAsUnset(z.string().default("claude-sonnet-5")),
 
   BACKEND_PORT: blankAsUnset(z.coerce.number().int().positive().default(3000)),
+
+  /**
+   * Where Prometheus scrapes this process. `0` turns it off.
+   *
+   * Its own port, not a route on the one above: the worker serves no HTTP and
+   * would otherwise be unobservable, and nginx proxies only the application
+   * port, so metrics are unreachable from the internet by construction.
+   */
+  METRICS_PORT: blankAsUnset(z.coerce.number().int().min(0).default(9464)),
   /**
    * Bind address for the API. Loopback by default: the frontend reaches it
    * through Vite's server-side proxy, so it does not need to be exposed even

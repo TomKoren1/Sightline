@@ -6,10 +6,12 @@
  * account's whole inventory and then projects it - and in a multi-tenant
  * deployment it must not be able to take down the API serving everybody else.
  *
- * It serves no HTTP. There is nothing to serve: work arrives through the
- * `scan_jobs` table, and `scan_jobs.heartbeat_at` is how anything else finds
- * out this process is alive. That makes a readiness probe a matter of the
- * database rather than of a port, which is also why this does not open one.
+ * It serves no application HTTP: work arrives through the `scan_jobs` table,
+ * and `scan_jobs.heartbeat_at` is how anything else finds out this process is
+ * alive - so liveness is a matter of the database rather than of a port. The
+ * one port it does open is the metrics port, which exists because this is the
+ * process that holds an inventory in memory and the one that gets OOMKilled,
+ * and scraping is the only way to see that coming.
  *
  * Migrations are deliberately not run here. Two processes racing to migrate on
  * boot is the problem a migration Job exists to solve, and a worker that
@@ -24,6 +26,9 @@ import { closeDriver } from "./db/neo4j.js";
 import { assertHostedInvariants } from "./hostedMode.js";
 import { ScanWorker } from "./jobs/worker.js";
 import { loggerOptions } from "./observability/logging.js";
+import { recordBuild, startMetricsServer } from "./observability/metrics.js";
+import { startSnapshotLoop } from "./observability/snapshot.js";
+import { VERSION } from "./version.js";
 
 // The same invariants the API checks, for the same reason: every one of them is
 // a configuration mistake that produces a working process with a silently wrong
@@ -55,8 +60,19 @@ try {
    */
   await assertSchemaCurrent();
   await worker.start();
+  if (cfg.METRICS_PORT > 0) {
+    startMetricsServer(cfg.METRICS_PORT);
+    recordBuild(VERSION);
+    // The process that owns background work owns the gauges that need a query
+    // to answer. Exactly one process runs this, whichever mode is in force.
+    startSnapshotLoop(log);
+  }
   log.info(
-    { deployment: cfg.DEPLOYMENT_MODE, concurrency: cfg.SCAN_WORKER_CONCURRENCY },
+    {
+      deployment: cfg.DEPLOYMENT_MODE,
+      concurrency: cfg.SCAN_WORKER_CONCURRENCY,
+      metricsPort: cfg.METRICS_PORT || "off",
+    },
     "worker ready",
   );
 } catch (err) {

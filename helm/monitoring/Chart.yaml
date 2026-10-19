@@ -1,0 +1,23 @@
+apiVersion: v2
+name: monitoring
+description: >
+  The observability platform: Prometheus, Grafana, Loki and Alertmanager, for
+  every application on this cluster rather than for one of them.
+type: application
+version: 0.1.0
+appVersion: "1.0.0"
+
+# Pinned, and pinned to the *same* versions as the copy in the resume_builder
+# repository. Only one of the two is ever deployed, and identical pins are what
+# stops the inactive copy drifting into something that has never been run -
+# `infra/monitoringChart.test.ts` compares them when that repo is present.
+dependencies:
+  - name: prometheus
+    version: 25.11.0
+    repository: https://prometheus-community.github.io/helm-charts
+  - name: grafana
+    version: 7.3.0
+    repository: https://grafana.github.io/helm-charts
+  - name: loki-stack
+    version: 2.10.2
+    repository: https://grafana.github.io/helm-charts

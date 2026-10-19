@@ -42,6 +42,13 @@ import { resolveScanTarget } from "../tenancy/scanTarget.js";
 import type { ScanId } from "../tenancy/ids.js";
 import { tooManyResources } from "../tenancy/limits.js";
 import type { Scope } from "../tenancy/scope.js";
+import {
+  projectionDuration,
+  scanDuration,
+  scanResources,
+  scanUnitDuration,
+  scanUnitFailures,
+} from "../observability/metrics.js";
 
 export interface ScanJobOutcome {
   /** The status to finish the queue row with. */
@@ -102,6 +109,9 @@ export async function runScanJob(options: RunScanJobOptions): Promise<ScanJobOut
   const { scope, correlationId, onEvent, onScanRun, stillMine, logError } = options;
   const emit = (event: ScanEvent) => onEvent?.(event);
   let scanId: ScanId | null = null;
+  // One clock for the whole attempt, so a failure is timed too - a scan that
+  // takes four minutes to fail is a different problem from one that fails fast.
+  const startedAt = Date.now();
 
   try {
     const target = await resolveScanTarget(scope);
@@ -155,6 +165,17 @@ export async function runScanJob(options: RunScanJobOptions): Promise<ScanJobOut
           });
         } else if (event.type === "unit.finished") {
           const unit = event.unit;
+          /**
+           * `region` is `null` for global services, and a metric label cannot
+           * be null - `global` says the same thing and keeps the series stable.
+           * The reason is AWS's own error code, which is a closed set, rather
+           * than the message, which is not.
+           */
+          const where = { service: unit.service, region: unit.region ?? "global" };
+          scanUnitDuration.observe(where, unit.durationMs / 1000);
+          if (unit.status === "failed") {
+            scanUnitFailures.inc({ ...where, reason: unit.errorCode ?? "unknown" });
+          }
           persist(async () => {
             if (scanId) await recordScanUnit(scope, scanId, unit);
           });
@@ -235,11 +256,16 @@ export async function runScanJob(options: RunScanJobOptions): Promise<ScanJobOut
 
     // Into its own scope. Nothing is deleted, and the previous graph stays
     // current until `markProjected` below.
+    const projectionStartedAt = Date.now();
     const projected = await projectGraph(
       { tenantId: scope.tenantId, scanId },
       result.resources,
       result.relationships,
     );
+    // Separate from the scan's own duration: collection is bounded by AWS and
+    // projection by Neo4j, and a slow scan is one or the other, never both.
+    projectionDuration.observe((Date.now() - projectionStartedAt) / 1000);
+    scanResources.observe(result.resources.length);
     await markProjected(scope, scanId);
 
     // The scan reaching the account *is* a successful verification, and it pins
@@ -256,6 +282,8 @@ export async function runScanJob(options: RunScanJobOptions): Promise<ScanJobOut
      * account showed an empty graph instead of an error.
      */
     await sweep(scope, await projectedScanIdsToKeep(scope.tenantId));
+
+    scanDuration.observe({ outcome: status }, (Date.now() - startedAt) / 1000);
 
     const run = await getScan(scope, scanId);
     if (run) emit({ type: "scan.finished", scanId, run });
@@ -288,6 +316,7 @@ export async function runScanJob(options: RunScanJobOptions): Promise<ScanJobOut
       return { status: "failed", scanId, error: message };
     }
 
+    scanDuration.observe({ outcome: "failed" }, (Date.now() - startedAt) / 1000);
     if (scanId) await failScanRun(scope, scanId, message);
     emit({ type: "scan.failed", scanId: scanId ?? correlationId, error: message });
     return { status: "failed", scanId, error: message };
