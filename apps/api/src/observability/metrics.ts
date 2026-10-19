@@ -218,6 +218,61 @@ export const agentUnsupportedCitations = new Counter({
   registers: [registry],
 });
 
+/**
+ * Model round-trips per answer, against the `MAX_STEPS` cap.
+ *
+ * Every step is a paid model call, so the distribution is both the cost curve
+ * and a behaviour signal: answers piling up at the cap are answers the model
+ * never reached, which `outcome="tool_limit"` then confirms.
+ */
+export const agentSteps = new Histogram({
+  name: "sightline_agent_steps",
+  help: "Model round-trips per answer. Piling up at the cap means the loop ran out.",
+  buckets: [1, 2, 3, 4, 5, 6, 7, 8],
+  registers: [registry],
+});
+
+/**
+ * Tool results too large to hand back whole.
+ *
+ * The model then answers from a prefix of the evidence while believing it has
+ * all of it, which is the one way a correct tool produces a wrong answer. It
+ * is invisible in the answer itself.
+ */
+export const agentTruncatedResults = new Counter({
+  name: "sightline_agent_truncated_results_total",
+  help: "Tool results truncated before the model saw them.",
+  registers: [registry],
+});
+
+/**
+ * Raw-Cypher requests refused, by cause.
+ *
+ * `hosted` is the ADR-016 gate rather than a bad query: the model reached for
+ * an escape hatch this deployment does not have, which is a prompt problem,
+ * not an attack. The rest come from `cypherGuard`'s closed cause set.
+ */
+export const agentRawCypherRefused = new Counter({
+  name: "sightline_agent_raw_cypher_refused_total",
+  help: "Raw-Cypher requests refused, by cause.",
+  labelNames: ["reason"],
+  registers: [registry],
+});
+
+/**
+ * Answers that needed the read-only notice bolted on.
+ *
+ * The prompt asks the model to say plainly that it cannot change anything, and
+ * `readOnlyGuard` adds the sentence when it does not. So this counts the model
+ * ignoring an explicit instruction - the one prompt-compliance number here
+ * that is measured rather than assumed.
+ */
+export const agentReadOnlyNoticeAdded = new Counter({
+  name: "sightline_agent_readonly_notice_added_total",
+  help: "Answers where the guard had to add the read-only notice itself.",
+  registers: [registry],
+});
+
 // --- onboarding, which decides whether anyone ever uses this ----------------
 
 export const connections = new Gauge({

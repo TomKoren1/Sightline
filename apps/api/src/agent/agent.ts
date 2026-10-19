@@ -28,8 +28,11 @@ import { errorMessage } from "@sightline/shared";
 import {
   agentDuration,
   agentQuestions,
+  agentReadOnlyNoticeAdded,
+  agentSteps,
   agentTokens,
   agentToolCalls,
+  agentTruncatedResults,
   agentUnsupportedCitations,
 } from "../observability/metrics.js";
 
@@ -74,6 +77,7 @@ export interface AskOptions {
 /** Serialise a tool result for the model, truncating rather than blowing context. */
 function serialiseResult(result: { rows: unknown[]; note?: string }): string {
   const body = JSON.stringify(result.rows);
+  if (body.length > MAX_RESULT_CHARS) agentTruncatedResults.inc();
   const truncated =
     body.length > MAX_RESULT_CHARS
       ? body.slice(0, MAX_RESULT_CHARS) +
@@ -203,6 +207,7 @@ export async function ask(options: AskOptions): Promise<AgentMessage> {
   const toolCalls: ToolCallTrace[] = [];
   const askedAt = Date.now();
   let answer = "";
+  let steps = 0;
 
   const result = streamText({
     model: options.model ?? configuredModel(),
@@ -218,6 +223,7 @@ export async function ask(options: AskOptions): Promise<AgentMessage> {
     stopWhen: stepCountIs(MAX_STEPS),
 
     onStepEnd({ text, toolCalls: calls }) {
+      steps += 1;
       if (calls.length > 0) {
         // Text alongside tool calls is the model narrating its plan. Worth
         // showing as activity, but it is not the answer.
@@ -234,7 +240,15 @@ export async function ask(options: AskOptions): Promise<AgentMessage> {
     emit({ type: "agent.token", text: delta });
   }
 
-  if (!answer) {
+  /**
+   * The loop ran out of steps without concluding.
+   *
+   * Tracked rather than inferred, because this answer is a fallback string and
+   * reporting it as `answered` makes the one outcome worth watching the one
+   * outcome the metric hides.
+   */
+  const ranOut = !answer;
+  if (ranOut) {
     answer =
       "I wasn't able to reach a conclusion within the tool-call limit. Try narrowing the question " +
       "to a specific resource or region.";
@@ -249,6 +263,7 @@ export async function ask(options: AskOptions): Promise<AgentMessage> {
    * reaches the user without passing through this and the citation check.
    */
   const guarded = enforceReadOnlyNotice(question, answer);
+  if (guarded.added) agentReadOnlyNoticeAdded.inc();
 
   /**
    * What the answer cost and whether it was supportable.
@@ -289,8 +304,14 @@ export async function ask(options: AskOptions): Promise<AgentMessage> {
    * measure, and it is already computed per answer for the user's benefit.
    */
   if (warnings.length > 0) agentUnsupportedCitations.inc(warnings.length);
-  agentQuestions.inc({ outcome: warnings.length > 0 ? "unsupported_citations" : "answered" });
+  const outcome = ranOut
+    ? "tool_limit"
+    : warnings.length > 0
+      ? "unsupported_citations"
+      : "answered";
+  agentQuestions.inc({ outcome });
   agentDuration.observe((Date.now() - askedAt) / 1000);
+  agentSteps.observe(steps);
 
   emit({ type: "agent.finished", message });
   return message;

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { assertReadOnlyCypher, stripLiteralsAndComments } from "./cypherGuard.js";
+import { assertReadOnlyCypher, stripLiteralsAndComments, type GuardCause } from "./cypherGuard.js";
 
 const ok = (q: string) => assertReadOnlyCypher(q).ok;
 
@@ -68,6 +68,40 @@ describe("assertReadOnlyCypher", () => {
     // Names the first forbidden clause it finds, in denylist order.
     expect(result.reason).toContain("DELETE");
     expect(result.reason).toContain("read-only");
+  });
+
+  /**
+   * Every refusal carries a cause, and the causes are a closed set.
+   *
+   * `reason` is prose for the model and interpolates the offending keyword into
+   * itself, so it cannot be a metric label. `cause` can, and a path that
+   * forgets to set one reaches Prometheus as `unknown` - a refusal that
+   * happened and cannot be attributed.
+   */
+  it("attributes every refusal to one of the closed causes", () => {
+    const causes: GuardCause[] = [
+      "empty",
+      "too_long",
+      "multiple_statements",
+      "forbidden_opening",
+      "forbidden_clause",
+    ];
+    const cases: [string, GuardCause][] = [
+      ["", "empty"],
+      [`MATCH (n) WHERE n.id = "${"x".repeat(4000)}" RETURN n`, "too_long"],
+      ["MATCH (n) RETURN n; MATCH (m) RETURN m", "multiple_statements"],
+      ["CALL db.labels()", "forbidden_opening"],
+      ["MATCH (n) DELETE n", "forbidden_clause"],
+    ];
+
+    for (const [cypher, expected] of cases) {
+      const result = assertReadOnlyCypher(cypher);
+      expect(result.ok, `"${cypher.slice(0, 30)}" was allowed`).toBe(false);
+      expect(result.cause, `"${cypher.slice(0, 30)}" has no cause`).toBe(expected);
+    }
+
+    // Each cause is reachable, so none of them is a label that never appears.
+    expect(new Set(cases.map(([, c]) => c))).toEqual(new Set(causes));
   });
 });
 

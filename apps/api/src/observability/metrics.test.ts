@@ -86,8 +86,17 @@ describe("the metrics registry", () => {
       if (["_ms", "_millis", "_milliseconds"].some((s) => m.name.endsWith(s))) {
         problems.push(`${m.name} should be seconds`);
       }
-      // `_resources` is a count of things, which has no SI unit to name.
-      const unitInName = ["_seconds", "_bytes", "_resources"].some((s) => m.name.endsWith(s));
+      /**
+       * A histogram must say what it measures in its own name.
+       *
+       * The exceptions are counts of things, which have no SI unit to name.
+       * Kept as an explicit list rather than a looser rule, so adding one is a
+       * decision somebody makes on purpose - the point of the check is to stop
+       * `_duration` arriving in milliseconds.
+       */
+      const unitInName = ["_seconds", "_bytes", "_resources", "_steps"].some((s) =>
+        m.name.endsWith(s),
+      );
       if (m.type === "histogram" && !unitInName) {
         problems.push(`${m.name} is a histogram with no unit in its name`);
       }

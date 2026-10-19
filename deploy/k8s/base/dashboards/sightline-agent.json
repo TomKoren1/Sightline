@@ -1,0 +1,885 @@
+{
+  "uid": "sightline-agent",
+  "title": "Sightline \u2014 the agent",
+  "description": "What the agent answers, whether the answers hold up, and what each one costs.",
+  "tags": ["sightline"],
+  "timezone": "browser",
+  "schemaVersion": 39,
+  "version": 1,
+  "editable": true,
+  "refresh": "5m",
+  "time": {
+    "from": "now-24h",
+    "to": "now"
+  },
+  "templating": {
+    "list": [
+      {
+        "name": "price_in",
+        "type": "constant",
+        "label": "$ per 1M input tokens",
+        "query": "3",
+        "current": {
+          "text": "3",
+          "value": "3"
+        },
+        "hide": 0,
+        "description": "Anthropic's input price for the configured model. Sonnet is 3."
+      },
+      {
+        "name": "price_out",
+        "type": "constant",
+        "label": "$ per 1M output tokens",
+        "query": "15",
+        "current": {
+          "text": "15",
+          "value": "15"
+        },
+        "hide": 0,
+        "description": "Output price. Sonnet is 15 - five times input, which is why the money split and the token split differ."
+      }
+    ]
+  },
+  "panels": [
+    {
+      "id": 1,
+      "title": "Is it answering, and can the answers be trusted?",
+      "type": "row",
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 0
+      },
+      "description": "Quality before cost: an agent that answers cheaply and wrongly is worse than no agent.",
+      "panels": []
+    },
+    {
+      "id": 2,
+      "title": "Questions (24h)",
+      "type": "stat",
+      "gridPos": {
+        "h": 4,
+        "w": 6,
+        "x": 0,
+        "y": 1
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "Prometheus"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "Prometheus"
+          },
+          "expr": "sum(increase(sightline_agent_questions_total[24h]))"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": {},
+          "decimals": 0
+        },
+        "overrides": []
+      },
+      "description": "Total asked. Every panel below is a ratio against this, so a small number here means the rest is noise rather than signal."
+    },
+    {
+      "id": 3,
+      "title": "Unsupported citations per 100 answers",
+      "type": "stat",
+      "gridPos": {
+        "h": 4,
+        "w": 6,
+        "x": 6,
+        "y": 1
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "Prometheus"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "Prometheus"
+          },
+          "expr": "100 * sum(increase(sightline_agent_unsupported_citations_total[24h])) / clamp_min(sum(increase(sightline_agent_questions_total[24h])), 1)"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": {},
+          "unit": "none",
+          "decimals": 1,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 1
+              },
+              {
+                "color": "red",
+                "value": 10
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "description": "Identifiers the agent named that no tool ever returned - the closest honest measure of hallucination this product has. Can exceed 100: one answer may invent several. Anything above zero is worth reading the answer for."
+    },
+    {
+      "id": 4,
+      "title": "Answers that ran out of steps",
+      "type": "stat",
+      "gridPos": {
+        "h": 4,
+        "w": 6,
+        "x": 12,
+        "y": 1
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "Prometheus"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "Prometheus"
+          },
+          "expr": "100 * sum(increase(sightline_agent_questions_total{outcome=\"tool_limit\"}[24h])) / clamp_min(sum(increase(sightline_agent_questions_total[24h])), 1)"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": {},
+          "unit": "percent",
+          "decimals": 1,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 5
+              },
+              {
+                "color": "red",
+                "value": 20
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "description": "The loop hit its eight-step cap and returned an apology instead of an answer. Paid for in full, eight model calls deep. A climbing number means questions are arriving that the curated tools cannot actually answer."
+    },
+    {
+      "id": 5,
+      "title": "Read-only notice added by the guard",
+      "type": "stat",
+      "gridPos": {
+        "h": 4,
+        "w": 6,
+        "x": 18,
+        "y": 1
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "Prometheus"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "Prometheus"
+          },
+          "expr": "100 * sum(increase(sightline_agent_readonly_notice_added_total[24h])) / clamp_min(sum(increase(sightline_agent_questions_total[24h])), 1)"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": {},
+          "unit": "percent",
+          "decimals": 1
+        },
+        "overrides": []
+      },
+      "description": "The prompt tells the model to say plainly that it cannot change anything; this counts the times it did not and the guard said it instead. A prompt-compliance rate, measured rather than assumed - and the reason the guarantee lives in code and not in the prompt."
+    },
+    {
+      "id": 6,
+      "title": "Outcomes over time",
+      "type": "timeseries",
+      "gridPos": {
+        "h": 7,
+        "w": 12,
+        "x": 0,
+        "y": 5
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "Prometheus"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "Prometheus"
+          },
+          "expr": "sum by (outcome) (increase(sightline_agent_questions_total[1h]))",
+          "legendFormat": "{{outcome}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": {}
+        },
+        "overrides": []
+      },
+      "description": "answered, unsupported_citations, tool_limit. The second and third are the interesting lines; the first is the baseline they are measured against."
+    },
+    {
+      "id": 7,
+      "title": "Tool results the model never saw whole (24h)",
+      "type": "timeseries",
+      "gridPos": {
+        "h": 7,
+        "w": 12,
+        "x": 12,
+        "y": 5
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "Prometheus"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "Prometheus"
+          },
+          "expr": "increase(sightline_agent_truncated_results_total[24h])",
+          "legendFormat": "truncated"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": {}
+        },
+        "overrides": []
+      },
+      "description": "A tool returned more than 12,000 characters, so the model answered from a prefix while believing it had everything. The one way a correct tool produces a wrong answer, and it is invisible in the answer itself."
+    },
+    {
+      "id": 8,
+      "title": "What does it cost?",
+      "type": "row",
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 12
+      },
+      "description": "Priced through the price_in / price_out variables, not hardcoded - change them when the model or the rate card changes.",
+      "panels": []
+    },
+    {
+      "id": 9,
+      "title": "Spend per hour, now",
+      "type": "stat",
+      "gridPos": {
+        "h": 4,
+        "w": 6,
+        "x": 0,
+        "y": 13
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "Prometheus"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "Prometheus"
+          },
+          "expr": "(sum(rate(sightline_agent_tokens_total{kind=\"input\"}[1h])) * 3600 / 1e6 * $price_in) + (sum(rate(sightline_agent_tokens_total{kind=\"output\"}[1h])) * 3600 / 1e6 * $price_out)"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": {},
+          "unit": "currencyUSD",
+          "decimals": 3
+        },
+        "overrides": []
+      },
+      "description": "Current burn, extrapolated from the last hour of tokens. The number to watch while somebody is demonstrating the product."
+    },
+    {
+      "id": 10,
+      "title": "Spend, last 24h",
+      "type": "stat",
+      "gridPos": {
+        "h": 4,
+        "w": 6,
+        "x": 6,
+        "y": 13
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "Prometheus"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "Prometheus"
+          },
+          "expr": "(sum(increase(sightline_agent_tokens_total{kind=\"input\"}[24h])) / 1e6 * $price_in) + (sum(increase(sightline_agent_tokens_total{kind=\"output\"}[24h])) / 1e6 * $price_out)"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": {},
+          "unit": "currencyUSD",
+          "decimals": 3
+        },
+        "overrides": []
+      },
+      "description": "What yesterday actually cost."
+    },
+    {
+      "id": 11,
+      "title": "Cost per answer (24h)",
+      "type": "stat",
+      "gridPos": {
+        "h": 4,
+        "w": 6,
+        "x": 12,
+        "y": 13
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "Prometheus"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "Prometheus"
+          },
+          "expr": "((sum(increase(sightline_agent_tokens_total{kind=\"input\"}[24h])) / 1e6 * $price_in) + (sum(increase(sightline_agent_tokens_total{kind=\"output\"}[24h])) / 1e6 * $price_out)) / clamp_min(sum(increase(sightline_agent_questions_total[24h])), 1)"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": {},
+          "unit": "currencyUSD",
+          "decimals": 4
+        },
+        "overrides": []
+      },
+      "description": "The unit economic. It rising while question volume is flat means the prompt is bloating or the model is working harder for the same answers."
+    },
+    {
+      "id": 12,
+      "title": "At this rate, 30 days",
+      "type": "stat",
+      "gridPos": {
+        "h": 4,
+        "w": 6,
+        "x": 18,
+        "y": 13
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "Prometheus"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "Prometheus"
+          },
+          "expr": "((sum(rate(sightline_agent_tokens_total{kind=\"input\"}[1h])) * 3600 / 1e6 * $price_in) + (sum(rate(sightline_agent_tokens_total{kind=\"output\"}[1h])) * 3600 / 1e6 * $price_out)) * 720"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": {},
+          "unit": "currencyUSD",
+          "decimals": 2
+        },
+        "overrides": []
+      },
+      "description": "A projection, not a forecast - it assumes the last hour repeats 720 times. Useful for the order of magnitude, which is the only thing worth knowing before there is real traffic."
+    },
+    {
+      "id": 13,
+      "title": "Tokens per hour",
+      "type": "timeseries",
+      "gridPos": {
+        "h": 7,
+        "w": 8,
+        "x": 0,
+        "y": 17
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "Prometheus"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "Prometheus"
+          },
+          "expr": "sum by (kind) (rate(sightline_agent_tokens_total[1h])) * 3600",
+          "legendFormat": "{{kind}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": {},
+          "decimals": 0
+        },
+        "overrides": []
+      },
+      "description": "Input dwarfs output, because every step resends the system prompt, the seventeen tool schemas and every prior tool result."
+    },
+    {
+      "id": 14,
+      "title": "Where the money goes (24h)",
+      "type": "piechart",
+      "gridPos": {
+        "h": 7,
+        "w": 8,
+        "x": 8,
+        "y": 17
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "Prometheus"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "Prometheus"
+          },
+          "legendFormat": "input",
+          "expr": "sum(increase(sightline_agent_tokens_total{kind=\"input\"}[24h])) / 1e6 * $price_in"
+        },
+        {
+          "refId": "B",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "Prometheus"
+          },
+          "legendFormat": "output",
+          "expr": "sum(increase(sightline_agent_tokens_total{kind=\"output\"}[24h])) / 1e6 * $price_out"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": {},
+          "unit": "currencyUSD"
+        },
+        "overrides": []
+      },
+      "description": "Not the same shape as the token split: output costs several times what input does, so a thin slice of tokens can be a thick slice of the bill. This is the panel that tells you which one to optimise.",
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "right",
+          "values": ["value", "percent"]
+        }
+      }
+    },
+    {
+      "id": 15,
+      "title": "Tokens per answer",
+      "type": "timeseries",
+      "gridPos": {
+        "h": 7,
+        "w": 8,
+        "x": 16,
+        "y": 17
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "Prometheus"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "Prometheus"
+          },
+          "expr": "sum by (kind) (rate(sightline_agent_tokens_total[6h])) / clamp_min(sum(rate(sightline_agent_questions_total[6h])), 0.0001)",
+          "legendFormat": "{{kind}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": {},
+          "decimals": 0
+        },
+        "overrides": []
+      },
+      "description": "Context cost per question. This is the prompt-bloat line: it moves when the prompt or the tool schemas grow, and not when traffic does."
+    },
+    {
+      "id": 16,
+      "title": "How hard is it working for each answer?",
+      "type": "row",
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 24
+      },
+      "description": "Latency and effort. A slow answer and an expensive answer are usually the same answer.",
+      "panels": []
+    },
+    {
+      "id": 17,
+      "title": "Answer latency",
+      "type": "timeseries",
+      "gridPos": {
+        "h": 7,
+        "w": 12,
+        "x": 0,
+        "y": 25
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "Prometheus"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "Prometheus"
+          },
+          "legendFormat": "p50",
+          "expr": "histogram_quantile(0.5, sum by (le) (rate(sightline_agent_duration_seconds_bucket[6h])))"
+        },
+        {
+          "refId": "B",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "Prometheus"
+          },
+          "legendFormat": "p95",
+          "expr": "histogram_quantile(0.95, sum by (le) (rate(sightline_agent_duration_seconds_bucket[6h])))"
+        },
+        {
+          "refId": "C",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "Prometheus"
+          },
+          "legendFormat": "p99",
+          "expr": "histogram_quantile(0.99, sum by (le) (rate(sightline_agent_duration_seconds_bucket[6h])))"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": {},
+          "unit": "s"
+        },
+        "overrides": []
+      },
+      "description": "End to end, including every tool call, as the person waiting experiences it. p99 past thirty seconds is past where people wait."
+    },
+    {
+      "id": 18,
+      "title": "Latency distribution",
+      "type": "heatmap",
+      "gridPos": {
+        "h": 7,
+        "w": 12,
+        "x": 12,
+        "y": 25
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "Prometheus"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "Prometheus"
+          },
+          "expr": "sum by (le) (increase(sightline_agent_duration_seconds_bucket[$__rate_interval]))",
+          "legendFormat": "{{le}}",
+          "format": "heatmap"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": {}
+        },
+        "overrides": []
+      },
+      "description": "The shape behind the percentiles. Two bands rather than one spread usually means two kinds of question - one the tools answer directly, one the model has to work at.",
+      "options": {
+        "calculate": false,
+        "cellGap": 1,
+        "color": {
+          "mode": "scheme",
+          "scheme": "Oranges",
+          "steps": 64
+        },
+        "yAxis": {
+          "unit": "s"
+        }
+      }
+    },
+    {
+      "id": 19,
+      "title": "Steps per answer",
+      "type": "timeseries",
+      "gridPos": {
+        "h": 7,
+        "w": 8,
+        "x": 0,
+        "y": 32
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "Prometheus"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "Prometheus"
+          },
+          "legendFormat": "p50",
+          "expr": "histogram_quantile(0.5, sum by (le) (rate(sightline_agent_steps_bucket[6h])))"
+        },
+        {
+          "refId": "B",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "Prometheus"
+          },
+          "legendFormat": "p95",
+          "expr": "histogram_quantile(0.95, sum by (le) (rate(sightline_agent_steps_bucket[6h])))"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": {},
+          "decimals": 1
+        },
+        "overrides": []
+      },
+      "description": "Model round-trips, against a cap of eight. p95 sitting at the cap means the loop is routinely running out rather than concluding - and every step is a paid call."
+    },
+    {
+      "id": 20,
+      "title": "Tool calls per answer",
+      "type": "timeseries",
+      "gridPos": {
+        "h": 7,
+        "w": 8,
+        "x": 8,
+        "y": 32
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "Prometheus"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "Prometheus"
+          },
+          "expr": "sum(rate(sightline_agent_tool_calls_total[6h])) / clamp_min(sum(rate(sightline_agent_questions_total[6h])), 0.0001)",
+          "legendFormat": "calls/answer"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": {},
+          "decimals": 2
+        },
+        "overrides": []
+      },
+      "description": "Evidence gathered per question. Climbing without latency climbing is the model getting thorough; climbing with it is the model flailing."
+    },
+    {
+      "id": 21,
+      "title": "Step distribution",
+      "type": "heatmap",
+      "gridPos": {
+        "h": 7,
+        "w": 8,
+        "x": 16,
+        "y": 32
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "Prometheus"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "Prometheus"
+          },
+          "expr": "sum by (le) (increase(sightline_agent_steps_bucket[$__rate_interval]))",
+          "legendFormat": "{{le}}",
+          "format": "heatmap"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": {}
+        },
+        "overrides": []
+      },
+      "description": "Where answers actually finish. Healthy work clusters at two or three; mass in the last bucket is the eight-step cap being hit.",
+      "options": {
+        "calculate": false,
+        "cellGap": 1,
+        "color": {
+          "mode": "scheme",
+          "scheme": "Blues",
+          "steps": 64
+        }
+      }
+    },
+    {
+      "id": 22,
+      "title": "What is it asking the graph for?",
+      "type": "row",
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 39
+      },
+      "description": "Which evidence the model reaches for, and what it reached for and was refused.",
+      "panels": []
+    },
+    {
+      "id": 23,
+      "title": "Tool mix (24h)",
+      "type": "bargauge",
+      "gridPos": {
+        "h": 9,
+        "w": 12,
+        "x": 0,
+        "y": 40
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "Prometheus"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "Prometheus"
+          },
+          "expr": "topk(12, sum by (tool) (increase(sightline_agent_tool_calls_total[24h])))",
+          "legendFormat": "{{tool}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": {},
+          "decimals": 0
+        },
+        "overrides": []
+      },
+      "description": "Which of the curated tools earn their place. A tool absent from this list was never called at all - its schema is still being sent to the model on every single step, and paid for. The list is also the shape of the questions people actually ask.",
+      "options": {
+        "displayMode": "gradient",
+        "orientation": "horizontal",
+        "reduceOptions": {
+          "calcs": ["lastNotNull"],
+          "fields": "",
+          "values": false
+        }
+      }
+    },
+    {
+      "id": 24,
+      "title": "Raw Cypher the model was refused (24h)",
+      "type": "timeseries",
+      "gridPos": {
+        "h": 9,
+        "w": 12,
+        "x": 12,
+        "y": 40
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "Prometheus"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "Prometheus"
+          },
+          "expr": "sum by (reason) (increase(sightline_agent_raw_cypher_refused_total[24h]))",
+          "legendFormat": "{{reason}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": {},
+          "decimals": 0
+        },
+        "overrides": []
+      },
+      "description": "hosted means the model reached for the raw-query escape hatch that ADR-016 switches off for hosted tenants - not an attack, a sign the curated tools have a gap. The other causes come from the Cypher guard, and forbidden_clause is the model attempting a write."
+    }
+  ]
+}

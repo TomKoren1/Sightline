@@ -60,6 +60,7 @@ configMapGenerator:
       - dashboards/sightline-health.json
       - dashboards/sightline-pipeline.json
       - dashboards/sightline-tenants.json
+      - dashboards/sightline-agent.json
       - dashboards/sightline-logs.json
 
 images:

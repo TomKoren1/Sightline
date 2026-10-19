@@ -145,7 +145,7 @@ describe("the monitoring chart", () => {
       const doc = JSON.parse(readFileSync(`${dashboardDir}/${file}`, "utf8")) as {
         uid?: string;
         title?: string;
-        panels?: { title?: string; description?: string }[];
+        panels?: { type?: string; title?: string; description?: string }[];
       };
       expect(doc.uid, `${file} has no uid`).toBeTruthy();
       expect(uids.has(doc.uid!), `${file} reuses uid ${doc.uid}`).toBe(false);
@@ -153,9 +153,11 @@ describe("the monitoring chart", () => {
       expect(doc.panels?.length, `${file} has no panels`).toBeGreaterThan(0);
 
       // A panel whose title is the only explanation is a panel nobody can
-      // interpret at 2am. Grafana shows `description` on hover.
+      // interpret at 2am. Grafana shows `description` on hover - which a row
+      // header has nowhere to show, so rows are exempt rather than carrying a
+      // field no reader can reach.
       const undescribed = (doc.panels ?? [])
-        .filter((p) => !p.description && p.title)
+        .filter((p) => p.type !== "row" && !p.description && p.title)
         .map((p) => `${file}: ${p.title}`);
       expect(undescribed, "every panel needs a description").toEqual([]);
     }
