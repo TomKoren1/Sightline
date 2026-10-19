@@ -1,13 +1,14 @@
 /**
  * Dashboards and alerts may only reference metrics the application registers.
  *
- * The failure this prevents is a panel that renders an empty graph for ever,
- * or an alert that can never fire. Both look fine in review and in Grafana:
- * "no data" is indistinguishable from "nothing is wrong", which is the worst
- * property a monitoring system can have.
+ * A panel querying nothing renders an empty graph for ever and an alert on a
+ * metric nobody exports can never fire. Both look healthy: "no data" is
+ * indistinguishable from "nothing is wrong".
  *
- * Metric names are read from `metrics.ts` rather than listed here, so renaming
- * one breaks this instead of silently emptying a panel.
+ * Names come from `metrics.ts`, so a rename breaks this rather than quietly
+ * emptying a panel. The dashboards sit in `deploy/k8s/base/` with the
+ * application, not in the chart - the sidecar finds them by label in any
+ * namespace, so they travel with what they describe.
  */
 
 import { existsSync, readFileSync, readdirSync } from "node:fs";
@@ -110,7 +111,7 @@ const KEYWORDS = new Set([
 
 describe("the monitoring chart", () => {
   const metrics = registeredMetrics();
-  const dashboardDir = `${root}helm/monitoring/dashboards`;
+  const dashboardDir = `${root}deploy/k8s/base/dashboards`;
   const dashboards = readdirSync(dashboardDir).filter((f) => f.endsWith(".json"));
 
   it("has dashboards and a rules file to check", () => {
@@ -118,6 +119,24 @@ describe("the monitoring chart", () => {
     expect(dashboards.length).toBeGreaterThan(3);
     expect(existsSync(`${root}helm/monitoring/values.yaml`)).toBe(true);
     expect(existsSync(`${root}helm/monitoring/Chart.yaml`)).toBe(true);
+  });
+
+  it("ships those dashboards with the application, not with the chart", () => {
+    /**
+     * The chart is the platform and nothing else, which is what lets either
+     * copy of it be the active one without carrying another repository's
+     * panels. If a dashboard appears in the chart, that stops being true.
+     */
+    expect(existsSync(`${root}helm/monitoring/dashboards`)).toBe(false);
+
+    const kustomization = read("deploy/k8s/base/kustomization.yaml");
+    for (const file of dashboards) {
+      expect(kustomization, `${file} is not generated into a ConfigMap`).toContain(file);
+    }
+    // The label the sidecar looks for, and no name hash - a hashed name on
+    // every edit leaves two copies of the dashboard in Grafana.
+    expect(kustomization).toContain('grafana_dashboard: "1"');
+    expect(kustomization).toContain("disableNameSuffixHash: true");
   });
 
   it("has dashboards that parse, with unique ids", () => {
