@@ -15,8 +15,18 @@ grafana:
     existingSecret: monitoring-grafana-admin
     userKey: admin-user
     passwordKey: admin-password
+  # Reached exactly as it was before this chart existed, so an existing
+  # bookmark still works: the same NodePort and the same hostname. Pinned
+  # rather than left to allocate, because a reallocated port is a dead link.
   service:
-    type: ClusterIP
+    type: NodePort
+    port: 80
+    nodePort: 31198
+  ingress:
+    enabled: true
+    ingressClassName: traefik
+    hosts:
+      - grafana.local
   persistence:
     enabled: true
     size: 1Gi
@@ -90,14 +100,12 @@ prometheus:
       enabled: true
       size: 8Gi
 
-  # Alertmanager is off until its Slack webhooks exist as a sealed secret.
-  #
-  # Deliberate: with it on and the secret missing, the pod waits in
-  # `ContainerCreating` for ever and the first sync looks broken. Prometheus
-  # still evaluates every rule below and Grafana still shows them, so the only
-  # thing waiting is delivery. See README.md, then set this to true.
+  # On, because `monitoring-slack` now exists as a SealedSecret. It shipped
+  # disabled: with it on and that secret missing, the pod waits in
+  # `ContainerCreating` for ever and the first sync looks broken, which is how
+  # the backup CronJob hid for thirty hours.
   alertmanager:
-    enabled: false
+    enabled: true
     config:
       route:
         receiver: slack-default
