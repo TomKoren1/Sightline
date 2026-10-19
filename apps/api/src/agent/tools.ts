@@ -22,6 +22,7 @@ import { readScoped, type GraphScope } from "../db/neo4j.js";
 import { diffScans, getLatestScan, listScans } from "../db/repository.js";
 import { asScanId } from "../tenancy/ids.js";
 import type { Scope } from "../tenancy/scope.js";
+import { agentRawCypherRefused } from "../observability/metrics.js";
 import { assertReadOnlyCypher } from "./cypherGuard.js";
 
 /**
@@ -416,6 +417,7 @@ export async function runTool(
     case RAW_CYPHER_TOOL: {
       // The second of the two gates in ADR-016. The first is `availableTools`.
       if (isHosted()) {
+        agentRawCypherRefused.inc({ reason: "hosted" });
         return {
           rows: [],
           arns: [],
@@ -427,6 +429,7 @@ export async function runTool(
       const cypher = String(input["cypher"] ?? "");
       const guard = assertReadOnlyCypher(cypher);
       if (!guard.ok) {
+        agentRawCypherRefused.inc({ reason: guard.cause ?? "unknown" });
         return { rows: [], arns: [], note: `Query rejected: ${guard.reason}` };
       }
       // Scoped like every other read. `readScoped` refuses Cypher that does not

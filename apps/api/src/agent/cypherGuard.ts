@@ -36,9 +36,20 @@ const FORBIDDEN_KEYWORDS = [
 /** A read query can only begin with one of these. */
 const ALLOWED_OPENINGS = ["MATCH", "OPTIONAL", "WITH", "UNWIND", "RETURN", "PROFILE", "EXPLAIN"];
 
+/**
+ * Why a query was refused, as a closed set.
+ *
+ * Separate from `reason`, which is prose for the model and interpolates the
+ * offending keyword into itself. That makes it useful to read and unusable as
+ * a metric label, so the cause is named here instead.
+ */
+export type GuardCause =
+  "empty" | "too_long" | "multiple_statements" | "forbidden_opening" | "forbidden_clause";
+
 export interface GuardResult {
   ok: boolean;
   reason?: string;
+  cause?: GuardCause;
 }
 
 /**
@@ -84,9 +95,13 @@ export function stripLiteralsAndComments(cypher: string): string {
 
 export function assertReadOnlyCypher(cypher: string): GuardResult {
   const trimmed = cypher.trim();
-  if (trimmed.length === 0) return { ok: false, reason: "Query is empty" };
+  if (trimmed.length === 0) return { ok: false, cause: "empty", reason: "Query is empty" };
   if (trimmed.length > 4000) {
-    return { ok: false, reason: "Query is too long; use one of the curated tools instead" };
+    return {
+      ok: false,
+      cause: "too_long",
+      reason: "Query is too long; use one of the curated tools instead",
+    };
   }
 
   const stripped = stripLiteralsAndComments(trimmed);
@@ -94,7 +109,11 @@ export function assertReadOnlyCypher(cypher: string): GuardResult {
   // Multiple statements would let a read be followed by a write.
   const withoutTrailing = stripped.replace(/;\s*$/, "");
   if (withoutTrailing.includes(";")) {
-    return { ok: false, reason: "Only a single statement is allowed" };
+    return {
+      ok: false,
+      cause: "multiple_statements",
+      reason: "Only a single statement is allowed",
+    };
   }
 
   const upper = withoutTrailing.toUpperCase();
@@ -103,6 +122,7 @@ export function assertReadOnlyCypher(cypher: string): GuardResult {
   if (!ALLOWED_OPENINGS.includes(firstWord)) {
     return {
       ok: false,
+      cause: "forbidden_opening",
       reason: `Query must start with one of ${ALLOWED_OPENINGS.join(", ")}, but starts with "${firstWord}"`,
     };
   }
@@ -113,6 +133,7 @@ export function assertReadOnlyCypher(cypher: string): GuardResult {
     if (new RegExp(`\\b${keyword}\\b`).test(upper)) {
       return {
         ok: false,
+        cause: "forbidden_clause",
         reason: `Query contains the forbidden clause "${keyword}". The agent has read-only access and cannot modify the graph.`,
       };
     }
