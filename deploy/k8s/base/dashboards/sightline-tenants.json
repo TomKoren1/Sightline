@@ -1,7 +1,7 @@
 {
   "uid": "sightline-tenants",
-  "title": "Sightline \u2014 customers and cost",
-  "description": "Who gets through onboarding, what the agent spends, and what the limits turn away.",
+  "title": "Sightline \u2014 customers and onboarding",
+  "description": "Who gets through onboarding, where they fall out, and what the limits turn away. What the agent costs is on 'Sightline \u2014 the agent'.",
   "tags": ["sightline"],
   "timezone": "browser",
   "schemaVersion": 39,
@@ -114,138 +114,6 @@
       "description": "How long the Connect screen sits amber. Minutes here is the difference between finishing onboarding and abandoning it."
     },
     {
-      "id": 4,
-      "title": "Questions asked",
-      "type": "timeseries",
-      "gridPos": {
-        "h": 8,
-        "w": 12,
-        "x": 0,
-        "y": 7
-      },
-      "datasource": {
-        "type": "prometheus",
-        "uid": "Prometheus"
-      },
-      "targets": [
-        {
-          "refId": "A",
-          "datasource": {
-            "type": "prometheus",
-            "uid": "Prometheus"
-          },
-          "expr": "sum by (outcome) (rate(sightline_agent_questions_total[30m])) * 1800",
-          "legendFormat": "{{outcome}} per 30m"
-        }
-      ],
-      "fieldConfig": {
-        "defaults": {
-          "custom": {}
-        },
-        "overrides": []
-      },
-      "description": "answered, or answered with citations the tools never returned. The second is the interesting series."
-    },
-    {
-      "id": 5,
-      "title": "Citations the tools never returned (24h)",
-      "type": "timeseries",
-      "gridPos": {
-        "h": 8,
-        "w": 12,
-        "x": 12,
-        "y": 7
-      },
-      "datasource": {
-        "type": "prometheus",
-        "uid": "Prometheus"
-      },
-      "targets": [
-        {
-          "refId": "A",
-          "datasource": {
-            "type": "prometheus",
-            "uid": "Prometheus"
-          },
-          "expr": "increase(sightline_agent_unsupported_citations_total[24h])",
-          "legendFormat": "unsupported"
-        }
-      ],
-      "fieldConfig": {
-        "defaults": {
-          "custom": {}
-        },
-        "overrides": []
-      },
-      "description": "The closest thing to a hallucination rate this product can honestly measure - the validator was already computing it per answer for the user's benefit. Rising means the agent is inventing resource ids, which is the one failure a reader cannot catch themselves."
-    },
-    {
-      "id": 6,
-      "title": "Anthropic tokens per hour",
-      "type": "timeseries",
-      "gridPos": {
-        "h": 8,
-        "w": 12,
-        "x": 0,
-        "y": 15
-      },
-      "datasource": {
-        "type": "prometheus",
-        "uid": "Prometheus"
-      },
-      "targets": [
-        {
-          "refId": "A",
-          "datasource": {
-            "type": "prometheus",
-            "uid": "Prometheus"
-          },
-          "expr": "sum by (kind) (rate(sightline_agent_tokens_total[1h])) * 3600",
-          "legendFormat": "{{kind}}/h"
-        }
-      ],
-      "fieldConfig": {
-        "defaults": {
-          "custom": {}
-        },
-        "overrides": []
-      },
-      "description": "Money. Output tokens cost several times input, so the two are separate series rather than a total."
-    },
-    {
-      "id": 7,
-      "title": "Tool calls by tool (6h)",
-      "type": "timeseries",
-      "gridPos": {
-        "h": 8,
-        "w": 12,
-        "x": 12,
-        "y": 15
-      },
-      "datasource": {
-        "type": "prometheus",
-        "uid": "Prometheus"
-      },
-      "targets": [
-        {
-          "refId": "A",
-          "datasource": {
-            "type": "prometheus",
-            "uid": "Prometheus"
-          },
-          "expr": "topk(10, sum by (tool) (increase(sightline_agent_tool_calls_total[6h])))",
-          "legendFormat": "{{tool}}"
-        }
-      ],
-      "fieldConfig": {
-        "defaults": {
-          "custom": {}
-        },
-        "overrides": []
-      },
-      "description": "Which questions need which evidence. A tool nobody calls is a tool to reconsider; the escape hatch being popular means the curated set has a gap."
-    },
-    {
       "id": 8,
       "title": "Requests a limit refused (6h)",
       "type": "timeseries",
@@ -253,7 +121,7 @@
         "h": 7,
         "w": 12,
         "x": 0,
-        "y": 23
+        "y": 7
       },
       "datasource": {
         "type": "prometheus",
@@ -286,7 +154,7 @@
         "h": 7,
         "w": 12,
         "x": 12,
-        "y": 23
+        "y": 7
       },
       "datasource": {
         "type": "prometheus",
