@@ -31,5 +31,8 @@ spec:
   destination:
     server: https://kubernetes.default.svc
     namespace: monitoring
-  syncOptions:
-    - CreateNamespace=true
+  syncPolicy:
+    # No `automated` block yet: sync it by hand once, look at what it created,
+    # then turn on prune and selfHeal. See the note above.
+    syncOptions:
+      - CreateNamespace=true
