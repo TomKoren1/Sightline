@@ -174,7 +174,17 @@ prometheus:
               # `absent(...)` as well as `== 0`, because a pod that is gone
               # entirely has no `up` series to be zero - the metric simply
               # disappears. Same idiom as the resume-builder group.
-              expr: absent(up{namespace="sightline", app="api"}) or up{namespace="sightline", app="api"} == 0
+              #
+              # `app_kubernetes_io_name`, not `app`. This project's manifests
+              # label pods `app.kubernetes.io/name`, and Prometheus's
+              # service-endpoints and pods jobs sanitise that into
+              # `app_kubernetes_io_name` - there is no `app` label on these
+              # targets at all. The first version used `app="api"`, matched
+              # nothing, and `absent()` therefore fired this alert against a
+              # perfectly healthy API within five minutes of the cutover.
+              # resume-builder's rules legitimately use `app=` because its pods
+              # carry a plain `app` label; that difference is the whole trap.
+              expr: absent(up{namespace="sightline", app_kubernetes_io_name="api"}) or up{namespace="sightline", app_kubernetes_io_name="api"} == 0
               for: 5m
               labels:
                 severity: critical

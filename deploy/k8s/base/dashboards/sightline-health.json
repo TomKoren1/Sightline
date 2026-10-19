@@ -230,7 +230,7 @@
             "type": "prometheus",
             "uid": "Prometheus"
           },
-          "expr": "up{namespace=\"sightline\", app=\"api\"}",
+          "expr": "up{namespace=\"sightline\", app_kubernetes_io_name=\"api\"}",
           "legendFormat": "api {{pod}}"
         },
         {
@@ -239,7 +239,7 @@
             "type": "prometheus",
             "uid": "Prometheus"
           },
-          "expr": "up{namespace=\"sightline\", app=\"worker\"}",
+          "expr": "up{namespace=\"sightline\", app_kubernetes_io_name=\"worker\"}",
           "legendFormat": "worker {{pod}}"
         }
       ],
@@ -249,7 +249,7 @@
         },
         "overrides": []
       },
-      "description": "A worker that is down shows here before the queue backs up behind it.",
+      "description": "A worker that is down shows here before the queue backs up behind it. Selected by `app_kubernetes_io_name`, not `app`: Prometheus sanitises this project's `app.kubernetes.io/name` label into that, and there is no `app` label on these targets - a selector on `app` matches nothing and reads as an outage.",
       "options": {
         "colorMode": "background",
         "reduceOptions": {

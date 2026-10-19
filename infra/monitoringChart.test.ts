@@ -228,6 +228,87 @@ describe("the monitoring chart", () => {
     ).toEqual([]);
   });
 
+  it("selects Sightline's targets by a label Prometheus actually sets", () => {
+    /**
+     * `app` does not exist on this project's Prometheus targets.
+     *
+     * These manifests label pods `app.kubernetes.io/name`, which Prometheus
+     * sanitises to `app_kubernetes_io_name`. promtail sets the plain `app`, so
+     * it is right in a Loki query and wrong in PromQL.
+     *
+     * `SightlineApiDown` used `app="api"`, matched nothing, and `absent()`
+     * fired against a healthy API five minutes after the cutover.
+     * resume-builder's rules use `app=` legitimately - its pods carry that
+     * label - so this looks only at expressions scoped to this project.
+     */
+    const offenders: string[] = [];
+
+    const check = (expr: string, where: string, prometheus: boolean) => {
+      if (!prometheus) return;
+      if (!expr.includes('namespace="sightline"')) return;
+      if (/\bapp\s*=~?\s*"/.test(expr)) offenders.push(`${where}: ${expr.slice(0, 60)}`);
+    };
+
+    for (const file of dashboards) {
+      const doc = JSON.parse(readFileSync(`${dashboardDir}/${file}`, "utf8")) as {
+        panels?: { datasource?: { type?: string }; targets?: { expr?: string }[] }[];
+      };
+      for (const p of doc.panels ?? []) {
+        const isProm = p.datasource?.type === "prometheus";
+        for (const tgt of p.targets ?? []) if (tgt.expr) check(tgt.expr, file, isProm);
+      }
+    }
+
+    const values = parse(read("helm/monitoring/values.yaml")) as {
+      prometheus?: {
+        serverFiles?: {
+          "alerting_rules.yml"?: { groups?: { name?: string; rules?: { expr?: string }[] }[] };
+        };
+      };
+    };
+    for (const group of values.prometheus?.serverFiles?.["alerting_rules.yml"]?.groups ?? []) {
+      // Alert expressions are always PromQL.
+      for (const rule of group.rules ?? [])
+        if (rule.expr) check(rule.expr, "alerting_rules.yml", true);
+    }
+
+    expect(
+      offenders,
+      "these filter Sightline's Prometheus series on `app`, which none of them carry - the " +
+        "selector matches nothing, so a panel is empty and an `absent()` alert fires against a " +
+        "healthy service. Use `app_kubernetes_io_name`.",
+    ).toEqual([]);
+  });
+
+  it("has Loki queries whose stream selector is actually a selector", () => {
+    /**
+     * `{namespace="sightline"}, app="worker"` is not LogQL - the matcher has
+     * fallen outside the braces, and Grafana answers with a parse error rather
+     * than an empty panel. Built by string concatenation, so it typechecked
+     * and rendered and was wrong.
+     */
+    const malformed: string[] = [];
+    for (const file of dashboards) {
+      const doc = JSON.parse(readFileSync(`${dashboardDir}/${file}`, "utf8")) as {
+        panels?: { datasource?: { type?: string }; targets?: { expr?: string }[] }[];
+      };
+      for (const p of doc.panels ?? []) {
+        if (p.datasource?.type !== "loki") continue;
+        for (const tgt of p.targets ?? []) {
+          const expr = tgt.expr ?? "";
+          if (/\}\s*,\s*[A-Za-z_][A-Za-z_0-9]*\s*=/.test(expr)) {
+            malformed.push(`${file}: ${expr.slice(0, 60)}`);
+          }
+        }
+      }
+    }
+    expect(
+      malformed,
+      "a label matcher has escaped the stream selector's braces. Grafana answers these with a " +
+        "parse error, which looks like a broken datasource rather than a broken query.",
+    ).toEqual([]);
+  });
+
   it("pins the same dependency versions as the other copy of this chart", () => {
     /**
      * Two complete copies exist, in two repositories, and exactly one is

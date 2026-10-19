@@ -190,7 +190,7 @@
             "type": "loki",
             "uid": "Loki"
           },
-          "expr": "{namespace=\"sightline\"}, app=\"worker\"",
+          "expr": "{namespace=\"sightline\", app=\"worker\"}",
           "queryType": "range"
         }
       ],
