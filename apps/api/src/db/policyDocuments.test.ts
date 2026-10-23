@@ -4,7 +4,7 @@
 
 import { randomUUID } from "node:crypto";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import type { Resource } from "@sightline/shared";
 
 import { system } from "./postgres.js";
@@ -155,7 +155,15 @@ describe.runIf(HAS_INFRA)("stored policy documents", () => {
     // A later scan in which the admin policy is gone from every role.
     const reader = role("reader");
     reader.properties["attachedPolicies"] = [];
-    await new Promise((r) => setTimeout(r, 20));
+    // As if the first scan were a day old, documents and all, so the margin
+    // pruning keeps for clock skew is behind both of them.
+    await system.execute(
+      sql`UPDATE scan_runs SET started_at = now() - interval '1 day' WHERE tenant_id = ${tenantId}`,
+    );
+    await system.execute(
+      sql`UPDATE policy_documents SET last_used_at = now() - interval '1 day'
+           WHERE tenant_id = ${tenantId}`,
+    );
     await scanOf([reader]);
 
     await pruneScanHistory(scope, 1);

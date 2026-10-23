@@ -141,12 +141,15 @@ export async function pruneScanHistory(scope: Scope, keep: number): Promise<numb
       // Documents no retained scan can refer to: every save marks the ones it
       // uses, so anything last used before the oldest remaining scan began is
       // referenced by nothing. Across the tenant, because documents are shared
-      // by all of its accounts.
+      // by all of its accounts. An hour's margin, because the two times come
+      // from different clocks - `started_at` the app's, `last_used_at` the
+      // database's - and an app clock running ahead would otherwise delete a
+      // document a retained scan still refers to. Late deletion costs nothing.
       await db.execute(sql`
         DELETE FROM policy_documents
          WHERE tenant_id = ${scope.tenantId}
            AND last_used_at < (SELECT min(started_at) FROM scan_runs
-                                WHERE tenant_id = ${scope.tenantId})
+                                WHERE tenant_id = ${scope.tenantId}) - interval '1 hour'
       `);
     }
     return rows.length;
@@ -405,7 +408,7 @@ async function unitsFor(scope: Scope, scanIds: string[]): Promise<Map<string, Sc
  */
 export async function refreshSnapshotStatistics(): Promise<void> {
   try {
-    await system.execute(sql`ANALYZE resource_snapshots, relationship_snapshots`);
+    await system.execute(sql`SELECT refresh_snapshot_statistics()`);
   } catch (err) {
     console.warn(
       "Refreshing snapshot statistics failed; queries may plan badly until autovacuum runs:",
