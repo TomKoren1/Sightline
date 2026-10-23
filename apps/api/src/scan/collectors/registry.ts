@@ -7,7 +7,7 @@
  * fields alone.
  */
 
-import type { ResourceKind, ScannableService } from "@sightline/shared";
+import type { RelationshipType, ResourceKind, ScannableService } from "@sightline/shared";
 
 import { collectApiGateway } from "./apigateway.js";
 import { collectCloudFront } from "./cloudfront.js";
@@ -30,6 +30,14 @@ export interface CollectorPlugin {
   scope: "global" | "regional";
   /** What it emits. A kind no plugin claims is one nothing can produce. */
   kinds: readonly ResourceKind[];
+  /** Every relationship type it may emit. Analysers add the derived ones. */
+  relationships: readonly RelationshipType[];
+  /**
+   * An upper bound on its AWS calls in one unit: a fixed number, plus so many
+   * per resource it returns (paginated lists cost a fraction a resource).
+   * Checked against moto, and what a scan of N resources is estimated from.
+   */
+  calls: { perUnit: number; perResource: number };
   /** The read-only actions it calls, named in the error when one is refused. */
   permissions: readonly string[];
   collect: Collector;
@@ -38,12 +46,34 @@ export interface CollectorPlugin {
 export const COLLECTORS: Record<ScannableService, CollectorPlugin> = {
   ec2: {
     scope: "regional",
+    relationships: [
+      "ATTACHED_TO",
+      "HAS_INSTANCE_PROFILE",
+      "HAS_SECURITY_GROUP",
+      "IN_REGION",
+      "IN_SUBNET",
+    ],
+    calls: { perUnit: 3, perResource: 0.01 },
     kinds: ["Ec2Instance", "EbsVolume", "ElasticIp"],
     permissions: ["ec2:DescribeInstances", "ec2:DescribeVolumes", "ec2:DescribeAddresses"],
     collect: collectEc2,
   },
   vpc: {
     scope: "regional",
+    relationships: [
+      "ATTACHED_TO",
+      "CONNECTS_TO",
+      "HAS_NACL",
+      "HAS_SECURITY_GROUP",
+      "IN_REGION",
+      "IN_SUBNET",
+      "IN_VPC",
+      "PEERS_WITH",
+      "ROUTES_TO",
+      "SERVED_BY",
+      "USES_ROUTE_TABLE",
+    ],
+    calls: { perUnit: 14, perResource: 0.05 },
     kinds: [
       "Vpc",
       "Subnet",
@@ -77,6 +107,8 @@ export const COLLECTORS: Record<ScannableService, CollectorPlugin> = {
   },
   s3: {
     scope: "global",
+    relationships: ["IN_REGION"],
+    calls: { perUnit: 1, perResource: 6 },
     kinds: ["S3Bucket"],
     permissions: [
       "s3:ListAllMyBuckets",
@@ -91,6 +123,8 @@ export const COLLECTORS: Record<ScannableService, CollectorPlugin> = {
   },
   iam: {
     scope: "global",
+    relationships: ["HAS_POLICY", "MEMBER_OF", "PROVIDES_ROLE"],
+    calls: { perUnit: 5, perResource: 0.01 },
     kinds: ["IamRole", "IamUser", "IamGroup", "IamPolicy", "InstanceProfile"],
     permissions: [
       "iam:GetAccountAuthorizationDetails",
@@ -103,18 +137,24 @@ export const COLLECTORS: Record<ScannableService, CollectorPlugin> = {
   },
   rds: {
     scope: "regional",
+    relationships: ["HAS_SECURITY_GROUP", "IN_REGION", "IN_SUBNET", "USES_SUBNET_GROUP"],
+    calls: { perUnit: 2, perResource: 0.01 },
     kinds: ["RdsInstance", "DbSubnetGroup"],
     permissions: ["rds:DescribeDBInstances", "rds:DescribeDBSubnetGroups"],
     collect: collectRds,
   },
   lambda: {
     scope: "regional",
+    relationships: ["EXECUTES_AS", "HAS_SECURITY_GROUP", "IN_REGION", "IN_SUBNET"],
+    calls: { perUnit: 1, perResource: 0.02 },
     kinds: ["LambdaFunction"],
     permissions: ["lambda:ListFunctions"],
     collect: collectLambda,
   },
   elbv2: {
     scope: "regional",
+    relationships: ["FORWARDS_TO", "HAS_SECURITY_GROUP", "IN_REGION", "IN_SUBNET", "TARGETS"],
+    calls: { perUnit: 2, perResource: 1 },
     kinds: ["LoadBalancer", "TargetGroup"],
     permissions: [
       "elasticloadbalancing:DescribeLoadBalancers",
@@ -126,12 +166,16 @@ export const COLLECTORS: Record<ScannableService, CollectorPlugin> = {
   },
   cloudfront: {
     scope: "global",
+    relationships: [],
+    calls: { perUnit: 1, perResource: 0.01 },
     kinds: ["CloudFrontDistribution"],
     permissions: ["cloudfront:ListDistributions"],
     collect: collectCloudFront,
   },
   apigateway: {
     scope: "regional",
+    relationships: ["IN_REGION", "INTEGRATES_WITH"],
+    calls: { perUnit: 2, perResource: 2 },
     kinds: ["ApiGateway"],
     // API Gateway's IAM actions are HTTP verbs on resource paths.
     permissions: ["apigateway:GET"],
@@ -139,18 +183,24 @@ export const COLLECTORS: Record<ScannableService, CollectorPlugin> = {
   },
   sqs: {
     scope: "regional",
+    relationships: ["IN_REGION"],
+    calls: { perUnit: 1, perResource: 1 },
     kinds: ["SqsQueue"],
     permissions: ["sqs:ListQueues", "sqs:GetQueueAttributes"],
     collect: collectSqs,
   },
   sns: {
     scope: "regional",
+    relationships: ["IN_REGION"],
+    calls: { perUnit: 1, perResource: 1 },
     kinds: ["SnsTopic"],
     permissions: ["sns:ListTopics", "sns:GetTopicAttributes"],
     collect: collectSns,
   },
   kms: {
     scope: "regional",
+    relationships: ["IN_REGION"],
+    calls: { perUnit: 1, perResource: 3 },
     kinds: ["KmsKey"],
     permissions: [
       "kms:ListKeys",
@@ -162,12 +212,16 @@ export const COLLECTORS: Record<ScannableService, CollectorPlugin> = {
   },
   secretsmanager: {
     scope: "regional",
+    relationships: ["IN_REGION"],
+    calls: { perUnit: 1, perResource: 1 },
     kinds: ["Secret"],
     permissions: ["secretsmanager:ListSecrets", "secretsmanager:GetResourcePolicy"],
     collect: collectSecrets,
   },
   dynamodb: {
     scope: "regional",
+    relationships: ["IN_REGION"],
+    calls: { perUnit: 1, perResource: 2 },
     kinds: ["DynamoTable"],
     permissions: [
       "dynamodb:ListTables",
@@ -178,6 +232,15 @@ export const COLLECTORS: Record<ScannableService, CollectorPlugin> = {
   },
   ecs: {
     scope: "regional",
+    relationships: [
+      "EXECUTES_AS",
+      "HAS_SECURITY_GROUP",
+      "IN_CLUSTER",
+      "IN_REGION",
+      "IN_SUBNET",
+      "TARGETS",
+    ],
+    calls: { perUnit: 1, perResource: 2 },
     kinds: ["EcsCluster", "EcsService"],
     permissions: [
       "ecs:ListClusters",
@@ -189,6 +252,8 @@ export const COLLECTORS: Record<ScannableService, CollectorPlugin> = {
   },
   eks: {
     scope: "regional",
+    relationships: ["CAN_ASSUME", "EXECUTES_AS", "IN_CLUSTER", "IN_REGION", "IN_SUBNET"],
+    calls: { perUnit: 1, perResource: 3 },
     kinds: ["EksCluster", "EksNodeGroup"],
     permissions: [
       "eks:ListClusters",
@@ -202,12 +267,16 @@ export const COLLECTORS: Record<ScannableService, CollectorPlugin> = {
   },
   route53: {
     scope: "global",
+    relationships: [],
+    calls: { perUnit: 1, perResource: 1 },
     kinds: ["HostedZone"],
     permissions: ["route53:ListHostedZones", "route53:ListResourceRecordSets"],
     collect: collectRoute53,
   },
   autoscaling: {
     scope: "regional",
+    relationships: ["IN_REGION", "MANAGES"],
+    calls: { perUnit: 1, perResource: 0.01 },
     kinds: ["AutoScalingGroup"],
     permissions: ["autoscaling:DescribeAutoScalingGroups"],
     collect: collectAutoScaling,

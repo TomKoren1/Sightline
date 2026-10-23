@@ -99,6 +99,16 @@ jobs:
       - name: Run a full scan and persist it
         run: npm run scan
 
+      - name: Every integration test
+        # The unit job sets SKIP_INTEGRATION, so until this step the tests that
+        # need Postgres or moto - tenant isolation, row-level security, the
+        # collector contracts - ran on developers' machines and nowhere else.
+        # Before the ground-truth step, which drifts the mock account.
+        run: >-
+          npx vitest run
+          --exclude '**/evals/groundTruth.test.ts'
+          --exclude '**/load/largeAccount.test.ts'
+
       - name: Ground-truth assertions
         # Tier 1 of the eval suite. Needs no API key, and catches the
         # regression that matters most: an analyser becoming quietly wrong.

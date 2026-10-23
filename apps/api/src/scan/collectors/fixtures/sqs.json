@@ -1,0 +1,54 @@
+{
+ "accountId": "123456789012",
+ "regions": [
+  "us-east-1",
+  "eu-west-1",
+  "ap-southeast-1"
+ ],
+ "resources": [
+  {
+   "arn": "arn:aws:sqs:us-east-1:123456789012:internal-events",
+   "kind": "SqsQueue",
+   "name": "internal-events",
+   "region": "us-east-1",
+   "accountId": "123456789012",
+   "tags": {},
+   "properties": {
+    "url": "http://100.68.161.48:15000/123456789012/internal-events",
+    "policy": null,
+    "kmsKeyId": null,
+    "encrypted": true,
+    "fifo": false
+   },
+   "derived": {}
+  },
+  {
+   "arn": "arn:aws:sqs:us-east-1:123456789012:orders-queue",
+   "kind": "SqsQueue",
+   "name": "orders-queue",
+   "region": "us-east-1",
+   "accountId": "123456789012",
+   "tags": {},
+   "properties": {
+    "url": "http://100.68.161.48:15000/123456789012/orders-queue",
+    "policy": "{\"Version\": \"2012-10-17\", \"Statement\": [{\"Sid\": \"Anyone\", \"Effect\": \"Allow\", \"Principal\": \"*\", \"Action\": \"sqs:SendMessage\", \"Resource\": \"*\"}]}",
+    "kmsKeyId": null,
+    "encrypted": true,
+    "fifo": false
+   },
+   "derived": {}
+  }
+ ],
+ "relationships": [
+  {
+   "from": "arn:aws:sqs:us-east-1:123456789012:internal-events",
+   "to": "arn:aws:sightline:us-east-1:123456789012:region/us-east-1",
+   "type": "IN_REGION"
+  },
+  {
+   "from": "arn:aws:sqs:us-east-1:123456789012:orders-queue",
+   "to": "arn:aws:sightline:us-east-1:123456789012:region/us-east-1",
+   "type": "IN_REGION"
+  }
+ ]
+}

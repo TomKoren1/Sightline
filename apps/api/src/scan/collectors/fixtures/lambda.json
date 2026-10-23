@@ -1,0 +1,90 @@
+{
+ "accountId": "123456789012",
+ "regions": [
+  "us-east-1",
+  "eu-west-1",
+  "ap-southeast-1"
+ ],
+ "resources": [
+  {
+   "arn": "arn:aws:lambda:us-east-1:123456789012:function:legacy-image-resizer",
+   "kind": "LambdaFunction",
+   "name": "legacy-image-resizer",
+   "region": "us-east-1",
+   "accountId": "123456789012",
+   "tags": {},
+   "properties": {
+    "functionName": "legacy-image-resizer",
+    "runtime": "nodejs20.x",
+    "handler": "index.handler",
+    "roleArn": "arn:aws:iam::123456789012:role/LegacyDeployRole",
+    "memorySizeMb": 3008,
+    "timeoutSeconds": 300,
+    "lastModified": "2026-10-23T18:03:37.860218000Z",
+    "codeSizeBytes": 114,
+    "vpcId": null,
+    "subnetIds": [],
+    "securityGroupIds": []
+   },
+   "derived": {}
+  },
+  {
+   "arn": "arn:aws:lambda:us-east-1:123456789012:function:order-processor",
+   "kind": "LambdaFunction",
+   "name": "order-processor",
+   "region": "us-east-1",
+   "accountId": "123456789012",
+   "tags": {},
+   "properties": {
+    "functionName": "order-processor",
+    "runtime": "nodejs20.x",
+    "handler": "index.handler",
+    "roleArn": "arn:aws:iam::123456789012:role/LambdaExecRole",
+    "memorySizeMb": 512,
+    "timeoutSeconds": 30,
+    "lastModified": "2026-10-23T18:03:37.833228000Z",
+    "codeSizeBytes": 114,
+    "vpcId": "vpc-123abc",
+    "subnetIds": [
+     "subnet-060e08738e8662d9f"
+    ],
+    "securityGroupIds": [
+     "sg-bd3d41b65e8d74102"
+    ]
+   },
+   "derived": {}
+  }
+ ],
+ "relationships": [
+  {
+   "from": "arn:aws:lambda:us-east-1:123456789012:function:legacy-image-resizer",
+   "to": "arn:aws:iam::123456789012:role/LegacyDeployRole",
+   "type": "EXECUTES_AS"
+  },
+  {
+   "from": "arn:aws:lambda:us-east-1:123456789012:function:legacy-image-resizer",
+   "to": "arn:aws:sightline:us-east-1:123456789012:region/us-east-1",
+   "type": "IN_REGION"
+  },
+  {
+   "from": "arn:aws:lambda:us-east-1:123456789012:function:order-processor",
+   "to": "arn:aws:iam::123456789012:role/LambdaExecRole",
+   "type": "EXECUTES_AS"
+  },
+  {
+   "from": "arn:aws:lambda:us-east-1:123456789012:function:order-processor",
+   "to": "arn:aws:ec2:us-east-1:123456789012:security-group/sg-bd3d41b65e8d74102",
+   "type": "HAS_SECURITY_GROUP"
+  },
+  {
+   "from": "arn:aws:lambda:us-east-1:123456789012:function:order-processor",
+   "to": "arn:aws:sightline:us-east-1:123456789012:region/us-east-1",
+   "type": "IN_REGION"
+  },
+  {
+   "from": "arn:aws:lambda:us-east-1:123456789012:function:order-processor",
+   "to": "arn:aws:ec2:us-east-1:123456789012:subnet/subnet-060e08738e8662d9f",
+   "type": "IN_SUBNET"
+  }
+ ]
+}

@@ -98,6 +98,8 @@ export interface CollectedEstate {
   regions: string[];
   units: ScanUnit[];
   collected: CollectorOutput;
+  /** Each succeeded unit's own output, for checking collectors against their declarations. */
+  unitOutputs: { unit: ScanUnit; output: CollectorOutput }[];
 }
 
 export async function runScan(options: ScanOptions): Promise<ScanResult & { units: ScanUnit[] }> {
@@ -190,6 +192,7 @@ export async function collectEstate(options: ScanOptions): Promise<CollectedEsta
 
   let completed = 0;
   const outputs: CollectorOutput[] = [];
+  const unitOutputs: CollectedEstate["unitOutputs"] = [];
 
   const tasks = units.map((unit) => async () => {
     const key = `${unit.service}:${unit.region ?? "global"}`;
@@ -211,10 +214,12 @@ export async function collectEstate(options: ScanOptions): Promise<CollectedEsta
 
       const output = await COLLECTORS[unit.service].collect({
         ...ctx,
+        unitKey: key,
         region: unit.region,
         accountId: session.accountId,
       });
       outputs.push(output);
+      unitOutputs.push({ unit, output });
       unit.status = "succeeded";
       unit.resourceCount = output.resources.length;
     } catch (err) {
@@ -239,7 +244,13 @@ export async function collectEstate(options: ScanOptions): Promise<CollectedEsta
 
   await runWithConcurrency(tasks, cfg.SCAN_CONCURRENCY);
 
-  return { accountId: session.accountId, regions, units, collected: mergeOutputs(outputs) };
+  return {
+    accountId: session.accountId,
+    regions,
+    units,
+    collected: mergeOutputs(outputs),
+    unitOutputs,
+  };
 }
 
 export { rollUpStatus };

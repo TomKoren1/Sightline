@@ -65,6 +65,12 @@ export class CallCounter {
 export interface AwsContext {
   target: ScanTarget;
   counter: CallCounter;
+  /**
+   * The scan unit making these calls, which they are counted under. Without
+   * it, two units sharing a client - VPC and EC2 both use EC2's - were
+   * counted under one key and each charged the other's calls.
+   */
+  unitKey?: string;
 }
 
 function baseConfig(ctx: AwsContext, region: string) {
@@ -147,36 +153,56 @@ function instrument<T extends object>(client: T, counter: CallCounter, key: stri
 }
 
 export const ec2Client = (ctx: AwsContext, region: string) =>
-  instrument(new EC2Client(baseConfig(ctx, region)), ctx.counter, `ec2:${region}`);
+  instrument(new EC2Client(baseConfig(ctx, region)), ctx.counter, ctx.unitKey ?? `ec2:${region}`);
 
 export const rdsClient = (ctx: AwsContext, region: string) =>
-  instrument(new RDSClient(baseConfig(ctx, region)), ctx.counter, `rds:${region}`);
+  instrument(new RDSClient(baseConfig(ctx, region)), ctx.counter, ctx.unitKey ?? `rds:${region}`);
 
 export const lambdaClient = (ctx: AwsContext, region: string) =>
-  instrument(new LambdaClient(baseConfig(ctx, region)), ctx.counter, `lambda:${region}`);
+  instrument(
+    new LambdaClient(baseConfig(ctx, region)),
+    ctx.counter,
+    ctx.unitKey ?? `lambda:${region}`,
+  );
 
 export const elbv2Client = (ctx: AwsContext, region: string) =>
   instrument(
     new ElasticLoadBalancingV2Client(baseConfig(ctx, region)),
     ctx.counter,
-    `elbv2:${region}`,
+    ctx.unitKey ?? `elbv2:${region}`,
   );
 
 /** CloudFront is global and answers in us-east-1, whatever region a scan runs in. */
 export const cloudfrontClient = (ctx: AwsContext) =>
-  instrument(new CloudFrontClient(baseConfig(ctx, "us-east-1")), ctx.counter, "cloudfront:global");
+  instrument(
+    new CloudFrontClient(baseConfig(ctx, "us-east-1")),
+    ctx.counter,
+    ctx.unitKey ?? "cloudfront:global",
+  );
 
 export const apigatewayClient = (ctx: AwsContext, region: string) =>
-  instrument(new APIGatewayClient(baseConfig(ctx, region)), ctx.counter, `apigateway:${region}`);
+  instrument(
+    new APIGatewayClient(baseConfig(ctx, region)),
+    ctx.counter,
+    ctx.unitKey ?? `apigateway:${region}`,
+  );
 
 export const apigatewayV2Client = (ctx: AwsContext, region: string) =>
-  instrument(new ApiGatewayV2Client(baseConfig(ctx, region)), ctx.counter, `apigateway:${region}`);
+  instrument(
+    new ApiGatewayV2Client(baseConfig(ctx, region)),
+    ctx.counter,
+    ctx.unitKey ?? `apigateway:${region}`,
+  );
 
 /** One regional client factory per service, counted under that service's unit. */
 const regional =
   <T extends object>(Client: new (config: ReturnType<typeof baseConfig>) => T, service: string) =>
   (ctx: AwsContext, region: string) =>
-    instrument(new Client(baseConfig(ctx, region)), ctx.counter, `${service}:${region}`);
+    instrument(
+      new Client(baseConfig(ctx, region)),
+      ctx.counter,
+      ctx.unitKey ?? `${service}:${region}`,
+    );
 
 export const sqsClient = regional(SQSClient, "sqs");
 export const snsClient = regional(SNSClient, "sns");
@@ -189,13 +215,17 @@ export const autoScalingClient = regional(AutoScalingClient, "autoscaling");
 
 /** Route 53 is global and answers in us-east-1. */
 export const route53Client = (ctx: AwsContext) =>
-  instrument(new Route53Client(baseConfig(ctx, "us-east-1")), ctx.counter, "route53:global");
+  instrument(
+    new Route53Client(baseConfig(ctx, "us-east-1")),
+    ctx.counter,
+    ctx.unitKey ?? "route53:global",
+  );
 
 export const resourceExplorerClient = (ctx: AwsContext, region: string) =>
   instrument(
     new ResourceExplorer2Client(baseConfig(ctx, region)),
     ctx.counter,
-    `resource-explorer:${region}`,
+    ctx.unitKey ?? `resource-explorer:${region}`,
   );
 
 /** moto serves S3 from a single host, so path-style addressing is required. */
@@ -213,4 +243,4 @@ export const s3Client = (ctx: AwsContext, region: string) =>
 
 /** IAM is global. Its endpoint lives in us-east-1 regardless of where we scan. */
 export const iamClient = (ctx: AwsContext) =>
-  instrument(new IAMClient(baseConfig(ctx, "us-east-1")), ctx.counter, "iam:global");
+  instrument(new IAMClient(baseConfig(ctx, "us-east-1")), ctx.counter, ctx.unitKey ?? "iam:global");

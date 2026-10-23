@@ -1,0 +1,38 @@
+{
+ "accountId": "123456789012",
+ "regions": [
+  "us-east-1",
+  "eu-west-1",
+  "ap-southeast-1"
+ ],
+ "resources": [
+  {
+   "arn": "arn:aws:route53:::hostedzone/APWA5SBKESRRGI0RDTNSDP",
+   "kind": "HostedZone",
+   "name": "northwind.example",
+   "region": null,
+   "accountId": "123456789012",
+   "tags": {},
+   "properties": {
+    "privateZone": false,
+    "recordCount": 4,
+    "records": [
+     {
+      "name": "app.northwind.example",
+      "type": "CNAME",
+      "target": "prod-alb-1.us-east-1.elb.amazonaws.com",
+      "alias": false
+     },
+     {
+      "name": "www.northwind.example",
+      "type": "CNAME",
+      "target": "asgrl18l58thw.cloudfront.net",
+      "alias": false
+     }
+    ]
+   },
+   "derived": {}
+  }
+ ],
+ "relationships": []
+}

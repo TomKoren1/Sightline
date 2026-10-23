@@ -1,0 +1,174 @@
+{
+ "accountId": "123456789012",
+ "regions": [
+  "us-east-1",
+  "eu-west-1",
+  "ap-southeast-1"
+ ],
+ "resources": [
+  {
+   "arn": "arn:aws:s3:::northwind-logs-archive",
+   "kind": "S3Bucket",
+   "name": "northwind-logs-archive",
+   "region": "us-east-1",
+   "accountId": "123456789012",
+   "tags": {
+    "Environment": "legacy",
+    "LastReviewed": "2022-03-01"
+   },
+   "properties": {
+    "bucketName": "northwind-logs-archive",
+    "createdAt": "2026-10-23T18:03:36.000Z",
+    "policy": null,
+    "policyIsPublic": null,
+    "publicAccessBlock": null,
+    "aclGrants": [
+     {
+      "granteeType": "CanonicalUser",
+      "granteeUri": null,
+      "permission": "FULL_CONTROL"
+     }
+    ]
+   },
+   "derived": {}
+  },
+  {
+   "arn": "arn:aws:s3:::northwind-public-assets",
+   "kind": "S3Bucket",
+   "name": "northwind-public-assets",
+   "region": "us-east-1",
+   "accountId": "123456789012",
+   "tags": {
+    "Environment": "production",
+    "Owner": "platform",
+    "CostCenter": "eng-core"
+   },
+   "properties": {
+    "bucketName": "northwind-public-assets",
+    "createdAt": "2026-10-23T18:03:35.000Z",
+    "policy": "{\"Version\":\"2012-10-17\",\"Statement\":[{\"Sid\":\"PublicRead\",\"Effect\":\"Allow\",\"Principal\":\"*\",\"Action\":\"s3:GetObject\",\"Resource\":\"arn:aws:s3:::northwind-public-assets/*\"}]}",
+    "policyIsPublic": null,
+    "publicAccessBlock": {
+     "BlockPublicAcls": false,
+     "IgnorePublicAcls": false,
+     "BlockPublicPolicy": false,
+     "RestrictPublicBuckets": false
+    },
+    "aclGrants": [
+     {
+      "granteeType": "CanonicalUser",
+      "granteeUri": null,
+      "permission": "FULL_CONTROL"
+     }
+    ]
+   },
+   "derived": {}
+  },
+  {
+   "arn": "arn:aws:s3:::northwind-reports",
+   "kind": "S3Bucket",
+   "name": "northwind-reports",
+   "region": "us-east-1",
+   "accountId": "123456789012",
+   "tags": {},
+   "properties": {
+    "bucketName": "northwind-reports",
+    "createdAt": "2026-10-23T18:03:36.000Z",
+    "policy": "{\"Version\":\"2012-10-17\",\"Statement\":[{\"Sid\":\"PublicRead\",\"Effect\":\"Allow\",\"Principal\":\"*\",\"Action\":\"s3:GetObject\",\"Resource\":\"arn:aws:s3:::northwind-reports/*\"}]}",
+    "policyIsPublic": null,
+    "publicAccessBlock": {
+     "BlockPublicAcls": true,
+     "IgnorePublicAcls": true,
+     "BlockPublicPolicy": true,
+     "RestrictPublicBuckets": true
+    },
+    "aclGrants": [
+     {
+      "granteeType": "CanonicalUser",
+      "granteeUri": null,
+      "permission": "FULL_CONTROL"
+     }
+    ]
+   },
+   "derived": {}
+  },
+  {
+   "arn": "arn:aws:s3:::northwind-staging-uploads",
+   "kind": "S3Bucket",
+   "name": "northwind-staging-uploads",
+   "region": "eu-west-1",
+   "accountId": "123456789012",
+   "tags": {},
+   "properties": {
+    "bucketName": "northwind-staging-uploads",
+    "createdAt": "2026-10-23T18:03:36.000Z",
+    "policy": null,
+    "policyIsPublic": null,
+    "publicAccessBlock": null,
+    "aclGrants": [
+     {
+      "granteeType": "CanonicalUser",
+      "granteeUri": null,
+      "permission": "FULL_CONTROL"
+     }
+    ]
+   },
+   "derived": {}
+  },
+  {
+   "arn": "arn:aws:s3:::northwind-terraform-state",
+   "kind": "S3Bucket",
+   "name": "northwind-terraform-state",
+   "region": "us-east-1",
+   "accountId": "123456789012",
+   "tags": {},
+   "properties": {
+    "bucketName": "northwind-terraform-state",
+    "createdAt": "2026-10-23T18:03:36.000Z",
+    "policy": null,
+    "policyIsPublic": null,
+    "publicAccessBlock": {
+     "BlockPublicAcls": true,
+     "IgnorePublicAcls": true,
+     "BlockPublicPolicy": true,
+     "RestrictPublicBuckets": true
+    },
+    "aclGrants": [
+     {
+      "granteeType": "CanonicalUser",
+      "granteeUri": null,
+      "permission": "FULL_CONTROL"
+     }
+    ]
+   },
+   "derived": {}
+  }
+ ],
+ "relationships": [
+  {
+   "from": "arn:aws:s3:::northwind-logs-archive",
+   "to": "arn:aws:sightline:us-east-1:123456789012:region/us-east-1",
+   "type": "IN_REGION"
+  },
+  {
+   "from": "arn:aws:s3:::northwind-public-assets",
+   "to": "arn:aws:sightline:us-east-1:123456789012:region/us-east-1",
+   "type": "IN_REGION"
+  },
+  {
+   "from": "arn:aws:s3:::northwind-reports",
+   "to": "arn:aws:sightline:us-east-1:123456789012:region/us-east-1",
+   "type": "IN_REGION"
+  },
+  {
+   "from": "arn:aws:s3:::northwind-staging-uploads",
+   "to": "arn:aws:sightline:eu-west-1:123456789012:region/eu-west-1",
+   "type": "IN_REGION"
+  },
+  {
+   "from": "arn:aws:s3:::northwind-terraform-state",
+   "to": "arn:aws:sightline:us-east-1:123456789012:region/us-east-1",
+   "type": "IN_REGION"
+  }
+ ]
+}

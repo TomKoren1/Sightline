@@ -33,3 +33,7 @@ helm/*/templates/
 # compared byte for byte by infra/collectorsGenerated.test.ts: reformatting it
 # would make the generated file stale by definition.
 apps/api/src/scan/collectors/README.md
+
+# Recorded collector output, written by `npm run gen:collectors -- --fixtures`.
+# Data, not code: reformatting it would only churn the diff on every re-record.
+apps/api/src/scan/collectors/fixtures/
