@@ -298,7 +298,9 @@ export const TOOL_DEFINITIONS: ToolDefinition[] = [
       "*Reason for each, plus estimatedMonthlyCostUsd - read booleans as (derived->>'isAdmin')::boolean. " +
       "rel_type is one of IN_REGION, IN_VPC, IN_SUBNET, HAS_SECURITY_GROUP, ATTACHED_TO, ROUTES_TO, " +
       "USES_SUBNET_GROUP, HAS_INSTANCE_PROFILE, PROVIDES_ROLE, HAS_POLICY, MEMBER_OF, EXECUTES_AS, " +
-      "CAN_REACH. Only these views and common functions are allowed; at most 200 rows come back.",
+      "CAN_REACH. A CAN_REACH row whose from_arn is a SecurityGroup means every member of that " +
+      "group (via HAS_SECURITY_GROUP) can reach to_arn; prefer find_network_paths for paths. " +
+      "Only these views and common functions are allowed; at most 200 rows come back.",
     input_schema: {
       type: "object",
       properties: {

@@ -16,6 +16,7 @@
  */
 
 import { GROUND_TRUTH } from "@sightline/mock-aws/answer-key";
+import { indexReach } from "../scan/analysers/reachIndex.js";
 import { INTERNET_ARN, type Relationship, type Resource } from "@sightline/shared";
 
 export interface CheckResult {
@@ -284,9 +285,8 @@ export const CHECKS: CheckDefinition[] = [
     rationale: "Reporting only the obvious route would leave the bastion open and unmentioned.",
     run: ({ resources, relationships }) => {
       const db = resources.find((r) => r.name === "northwind-prod-db");
-      const reachers = relationships
-        .filter((r) => r.type === "CAN_REACH" && r.to === db?.arn)
-        .map((r) => resources.find((x) => x.arn === r.from)?.name)
+      const reachers = (db ? indexReach(relationships).prev(db.arn) : [])
+        .map((arn) => resources.find((x) => x.arn === arn)?.name)
         .filter(Boolean) as string[];
       const missing = ["prod-bastion", "prod-app-1"].filter((n) => !reachers.includes(n));
       return {
@@ -312,7 +312,7 @@ export const CHECKS: CheckDefinition[] = [
           continue;
         }
         if (db.derived.isPublic) failures.push(`${name} wrongly reported exposed`);
-        const paths = relationships.filter((r) => r.type === "CAN_REACH" && r.to === db.arn);
+        const paths = indexReach(relationships).prev(db.arn);
         if (paths.length > 0) failures.push(`${name} has ${paths.length} inbound paths`);
       }
       return {

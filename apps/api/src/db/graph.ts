@@ -17,9 +17,10 @@
  */
 
 import { sql, type SQL } from "drizzle-orm";
-import { INTERNET_ARN, type Resource } from "@sightline/shared";
+import { INTERNET_ARN, type Relationship, type Resource } from "@sightline/shared";
 
 import { db, withTenant } from "./postgres.js";
+import { hopsFrom, indexReach, type ReachIndex } from "../scan/analysers/reachIndex.js";
 import type { ScanId, TenantId } from "../tenancy/ids.js";
 
 /** Which graph a read may touch: one tenant's one scan. */
@@ -405,39 +406,44 @@ interface Hop {
   ports: string[];
 }
 
-interface ReachGraph {
-  /** from -> to -> the merged edge. One route on several ports is one route. */
-  out: Map<string, Map<string, Hop>>;
-}
-
-async function reachGraph(scope: GraphScope): Promise<ReachGraph> {
+/** This scan's reach edges and group memberships, ready to walk. */
+async function reachIndex(scope: GraphScope): Promise<ReachIndex> {
   const rows = await read<{
     from_arn: string;
     to_arn: string;
+    rel_type: string;
     properties: Record<string, unknown>;
   }>(
     scope,
-    (_r, e) => sql`SELECT from_arn, to_arn, properties FROM ${e} e WHERE rel_type = 'CAN_REACH'`,
+    (_r, e) => sql`SELECT from_arn, to_arn, rel_type, properties FROM ${e} e
+                    WHERE rel_type IN ('CAN_REACH', 'HAS_SECURITY_GROUP')`,
   );
-  const out = new Map<string, Map<string, Hop>>();
-  for (const row of rows) {
-    const targets = out.get(row.from_arn) ?? out.set(row.from_arn, new Map()).get(row.from_arn)!;
-    const hop =
-      targets.get(row.to_arn) ??
-      targets
-        .set(row.to_arn, {
-          via: (row.properties["via"] as string | undefined) ?? null,
-          reason: (row.properties["reason"] as string | undefined) ?? null,
-          ports: [],
-        })
-        .get(row.to_arn)!;
-    const ports = row.properties["ports"];
-    for (const p of Array.isArray(ports) ? ports : ports === undefined ? [] : [ports]) {
+  return indexReach(
+    rows.map((row) => ({
+      from: row.from_arn,
+      to: row.to_arn,
+      type: row.rel_type as Relationship["type"],
+      properties: row.properties,
+    })),
+  );
+}
+
+/** One route opened on several ports is one route: merge the rule edges. */
+function hopOf(edges: Relationship[]): Hop {
+  const ports: string[] = [];
+  for (const edge of edges) {
+    const value = edge.properties?.["ports"];
+    for (const p of Array.isArray(value) ? value : value === undefined ? [] : [value]) {
       const text = String(p);
-      if (!hop.ports.includes(text)) hop.ports.push(text);
+      if (!ports.includes(text)) ports.push(text);
     }
   }
-  return { out };
+  const first = edges[0]?.properties ?? {};
+  return {
+    via: (first["via"] as string | undefined) ?? null,
+    reason: (first["reason"] as string | undefined) ?? null,
+    ports,
+  };
 }
 
 /** Resolve an ARN or a name to an ARN in this scan, preferring an exact ARN. */
@@ -481,19 +487,15 @@ export async function findNetworkPaths(
     resolve(scope, params.source ?? INTERNET_ARN),
   ]);
   if (!target || !source) return [];
-  const { out } = await reachGraph(scope);
+  const index = await reachIndex(scope);
 
   // Hops from each node to the target, so the search never follows an edge
   // that cannot arrive within the bound.
-  const into = new Map<string, string[]>();
-  for (const [from, targets] of out) {
-    for (const to of targets.keys()) (into.get(to) ?? into.set(to, []).get(to)!).push(from);
-  }
   const toTarget = new Map<string, number>([[target, 0]]);
   for (let frontier = [target], d = 1; frontier.length > 0 && d <= maxHops; d++) {
     const next: string[] = [];
     for (const node of frontier) {
-      for (const prev of into.get(node) ?? []) {
+      for (const prev of index.prev(node)) {
         if (!toTarget.has(prev)) {
           toTarget.set(prev, d);
           next.push(prev);
@@ -503,37 +505,36 @@ export async function findNetworkPaths(
     frontier = next;
   }
 
-  const found: string[][] = [];
-  const walk = (path: string[]) => {
+  const found: { path: string[]; hops: Hop[] }[] = [];
+  const walk = (path: string[], hops: Hop[]) => {
     if (found.length >= MAX_PATHS_EXPLORED) return;
     const here = path[path.length - 1]!;
     if (here === target && path.length > 1) {
-      found.push([...path]);
+      found.push({ path: [...path], hops: [...hops] });
       return;
     }
-    for (const next of out.get(here)?.keys() ?? []) {
-      const remaining = toTarget.get(next);
+    for (const { to, edges } of index.next(here)) {
+      const remaining = toTarget.get(to);
       if (remaining === undefined || path.length + remaining > maxHops + 1) continue;
-      if (path.includes(next)) continue;
-      path.push(next);
-      walk(path);
+      if (path.includes(to)) continue;
+      path.push(to);
+      hops.push(hopOf(edges));
+      walk(path, hops);
       path.pop();
+      hops.pop();
     }
   };
-  if (toTarget.has(source)) walk([source]);
+  if (toTarget.has(source)) walk([source], []);
 
-  found.sort((a, b) => a.length - b.length);
+  found.sort((a, b) => a.path.length - b.path.length);
   const chosen = found.slice(0, limit);
-  const nodes = await describeNodes(scope, [...new Set(chosen.flat())]);
-  return chosen.map((path) => ({
+  const nodes = await describeNodes(scope, [...new Set(chosen.flatMap((c) => c.path))]);
+  return chosen.map(({ path, hops }) => ({
     hops: path.map((arn) => {
       const n = nodes.get(arn);
       return { arn, name: n?.name ?? arn, kind: n?.kind ?? "Unknown" };
     }),
-    edges: path.slice(1).map((to, i) => {
-      const hop = out.get(path[i]!)!.get(to)!;
-      return { via: hop.via, reason: hop.reason, ports: hop.ports };
-    }),
+    edges: hops,
     length: path.length - 1,
   }));
 }
@@ -549,21 +550,7 @@ export async function findReachableFrom(
   const maxHops = Math.min(Math.max(1, params.maxHops ?? 3), 8);
   const sourceArn = await resolve(scope, params.source);
   if (!sourceArn) return [];
-  const { out } = await reachGraph(scope);
-
-  const hops = new Map<string, number>([[sourceArn, 0]]);
-  for (let frontier = [sourceArn], d = 1; frontier.length > 0 && d <= maxHops; d++) {
-    const next: string[] = [];
-    for (const node of frontier) {
-      for (const to of out.get(node)?.keys() ?? []) {
-        if (!hops.has(to)) {
-          hops.set(to, d);
-          next.push(to);
-        }
-      }
-    }
-    frontier = next;
-  }
+  const hops = hopsFrom(await reachIndex(scope), sourceArn, maxHops);
 
   const nodes = await describeNodes(scope, [...hops.keys()]);
   const rows = [...hops]

@@ -6,8 +6,9 @@
  *                          actually exposed (public subnet, public address, or
  *                          flagged accessible). An open rule on an instance in
  *                          a private subnet would otherwise bury real findings.
- *   resource -> resource   the target's group admits a group the source is in.
- *                          This is what makes multi-hop paths visible.
+ *   group -> resource      the target's group admits the source group, so every
+ *                          member reaches it. Stored per group, not per member
+ *                          pair, which keeps a shared group linear.
  *
  * Not modelled: NACLs, route tables, VPC peering, Transit Gateway, PrivateLink,
  * on-premises. Each would add edges, so this is conservative - it can miss a
@@ -17,6 +18,8 @@
 
 import { INTERNET_ARN, type Relationship, type Resource } from "@sightline/shared";
 import { formatPortRange } from "@sightline/shared";
+
+import { hopsFrom, indexReach } from "./reachIndex.js";
 
 /** An ingress rule, flattened by the VPC collector. */
 interface IngressRule {
@@ -53,11 +56,9 @@ export function analyseReachability(
 
   // resource -> the security groups attached to it, and the inverse.
   const sgsOfResource = new Map<string, string[]>();
-  const membersOfSg = new Map<string, string[]>();
   for (const rel of relationships) {
     if (rel.type !== "HAS_SECURITY_GROUP") continue;
     (sgsOfResource.get(rel.from) ?? sgsOfResource.set(rel.from, []).get(rel.from)!).push(rel.to);
-    (membersOfSg.get(rel.to) ?? membersOfSg.set(rel.to, []).get(rel.to)!).push(rel.from);
   }
 
   // resource -> subnet, so we can tell whether it sits on the public side.
@@ -126,51 +127,26 @@ export function analyseReachability(
           const sourceSgArn = sgArnByGroupId.get(rule.groupId);
           if (!sourceSgArn) continue;
           const sourceSg = byArn.get(sourceSgArn);
-          for (const memberArn of membersOfSg.get(sourceSgArn) ?? []) {
-            if (memberArn === target.arn) continue;
-            const member = byArn.get(memberArn);
-            push({
-              from: memberArn,
-              to: target.arn,
-              type: "CAN_REACH",
-              properties: {
-                ports,
-                via: sg.name,
-                viaArn: sg.arn,
-                reason: `Security group ${sg.name} allows ${ports} from ${sourceSg?.name ?? rule.groupId}, which ${member?.name ?? memberArn} belongs to`,
-              },
-            });
-          }
+          // From the source *group*, not each member: see reachIndex.ts.
+          push({
+            from: sourceSgArn,
+            to: target.arn,
+            type: "CAN_REACH",
+            properties: {
+              ports,
+              via: sg.name,
+              viaArn: sg.arn,
+              sourceGroup: sourceSg?.name ?? rule.groupId,
+              reason: `Security group ${sg.name} allows ${ports} from members of ${sourceSg?.name ?? rule.groupId}`,
+            },
+          });
         }
       }
     }
   }
 
-  return { edges, internetReachable: transitiveFromInternet(edges) };
-}
-
-/**
- * Everything reachable from the internet by following CAN_REACH edges.
- *
- * Plain breadth-first search. The visited set makes cycles harmless, which
- * matters because security groups routinely reference each other both ways.
- */
-export function transitiveFromInternet(edges: Relationship[]): Set<string> {
-  const outgoing = new Map<string, string[]>();
-  for (const edge of edges) {
-    if (edge.type !== "CAN_REACH") continue;
-    (outgoing.get(edge.from) ?? outgoing.set(edge.from, []).get(edge.from)!).push(edge.to);
-  }
-
-  const reachable = new Set<string>();
-  const queue = [INTERNET_ARN];
-  while (queue.length > 0) {
-    const current = queue.shift()!;
-    for (const next of outgoing.get(current) ?? []) {
-      if (reachable.has(next)) continue;
-      reachable.add(next);
-      queue.push(next);
-    }
-  }
-  return reachable;
+  const index = indexReach([...relationships, ...edges]);
+  const reachable = hopsFrom(index, INTERNET_ARN);
+  reachable.delete(INTERNET_ARN);
+  return { edges, internetReachable: new Set(reachable.keys()) };
 }
