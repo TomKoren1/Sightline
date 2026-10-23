@@ -77,6 +77,13 @@ function collectArns(value: unknown, into: Set<string>): void {
   }
 }
 
+/** Every ARN anywhere in a value. */
+export function arnsIn(value: unknown): string[] {
+  const arns = new Set<string>();
+  collectArns(value, arns);
+  return [...arns];
+}
+
 const wrap = (rows: unknown[], extra: Partial<ToolResult> = {}): ToolResult => {
   const arns = new Set<string>();
   collectArns(rows, arns);

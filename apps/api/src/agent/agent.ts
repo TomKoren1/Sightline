@@ -22,9 +22,10 @@ import { getLatestScan } from "../db/repository.js";
 import { summariseAccount } from "../db/graph.js";
 import { CitationTracker, validateCitations } from "./citations.js";
 import { buildSystemPrompt } from "./prompt.js";
-import { availableTools, runTool, type ToolContext } from "./tools.js";
+import { arnsIn, availableTools, runTool, type ToolContext } from "./tools.js";
 import { enforceReadOnlyNotice } from "./readOnlyGuard.js";
 import { errorMessage } from "@sightline/shared";
+import { fitRows, type Fitted } from "./fit.js";
 import {
   agentDuration,
   agentQuestions,
@@ -43,7 +44,7 @@ import {
  */
 const MAX_STEPS = 8;
 
-/** Results are truncated before going back to the model, to bound context. */
+/** Results are fitted to this before going back to the model, to bound context. */
 const MAX_RESULT_CHARS = 12_000;
 
 function configuredModel(): LanguageModel {
@@ -74,16 +75,22 @@ export interface AskOptions {
   model?: LanguageModel;
 }
 
-/** Serialise a tool result for the model, truncating rather than blowing context. */
-function serialiseResult(result: { rows: unknown[]; note?: string }): string {
-  const body = JSON.stringify(result.rows);
-  if (body.length > MAX_RESULT_CHARS) agentTruncatedResults.inc();
-  const truncated =
-    body.length > MAX_RESULT_CHARS
-      ? body.slice(0, MAX_RESULT_CHARS) +
-        `\n... truncated. ${result.rows.length} rows returned; narrow the query if you need the rest.`
-      : body;
-  return result.note ? `${result.note}\n${truncated}` : truncated;
+/** Serialise a tool result for the model, fitted to the context budget. */
+function serialiseResult(note: string | undefined, fitted: Fitted): string {
+  const parts = [note, JSON.stringify(fitted.rows)];
+  if (fitted.omitted > 0 || fitted.shortened) {
+    agentTruncatedResults.inc();
+    parts.push(
+      [
+        fitted.omitted > 0 ? `${fitted.omitted} more rows were not shown.` : "",
+        fitted.shortened ? "Long values were shortened." : "",
+        "Narrow the question - a kind, a region, a name - to see the rest.",
+      ]
+        .filter(Boolean)
+        .join(" "),
+    );
+  }
+  return parts.filter(Boolean).join("\n");
 }
 
 /**
@@ -128,7 +135,12 @@ function buildTools(ctx: {
              * into the tracker before they go anywhere else, including back to
              * the model.
              */
-            ctx.tracker.record(result.rows, result.arns);
+            // Only what the model will see is citable: an ARN from a row that
+            // was cut must not validate an answer that happens to name it.
+            const fitted = fitRows(result.rows, MAX_RESULT_CHARS);
+            const shown =
+              fitted.omitted > 0 || fitted.shortened ? arnsIn(fitted.rows) : result.arns;
+            ctx.tracker.record(fitted.rows, shown);
 
             const durationMs = Date.now() - startedAt;
             ctx.traces.push({
@@ -146,7 +158,7 @@ function buildTools(ctx: {
               resultCount: result.rows.length,
               durationMs,
             });
-            return serialiseResult(result);
+            return serialiseResult(result.note, fitted);
           } catch (err) {
             // Returned rather than thrown: the model can often recover by
             // trying a different tool, and failing the step would end the turn
