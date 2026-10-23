@@ -2,8 +2,8 @@
  * Every container image is pinned to a version and a digest.
  *
  * `motoserver/moto:latest` let a moto release change what the ground-truth
- * suite runs against without a commit; `neo4j:5-community` and the base images
- * floated the same way. Dependabot raises the bumps as reviewable PRs instead.
+ * suite runs against without a commit, and the base images floated the same
+ * way. Dependabot raises the bumps as reviewable PRs instead.
  */
 
 import { readdirSync, readFileSync } from "node:fs";

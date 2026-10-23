@@ -23,7 +23,7 @@ const source = readFileSync(
 
 /** Mirrors the route's rule, so the cases below describe real behaviour. */
 function overallStatus(checks: Record<string, string>): "ok" | "degraded" {
-  const required = ["postgres", "neo4j"] as const;
+  const required = ["postgres"] as const;
   return required.every((key) => checks[key] === "ok") ? "ok" : "degraded";
 }
 
@@ -32,7 +32,6 @@ describe("health status", () => {
     expect(
       overallStatus({
         postgres: "ok",
-        neo4j: "ok",
         agent: "ANTHROPIC_API_KEY not set - chat will fail",
       }),
     ).toBe("ok");
@@ -40,21 +39,17 @@ describe("health status", () => {
 
   it("is degraded when a database is down, key or no key", () => {
     for (const agent of ["configured (claude-sonnet-5)", "ANTHROPIC_API_KEY not set"]) {
-      expect(overallStatus({ postgres: "ok", neo4j: "connection refused", agent })).toBe(
-        "degraded",
-      );
-      expect(overallStatus({ postgres: "timeout", neo4j: "ok", agent })).toBe("degraded");
+      expect(overallStatus({ postgres: "connection refused", agent })).toBe("degraded");
+      expect(overallStatus({ postgres: "timeout", agent })).toBe("degraded");
     }
   });
 
   it("does not let a new optional check silently make the service unhealthy", () => {
     // Adding a check must be a deliberate decision about whether it is required.
-    expect(overallStatus({ postgres: "ok", neo4j: "ok", somethingNew: "not configured" })).toBe(
-      "ok",
-    );
+    expect(overallStatus({ postgres: "ok", somethingNew: "not configured" })).toBe("ok");
   });
 
-  it("keeps the route's required list to the two databases", () => {
+  it("keeps the route's required list to the database", () => {
     /**
      * Pins the route to the rule above. Without this the mirror could drift from
      * the implementation and these cases would describe nothing.
@@ -64,9 +59,8 @@ describe("health status", () => {
       match,
       "the required-checks list was renamed, restructured, or moved out of " + "health.service.ts",
     ).toBeTruthy();
-    // [a-z0-9]: "neo4j" has a digit in it, and [a-z]+ silently matched nothing.
     const keys = [...match![1]!.matchAll(/"([a-z0-9]+)"/g)].map((m) => m[1]);
-    expect(keys.sort()).toEqual(["neo4j", "postgres"]);
+    expect(keys.sort()).toEqual(["postgres"]);
   });
 
   it("still reports the agent check, so nothing is hidden", () => {

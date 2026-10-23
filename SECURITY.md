@@ -73,10 +73,11 @@ deletes by name.
 Remediation commands are _generated as text for an operator to run_ and are
 never executed by the product.
 
-**The agent cannot write.** Its graph queries go through Neo4j's `executeRead`,
-which routes them as read transactions — a write inside one fails at the
-database rather than being filtered by a prompt. The agent has no shell, no
-AWS client, and no tool that mutates anything.
+**The agent cannot write.** Its curated tools are fixed `SELECT`s, and its one
+escape hatch runs a parsed, allow-listed `SELECT` inside a `READ ONLY`
+transaction with a statement timeout, so a write fails at the database rather
+than being filtered by a prompt. The agent has no shell, no AWS client, and no
+tool that mutates anything.
 
 ## The ExternalId
 
@@ -110,10 +111,10 @@ There are two independent mechanisms, which fail in different ways:
 **The application cannot forget.** `TenantId`, `ConnectionId` and `ScanId` are
 branded types, so passing an unscoped string where one is required is a compile
 error rather than a code review. Adding them produced 75 of those errors, each
-a call site reading data without saying whose. Graph node identity is
+a call site reading data without saying whose. A resource's identity is
 `(scanId, arn)` rather than `arn`, because some ARNs — the synthetic `Internet`
-node — are the same constant for every customer, and a projection keyed on the
-ARN alone would attach one customer's relationships to another's nodes.
+node — are the same constant for every customer, and a graph read keyed on the
+ARN alone would attach one customer's relationships to another's resources.
 
 **The database refuses anyway.** Row-level security policies on the nine tables
 holding customer data compare every row against the tenant on the connection,
@@ -153,12 +154,10 @@ graph to anyone who can reach it.
 
 ## Deleting an account
 
-`DELETE /api/me`, confirmed by typing the account's own email address. It drops
-the tenant's graph from Neo4j first and then deletes the tenant row, which
-cascades to every scan, snapshot, conversation, connection and encrypted
-ExternalId — including the tenant's own audit trail, which is the right answer
-to a deletion request. The order is deliberate: dropping the graph second and
-failing would orphan those nodes with nothing left to identify them by.
+`DELETE /api/me`, confirmed by typing the account's own email address. It
+deletes the tenant row, which cascades to every scan, snapshot (the graph is
+those snapshots), conversation, connection and encrypted ExternalId — including
+the tenant's own audit trail, which is the right answer to a deletion request.
 
 It reports what it deleted, and it says plainly what it cannot do: Sightline
 cannot delete the CloudFormation stack in a customer's AWS account. Only they
@@ -175,15 +174,15 @@ can, and until they do, the role it created still exists.
   records the override and keeps 0.18.20 anyway. `npm audit --omit=dev` reports
   **zero** vulnerabilities, which is the number that describes what runs in
   production.
-- **The policy analyser is not an IAM evaluator.** It does not model permission
-  boundaries, service control policies, or session policies, so "effectively an
-  administrator" is a strong hint rather than a formal proof.
-- **One node, no replication, no SLA.** Postgres and Neo4j are a single replica
-  each; this is a single point of failure whose mitigation is a backup with a
+- **The policy analyser is not a complete IAM evaluator.** It models identity
+  policies, explicit Deny, permissions boundaries and known escalation paths, but
+  not service control policies, session policies or resource policies, so
+  "effectively an administrator" is a strong hint rather than a formal proof.
+- **One node, no replication, no SLA.** Postgres is a single replica; this is a single point of failure whose mitigation is a backup with a
   restore that has actually been tested, not a second replica that would make it
   worse. See [`deploy/k8s/README.md`](deploy/k8s/README.md).
 - **A scan's peak memory is not bounded.** There is a ceiling on how many
-  resources one scan may project, which protects the graph. It does not protect
+  resources one scan may publish, which protects the graph. It does not protect
   the worker: the collectors have already held every resource in memory by the
   time it is checked, so an account large enough to exhaust the worker exhausts
   it before the limit fires. The worker runs in its own deployment so that it

@@ -255,7 +255,7 @@ export class MeController {
       throw new BadRequestException({
         error:
           "This is a self-hosted deployment with a single local tenant, so there is no account " +
-          "to delete. To start over, remove the Postgres and Neo4j volumes.",
+          "to delete. To start over, remove the Postgres volume.",
       });
     }
 

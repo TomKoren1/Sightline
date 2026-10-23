@@ -24,11 +24,10 @@ export type TenantId = string & { readonly __tenant: unique symbol };
 export type ConnectionId = string & { readonly __connection: unique symbol };
 
 /**
- * One scan, and the graph projected from it.
+ * One scan, and the graph read from it.
  *
- * Node identity in Neo4j is `(scanId, arn)`, so this is also the graph's scope
- * - see `db/neo4j.ts` for why the projection is keyed on the scan rather than
- * on the connection.
+ * A resource's identity is `(scanId, arn)`, so this is also the graph's scope:
+ * every graph read in `db/graph.ts` names the scan as well as the tenant.
  */
 export type ScanId = string & { readonly __scan: unique symbol };
 

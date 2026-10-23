@@ -13,7 +13,7 @@
  * than written out, so a table added later is covered without anyone
  * remembering to add it here.
  *
- * Requires Postgres and Neo4j; skipped without them.
+ * Requires Postgres; skipped without it.
  */
 
 import { randomUUID } from "node:crypto";
@@ -21,12 +21,11 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { eq, sql } from "drizzle-orm";
 import { getTableColumns, getTableName } from "drizzle-orm";
 import type { PgTable } from "drizzle-orm/pg-core";
-import { INTERNET_ARN, type Relationship, type Resource } from "@sightline/shared";
+import { INTERNET_ARN } from "@sightline/shared";
 
-import { dropTenantGraph, getDriver, projectGraph } from "../db/neo4j.js";
 import { system } from "../db/postgres.js";
 import * as schema from "../db/schema.js";
-import { asScanId, asTenantId, type TenantId } from "./ids.js";
+import { asTenantId, type TenantId } from "./ids.js";
 import { confirmationMatches, purgeTenant } from "./purge.js";
 
 const HAS_INFRA = !process.env["SKIP_INTEGRATION"];
@@ -81,26 +80,6 @@ async function rowsFor(table: PgTable, tenantId: TenantId): Promise<number> {
     sql`SELECT count(*)::int AS n FROM ${sql.identifier(name)} WHERE tenant_id = ${tenantId}`,
   );
   return Number((rows[0] as { n: number }).n);
-}
-
-/**
- * Nodes this tenant has in the graph, counted through the driver directly.
- *
- * Not `readScoped`, which refuses any query that does not bind a scan id - and
- * refusing is the whole point of it. The question here is "is there anything
- * left for this tenant at all", across every scan, which is exactly the shape
- * that function exists to prevent the application from asking.
- */
-async function graphNodes(tenantId: TenantId): Promise<number> {
-  const session = getDriver().session();
-  try {
-    const result = await session.executeRead((tx) =>
-      tx.run("MATCH (n:Resource {tenantId: $tenantId}) RETURN count(n) AS n", { tenantId }),
-    );
-    return Number(result.records[0]?.get("n") ?? 0);
-  } finally {
-    await session.close();
-  }
 }
 
 /** One tenant's worth of rows in every table, plus a projected graph. */
@@ -186,38 +165,6 @@ async function seed(f: Fixture): Promise<void> {
     action: "connection.created",
     subject: f.connectionId,
   });
-
-  // And a real projection, so the graph half is not simulated.
-  const resources: Resource[] = [
-    {
-      arn: INTERNET_ARN,
-      kind: "Internet",
-      name: "Public internet",
-      region: null,
-      accountId: "123456789012",
-      tags: {},
-      properties: {},
-      derived: {},
-    },
-    {
-      arn: `arn:aws:s3:::${f.tag}-bucket`,
-      kind: "S3Bucket",
-      name: `${f.tag}-bucket`,
-      region: null,
-      accountId: "123456789012",
-      tags: {},
-      properties: {},
-      derived: { isPublic: true },
-    },
-  ];
-  const relationships: Relationship[] = [
-    { from: INTERNET_ARN, to: `arn:aws:s3:::${f.tag}-bucket`, type: "CAN_REACH", properties: {} },
-  ];
-  await projectGraph(
-    { tenantId: f.tenantId, scanId: asScanId(f.scanId) },
-    resources,
-    relationships,
-  );
 }
 
 beforeAll(async () => {
@@ -239,7 +186,6 @@ afterAll(async () => {
   for (const f of [doomed, bystander]) {
     await system.delete(schema.tenants).where(eq(schema.tenants.id, f.tenantId));
   }
-  for (const f of [doomed, bystander]) await dropTenantGraph(f.tenantId);
 });
 
 describe.runIf(HAS_INFRA)("purging a tenant", () => {
@@ -262,7 +208,6 @@ describe.runIf(HAS_INFRA)("purging a tenant", () => {
       "the fixture seeds nothing into these tables, so the purge is not actually tested against " +
         "them. Add rows for them to `seed`.",
     ).toEqual([]);
-    expect(await graphNodes(doomed.tenantId)).toBeGreaterThan(0);
   });
 
   it("deletes everything, and says what it deleted", async () => {
@@ -271,7 +216,6 @@ describe.runIf(HAS_INFRA)("purging a tenant", () => {
 
     // Reported rather than assumed: a purge that returned 200 and nothing else
     // would be indistinguishable from one that did nothing.
-    expect(result.graphNodes).toBeGreaterThan(0);
     expect(result).toMatchObject({
       connections: 1,
       scans: 1,
@@ -356,11 +300,6 @@ describe.runIf(HAS_INFRA)("purging a tenant", () => {
     expect(Number((sessions[0] as { n: number }).n)).toBe(0);
   });
 
-  it("leaves nothing in the graph", async () => {
-    if (!available) return;
-    expect(await graphNodes(doomed.tenantId)).toBe(0);
-  });
-
   it("does not touch the other tenant", async () => {
     if (!available) return;
     /**
@@ -373,7 +312,6 @@ describe.runIf(HAS_INFRA)("purging a tenant", () => {
       if ((await rowsFor(table, bystander.tenantId)) === 0) lost.push(getTableName(table));
     }
     expect(lost, "purging one tenant removed another tenant's rows from these tables").toEqual([]);
-    expect(await graphNodes(bystander.tenantId)).toBeGreaterThan(0);
   });
 });
 

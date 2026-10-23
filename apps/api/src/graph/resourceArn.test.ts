@@ -30,7 +30,7 @@ afterAll(async () => {
 });
 
 /**
- * Issuing a request runs the handler, which reads Neo4j. That is deliberate -
+ * Issuing a request runs the handler, which reads Postgres. That is deliberate -
  * a routing test that stubbed the handler would not prove the route is
  * reachable in the product - but it means these belong with the integration
  * suite rather than the dependency-free unit job, which has no databases and

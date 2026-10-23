@@ -8,9 +8,8 @@
  *   npm run query -w @sightline/api
  */
 
-import { closeDriver } from "../db/neo4j.js";
 import { closePool } from "../db/postgres.js";
-import * as q from "../db/queries.js";
+import * as q from "../db/graph.js";
 import { requireGraphScope } from "../tenancy/graphScope.js";
 import { ensureLocalTenant, localScope } from "../tenancy/local.js";
 
@@ -56,6 +55,5 @@ try {
     `\n${bold("findNetworkPaths(analytics-db)")} ${dim(`(${analytics.length} paths - expected 0)`)}`,
   );
 } finally {
-  await closeDriver();
   await closePool();
 }

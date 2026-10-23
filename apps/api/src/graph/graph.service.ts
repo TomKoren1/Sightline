@@ -16,8 +16,8 @@
 
 import { Injectable, NotFoundException } from "@nestjs/common";
 
-import * as q from "../db/queries.js";
-import type { GraphScope } from "../db/neo4j.js";
+import * as q from "../db/graph.js";
+import type { GraphScope } from "../db/graph.js";
 import { graphScopeFor } from "../tenancy/graphScope.js";
 import type { Scope } from "../tenancy/scope.js";
 import { remediationInputFromGraph } from "../remediation/fromGraph.js";

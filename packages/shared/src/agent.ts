@@ -11,7 +11,7 @@ export interface ToolCallTrace {
   arns: string[];
   durationMs: number;
   error?: string;
-  /** The Cypher actually executed, for transparency. */
+  /** The query actually executed, for transparency. */
   query?: string;
 }
 

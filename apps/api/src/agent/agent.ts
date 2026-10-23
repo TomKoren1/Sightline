@@ -19,7 +19,7 @@ import type { AgentEvent, AgentMessage, ToolCallTrace } from "@sightline/shared"
 
 import { cfg } from "../config.js";
 import { getLatestScan } from "../db/repository.js";
-import { summariseAccount } from "../db/queries.js";
+import { summariseAccount } from "../db/graph.js";
 import { CitationTracker, validateCitations } from "./citations.js";
 import { buildSystemPrompt } from "./prompt.js";
 import { availableTools, runTool, type ToolContext } from "./tools.js";
@@ -103,7 +103,7 @@ function buildTools(ctx: {
 }): ToolSet {
   return Object.fromEntries(
     // `availableTools()`, not the whole list: hosted mode does not offer the
-    // raw-Cypher escape hatch at all (ADR-016), and the dispatch refuses it too.
+    // raw-SQL escape hatch at all (ADR-016), and the dispatch refuses it too.
     availableTools().map((definition) => [
       definition.name,
       tool({

@@ -25,7 +25,7 @@ import { z } from "zod";
 import { buildApp } from "./app.js";
 
 /**
- * Issuing a request runs the real handler against Postgres and Neo4j - a
+ * Issuing a request runs the real handler against Postgres - a
  * contract test that stubbed them would not prove the route is reachable in the
  * product. Same gate, and the same reasoning, as `graph/resourceArn.test.ts`.
  */
@@ -87,7 +87,7 @@ const CONTRACTS: Contract[] = [
       200: z
         .object({
           status: z.string(),
-          checks: z.object({ postgres: z.string(), neo4j: z.string(), agent: z.string() }).strict(),
+          checks: z.object({ postgres: z.string(), agent: z.string() }).strict(),
           awsMode: z.string(),
           lastScan: z.object({ id: z.string(), at: z.string(), status: z.string() }).nullable(),
         })

@@ -13,28 +13,17 @@ What is where:
 
 |                           |                                                                 |
 | ------------------------- | --------------------------------------------------------------- |
-| `base/datastores.yaml`    | Postgres and Neo4j StatefulSets, one replica each               |
+| `base/datastores.yaml`    | the Postgres StatefulSet, one replica                           |
 | `base/app.yaml`           | the migrate Job, then `api`, `worker` and `web`                 |
 | `base/networkpolicy.yaml` | default-deny ingress, then the flows that exist                 |
 | `base/backup.yaml`        | nightly `pg_dump`, encrypted to a key the cluster does not hold |
 | `prod/cloudflared.yaml`   | the tunnel — no inbound port, no static IP                      |
 
-## Before you deploy: this needs about 3 GB
+## Before you deploy: this needs about 1.5 GB
 
-Neo4j is configured for a 1 GB heap and a 512 MB page cache, with a 2 GB pod
-limit to leave room for the JVM's non-heap use. Add Postgres, two API replicas
-and a worker and the namespace wants roughly 3 GB.
-
-**Measured on this machine, not estimated:** 9 GB total, of which other
-workloads hold about 2.5 GB and the development `docker compose` stack another
-2 GB while it is up — so **stop the compose stack first** (`docker compose
-down`) and this fits with room to spare. It does not fit alongside it.
-
-To give Neo4j more, raise the heap and page cache in `base/datastores.yaml`
-_and_ the limit in `prod/sizing.yaml` — both, because changing the limit
-without the heap wastes the difference, and changing the heap without the limit
-gets the container killed while the JVM believes it is fine.
-`infra/k8sManifests.test.ts` fails if they disagree.
+Postgres, two API replicas and a worker want roughly 1.5 GB between them. The
+worker is the one that grows: it holds a scan's inventory in memory while it is
+analysed, so a very large account needs its limit raised in `base/app.yaml`.
 
 ## Images
 
@@ -119,12 +108,12 @@ source of truth and a rebuilt cluster has to reproduce them; the secret names
 and keys are identical either way.
 
 ```bash
-# 1. The datastores' own credentials.
+# 1. The database's own credentials.
 kubectl -n sightline create secret generic sightline-db --dry-run=client -o yaml \
   --from-literal=POSTGRES_DB=sightline \
   --from-literal=POSTGRES_USER=sightline \
   --from-literal=POSTGRES_PASSWORD="$(openssl rand -base64 24)" \
-  --from-literal=NEO4J_AUTH="neo4j/$(openssl rand -base64 24 | tr -d /+=)" \
+\
   | kubeseal --format yaml > /tmp/db.sealed.yaml
 
 # 2. What the application needs. DATABASE_URL_APP is not optional here: hosted
@@ -133,7 +122,7 @@ kubectl -n sightline create secret generic sightline-db --dry-run=client -o yaml
 kubectl -n sightline create secret generic sightline-app --dry-run=client -o yaml \
   --from-literal=DATABASE_URL="postgres://sightline:<password>@postgres:5432/sightline" \
   --from-literal=DATABASE_URL_APP="postgres://sightline_app:<other-password>@postgres:5432/sightline" \
-  --from-literal=NEO4J_PASSWORD="<the half after the slash above>" \
+\
   --from-literal=SESSION_SECRET="$(openssl rand -base64 48)" \
   --from-literal=PUBLIC_BASE_URL="https://sightline.example.com" \
   --from-literal=GOOGLE_CLIENT_ID=... \

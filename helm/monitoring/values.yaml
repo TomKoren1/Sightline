@@ -223,19 +223,6 @@ prometheus:
                 summary: "Scans are queued but nothing is claiming them"
                 description: "Jobs have been queued for 15 minutes with no claims. The worker is probably dead: kubectl -n sightline get pods -l app.kubernetes.io/name=worker."
 
-            - alert: SightlineGraphMismatch
-              # Postgres and Neo4j disagreeing about a connection's graph. The
-              # signal whose absence let a sweep delete other accounts' graphs
-              # while `projected_at` went on claiming they were there.
-              expr: sightline_graph_reconciliation_mismatches > 0
-              for: 15m
-              labels:
-                severity: critical
-                service: sightline
-              annotations:
-                summary: "A connection's graph does not match what Postgres recorded"
-                description: "At least one connection's Neo4j node count disagrees with its scan's resource_count. That account renders as an empty graph rather than an error - which reads to the customer as an empty AWS account."
-
             - alert: SightlineBackupStale
               # Pushed by the backup CronJob on success, so this fires on a job
               # that never ran at all - which is how it failed once, sitting in
@@ -261,7 +248,7 @@ prometheus:
                 service: sightline
               annotations:
                 summary: "A Sightline container was OOMKilled"
-                description: "Neo4j is limited to 2Gi against a 1G heap and 512M page cache, and the worker to 2Gi while it holds a whole inventory. Raise the limit *and* the heap together, never one alone."
+                description: "The worker is limited to 2Gi and holds a whole inventory in memory while it analyses a scan. Raise its limit in base/app.yaml for a very large account."
 
             - alert: SightlineAgentSpendSpike
               # Wallet, not correctness. Without a chat quota the Anthropic key

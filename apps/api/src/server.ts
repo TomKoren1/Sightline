@@ -3,7 +3,6 @@
 import { buildApp } from "./app.js";
 import { cfg, migrateOnBoot, scanWorkerMode } from "./config.js";
 import { assertSchemaCurrent, migrate, closePool } from "./db/postgres.js";
-import { closeDriver } from "./db/neo4j.js";
 import { assertHostedInvariants } from "./hostedMode.js";
 import { ScanWorker } from "./jobs/worker.js";
 import { ensureLocalTenant } from "./tenancy/local.js";
@@ -114,7 +113,6 @@ for (const signal of ["SIGINT", "SIGTERM"] as const) {
         // than the process having been asked to stop.
         await worker.stop();
         await app.close();
-        await closeDriver();
         await closePool();
         process.exit(0);
       } catch (err) {

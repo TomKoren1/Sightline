@@ -290,7 +290,7 @@
         },
         "overrides": []
       },
-      "description": "From kube-state-metrics. Neo4j restarting with nothing in its own log is what an OOMKill looks like."
+      "description": "From kube-state-metrics. A pod restarting with nothing in its own log is what an OOMKill looks like."
     },
     {
       "id": 8,
@@ -324,7 +324,7 @@
         },
         "overrides": []
       },
-      "description": "How close each pod is to being killed. Neo4j sits high by design: a 1G heap and a 512M page cache inside a 2Gi limit."
+      "description": "How close each pod is to being killed. The worker sits highest while a scan holds a whole inventory in memory."
     },
     {
       "id": 9,

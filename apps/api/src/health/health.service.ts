@@ -10,7 +10,6 @@ import { existsSync } from "node:fs";
 import { Injectable } from "@nestjs/common";
 
 import { cfg, ENV_FILE, isHosted } from "../config.js";
-import { probeNeo4j } from "../db/neo4j.js";
 import { pool } from "../db/postgres.js";
 import { getLatestScan } from "../db/repository.js";
 import { localScope } from "../tenancy/local.js";
@@ -20,7 +19,7 @@ import { localScope } from "../tenancy/local.js";
  *
  * The LLM key is deliberately not among them - see `overallStatus`.
  */
-const REQUIRED = ["postgres", "neo4j"] as const;
+const REQUIRED = ["postgres"] as const;
 
 export interface HealthReport {
   status: "ok" | "degraded";
@@ -42,13 +41,6 @@ export class HealthService {
       checks["postgres"] = "ok";
     } catch (err) {
       checks["postgres"] = err instanceof Error ? err.message : "error";
-    }
-
-    try {
-      await probeNeo4j();
-      checks["neo4j"] = "ok";
-    } catch (err) {
-      checks["neo4j"] = err instanceof Error ? err.message : "error";
     }
 
     checks["agent"] = this.agentCheck();

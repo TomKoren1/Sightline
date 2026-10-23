@@ -99,8 +99,8 @@ spec:
             # The Job above owns the schema; see its comment.
             - { name: MIGRATE_ON_BOOT, value: "false" }
           readinessProbe:
-            # `/api/health` reports on Postgres and Neo4j, so a pod whose
-            # databases are unreachable stops receiving traffic rather than
+            # `/api/health` reports on Postgres, so a pod whose database is
+            # unreachable stops receiving traffic rather than
             # answering every request with a 500.
             httpGet: { path: /api/health, port: http }
             initialDelaySeconds: 15
@@ -124,8 +124,8 @@ metadata:
   name: worker
   labels: { app.kubernetes.io/name: worker }
 spec:
-  # One. A scan holds a whole inventory in memory and then projects it, so
-  # worker count multiplies the peak memory of both this and Neo4j.
+  # One. A scan holds a whole inventory in memory while it is analysed, so
+  # worker count multiplies peak memory.
   replicas: 1
   # Recreate, not RollingUpdate: during a rolling update the old and new pods
   # overlap, and the overlap is two workers claiming jobs - which the queue

@@ -50,7 +50,7 @@ describe("the metrics registry", () => {
     // Without this every assertion below passes on an empty registry.
     const all = await described();
     expect(all.filter(ours).length).toBeGreaterThan(20);
-    expect(all.map((m) => m.name)).toContain("sightline_graph_reconciliation_mismatches");
+    expect(all.map((m) => m.name)).toContain("sightline_scan_queue_depth");
     // And labels are actually being read, which is what went wrong once: a
     // check over labels nobody could see passed every time.
     expect(all.flatMap((m) => m.labelNames)).toContain("route");

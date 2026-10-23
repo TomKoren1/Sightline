@@ -12,10 +12,10 @@ It runs end to end against a mocked AWS account with no credentials and no cloud
 spend.
 
 ```
-AWS (real or mock) ──▶ scanner ──▶ Postgres ──▶ Neo4j ──▶ agent ──▶ React UI
-                       assume-role  system of   graph     curated   graph +
-                       per service  record      projection tools    chat
-                       per region
+AWS (real or mock) ──▶ scanner ──▶ analysers ──▶ Postgres ──▶ agent ──▶ React UI
+                       assume-role  verdicts in   inventory,   curated   graph +
+                       per service  code, with    graph and    tools     chat
+                       per region   evidence      history
 
                        a scan is a queued job; Postgres is the queue, and
                        every row above is scoped to one tenant's connection
@@ -98,20 +98,22 @@ cannot grade itself as correct.
 
 ## How it works
 
-**Postgres is the system of record; Neo4j is a rebuildable projection of it.** The
-questions are about relationships — _"what can reach the production database?"_ is a
-variable-length path query, one `MATCH` in Cypher against a recursive CTE in SQL. But
-scan history, per-region partial failures and agent traces all fit badly in a graph,
-so they live in Postgres, and the graph is replayed from it without rescanning.
+**One database.** Each scan's resources and relationships are rows in Postgres, and
+that is the graph: lookups and findings are SQL over computed verdicts, and the path
+questions — _"what can reach the production database?"_ — load the scan's
+`CAN_REACH` edges and search them in memory, bounded by hop count. A separate graph
+database was tried and removed: it doubled the stores to back up, isolate and keep in
+step for two queries that a breadth-first search answers in milliseconds.
 
 **Every security verdict is computed in code, never by the model.** Whether a bucket
 is public, whether a role is effectively admin, what can reach what — all of it is
 deterministic, and each verdict carries the evidence it was derived from. The model
 chooses which question to ask and explains the answer; it does not decide the answer.
 
-**The agent gets a curated tool library rather than free-form Cypher.** Sixteen tools,
+**The agent gets a curated tool library rather than free-form SQL.** Sixteen tools,
 fifteen of them queries written and reviewed in advance and one a guarded escape hatch
-for questions nobody anticipated. After it answers, every identifier in its reply is
+for questions nobody anticipated: a single parsed `SELECT` over two views pinned to one
+scan, run read-only, on a timeout, under the tenant's row-level security. After it answers, every identifier in its reply is
 checked against what the tools actually returned, and anything unsupported is flagged
 to the user — because a confident, plausible, invented resource id is the failure a
 reader cannot catch themselves.
@@ -142,10 +144,8 @@ to a managed policy. See [SECURITY.md](SECURITY.md).
 **One deployment serves many tenants, and the database refuses to mix them.**
 Every tenant-scoped table has row-level security, and the application connects as a
 restricted role the policies apply to — not the table owner, which would bypass them.
-The graph is one Neo4j database partitioned by scan id, with four independent
-enforcement layers rather than a convention: a composite uniqueness constraint, a
-single read chokepoint, a query that refuses Cypher without the scope bound, and a
-check on the rows that come back. A two-tenant leak test enumerates the query layer
+Every graph query also names its scan, so a scan id from the wrong tenant is refused
+twice over. A two-tenant leak test enumerates the query layer
 **by reflection**, so a query added later fails for not being covered before it can
 fail for leaking. See [SECURITY.md](SECURITY.md).
 
@@ -169,8 +169,8 @@ apps/api              backend: scanner, analysers, graph, agent, HTTP API
   src/hostedMode.ts   configuration the public service refuses to start with
   src/aws/            credentials, instrumented clients, region discovery
   src/scan/           collectors, analysers, orchestration
-  src/db/             Drizzle schema and migrations, repository, Neo4j projection
-  src/agent/          tools, Cypher guard, citation validation, the loop
+  src/db/             Drizzle schema and migrations, repository, the graph queries
+  src/agent/          tools, SQL guard, citation validation, the loop
   src/auth/           OIDC against Google and GitHub, sessions, route guard
   src/tenancy/        tenants, connections, onboarding, limits, branded ids
   src/jobs/           the Postgres queue, the worker, scan progress
@@ -211,7 +211,7 @@ Docker for the three dependencies, Node for the rest — hot reload, and the CLI
 hand.
 
 ```bash
-docker compose up -d          # Postgres, Neo4j, and moto (mock AWS)
+docker compose up -d          # Postgres and moto (mock AWS)
 npm install
 
 npm run seed                  # build the fictional customer account
@@ -383,9 +383,9 @@ work: it restarts the existing container, whose environment was resolved when th
 container was created, so the edit is ignored and the command exits zero. On the host
 path, stop `npm run dev:api` and start it again — `tsx watch` does not watch `.env`.
 
-**A container fails to start.** Ports in use. It binds `8080` for the app and `5432`,
-`7474`, `7687`, `5000` for Postgres, Neo4j and moto; each is configurable in `.env` as
-`APP_PORT`, `POSTGRES_PORT`, `NEO4J_HTTP_PORT`, `NEO4J_BOLT_PORT` and `MOCK_AWS_PORT`.
+**A container fails to start.** Ports in use. It binds `8080` for the app and `5432`
+and `5000` for Postgres and moto; each is configurable in `.env` as `APP_PORT`,
+`POSTGRES_PORT` and `MOCK_AWS_PORT`.
 Running two clones at once will collide.
 
 **A scan finds nothing.** moto holds the account in memory, so any `down` empties it.
@@ -408,7 +408,7 @@ the API and nginx containers are left running against databases that no longer e
 
 | Command                                        | What it does                                                 |
 | ---------------------------------------------- | ------------------------------------------------------------ |
-| `docker compose up -d`                         | Postgres, Neo4j and moto — just the dependencies             |
+| `docker compose up -d`                         | Postgres and moto — just the dependencies                    |
 | `docker compose --profile app up -d --build`   | The whole thing in Docker, served on `:8080`                 |
 | `docker compose --profile app down -v`         | Tear it all down, volumes included                           |
 | `npm run setup`                                | Connect an AWS account, or switch back to the demo one       |
@@ -466,12 +466,12 @@ _more_ useful at scale, which is why they were built in from the start.
 
 **Multi-tenancy** is built, as far as the data path goes. Every table holding customer
 data carries a tenant id — `NOT NULL`, with no default, so an insert that forgets one
-fails rather than landing in somebody else's account. Graph node identity is
+fails rather than landing in somebody else's account. A resource's identity is
 `(scanId, arn)` rather than `arn`, because two tenants collide immediately on the
-synthetic `Internet` node and completely if they connect the same AWS account. Reads go
-through one chokepoint that **refuses** Cypher not binding both parameters, and
-[`tenantIsolation.test.ts`](apps/api/src/db/tenantIsolation.test.ts) projects two
-tenants into one graph and asserts that no query returns the other's data — discovering
+synthetic `Internet` node and completely if they connect the same AWS account. Every
+graph read runs under row-level security and names its scan, and
+[`tenantIsolation.test.ts`](apps/api/src/db/tenantIsolation.test.ts) loads two
+tenants side by side and asserts that no query returns the other's data — discovering
 the query list by reflection, so a new query fails for _not being covered_ before it can
 fail for leaking. Credentials are cached per connection rather than per process, and the
 AWS target comes from a `connections` row with no fallback to configuration.
@@ -489,8 +489,8 @@ unauthenticated request.
 system with a silently wrong security property, and names every problem at once rather
 than one per restart. The capabilities that are harmless with one operator and dangerous
 with many are **removed** there rather than guarded: no process-wide endpoint override,
-no process-wide mock, and no raw-Cypher escape hatch for the agent — the existing guards
-on that one defend against writes, and neither of them knows whose data a read touches.
+no process-wide mock, and no raw-SQL escape hatch for the agent — defence in depth on
+top of the row-level security its reads already run under.
 
 **Connecting an account** is one link and one field. A quick-create CloudFormation link
 arrives with the ExternalId and the trusted principal already filled in, the customer

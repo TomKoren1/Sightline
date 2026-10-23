@@ -124,7 +124,7 @@ describe("the numbers the README quotes are true", () => {
     // Tool definitions only: the dispatch switch repeats every name.
     const actual = (tools.match(/^ {4}name: "/gm) ?? []).length;
     // The README's wording, since this claim used to live in a file that is gone.
-    expect(quoted(/free-form Cypher\.\*\* ([A-Za-z-]+) tools/)).toBe(actual);
+    expect(quoted(/free-form SQL\.\*\* ([A-Za-z-]+) tools/)).toBe(actual);
   });
 
   it("states the real number of tier-2 eval cases", () => {

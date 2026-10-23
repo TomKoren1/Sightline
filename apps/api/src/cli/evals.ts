@@ -21,8 +21,7 @@ import { ask } from "../agent/agent.js";
 import { EVAL_CASES } from "../evals/cases.js";
 import { gradeCase, summarise, type CaseResult } from "../evals/grade.js";
 import { isTerminalApiError } from "../evals/terminalError.js";
-import { listResources } from "../db/queries.js";
-import { closeDriver } from "../db/neo4j.js";
+import { listResources } from "../db/graph.js";
 import { closePool, system } from "../db/postgres.js";
 import { evalRuns } from "../db/schema.js";
 import { getLatestScan } from "../db/repository.js";
@@ -240,6 +239,5 @@ try {
   if (incomplete) process.exitCode = 2;
   else if (summary.failed > 0) process.exitCode = 1;
 } finally {
-  await closeDriver();
   await closePool();
 }

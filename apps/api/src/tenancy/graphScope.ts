@@ -3,8 +3,8 @@
  *
  * The graph a connection reads is its latest projected scan, which lives in
  * Postgres - so every graph read begins with one indexed lookup. That is the
- * cost of write-then-flip, and it buys a projection that can never be read
- * half-built.
+ * cost of write-then-flip, and it buys a graph that can never be read
+ * half-written.
  *
  * `null` means this connection has no projected scan yet, which is the normal
  * state of a connection nobody has scanned. It is not an error, and callers
@@ -12,7 +12,7 @@
  */
 
 import { currentScanId } from "../db/repository.js";
-import type { GraphScope } from "../db/neo4j.js";
+import type { GraphScope } from "../db/graph.js";
 import type { Scope } from "./scope.js";
 
 export async function graphScopeFor(scope: Scope): Promise<GraphScope | null> {

@@ -56,8 +56,8 @@ export interface WorkerOptions {
    * How many scans this worker runs at once.
    *
    * One by default, and the default is the point: a scan holds an account's
-   * whole inventory in memory and then projects it, so concurrency here
-   * multiplies the peak memory of both this process and Neo4j. Raising it is a
+   * whole inventory in memory while it is analysed, so concurrency here
+   * multiplies this process's peak memory. Raising it is a
    * decision about the machine, which is why it is configuration rather than a
    * number chosen here.
    */

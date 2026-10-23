@@ -2,7 +2,7 @@
  * The agent's tools.
  *
  * Each one wraps a curated query. The model chooses which to call
- * and with what arguments; it never writes the Cypher, and none of these can
+ * and with what arguments; it never writes the query, and none of these can
  * express a mutation - the read-only rule is enforced by construction
  * rather than by instruction.
  *
@@ -14,16 +14,17 @@
 
 import type { JSONSchema7 } from "ai";
 
-import * as q from "../db/queries.js";
+import * as q from "../db/graph.js";
 import { isHosted } from "../config.js";
 import { remediationInputFromGraph } from "../remediation/fromGraph.js";
 import { remediationsFor } from "../remediation/remediation.js";
-import { readScoped, type GraphScope } from "../db/neo4j.js";
+import type { GraphScope } from "../db/graph.js";
+import { readOnlyAsTenant } from "../db/postgres.js";
 import { diffScans, getLatestScan, listScans } from "../db/repository.js";
 import { asScanId } from "../tenancy/ids.js";
 import type { Scope } from "../tenancy/scope.js";
-import { agentRawCypherRefused } from "../observability/metrics.js";
-import { assertReadOnlyCypher } from "./cypherGuard.js";
+import { agentRawQueryRefused } from "../observability/metrics.js";
+import { assertSafeInventorySql } from "./sqlGuard.js";
 
 /**
  * What a tool may read: one tenant, and one of their scans.
@@ -36,35 +37,27 @@ export interface ToolContext {
   graph: GraphScope;
 }
 
-/** The raw-Cypher escape hatch, by name, because two places refer to it. */
-export const RAW_CYPHER_TOOL = "graph_query";
+/** The SQL escape hatch, by name, because two places refer to it. */
+export const RAW_QUERY_TOOL = "inventory_sql";
 
 /**
  * The tools on offer.
  *
- * In hosted mode the raw-Cypher escape hatch is **not offered**, and the
- * dispatch refuses it independently - the list is a suggestion and the dispatch
- * is the gate, because a model can call a tool it was never offered from a
- * replayed conversation or because the name appears in the prompt.
- *
- * Removed rather than guarded. The existing guards defend against *writes*;
- * neither knows whose data a read touches, and an unfiltered `MATCH
- * (r:Resource) RETURN r` is a cross-tenant read that is not a write, so both
- * pass it correctly having been asked a different question. A rewriter that
- * forced a predicate onto every `MATCH` would be a third layer whose
- * correctness depends on handling every Cypher shape - `UNION`, `CALL {}`,
- * pattern comprehensions - and whose failure mode is silent, cross-customer,
- * and discovered by the customer. Removing the capability has no failure mode.
+ * In hosted mode the SQL escape hatch is **not offered**, and the dispatch
+ * refuses it independently - the list is a suggestion and the dispatch is the
+ * gate, because a model can call a tool it was never offered. Its reads are
+ * tenant-isolated by row-level security and pinned to one scan, so this is
+ * defence in depth rather than the only lock.
  */
 export function availableTools(): ToolDefinition[] {
-  return isHosted() ? TOOL_DEFINITIONS.filter((t) => t.name !== RAW_CYPHER_TOOL) : TOOL_DEFINITIONS;
+  return isHosted() ? TOOL_DEFINITIONS.filter((t) => t.name !== RAW_QUERY_TOOL) : TOOL_DEFINITIONS;
 }
 
 export interface ToolResult {
   rows: unknown[];
   /** ARNs this result makes citable. */
   arns: string[];
-  /** The Cypher actually run, surfaced in the UI for auditability. */
+  /** The SQL actually run, surfaced in the UI for auditability. */
   query?: string;
   note?: string;
 }
@@ -295,26 +288,31 @@ export const TOOL_DEFINITIONS: ToolDefinition[] = [
     },
   },
   {
-    name: "graph_query",
+    name: "inventory_sql",
     description:
-      "Run a read-only Cypher query against the resource graph. This is an escape hatch for " +
-      "questions the tools above cannot express - try them first, as they are tested and " +
-      "return reasoning. Nodes carry the label :Resource plus their kind (:Ec2Instance, " +
-      ":S3Bucket, :IamRole, ...) and properties arn, name, kind, region, plus isPublic, " +
-      "isAdmin, isIdle where computed. Relationships: IN_REGION, IN_VPC, IN_SUBNET, " +
-      "HAS_SECURITY_GROUP, ATTACHED_TO, ROUTES_TO, USES_SUBNET_GROUP, HAS_INSTANCE_PROFILE, " +
-      "PROVIDES_ROLE, HAS_POLICY, EXECUTES_AS, CAN_REACH. Write clauses are rejected.",
+      "Run one read-only PostgreSQL SELECT over this scan. An escape hatch for questions the " +
+      "tools above cannot express - try them first, as they are tested and return reasoning. " +
+      "Two views: resources(arn, kind, name, region, account_id, tags jsonb, properties jsonb, " +
+      "derived jsonb) and relationships(from_arn, to_arn, rel_type, properties jsonb). `derived` " +
+      "holds the computed verdicts: isPublic, isAdmin, adminVia, isIdle, isUnprotected and a " +
+      "*Reason for each, plus estimatedMonthlyCostUsd - read booleans as (derived->>'isAdmin')::boolean. " +
+      "rel_type is one of IN_REGION, IN_VPC, IN_SUBNET, HAS_SECURITY_GROUP, ATTACHED_TO, ROUTES_TO, " +
+      "USES_SUBNET_GROUP, HAS_INSTANCE_PROFILE, PROVIDES_ROLE, HAS_POLICY, MEMBER_OF, EXECUTES_AS, " +
+      "CAN_REACH. Only these views and common functions are allowed; at most 200 rows come back.",
     input_schema: {
       type: "object",
       properties: {
-        cypher: { type: "string", description: "A single read-only Cypher statement." },
+        sql: { type: "string", description: "A single SELECT statement." },
       },
-      required: ["cypher"],
+      required: ["sql"],
     },
   },
 ];
 
 type ToolInput = Record<string, never> & Record<string, unknown>;
+
+/** Long enough for an honest aggregate over a large scan, short enough to notice. */
+const RAW_QUERY_TIMEOUT_MS = 5_000;
 
 /**
  * Run one tool.
@@ -414,29 +412,43 @@ export async function runTool(
       return wrap([await diffScans(ctx.scope, asScanId(from), asScanId(to))]);
     }
 
-    case RAW_CYPHER_TOOL: {
-      // The second of the two gates in ADR-016. The first is `availableTools`.
+    case RAW_QUERY_TOOL: {
+      // The second of the two gates. The first is `availableTools`.
       if (isHosted()) {
-        agentRawCypherRefused.inc({ reason: "hosted" });
+        agentRawQueryRefused.inc({ reason: "hosted" });
         return {
           rows: [],
           arns: [],
-          note:
-            "Raw Cypher is not available in this deployment. Use the curated tools; they cover " +
-            "every question this one was for, and they cannot read another customer's account.",
+          note: "Raw SQL is not available in this deployment. Use the curated tools.",
         };
       }
-      const cypher = String(input["cypher"] ?? "");
-      const guard = assertReadOnlyCypher(cypher);
+      const statement = String(input["sql"] ?? "")
+        .trim()
+        .replace(/;\s*$/, "");
+      const guard = assertSafeInventorySql(statement);
       if (!guard.ok) {
-        agentRawCypherRefused.inc({ reason: guard.cause ?? "unknown" });
+        agentRawQueryRefused.inc({ reason: guard.cause });
         return { rows: [], arns: [], note: `Query rejected: ${guard.reason}` };
       }
-      // Scoped like every other read. `readScoped` refuses Cypher that does not
-      // bind both parameters, so a query written without them comes back as a
-      // correctable error rather than as another account's resources.
-      const rows = await readScoped(ctx.graph, cypher);
-      return wrap(rows.slice(0, 200), { query: cypher });
+      try {
+        const rows = await readOnlyAsTenant(
+          ctx.graph.tenantId,
+          `WITH resources AS (
+             SELECT arn, kind, name, region, account_id, tags, properties, derived
+               FROM resource_snapshots WHERE tenant_id = $1 AND scan_id = $2),
+           relationships AS (
+             SELECT from_arn, to_arn, rel_type, properties
+               FROM relationship_snapshots WHERE tenant_id = $1 AND scan_id = $2)
+           SELECT * FROM (${statement}) AS q LIMIT 200`,
+          [ctx.graph.tenantId, ctx.graph.scanId],
+          RAW_QUERY_TIMEOUT_MS,
+        );
+        return wrap(rows, { query: statement });
+      } catch (err) {
+        agentRawQueryRefused.inc({ reason: "execution" });
+        const message = err instanceof Error ? err.message : String(err);
+        return { rows: [], arns: [], note: `Query failed: ${message}` };
+      }
     }
 
     default:

@@ -74,7 +74,7 @@ jobs:
 
       - run: npm ci
 
-      - name: Start Postgres, Neo4j and the mock AWS control plane
+      - name: Start Postgres and the mock AWS control plane
         run: |
           cp .env.example .env
           docker compose up -d

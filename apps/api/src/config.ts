@@ -101,10 +101,6 @@ const schema = z.object({
    */
   MIGRATE_ON_BOOT: blankAsUnset(z.enum(["true", "false"]).optional()),
 
-  NEO4J_URI: blankAsUnset(z.string().default("bolt://localhost:7687")),
-  NEO4J_USER: blankAsUnset(z.string().default("neo4j")),
-  NEO4J_PASSWORD: blankAsUnset(z.string().default("neo4jneo4j")),
-
   /**
    * `mock` points every AWS client at moto and uses static source credentials.
    * `real` drops the endpoint override and uses the standard credential chain.
@@ -156,8 +152,8 @@ const schema = z.object({
    * How many scans one worker runs at once.
    *
    * One, and the default is the point: a scan holds an account's whole
-   * inventory in memory and then projects it, so this multiplies the peak
-   * memory of both the worker and Neo4j. Raising it is a statement about the
+   * inventory in memory while it is analysed, so this multiplies the worker's
+   * peak memory. Raising it is a statement about the
    * machine, which is why it is configuration rather than a constant.
    */
   SCAN_WORKER_CONCURRENCY: blankAsUnset(z.coerce.number().int().positive().default(1)),
@@ -198,7 +194,7 @@ const schema = z.object({
    * checked the collectors have already held every resource in an array, so an
    * account large enough to exhaust the worker exhausts it before this fires.
    * Fixing that needs streaming collection, which this is not. What it does buy
-   * is a clear message instead of a projection that runs Neo4j out of heap, and
+   * is a clear message instead of a graph too large to query or render, and
    * that is worth having on its own.
    */
   MAX_RESOURCES_PER_SCAN: blankAsUnset(z.coerce.number().int().positive().default(100_000)),

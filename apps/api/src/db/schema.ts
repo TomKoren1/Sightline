@@ -55,11 +55,11 @@ export const scanRuns = pgTable(
     apiCalls: integer("api_calls").notNull().default(0),
     error: text("error"),
     /**
-     * When this scan's graph projection committed, or null if it never did.
+     * When this scan became its connection's graph, or null if it never did.
      *
-     * This single column *is* the flip in write-then-flip: a scan projects into
-     * its own Neo4j scope while the previous graph stays readable, and setting
-     * this is what makes the new one current. The connection's graph is
+     * This single column *is* the flip in write-then-flip: a scan writes its
+     * snapshots while the previous scan stays readable, and setting this is
+     * what makes the new one current. The connection's graph is
      * therefore "its latest scan with a projected_at", which needs no pointer
      * to keep in step and leaves a record of which scans were ever projected.
      */

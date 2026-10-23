@@ -1,6 +1,6 @@
 #!/usr/bin/env tsx
 /**
- * Run a scan, persist it, and rebuild the graph.
+ * Run a scan and persist it.
  *
  *   npm run scan
  *
@@ -19,7 +19,6 @@
 import { randomUUID } from "node:crypto";
 
 import { closePool, migrate, withTenant } from "../db/postgres.js";
-import { closeDriver } from "../db/neo4j.js";
 import { runScanJob } from "../jobs/runScanJob.js";
 import { ensureLocalTenant, localScope } from "../tenancy/local.js";
 
@@ -68,7 +67,6 @@ try {
       `\nScan ${outcome.scanId} ${outcome.status}` +
         (failed > 0 ? ` (${failed}/${summary.units.length} units failed)` : "") +
         `\n  ${summary.resources} resources, ${summary.relationships} relationships` +
-        `\n  graph: ${summary.graph.nodes} nodes, ${summary.graph.edges} edges` +
         `\n  ${summary.apiCalls} AWS API calls in ${((Date.now() - started) / 1000).toFixed(1)}s`,
     );
   }
@@ -78,6 +76,5 @@ try {
   console.error(`\nScan could not start: ${err instanceof Error ? err.message : String(err)}`);
   process.exitCode = 1;
 } finally {
-  await closeDriver();
   await closePool();
 }

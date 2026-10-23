@@ -5,7 +5,7 @@
  * on `Resource`, and the `CAN_REACH` relationship. "Which buckets are public?"
  * is security reasoning, not a lookup - it means combining a policy with its
  * ACLs and access block - and that reasoning happens deterministically in code
- * at projection time, never in the model.
+ * at ingest time, never in the model.
  *
  * The model selects the query, reads computed facts and explains them. That is
  * what makes its answers auditable: every claim traces to a unit-tested

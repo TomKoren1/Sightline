@@ -42,7 +42,7 @@ const TOOL_LABELS: Record<string, string> = {
   list_scans: "Checking scan history",
   diff_scans: "Comparing scans",
   suggest_remediation: "Working out how to fix it",
-  graph_query: "Running a graph query",
+  inventory_sql: "Querying the inventory",
 };
 
 const SUGGESTIONS = [
