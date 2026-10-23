@@ -287,7 +287,7 @@ export function fingerprint(
 }
 
 /** Key order must not affect the hash, so it is normalised recursively. */
-function sortKeys(value: unknown): unknown {
+export function sortKeys(value: unknown): unknown {
   if (Array.isArray(value)) return value.map(sortKeys);
   if (value && typeof value === "object") {
     return Object.fromEntries(

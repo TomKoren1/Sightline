@@ -20,6 +20,13 @@ import type {
 } from "@sightline/shared";
 
 import { db, fingerprint, system, withTenant, type Database } from "./postgres.js";
+import {
+  documentRefs,
+  extractDocuments,
+  restoreDocuments,
+  selectDocuments,
+  upsertDocuments,
+} from "./policyDocuments.js";
 
 /**
  * Anything that can run a write: the pool, or a transaction on it.
@@ -130,6 +137,18 @@ export async function pruneScanHistory(scope: Scope, keep: number): Promise<numb
         )
       RETURNING id
     `);
+    if (rows.length > 0) {
+      // Documents no retained scan can refer to: every save marks the ones it
+      // uses, so anything last used before the oldest remaining scan began is
+      // referenced by nothing. Across the tenant, because documents are shared
+      // by all of its accounts.
+      await db.execute(sql`
+        DELETE FROM policy_documents
+         WHERE tenant_id = ${scope.tenantId}
+           AND last_used_at < (SELECT min(started_at) FROM scan_runs
+                                WHERE tenant_id = ${scope.tenantId})
+      `);
+    }
     return rows.length;
   });
 }
@@ -271,10 +290,14 @@ export async function saveScanResult(
 
       for (let i = 0; i < params.resources.length; i += BATCH_SIZE) {
         const batch = params.resources.slice(i, i + BATCH_SIZE);
+        // Documents first, so no snapshot ever refers to one not yet stored.
+        const extracted = batch.map((r) => extractDocuments(r));
+        const documents = new Map(extracted.flatMap((e) => [...e.documents]));
+        if (documents.size > 0) await tx.execute(upsertDocuments(scope.tenantId, documents));
         await tx
           .insert(resourceSnapshots)
           .values(
-            batch.map((r) => ({
+            batch.map((r, j) => ({
               tenantId: scope.tenantId,
               scanId,
               arn: r.arn,
@@ -283,8 +306,10 @@ export async function saveScanResult(
               region: r.region,
               accountId: r.accountId,
               tags: r.tags,
-              properties: r.properties,
+              properties: extracted[j]!.properties,
               derived: r.derived,
+              // Of the resource as collected: a document's content, not where
+              // it is stored, is what makes two scans of a role differ.
               fingerprint: fingerprint(r),
             })),
           )
@@ -457,8 +482,22 @@ export async function loadResources(scope: Scope, scanId: string): Promise<Resou
       .where(
         and(eq(resourceSnapshots.scanId, scanId), eq(resourceSnapshots.tenantId, scope.tenantId)),
       );
-    return rows;
+    return withDocuments(scope.tenantId, rows);
   });
+}
+
+/** Put stored policy documents back into snapshots that refer to them. */
+export async function withDocuments<T extends { properties: Resource["properties"] }>(
+  tenantId: string,
+  rows: T[],
+): Promise<T[]> {
+  const hashes = [...new Set(rows.flatMap((r) => documentRefs(r.properties)))];
+  if (hashes.length === 0) return rows;
+  const { rows: found } = await db.execute<{ hash: string; document: unknown }>(
+    selectDocuments(tenantId, hashes),
+  );
+  const documents = new Map(found.map((d) => [d.hash, d.document]));
+  return rows.map((r) => ({ ...r, properties: restoreDocuments(r.properties, documents) }));
 }
 
 export async function loadRelationships(scope: Scope, scanId: string): Promise<Relationship[]> {

@@ -535,3 +535,29 @@ export const findings = pgTable(
 
 export type FindingCategory = "exposed" | "admin" | "idle" | "unguarded";
 export type FindingStatus = "open" | "accepted" | "resolved";
+
+/**
+ * IAM policy documents, stored once per tenant by content hash.
+ *
+ * Every principal carries the documents of the policies it holds, so an
+ * AWS-managed policy attached to a thousand roles was stored a thousand times
+ * per scan: 75% of a 50,000-resource scan's payload. Snapshots now hold a
+ * `documentRef` where the document was, and reads put it back.
+ *
+ * `last_used_at` is what lets pruning delete documents safely without
+ * scanning every snapshot for references: each save refreshes the documents it
+ * refers to, so one older than the tenant's oldest retained scan is
+ * referenced by nothing.
+ */
+export const policyDocuments = pgTable(
+  "policy_documents",
+  {
+    tenantId: uuid("tenant_id")
+      .notNull()
+      .references(() => tenants.id, { onDelete: "cascade" }),
+    hash: text("hash").notNull(),
+    document: jsonb("document").notNull(),
+    lastUsedAt: timestamp("last_used_at", tz).notNull().defaultNow(),
+  },
+  (t) => [primaryKey({ columns: [t.tenantId, t.hash] })],
+);

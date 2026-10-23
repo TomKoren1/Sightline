@@ -20,6 +20,7 @@ import { sql, type SQL } from "drizzle-orm";
 import { INTERNET_ARN, type Relationship, type Resource } from "@sightline/shared";
 
 import { db, withTenant } from "./postgres.js";
+import { withDocuments } from "./repository.js";
 import { hopsFrom, indexReach, type ReachIndex } from "../scan/analysers/reachIndex.js";
 import type { ScanId, TenantId } from "../tenancy/ids.js";
 
@@ -144,6 +145,7 @@ export async function getResource(
      LIMIT 1`,
   );
   if (!row) return null;
+  const [resource] = await withTenant(scope.tenantId, () => withDocuments(scope.tenantId, [row]));
 
   const neighbours = await read<{
     direction: "out" | "in";
@@ -168,7 +170,7 @@ export async function getResource(
       .map(({ type, arn, name, kind }) => ({ type, arn, name, kind }));
 
   return {
-    props: flattenResource({ ...row, accountId: row.account_id }),
+    props: flattenResource({ ...resource!, accountId: row.account_id }),
     arn: row.arn,
     kind: row.kind,
     name: row.name,

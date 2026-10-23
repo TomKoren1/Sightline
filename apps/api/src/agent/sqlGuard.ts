@@ -21,7 +21,7 @@ const parser = new Parser();
 const OPTIONS = { database: "PostgresQL" };
 
 /** The views the tool provides. Nothing else in the database is reachable. */
-export const INVENTORY_VIEWS = ["resources", "relationships"] as const;
+export const INVENTORY_VIEWS = ["resources", "relationships", "policy_documents"] as const;
 
 /**
  * Functions a read over two JSONB-bearing views reasonably needs. Notably
@@ -169,7 +169,7 @@ export function assertSafeInventorySql(statement: string): GuardResult {
       return {
         ok: false,
         cause: "table",
-        reason: `Only the views ${INVENTORY_VIEWS.join(" and ")} can be read; "${schema === "null" ? table : `${schema}.${table}`}" is not one of them.`,
+        reason: `Only the views ${INVENTORY_VIEWS.join(", ")} can be read; "${schema === "null" ? table : `${schema}.${table}`}" is not one of them.`,
       };
     }
   }

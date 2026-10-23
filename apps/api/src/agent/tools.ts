@@ -299,8 +299,10 @@ export const TOOL_DEFINITIONS: ToolDefinition[] = [
     description:
       "Run one read-only PostgreSQL SELECT over this scan. An escape hatch for questions the " +
       "tools above cannot express - try them first, as they are tested and return reasoning. " +
-      "Two views: resources(arn, kind, name, region, account_id, tags jsonb, properties jsonb, " +
-      "derived jsonb) and relationships(from_arn, to_arn, rel_type, properties jsonb). `derived` " +
+      "Three views: resources(arn, kind, name, region, account_id, tags jsonb, properties jsonb, " +
+      "derived jsonb), relationships(from_arn, to_arn, rel_type, properties jsonb) and " +
+      "policy_documents(hash, document jsonb). IAM policy documents are stored once: where a " +
+      "property would hold a `document`, it holds a `documentRef` hash to join on. `derived` " +
       "holds the computed verdicts: isPublic, isAdmin, adminVia, isIdle, isUnprotected and a " +
       "*Reason for each, plus estimatedMonthlyCostUsd - read booleans as (derived->>'isAdmin')::boolean. " +
       "rel_type is one of IN_REGION, IN_VPC, IN_SUBNET, HAS_SECURITY_GROUP, ATTACHED_TO, ROUTES_TO, " +
@@ -447,7 +449,9 @@ export async function runTool(
                FROM resource_snapshots WHERE tenant_id = $1 AND scan_id = $2),
            relationships AS (
              SELECT from_arn, to_arn, rel_type, properties
-               FROM relationship_snapshots WHERE tenant_id = $1 AND scan_id = $2)
+               FROM relationship_snapshots WHERE tenant_id = $1 AND scan_id = $2),
+           policy_documents AS (
+             SELECT hash, document FROM policy_documents WHERE tenant_id = $1)
            SELECT * FROM (${statement}) AS q LIMIT 200`,
           [ctx.graph.tenantId, ctx.graph.scanId],
           RAW_QUERY_TIMEOUT_MS,
