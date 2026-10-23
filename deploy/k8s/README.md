@@ -389,6 +389,29 @@ kubectl -n sightline create configmap sightline-backup-key --from-file=backup-ce
 # Put backup-key.pem somewhere that is not this cluster and not this repository.
 ```
 
+### Copies off the machine
+
+The CronJob writes to a volume on the same node as the database, which
+survives losing the database but not losing the node. `scripts/backup-pull.sh`
+copies every encrypted dump to another machine you own: a laptop, a NAS, a
+second server. It is free and needs nothing new on the cluster. Run it from
+that machine's cron, or from Task Scheduler on Windows through Git Bash:
+
+```bash
+# Through ssh, as this cluster is reached; any kubectl that reaches it works.
+KUBECTL="ssh tom@server sudo k3s kubectl" BACKUP_PULL_DIR=~/sightline-backups BACKUP_KEY=~/keys/backup-key.pem   scripts/backup-pull.sh
+
+# crontab -e, daily after the 03:15 backup:
+# 45 4 * * * cd ~/sightline && KUBECTL="ssh tom@server sudo k3s kubectl" scripts/backup-pull.sh
+```
+
+It starts a throwaway pod that mounts the volume read-only. It copies only
+what is new, checks each copy against the cluster's SHA-256 before keeping it,
+and deletes local copies older than `KEEP_DAYS` (90). Where the machine holds
+the backup's private key, which belongs off the cluster anyway, it also
+decrypts the newest copy and checks it is a Postgres dump. It exits non-zero on
+any failure, so cron's mail or the scheduler's history is the alert.
+
 ### Restoring
 
 ```bash
@@ -448,12 +471,6 @@ fails if nginx ever starts routing it.
   Cloudflare's API, not Kubernetes objects, so they are not here — and the
   application's own per-tenant limits are in `apps/api/src/tenancy/limits.ts`
   rather than relying on the edge for correctness.
-- **Copying backups off the machine.** The CronJob writes to a PVC on the same
-  node as the database, which survives a lost database and not a lost disk. The
-  job reads `BACKUP_S3_DESTINATION` and says so if it is set, because the
-  `postgres` image has no `aws` CLI and adding a package to a backup job adds a
-  way for the backup job to fail; the right shape is a second container with the
-  CLI, sharing the volume.
 - **A second node.** Every StatefulSet here is one replica, and that is honest
   rather than hidden: neither datastore is replicated, so this is a single point
   of failure whose mitigation is a tested restore.
