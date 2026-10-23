@@ -143,6 +143,9 @@ jobs:
         # step and leaves nothing behind for the others to trip over.
         env:
           LOAD_TEST: "1"
+          # The scan copied into two more accounts, so queries filter tables
+          # three times its size. The million-resource run is nightly.
+          LOAD_ACCOUNTS: "3"
         run: npx vitest run apps/api/src/load/largeAccount.test.ts
 
       - name: Service logs on failure

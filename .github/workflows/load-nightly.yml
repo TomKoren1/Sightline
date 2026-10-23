@@ -1,0 +1,62 @@
+name: Load test, a million resources
+
+# The large-account load test at twenty times the size every CI run uses, and
+# copied across several accounts. Nightly rather than per push: it takes most
+# of an hour, and the change it catches - a step becoming a different order of
+# cost - shows up the night after it lands. Budgets scale with the size.
+on:
+  workflow_dispatch:
+    inputs:
+      resources:
+        description: Resources in the estate
+        required: false
+        default: "1000000"
+      accounts:
+        description: Accounts the scan is copied into
+        required: false
+        default: "3"
+  schedule:
+    - cron: "30 2 * * *"
+
+jobs:
+  load:
+    name: Large estate against time and memory budgets
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+
+      - run: npm ci
+
+      - name: Start Postgres and the mock AWS control plane
+        run: |
+          cp .env.example .env
+          docker compose up -d
+          for i in $(seq 1 60); do
+            unhealthy=$(docker compose ps --format json \
+              | jq -r 'select(.Health != "healthy" and .Health != "") | .Service' || true)
+            [ -z "$unhealthy" ] && break
+            sleep 3
+          done
+
+      - name: Seed the mock account
+        run: npm run seed
+
+      - name: The load test
+        env:
+          LOAD_TEST: "1"
+          LOAD_RESOURCES: ${{ inputs.resources || '1000000' }}
+          LOAD_ACCOUNTS: ${{ inputs.accounts || '3' }}
+          # About 10 KB of heap a resource, measured: a million needs ~10 GB of
+          # the runner's 16.
+          NODE_OPTIONS: --max-old-space-size=13312
+        run: npx vitest run apps/api/src/load/largeAccount.test.ts --testTimeout=3600000 --hookTimeout=3600000
+
+      - name: Service logs on failure
+        if: failure()
+        run: docker compose logs --tail 100

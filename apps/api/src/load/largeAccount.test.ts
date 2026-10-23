@@ -7,11 +7,14 @@
  * that size goes through: analysis, the snapshot write, findings sync, and
  * every query the dashboard and the agent make against the result.
  *
+ * `LOAD_ACCOUNTS` copies the scan, server-side, into that many connections in
+ * all, so the queries run against tables holding many accounts. Peak memory is
+ * sampled through analysis and the write, against a per-resource budget.
+ *
  * Opt-in with `LOAD_TEST=1`: it takes about a minute and needs Postgres and
- * moto. The budgets are several times what a laptop against a local database
- * measures, so a failure means something became a different order of cost,
- * not that the machine was busy. The measured numbers are printed either way;
- * they are the useful output.
+ * moto. Budgets are several times what a laptop measures, so a failure means
+ * a different order of cost, not a busy machine. The numbers are printed
+ * either way; they are the useful output.
  */
 
 import { randomUUID } from "node:crypto";
@@ -42,6 +45,8 @@ const ENABLED = process.env["LOAD_TEST"] === "1";
 const TARGET = Number(process.env["LOAD_RESOURCES"] ?? 50_000);
 /** Instances behind one group: the shape that makes edge growth visible. */
 const CROWD = 2_000;
+/** Connections holding a copy of the scan, this one included. */
+const ACCOUNTS = Math.max(1, Number(process.env["LOAD_ACCOUNTS"] ?? 1));
 
 /**
  * Milliseconds, per step. The scale they assume is 50,000 resources; another
@@ -54,6 +59,14 @@ const BUDGET_MS = {
   /** Each dashboard or agent query, singly. */
   query: 3_000,
 } as const;
+/**
+ * Peak heap per resource while the estate is analysed and written - the
+ * worker's real ceiling, since it holds the whole estate at once. 50,000
+ * resources measure about 10 KB each.
+ */
+const HEAP_BYTES_PER_RESOURCE = 30_000;
+/** The worker's memory limit in deploy/k8s/base/app.yaml. */
+const WORKER_LIMIT_BYTES = 2 * 1024 ** 3;
 /**
  * Budgets assume the database is next to the process, as in CI and in the
  * deployment. Across a slow link the snapshot write is bandwidth, not code -
@@ -76,6 +89,26 @@ async function timed<T>(step: string, fn: () => Promise<T> | T, detail?: (t: T) 
 }
 
 let skipReason: string | null = ENABLED ? null : "LOAD_TEST is not 1";
+
+/** The highest heap and RSS seen since `start`, sampled every 25 ms. */
+function memoryPeak() {
+  const peak = { heap: 0, rss: 0 };
+  const sample = () => {
+    const m = process.memoryUsage();
+    peak.heap = Math.max(peak.heap, m.heapUsed);
+    peak.rss = Math.max(peak.rss, m.rss);
+  };
+  sample();
+  const timer = setInterval(sample, 25);
+  return {
+    stop() {
+      clearInterval(timer);
+      sample();
+      return peak;
+    },
+  };
+}
+let peakHeap = 0;
 let annotated: ScanResult;
 let scanId: ScanId;
 
@@ -103,6 +136,7 @@ beforeAll(async () => {
     base = await collectEstate({ target, scanId: "load" });
   }
 
+  const memory = memoryPeak();
   const per = base.collected.resources.length;
   const copies = Math.max(1, Math.ceil((TARGET - CROWD) / per));
   const big = replicateEstate(base.collected, { copies, crowd: CROWD });
@@ -132,6 +166,18 @@ beforeAll(async () => {
       apiCalls: 0,
     }),
   );
+  const peak = memory.stop();
+  peakHeap = peak.heap;
+  const mib = (b: number) => `${Math.round(b / 1024 ** 2).toLocaleString()} MiB`;
+  const perResource = Math.round(peak.heap / annotated.resources.length);
+  timings.push({
+    step: "peak memory",
+    ms: 0,
+    detail:
+      `heap ${mib(peak.heap)}, rss ${mib(peak.rss)}: ${perResource.toLocaleString()} bytes a resource, ` +
+      `so the worker's 2 GiB fits about ${Math.floor(WORKER_LIMIT_BYTES / perResource).toLocaleString()}`,
+  });
+
   // As the scan job does after a write this size.
   await timed("refresh statistics", () => refreshSnapshotStatistics());
   await timed(
@@ -141,6 +187,41 @@ beforeAll(async () => {
   );
   await markProjected(scope, scanId);
 
+  // Further accounts, copied in Postgres rather than written again: the point
+  // is the size of the tables the queries filter, not the write.
+  await timed(
+    "copy to more accounts",
+    async () => {
+      for (let i = 1; i < ACCOUNTS; i++) {
+        const other = asConnectionId(randomUUID());
+        await system.insert(schema.connections).values({
+          id: other,
+          tenantId,
+          kind: "demo",
+          label: `load.test ${i}`,
+          externalIdSource: "demo",
+        });
+        const copy = await createScanRun(
+          { tenantId, connectionId: other },
+          base.accountId,
+          base.regions,
+        );
+        await system.execute(sql`
+          INSERT INTO resource_snapshots
+                 (tenant_id, scan_id, arn, kind, name, region, account_id, tags, properties, derived, fingerprint)
+          SELECT tenant_id, ${copy}, arn, kind, name, region, account_id, tags, properties, derived, fingerprint
+            FROM resource_snapshots WHERE scan_id = ${scanId}`);
+        await system.execute(sql`
+          INSERT INTO relationship_snapshots (tenant_id, scan_id, from_arn, to_arn, rel_type, properties)
+          SELECT tenant_id, ${copy}, from_arn, to_arn, rel_type, properties
+            FROM relationship_snapshots WHERE scan_id = ${scanId}`);
+      }
+      await refreshSnapshotStatistics();
+    },
+    () =>
+      `${ACCOUNTS} accounts, ${(annotated.resources.length * ACCOUNTS).toLocaleString()} resources in all`,
+  );
+
   // What the scan costs to keep, after Postgres's own compression.
   const { rows } = await system.execute<{ bytes: string }>(sql`
     SELECT (SELECT coalesce(sum(pg_column_size(r.*)), 0) FROM resource_snapshots r
@@ -149,7 +230,7 @@ beforeAll(async () => {
              WHERE e.scan_id = ${scanId}) AS bytes`);
   const mb = Number(rows[0]?.bytes ?? 0) / 1024 / 1024;
   timings.push({ step: "stored size", ms: 0, detail: `${mb.toFixed(1)} MB of rows for this scan` });
-}, 600_000);
+}, 600_000 * scale);
 
 afterAll(async () => {
   if (!ENABLED || skipReason) return;
@@ -181,6 +262,14 @@ describe.runIf(ENABLED)("a large account", () => {
     expect(canReach).toBeLessThan(annotated.resources.length * 4);
   });
 
+  it("holds the estate within its memory budget", () => {
+    if (skipReason) return;
+    const perResource = peakHeap / annotated.resources.length;
+    expect(perResource, `${Math.round(perResource)} bytes a resource`).toBeLessThan(
+      HEAP_BYTES_PER_RESOURCE,
+    );
+  });
+
   it("analyses, saves and syncs within budget", () => {
     if (skipReason) return;
     for (const step of ["annotate", "save", "syncFindings"] as const) {
@@ -200,6 +289,10 @@ describe.runIf(ENABLED)("a large account", () => {
     ["unguarded buckets", () => q.findUnprotectedBuckets(graph(), { limit: 50 })],
     ["findings panel (whole endpoint)", () => new GraphService().findings(scope)],
     ["search", () => q.searchResources(graph(), { text: "prod" })],
+    [
+      "agent: a page of public resources, with counts",
+      () => q.pageOf("findPublicResources", graph(), { limit: 50, offset: 50 }),
+    ],
     [
       "reachable from the internet",
       () => q.findReachableFrom(graph(), { source: INTERNET_ARN, maxHops: 3 }),

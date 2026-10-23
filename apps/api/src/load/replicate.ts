@@ -23,6 +23,13 @@ import type { CollectorOutput } from "../scan/collectors/types.js";
 const AWS_ID =
   /\b(?:sg|vpc|subnet|i|igw|nat|rtb|acl|eni|vol|eipalloc|eipassoc|lt|tgw|pcx|vpce|snap|ami)-[0-9a-f]{8,17}\b/g;
 
+/**
+ * An EKS cluster's OIDC provider, which its issuer and every IRSA trust policy
+ * name. Rewritten like an id, or every copy's pods could assume every copy's
+ * roles - quadratic, and a stack overflow at 283 copies.
+ */
+const OIDC_PROVIDER = /oidc\.eks\.[a-z0-9-]+\.amazonaws\.com\/id\/[A-Za-z0-9]+/g;
+
 const escape = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
 /** Eight hex digits, distinct per copy, so a rewritten id still looks like an id. */
@@ -36,7 +43,10 @@ const tag = (copy: number) => copy.toString(16).padStart(8, "0");
 function rewriter(arns: string[]): (json: string, copy: number) => string {
   // Longest first, so an ARN that prefixes another never wins the match.
   const sorted = [...arns].sort((a, b) => b.length - a.length);
-  const pattern = new RegExp(`${sorted.map(escape).join("|")}|${AWS_ID.source}`, "g");
+  const pattern = new RegExp(
+    `${sorted.map(escape).join("|")}|${AWS_ID.source}|${OIDC_PROVIDER.source}`,
+    "g",
+  );
   const known = new Set(arns);
   return (json, copy) =>
     json.replace(pattern, (match) => {

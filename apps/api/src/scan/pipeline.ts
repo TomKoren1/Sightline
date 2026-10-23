@@ -166,11 +166,16 @@ export function annotate(
   analyseIdleResources(resources, relationships);
 
   // --- What can reach what? -----------------------------------------------
-  relationships.push(...linkEntryPoints(resources));
+  // Appended one at a time: spreading an analyser's output into `push` puts
+  // every edge on the stack, and a large estate overflows it.
+  const append = (more: Relationship[]) => {
+    for (const r of more) relationships.push(r);
+  };
+  append(linkEntryPoints(resources));
   // --- Which roles can a cluster's pods assume? ----------------------------
-  relationships.push(...linkIrsa(resources));
+  append(linkIrsa(resources));
   const { edges, internetReachable } = analyseReachability(resources, relationships);
-  relationships.push(...edges);
+  append(edges);
 
   // Fold reachability back onto the resources, so a node carries its own
   // verdict and the UI does not have to re-derive it from edges.

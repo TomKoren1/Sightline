@@ -38,42 +38,54 @@ function serviceAccounts(s: Statement, provider: string): string[] {
 }
 
 export function linkIrsa(resources: Resource[]): Relationship[] {
-  const clusters = resources.flatMap((r) => {
+  // By provider, so each role's trust policy is a lookup, not a scan of clusters.
+  const clusters = new Map<string, Resource[]>();
+  for (const r of resources) {
     const issuer = r.kind === "EksCluster" ? r.properties["oidcIssuer"] : null;
-    return typeof issuer === "string"
-      ? [{ cluster: r, provider: issuer.replace(/^https:\/\//, "") }]
-      : [];
-  });
-  if (clusters.length === 0) return [];
+    if (typeof issuer !== "string") continue;
+    const provider = issuer.replace(/^https:\/\//, "");
+    clusters.set(provider, [...(clusters.get(provider) ?? []), r]);
+  }
+  if (clusters.size === 0) return [];
 
   const edges: Relationship[] = [];
   for (const role of resources) {
     if (role.kind !== "IamRole") continue;
     const policy = role.properties["trustPolicy"] as { Statement?: Statement | Statement[] } | null;
-    const statements = policy?.Statement === undefined ? [] : [policy.Statement].flat();
-    for (const { cluster, provider } of clusters) {
-      const admitted = statements
-        .filter(allowsWebIdentity)
-        .filter(
-          (s) =>
-            typeof s.Principal === "object" &&
-            asList(s.Principal.Federated).some((f) => f.endsWith(`:oidc-provider/${provider}`)),
-        )
-        .flatMap((s) => serviceAccounts(s, provider));
-      if (admitted.length === 0) continue;
-      const any = admitted.includes("*");
-      edges.push({
-        from: cluster.arn,
-        to: role.arn,
-        type: "CAN_ASSUME",
-        properties: {
-          via: "IRSA",
-          serviceAccounts: any ? ["*"] : [...new Set(admitted)],
-          reason: any
-            ? `${role.name} trusts ${cluster.name}'s OIDC provider with no service account condition, so any pod in the cluster can assume it`
-            : `Pods running as ${[...new Set(admitted)].join(", ")} in ${cluster.name} can assume ${role.name} through IRSA`,
-        },
-      });
+    const statements = (policy?.Statement === undefined ? [] : [policy.Statement].flat()).filter(
+      allowsWebIdentity,
+    );
+    const trusted = new Set(
+      statements.flatMap((s) =>
+        typeof s.Principal === "object"
+          ? asList(s.Principal.Federated).map((f) => f.split(":oidc-provider/")[1] ?? "")
+          : [],
+      ),
+    );
+    for (const provider of trusted) {
+      for (const cluster of clusters.get(provider) ?? []) {
+        const admitted = statements
+          .filter(
+            (s) =>
+              typeof s.Principal === "object" &&
+              asList(s.Principal.Federated).some((f) => f.endsWith(`:oidc-provider/${provider}`)),
+          )
+          .flatMap((s) => serviceAccounts(s, provider));
+        if (admitted.length === 0) continue;
+        const any = admitted.includes("*");
+        edges.push({
+          from: cluster.arn,
+          to: role.arn,
+          type: "CAN_ASSUME",
+          properties: {
+            via: "IRSA",
+            serviceAccounts: any ? ["*"] : [...new Set(admitted)],
+            reason: any
+              ? `${role.name} trusts ${cluster.name}'s OIDC provider with no service account condition, so any pod in the cluster can assume it`
+              : `Pods running as ${[...new Set(admitted)].join(", ")} in ${cluster.name} can assume ${role.name} through IRSA`,
+          },
+        });
+      }
     }
   }
   return edges;
