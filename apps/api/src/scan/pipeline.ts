@@ -114,7 +114,7 @@ export function annotate(
       ...groupPolicies.map((p) => ({
         policyName: p.policyName,
         kind: p.kind,
-        document: p.document as PolicyRef["document"],
+        document: p.document,
         viaGroup: p.groupName,
       })),
     ];
