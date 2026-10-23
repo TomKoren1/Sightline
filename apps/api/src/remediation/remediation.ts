@@ -17,6 +17,8 @@ import type { Remediation } from "@sightline/shared";
 import { asText, formatPortRange, shellQuote } from "@sightline/shared";
 
 import { disabledBlockSettings } from "../scan/analysers/publicAccess.js";
+import { documentGrantsAdmin } from "../scan/analysers/policy.js";
+import type { GroupPolicy } from "../scan/collectors/iam.js";
 
 /** The resource shape these generators need — properties plus derived facts. */
 export interface RemediationInput {
@@ -251,6 +253,31 @@ function iamRemediations(input: RemediationInput): Remediation[] {
         `  --policy-name ${shellQuote(policy.policyName)} --policy-document file://scoped.json`,
       ],
       verify: `aws iam get-${noun}-policy ${nameFlag} ${name} --policy-name ${shellQuote(policy.policyName)}`,
+    });
+  }
+
+  // Admin held through a group is fixed on the group, and fixing it there
+  // changes every member, so both routes are offered and the cost named.
+  const groupGrants = ((input.properties["groupPolicies"] ?? []) as GroupPolicy[]).filter(
+    (p) => documentGrantsAdmin(p.document).yes,
+  );
+  for (const group of new Set(groupGrants.map((p) => p.groupName))) {
+    const policies = groupGrants.filter((p) => p.groupName === group).map((p) => p.policyName);
+    out.push({
+      id: `iam-group-${group}`,
+      addresses: "admin",
+      title: `Remove this user from the group ${group}`,
+      summary:
+        `The admin grant comes from the group, through ${policies.join(", ")}. Removing the ` +
+        "membership takes it from this user alone; scoping the group's policy takes it from " +
+        "every member.",
+      caution: `Removing the membership drops every permission the group gives, not only the admin grant. ${usedByText} Editing the group's policy instead changes every other member at once — list them first.`,
+      risk: "high",
+      cli: [
+        `aws iam get-group --group-name ${shellQuote(group)} --query 'Users[].UserName'`,
+        `aws iam remove-user-from-group --group-name ${shellQuote(group)} --user-name ${name}`,
+      ],
+      verify: `aws iam list-groups-for-user --user-name ${name}`,
     });
   }
 

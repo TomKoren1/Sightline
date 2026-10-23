@@ -28,6 +28,7 @@ export const RESOURCE_KINDS = [
   "S3Bucket",
   "IamRole",
   "IamUser",
+  "IamGroup",
   "IamPolicy",
   "InstanceProfile",
   "RdsInstance",
@@ -49,6 +50,7 @@ export const RELATIONSHIP_TYPES = [
   "HAS_INSTANCE_PROFILE",
   "PROVIDES_ROLE",
   "HAS_POLICY",
+  "MEMBER_OF",
   "CAN_ASSUME",
   "EXECUTES_AS",
   /**
@@ -149,6 +151,7 @@ export function isGlobalKind(kind: ResourceKind): boolean {
     kind === "Account" ||
     kind === "IamRole" ||
     kind === "IamUser" ||
+    kind === "IamGroup" ||
     kind === "IamPolicy" ||
     kind === "InstanceProfile" ||
     kind === "Internet"

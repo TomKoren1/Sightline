@@ -58,7 +58,7 @@ export const GROUND_TRUTH = {
    * entirely through IAM users reported no administrators at all. A standing
    * user with long-lived keys is not a lesser finding than an admin role.
    */
-  adminUsers: ["northwind-ci-deploy", "northwind-backup-agent"],
+  adminUsers: ["northwind-ci-deploy", "northwind-backup-agent", "northwind-oncall"],
 
   /** Users that must NOT be flagged - the negative class for the above. */
   nonAdminUsers: ["northwind-metrics-reader"],
@@ -81,6 +81,9 @@ export const GROUND_TRUTH = {
 
   /** Admin users whose grant is inline, under an unrevealing policy name. */
   inlineAdminUsers: ["northwind-backup-agent"],
+
+  /** Admin users with no policy of their own: the grant is a group's. */
+  groupAdminUsers: { "northwind-oncall": "northwind-ops" },
 
   /** Admin roles nothing assumes or attaches to. */
   unusedAdminRoles: ["UnusedAdminRole"],

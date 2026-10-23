@@ -31,13 +31,15 @@ export interface AdminVerdict {
   /** Human-readable evidence, always populated. */
   reason: string;
   /** Which policy produced the verdict, for the UI and for citations. */
-  via?: { policyName: string; kind: "managed" | "inline"; sid?: string };
+  via?: { policyName: string; kind: "managed" | "inline"; sid?: string; group?: string };
 }
 
 export interface PolicyRef {
   policyName: string;
   kind: "managed" | "inline";
   document: PolicyDocument | null;
+  /** Set when the principal holds this policy through an IAM group. */
+  viaGroup?: string;
 }
 
 /**
@@ -74,10 +76,16 @@ export function evaluateAdmin(policies: PolicyRef[]): AdminVerdict {
     const { yes, sid } = documentGrantsAdmin(policy.document);
     if (yes) {
       const where = sid ? `statement "${sid}" of ` : "";
+      const group = policy.viaGroup ? ` of group "${policy.viaGroup}"` : "";
       return {
         isAdmin: true,
-        reason: `Grants Action "*" on Resource "*" via ${where}the ${policy.kind} policy "${policy.policyName}"`,
-        via: { policyName: policy.policyName, kind: policy.kind, ...(sid ? { sid } : {}) },
+        reason: `Grants Action "*" on Resource "*" via ${where}the ${policy.kind} policy "${policy.policyName}"${group}`,
+        via: {
+          policyName: policy.policyName,
+          kind: policy.kind,
+          ...(sid ? { sid } : {}),
+          ...(policy.viaGroup ? { group: policy.viaGroup } : {}),
+        },
       };
     }
   }

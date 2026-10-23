@@ -35,6 +35,9 @@ import {
 } from "@aws-sdk/client-s3";
 import {
   AddRoleToInstanceProfileCommand,
+  AddUserToGroupCommand,
+  AttachGroupPolicyCommand,
+  CreateGroupCommand,
   AttachRolePolicyCommand,
   AttachUserPolicyCommand,
   CreateUserCommand,
@@ -386,6 +389,20 @@ async function seedIam() {
     }),
   );
 
+  // Admin held only through a group: the user has no policies of its own, so
+  // a collector that ignores groups reports it as unprivileged.
+  await client.send(new CreateGroupCommand({ GroupName: "northwind-ops" }));
+  await client.send(
+    new AttachGroupPolicyCommand({
+      GroupName: "northwind-ops",
+      PolicyArn: "arn:aws:iam::aws:policy/AdministratorAccess",
+    }),
+  );
+  await client.send(new CreateUserCommand({ UserName: "northwind-oncall" }));
+  await client.send(
+    new AddUserToGroupCommand({ GroupName: "northwind-ops", UserName: "northwind-oncall" }),
+  );
+
   // Negative class: scoped, and must not be flagged.
   await client.send(new CreateUserCommand({ UserName: "northwind-metrics-reader" }));
   await client.send(
@@ -396,7 +413,7 @@ async function seedIam() {
   );
 
   log(
-    "IAM: 6 roles (3 effectively admin, 1 of them inline-only, 1 service-linked with a long ARN), 3 users (2 admin, 1 of them inline-only), 1 instance profile",
+    "IAM: 6 roles (3 effectively admin, 1 of them inline-only, 1 service-linked with a long ARN), 4 users (3 admin: 1 inline-only, 1 through a group), 1 group, 1 instance profile",
   );
   return { appProfileName: "NorthwindAppProfile" };
 }

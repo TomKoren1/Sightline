@@ -165,6 +165,27 @@ export const CHECKS: CheckDefinition[] = [
     },
   },
   {
+    id: "group-admin-user",
+    description: "Admin held through an IAM group is found and attributed to the group",
+    rationale:
+      "A user with no policies of its own can be an administrator through its groups. Groups were not collected, so such a user read as unprivileged.",
+    run: ({ resources }) => {
+      const failures = Object.entries(GROUND_TRUTH.groupAdminUsers).filter(([name, group]) => {
+        const user = resources.find((r) => r.kind === "IamUser" && r.name === name);
+        return (
+          !user?.derived.isAdmin || !(user.derived.adminReason ?? "").includes(`group "${group}"`)
+        );
+      });
+      return {
+        passed: failures.length === 0,
+        detail:
+          failures.length === 0
+            ? "group-granted admin found and attributed to its group"
+            : `not found or not attributed: ${failures.map(([n]) => n).join(", ")}`,
+      };
+    },
+  },
+  {
     id: "inline-admin",
     description: "Admin granted inline is attributed to the inline policy",
     rationale: "A verdict a user can act on has to say where the privilege came from.",

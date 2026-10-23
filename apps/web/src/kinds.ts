@@ -30,6 +30,7 @@ export const KIND_STYLES: Record<string, KindStyle> = {
   DbSubnetGroup: { label: "DB subnet group", color: "#4a7f90", group: "data" },
   IamRole: { label: "IAM role", color: "#a87fd4", group: "identity" },
   IamUser: { label: "IAM user", color: "#9a6fc4", group: "identity" },
+  IamGroup: { label: "IAM group", color: "#946bbd", group: "identity" },
   IamPolicy: { label: "IAM policy", color: "#8f6fb5", group: "identity" },
   InstanceProfile: { label: "Instance profile", color: "#9f7fc9", group: "identity" },
 };

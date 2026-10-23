@@ -11,6 +11,7 @@ import { INTERNET_ARN, type Relationship, type Resource, type ScanResult } from 
 
 import { accountArn, regionArn } from "../aws/arns.js";
 import { evaluateAdmin, type PolicyRef } from "./analysers/policy.js";
+import type { GroupPolicy } from "./collectors/iam.js";
 import { evaluateBucketPublicAccess, type AclGrant } from "./analysers/publicAccess.js";
 import { analyseIdleResources } from "./analysers/idle.js";
 import { analyseReachability } from "./analysers/reachability.js";
@@ -97,6 +98,8 @@ export function annotate(
       document: unknown;
     }[];
 
+    const groupPolicies = (resource.properties["groupPolicies"] ?? []) as GroupPolicy[];
+
     const refs: PolicyRef[] = [
       ...attached.map((p) => ({
         policyName: p.policyName,
@@ -107,6 +110,12 @@ export function annotate(
         policyName: p.policyName,
         kind: "inline" as const,
         document: p.document as PolicyRef["document"],
+      })),
+      ...groupPolicies.map((p) => ({
+        policyName: p.policyName,
+        kind: p.kind,
+        document: p.document as PolicyRef["document"],
+        viaGroup: p.groupName,
       })),
     ];
 

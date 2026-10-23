@@ -18,6 +18,7 @@ const STRUCTURED_KEYS = [
   "ingress",
   "attachedPolicies",
   "inlinePolicies",
+  "groupPolicies",
   "aclGrants",
 ] as const;
 
