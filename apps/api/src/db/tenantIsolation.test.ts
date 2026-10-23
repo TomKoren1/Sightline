@@ -176,6 +176,9 @@ const CALLS: Record<string, (f: Fixture) => Promise<unknown>> = {
   // Matches a substring both tenants' names share, so a leak is *likely* rather
   // than merely possible: an unscoped version returns both tenants' rows.
   searchResources: (f) => queries.searchResources(f.scope, { text: "-db" }),
+  // The agent's paged reader, through the finder most likely to leak; its
+  // counts run a second query over the same rows, so both are checked.
+  pageOf: (f) => queries.pageOf("searchResources", f.scope, { text: "-db" }),
   summariseAccount: (f) => queries.summariseAccount(f.scope),
   fetchGraph: (f) => queries.fetchGraph(f.scope, {}),
 };

@@ -16,55 +16,28 @@
  * so a scan id from the wrong tenant returns nothing twice over.
  */
 
-import { sql, type SQL } from "drizzle-orm";
+import { sql } from "drizzle-orm";
 import { INTERNET_ARN, type Relationship, type Resource } from "@sightline/shared";
 
-import { db, withTenant } from "./postgres.js";
+import { clamp, flag, read, type GraphScope, type ResourceRow } from "./graphRead.js";
+import { withTenant } from "./postgres.js";
 import { withDocuments } from "./repository.js";
 import { hopsFrom, indexReach, type ReachIndex } from "../scan/analysers/reachIndex.js";
-import type { ScanId, TenantId } from "../tenancy/ids.js";
 
-/** Which graph a read may touch: one tenant's one scan. */
-export interface GraphScope {
-  tenantId: TenantId;
-  scanId: ScanId;
-}
-
-/** Cap every query, so one bad question cannot drag the whole estate back. */
-const DEFAULT_LIMIT = 100;
-const MAX_LIMIT = 500;
-
-/**
- * Bound a caller-supplied limit. `NaN` is treated as absent: `?limit=abc` once
- * became `LIMIT 0` and told a customer their account was empty.
- */
-const clamp = (n: number | undefined, fallback = DEFAULT_LIMIT) => {
-  const requested = Number.isFinite(n) ? n! : fallback;
-  return Math.min(Math.max(1, Math.floor(requested)), MAX_LIMIT);
-};
-
-export interface ResourceRow {
-  arn: string;
-  kind: string;
-  name: string;
-  region: string | null;
-  [key: string]: unknown;
-}
-
-async function read<T>(scope: GraphScope, query: (r: SQL, e: SQL) => SQL): Promise<T[]> {
-  // `r` and `e` are the scan's resources and edges, already filtered to it.
-  const resources = sql`(SELECT * FROM resource_snapshots
-    WHERE tenant_id = ${scope.tenantId} AND scan_id = ${scope.scanId})`;
-  const edges = sql`(SELECT * FROM relationship_snapshots
-    WHERE tenant_id = ${scope.tenantId} AND scan_id = ${scope.scanId})`;
-  return withTenant(scope.tenantId, async () => {
-    const { rows } = await db.execute(query(resources, edges));
-    return rows as T[];
-  });
-}
-
-/** A verdict from the `derived` column, as the boolean it is or null. */
-const flag = (column: string, key: string) => sql.raw(`(${column}.derived->>'${key}')::boolean`);
+export type { GraphScope, ResourceRow } from "./graphRead.js";
+export {
+  findAdminPrincipals,
+  findIdleResources,
+  findInstancesInPublicSubnets,
+  findOpenSecurityGroups,
+  findPublicResources,
+  findUnprotectedBuckets,
+  listResources,
+  pageOf,
+  searchResources,
+  type FinderName,
+  type Page,
+} from "./finders.js";
 
 /**
  * The flat property bag the UI and remediation read: properties, then derived
@@ -104,31 +77,7 @@ function primitiveOrJson(value: unknown): unknown {
   return JSON.stringify(value);
 }
 
-// --- Lookups and filters ----------------------------------------------------
-
-export async function listResources(
-  scope: GraphScope,
-  params: { kind?: string; region?: string; nameContains?: string; limit?: number },
-): Promise<ResourceRow[]> {
-  const kind = params.kind ?? null;
-  const region = params.region ?? null;
-  const name = params.nameContains?.toLowerCase() ?? null;
-  return read(
-    scope,
-    (r) => sql`
-    SELECT arn, kind, name, region,
-           ${flag("r", "isPublic")} AS "isPublic",
-           ${flag("r", "isAdmin")} AS "isAdmin",
-           ${flag("r", "isIdle")} AS "isIdle"
-      FROM ${r} r
-     WHERE kind <> 'Internet'
-       AND (${kind}::text IS NULL OR kind = ${kind})
-       AND (${region}::text IS NULL OR region = ${region})
-       AND (${name}::text IS NULL OR position(${name} in lower(name)) > 0)
-     ORDER BY kind, name
-     LIMIT ${clamp(params.limit)}`,
-  );
-}
+// --- Lookups ---------------------------------------------------------------
 
 /** Everything known about one resource, plus its immediate neighbours. */
 export async function getResource(
@@ -178,153 +127,6 @@ export async function getResource(
     outgoing: side("out"),
     incoming: side("in"),
   };
-}
-
-/**
- * Resources an anonymous caller can reach. `isPublic` was decided at ingest by
- * analysers that are unit tested, and `publicReason` records the evidence.
- */
-export async function findPublicResources(
-  scope: GraphScope,
-  params: { kind?: string; limit?: number } = {},
-) {
-  const kind = params.kind ?? null;
-  return read<ResourceRow>(
-    scope,
-    (r) => sql`
-    SELECT arn, kind, name, region, derived->>'publicReason' AS reason
-      FROM ${r} r
-     WHERE ${flag("r", "isPublic")} AND (${kind}::text IS NULL OR kind = ${kind})
-     ORDER BY kind, name
-     LIMIT ${clamp(params.limit)}`,
-  );
-}
-
-/**
- * Principals that are effectively administrators, and what uses them. An admin
- * role on a running instance is an incident; one nothing references is
- * cleanup. A user has nothing to be used by, which is itself the finding.
- */
-export async function findAdminPrincipals(scope: GraphScope, params: { limit?: number } = {}) {
-  return read<ResourceRow>(
-    scope,
-    (r, e) => sql`
-    WITH admins AS (
-      SELECT arn, kind, name, derived FROM ${r} r
-       WHERE kind IN ('IamRole', 'IamUser') AND ${flag("r", "isAdmin")}
-    ),
-    users AS (
-      SELECT a.arn AS admin, i.arn, i.name, i.kind
-        FROM admins a
-        JOIN ${e} pr ON pr.rel_type = 'PROVIDES_ROLE' AND pr.to_arn = a.arn
-        JOIN ${e} hp ON hp.rel_type = 'HAS_INSTANCE_PROFILE' AND hp.to_arn = pr.from_arn
-        JOIN ${r} i ON i.arn = hp.from_arn AND i.kind = 'Ec2Instance'
-      UNION
-      SELECT a.arn, f.arn, f.name, f.kind
-        FROM admins a
-        JOIN ${e} ex ON ex.rel_type = 'EXECUTES_AS' AND ex.to_arn = a.arn
-        JOIN ${r} f ON f.arn = ex.from_arn
-    )
-    SELECT a.arn, a.kind, a.name, NULL AS region,
-           a.derived->>'adminReason' AS reason,
-           a.derived->>'adminVia' AS "adminVia",
-           coalesce(jsonb_agg(jsonb_build_object('arn', u.arn, 'name', u.name, 'kind', u.kind))
-                    FILTER (WHERE u.arn IS NOT NULL), '[]'::jsonb) AS "usedBy",
-           count(u.arn)::int AS "useCount"
-      FROM admins a LEFT JOIN users u ON u.admin = a.arn
-     GROUP BY a.arn, a.kind, a.name, a.derived
-     ORDER BY "useCount" DESC, a.name
-     LIMIT ${clamp(params.limit)}`,
-  );
-}
-
-/**
- * Instances outside a private subnet: in a subnet that routes to an internet
- * gateway, or in no subnet at all - the rarer half, and easier to miss.
- */
-export async function findInstancesInPublicSubnets(
-  scope: GraphScope,
-  params: { limit?: number } = {},
-) {
-  return read<ResourceRow>(
-    scope,
-    (r, e) => sql`
-    SELECT i.arn, 'Ec2Instance' AS kind, i.name, i.region,
-           i.properties->>'state' AS state,
-           coalesce(s.name, '(none)') AS subnet,
-           CASE WHEN s.arn IS NULL THEN 'Instance is not associated with any subnet'
-                ELSE s.derived->>'publicReason' END AS reason
-      FROM ${r} i
-      LEFT JOIN ${e} sn ON sn.rel_type = 'IN_SUBNET' AND sn.from_arn = i.arn
-      LEFT JOIN ${r} s ON s.arn = sn.to_arn AND s.kind = 'Subnet'
-     WHERE i.kind = 'Ec2Instance' AND (s.arn IS NULL OR ${flag("s", "isPublic")})
-     ORDER BY i.name
-     LIMIT ${clamp(params.limit)}`,
-  );
-}
-
-/** Billable and doing nothing, most expensive first. */
-export async function findIdleResources(scope: GraphScope, params: { limit?: number } = {}) {
-  return read<ResourceRow>(
-    scope,
-    (r) => sql`
-    SELECT arn, kind, name, region, derived->>'idleReason' AS reason,
-           coalesce((derived->>'estimatedMonthlyCostUsd')::float8, 0) AS "estimatedMonthlyCostUsd"
-      FROM ${r} r
-     WHERE ${flag("r", "isIdle")}
-     ORDER BY "estimatedMonthlyCostUsd" DESC, name
-     LIMIT ${clamp(params.limit)}`,
-  );
-}
-
-/**
- * Buckets nothing would stop from being made public. Not public: Block Public
- * Access being off grants nobody anything. A posture finding, not exposure.
- */
-export async function findUnprotectedBuckets(scope: GraphScope, params: { limit?: number } = {}) {
-  return read<ResourceRow>(
-    scope,
-    (r) => sql`
-    SELECT arn, 'S3Bucket' AS kind, name, region, derived->>'unprotectedReason' AS reason,
-           coalesce(${flag("r", "isPublic")}, false) AS "isPublic"
-      FROM ${r} r
-     WHERE kind = 'S3Bucket' AND ${flag("r", "isUnprotected")}
-     ORDER BY name
-     LIMIT ${clamp(params.limit)}`,
-  );
-}
-
-/** Resources the internet reaches directly, with the rule that lets it. */
-export async function findOpenSecurityGroups(scope: GraphScope, params: { limit?: number } = {}) {
-  return read<ResourceRow>(
-    scope,
-    (r, e) => sql`
-    SELECT t.arn, t.kind, t.name, t.region,
-           array_agg(DISTINCT e.properties->>'ports') AS ports,
-           (array_agg(e.properties->>'via' ORDER BY e.properties->>'via'))[1] AS "securityGroup",
-           (array_agg(e.properties->>'reason' ORDER BY e.properties->>'via'))[1] AS reason
-      FROM ${e} e JOIN ${r} t ON t.arn = e.to_arn
-     WHERE e.rel_type = 'CAN_REACH' AND e.from_arn = ${INTERNET_ARN}
-     GROUP BY t.arn, t.kind, t.name, t.region
-     ORDER BY t.name
-     LIMIT ${clamp(params.limit)}`,
-  );
-}
-
-/** Free-text search across resource names, tags and ARNs. */
-export async function searchResources(scope: GraphScope, params: { text: string; limit?: number }) {
-  const text = params.text.toLowerCase();
-  return read<ResourceRow>(
-    scope,
-    (r) => sql`
-    SELECT arn, kind, name, region
-      FROM ${r} r
-     WHERE position(${text} in lower(name)) > 0
-        OR position(${text} in lower(tags::text)) > 0
-        OR position(${text} in lower(arn)) > 0
-     ORDER BY kind, name
-     LIMIT ${clamp(params.limit, 25)}`,
-  );
 }
 
 /** Counts by kind and region - cheap orientation for an opening question. */

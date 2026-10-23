@@ -61,6 +61,56 @@ export interface ToolResult {
   /** The SQL actually run, surfaced in the UI for auditability. */
   query?: string;
   note?: string;
+  /** For a list tool: where these rows sit in the whole answer. */
+  page?: Omit<q.Page, "rows">;
+}
+
+/**
+ * Tools that answer a list question, and the finder each pages through. Their
+ * results carry the true total and counts by kind and region, so "how many"
+ * is answered by Postgres rather than by the model counting a truncated list.
+ */
+const PAGED: Record<string, q.FinderName> = {
+  list_resources: "listResources",
+  find_public_resources: "findPublicResources",
+  find_admin_principals: "findAdminPrincipals",
+  find_instances_in_public_subnets: "findInstancesInPublicSubnets",
+  find_idle_resources: "findIdleResources",
+  find_unprotected_buckets: "findUnprotectedBuckets",
+  find_open_security_groups: "findOpenSecurityGroups",
+  search_resources: "searchResources",
+};
+
+export const AGENT_PAGE_ROWS = 50;
+const AGENT_MAX_PAGE_ROWS = 200;
+
+const PAGE_PROPERTIES = {
+  limit: {
+    type: "number",
+    description: `Rows per page (default ${AGENT_PAGE_ROWS}, at most ${AGENT_MAX_PAGE_ROWS}).`,
+  },
+  cursor: { type: "string", description: "The cursor a previous page returned, to continue it." },
+} satisfies Record<string, JSONSchema7>;
+
+/**
+ * Where the next page starts, bound to its scan: a cursor kept across a rescan
+ * would otherwise page through a different estate at the same offsets.
+ */
+export const encodeCursor = (scanId: string, offset: number) =>
+  Buffer.from(JSON.stringify({ s: scanId, o: offset })).toString("base64url");
+
+function decodeCursor(value: unknown, scanId: string): number | "stale" | null {
+  if (typeof value !== "string" || value === "") return null;
+  try {
+    const parsed = JSON.parse(Buffer.from(value, "base64url").toString("utf8")) as {
+      s?: unknown;
+      o?: unknown;
+    };
+    if (parsed.s !== scanId) return "stale";
+    return typeof parsed.o === "number" && parsed.o >= 0 ? Math.floor(parsed.o) : "stale";
+  } catch {
+    return "stale";
+  }
 }
 
 /** Pull ARNs out of arbitrary result rows, however deeply nested. */
@@ -131,7 +181,7 @@ export const TOOL_DEFINITIONS: ToolDefinition[] = [
         },
         region: { type: "string", description: "AWS region, e.g. us-east-1." },
         nameContains: { type: "string", description: "Case-insensitive substring of the name." },
-        limit: { type: "number", description: "Max rows (default 100)." },
+        ...PAGE_PROPERTIES,
       },
     },
   },
@@ -158,7 +208,7 @@ export const TOOL_DEFINITIONS: ToolDefinition[] = [
       type: "object",
       properties: {
         kind: { type: "string", description: "Restrict to one type, e.g. S3Bucket." },
-        limit: { type: "number" },
+        ...PAGE_PROPERTIES,
       },
     },
   },
@@ -171,7 +221,7 @@ export const TOOL_DEFINITIONS: ToolDefinition[] = [
       "running instance is an incident, a role nothing uses is cleanup, and a *user* with " +
       "admin has long-lived credentials and no usage data here - report it as its own risk " +
       "rather than as an unused role.",
-    input_schema: { type: "object", properties: { limit: { type: "number" } } },
+    input_schema: { type: "object", properties: { ...PAGE_PROPERTIES } },
   },
   {
     name: "find_network_paths",
@@ -216,7 +266,7 @@ export const TOOL_DEFINITIONS: ToolDefinition[] = [
       "EC2 instances that are not in a private subnet - either in a subnet that routes " +
       "0.0.0.0/0 to an internet gateway, or in no subnet at all. Use for 'which instances " +
       "aren't in a private subnet?'.",
-    input_schema: { type: "object", properties: { limit: { type: "number" } } },
+    input_schema: { type: "object", properties: { ...PAGE_PROPERTIES } },
   },
   {
     name: "find_idle_resources",
@@ -225,7 +275,7 @@ export const TOOL_DEFINITIONS: ToolDefinition[] = [
       "unassociated elastic IPs, stopped instances, NAT gateways serving nothing - with " +
       "rough monthly cost, most expensive first. Use for 'what is costing money but not " +
       "being used?'. Costs are list-price estimates; present them as approximate.",
-    input_schema: { type: "object", properties: { limit: { type: "number" } } },
+    input_schema: { type: "object", properties: { ...PAGE_PROPERTIES } },
   },
   {
     name: "find_unprotected_buckets",
@@ -236,7 +286,7 @@ export const TOOL_DEFINITIONS: ToolDefinition[] = [
       "Public Access enabled?', and when a user expects a bucket to be public because they " +
       "disabled the block. Never describe these as public: that is a different question, " +
       "answered by find_public_resources.",
-    input_schema: { type: "object", properties: { limit: { type: "number" } } },
+    input_schema: { type: "object", properties: { ...PAGE_PROPERTIES } },
   },
   {
     name: "find_open_security_groups",
@@ -244,7 +294,7 @@ export const TOOL_DEFINITIONS: ToolDefinition[] = [
       "Resources directly exposed to 0.0.0.0/0, with the ports and the security group " +
       "responsible. Use for 'what is open to the internet?' and for spotting SSH or RDP " +
       "exposed to the world.",
-    input_schema: { type: "object", properties: { limit: { type: "number" } } },
+    input_schema: { type: "object", properties: { ...PAGE_PROPERTIES } },
   },
   {
     name: "search_resources",
@@ -253,7 +303,7 @@ export const TOOL_DEFINITIONS: ToolDefinition[] = [
       "something you cannot match exactly, before giving up on finding it.",
     input_schema: {
       type: "object",
-      properties: { text: { type: "string" }, limit: { type: "number" } },
+      properties: { text: { type: "string" }, ...PAGE_PROPERTIES },
       required: ["text"],
     },
   },
@@ -337,12 +387,12 @@ export async function runTool(
   name: string,
   input: ToolInput,
 ): Promise<ToolResult> {
+  const finder = PAGED[name];
+  if (finder) return runPaged(ctx, finder, input);
+
   switch (name) {
     case "summarise_account":
       return wrap([await q.summariseAccount(ctx.graph)]);
-
-    case "list_resources":
-      return wrap(await q.listResources(ctx.graph, input));
 
     case "get_resource": {
       const row = await q.getResource(ctx.graph, String(input["arnOrName"] ?? ""));
@@ -360,12 +410,6 @@ export async function runTool(
             : "Sightline cannot apply these. Present them as commands for the user to run, with the caution attached to each.",
       });
     }
-
-    case "find_public_resources":
-      return wrap(await q.findPublicResources(ctx.graph, input));
-
-    case "find_admin_principals":
-      return wrap(await q.findAdminPrincipals(ctx.graph, input));
 
     case "find_network_paths": {
       const rows = await q.findNetworkPaths(ctx.graph, {
@@ -388,21 +432,6 @@ export async function runTool(
           maxHops: input["maxHops"] ? Number(input["maxHops"]) : undefined,
         }),
       );
-
-    case "find_instances_in_public_subnets":
-      return wrap(await q.findInstancesInPublicSubnets(ctx.graph, input));
-
-    case "find_idle_resources":
-      return wrap(await q.findIdleResources(ctx.graph, input));
-
-    case "find_unprotected_buckets":
-      return wrap(await q.findUnprotectedBuckets(ctx.graph, input));
-
-    case "find_open_security_groups":
-      return wrap(await q.findOpenSecurityGroups(ctx.graph, input));
-
-    case "search_resources":
-      return wrap(await q.searchResources(ctx.graph, { text: String(input["text"] ?? "") }));
 
     case "list_scans":
       return wrap(await listScans(ctx.scope, Number(input["limit"] ?? 10)));
@@ -467,6 +496,30 @@ export async function runTool(
     default:
       return { rows: [], arns: [], note: `Unknown tool "${name}".` };
   }
+}
+
+async function runPaged(
+  ctx: ToolContext,
+  finder: q.FinderName,
+  input: ToolInput,
+): Promise<ToolResult> {
+  const offset = decodeCursor(input["cursor"], ctx.graph.scanId);
+  if (offset === "stale") {
+    return wrap([], {
+      note: "That cursor belongs to another scan or is not one this tool issued. Call again without it.",
+    });
+  }
+  const limit = Number(input["limit"]);
+  const str = (key: string) => (typeof input[key] === "string" ? input[key] : undefined);
+  const { rows, ...page } = await q.pageOf(finder, ctx.graph, {
+    kind: str("kind"),
+    region: str("region"),
+    nameContains: str("nameContains"),
+    text: str("text"),
+    limit: Number.isFinite(limit) ? Math.min(limit, AGENT_MAX_PAGE_ROWS) : AGENT_PAGE_ROWS,
+    offset: offset ?? 0,
+  });
+  return wrap(rows, { page });
 }
 
 export { getLatestScan };
