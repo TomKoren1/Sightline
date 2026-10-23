@@ -48,7 +48,20 @@ export const GROUND_TRUTH = {
   blockedPublicBuckets: ["northwind-reports"],
 
   /** Roles with effective `*:*`. */
-  adminRoles: ["NorthwindAdminRole", "LegacyDeployRole", "UnusedAdminRole"],
+  adminRoles: [
+    "NorthwindAdminRole",
+    "LegacyDeployRole",
+    "UnusedAdminRole",
+    "NorthwindBuildRole",
+    "NorthwindPlatformRole",
+    "PlatformPodAdminRole",
+  ],
+
+  /** Admin with no "*" anywhere: a known escalation path, by its id. */
+  escalationAdminRoles: { NorthwindBuildRole: "passrole-lambda" },
+
+  /** Admin through `NotAction` that leaves IAM writable. */
+  notActionAdminRoles: ["NorthwindPlatformRole"],
 
   /**
    * Users with effective `*:*`.
@@ -58,7 +71,7 @@ export const GROUND_TRUTH = {
    * entirely through IAM users reported no administrators at all. A standing
    * user with long-lived keys is not a lesser finding than an admin role.
    */
-  adminUsers: ["northwind-ci-deploy", "northwind-backup-agent"],
+  adminUsers: ["northwind-ci-deploy", "northwind-backup-agent", "northwind-oncall"],
 
   /** Users that must NOT be flagged - the negative class for the above. */
   nonAdminUsers: ["northwind-metrics-reader"],
@@ -82,6 +95,9 @@ export const GROUND_TRUTH = {
   /** Admin users whose grant is inline, under an unrevealing policy name. */
   inlineAdminUsers: ["northwind-backup-agent"],
 
+  /** Admin users with no policy of their own: the grant is a group's. */
+  groupAdminUsers: { "northwind-oncall": "northwind-ops" },
+
   /** Admin roles nothing assumes or attaches to. */
   unusedAdminRoles: ["UnusedAdminRole"],
 
@@ -92,6 +108,10 @@ export const GROUND_TRUTH = {
     "prod-bastion",
     "staging-rdp-host",
     "northwind-prod-db",
+    "prod-alb",
+    "northwind-cdn",
+    "northwind-orders-api",
+    "status-page",
   ],
 
   /**
@@ -104,11 +124,82 @@ export const GROUND_TRUTH = {
     ["Internet", "prod-bastion", "northwind-prod-db"],
   ],
 
+  /** Entry points the internet reaches: a load balancer, a CDN, an API. */
+  entryPoints: ["prod-alb", "northwind-cdn", "northwind-orders-api"],
+
+  /** Open to 0.0.0.0/0 in its group, and internal, so not reachable. */
+  internalEntryPoints: ["prod-internal-alb"],
+
+  /** What each entry point delivers traffic to. */
+  entryRoutes: [
+    ["prod-alb", "prod-app-1"],
+    ["northwind-cdn", "prod-alb"],
+    ["northwind-orders-api", "order-processor"],
+  ],
+
+  /** Resource policies that let anyone in, and look-alikes that do not. */
+  publicPolicyResources: ["orders-queue", "prod/db-password"],
+  privatePolicyResources: ["internal-events", "alerts", "prod/api-key", "northwind-data"],
+
+  /**
+   * Roles a cluster's pods can assume through IRSA, `[cluster, role, service
+   * account]`, where `*` is every service account: no `sub` condition.
+   */
+  podRoles: [
+    ["prod-eks", "OrdersPodRole", "orders/orders-api"],
+    ["prod-eks", "PlatformPodAdminRole", "*"],
+  ],
+
+  /** Node groups whose SSH key is usable from anywhere: no source groups. */
+  sshOpenNodeGroups: ["prod-nodes"],
+
+  /** A Kubernetes API endpoint on the internet. */
+  publicClusterEndpoints: ["prod-eks"],
+
+  /** Containers running as an administrator: service -> role. */
+  adminContainers: { checkout: "LegacyDeployRole" },
+
+  /** What the customer's domain names point at. */
+  dnsTargets: [
+    ["northwind.example", "prod-alb"],
+    ["northwind.example", "northwind-cdn"],
+  ],
+
+  /** Open in its security group, in a public subnet, and denied by its ACL. */
+  naclBlockedHosts: ["staging-ssh-host"],
+
   /** Flagged PubliclyAccessible but unreachable - no security group opens a port. */
   falsePositivePublicDb: ["analytics-db"],
 
   /** EC2 instances outside a private subnet. */
-  instancesInPublicSubnets: ["prod-web-1", "prod-web-2", "prod-bastion", "staging-rdp-host"],
+  instancesInPublicSubnets: [
+    "prod-web-1",
+    "prod-web-2",
+    "prod-bastion",
+    "staging-rdp-host",
+    "staging-ssh-host",
+    "status-page",
+  ],
+
+  /** Reached across VPCs through private ranges, `[from, to]`: peering, TGW, PrivateLink. */
+  privateNetworkPaths: [
+    ["analytics-worker", "northwind-prod-db"],
+    ["shared-ci-runner", "prod-app-1"],
+    ["analytics-worker", "prod-orders-nlb"],
+  ],
+
+  /**
+   * Admitted by the target's group and carried by no route, `[from, to]`: a
+   * peering routed one way only, and a subnet whose table sends prod's range
+   * to the internet rather than to the transit gateway.
+   */
+  unroutedPaths: [
+    ["partner-reporting", "northwind-prod-db"],
+    ["status-page", "prod-app-1"],
+  ],
+
+  /** Public only through its VPC's main route table, which its subnet uses by default. */
+  publicByMainRouteTable: ["status-page"],
 
   /**
    * Billable but idle, by structural signal alone (attached to nothing,

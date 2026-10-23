@@ -66,10 +66,17 @@ export const EVAL_CASES: EvalCase[] = [
   {
     id: "admin-roles",
     question: "Which IAM roles have admin access, and what uses them?",
-    expectResources: ["NorthwindAdminRole", "LegacyDeployRole", "UnusedAdminRole"],
+    expectResources: [
+      "NorthwindAdminRole",
+      "LegacyDeployRole",
+      "UnusedAdminRole",
+      "NorthwindBuildRole",
+      "NorthwindPlatformRole",
+    ],
+    forbidResources: ["NorthwindPowerUserRole"],
     expectTools: ["find_admin_principals"],
     rationale:
-      "Three roles are effectively admin; one grants it inline under an innocuous name and is only findable by reading policy documents.",
+      "Five roles are effectively admin: one inline under an innocuous name, one through a NotAction that leaves IAM writable, and one with no '*' at all that can escalate through iam:PassRole and Lambda. The PowerUser-shaped role is the negative class.",
   },
   {
     id: "admin-unused",
@@ -82,7 +89,7 @@ export const EVAL_CASES: EvalCase[] = [
   {
     id: "admin-users",
     question: "Are there any IAM users with administrator access?",
-    expectResources: ["northwind-ci-deploy", "northwind-backup-agent"],
+    expectResources: ["northwind-ci-deploy", "northwind-backup-agent", "northwind-oncall"],
     forbidResources: ["northwind-metrics-reader"],
     expectTools: ["find_admin_principals"],
     rationale:

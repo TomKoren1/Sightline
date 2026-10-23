@@ -849,7 +849,7 @@
     },
     {
       "id": 24,
-      "title": "Raw Cypher the model was refused (24h)",
+      "title": "Raw SQL the model was refused (24h)",
       "type": "timeseries",
       "gridPos": {
         "h": 9,
@@ -868,7 +868,7 @@
             "type": "prometheus",
             "uid": "Prometheus"
           },
-          "expr": "sum by (reason) (increase(sightline_agent_raw_cypher_refused_total[24h]))",
+          "expr": "sum by (reason) (increase(sightline_agent_raw_query_refused_total[24h]))",
           "legendFormat": "{{reason}}"
         }
       ],
@@ -879,7 +879,7 @@
         },
         "overrides": []
       },
-      "description": "hosted means the model reached for the raw-query escape hatch that ADR-016 switches off for hosted tenants - not an attack, a sign the curated tools have a gap. The other causes come from the Cypher guard, and forbidden_clause is the model attempting a write."
+      "description": "hosted means the model reached for the raw-query escape hatch that ADR-016 switches off for hosted tenants - not an attack, a sign the curated tools have a gap. The other causes come from the SQL guard: not_select is the model attempting a write, table or function a reach outside the inventory views, and execution a query Postgres failed or timed out."
     }
   ]
 }

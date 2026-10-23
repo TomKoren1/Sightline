@@ -39,7 +39,7 @@ function manifests(): Manifest[] {
     "base/backup.yaml",
     "prod/cloudflared.yaml",
     "prod/namespace.yaml",
-    "prod/sizing.yaml",
+    "staging/namespace.yaml",
   ];
   return files.flatMap((f) =>
     parseAllDocuments(read(f))
@@ -94,25 +94,6 @@ function workloads(): { kind: string; name: string; replicas: number; pod: PodSp
     });
 }
 
-/** Memory in bytes, from the Kubernetes and Neo4j spellings alike. */
-function bytes(value: string): number {
-  const m = /^(\d+(?:\.\d+)?)\s*([a-zA-Z]*)$/.exec(value.trim());
-  expect(m, `cannot parse a memory value from ${JSON.stringify(value)}`).toBeTruthy();
-  const n = Number(m![1]);
-  const unit = (m![2] ?? "").toLowerCase();
-  const scale: Record<string, number> = {
-    "": 1,
-    k: 1000,
-    m: 1000 ** 2,
-    g: 1000 ** 3,
-    ki: 1024,
-    mi: 1024 ** 2,
-    gi: 1024 ** 3,
-  };
-  expect(Object.keys(scale), `unknown memory unit ${unit}`).toContain(unit);
-  return n * scale[unit]!;
-}
-
 describe("the Kubernetes manifests", () => {
   it("were found and parsed", () => {
     // Without this every assertion below passes on an empty list, which is how
@@ -147,7 +128,11 @@ describe("the Kubernetes manifests", () => {
      * `secretGenerator` is not used - a guard that trips on the prose
      * describing the rule is a guard somebody deletes.
      */
-    const generators = ["base/kustomization.yaml", "prod/kustomization.yaml"].filter((f) => {
+    const generators = [
+      "base/kustomization.yaml",
+      "prod/kustomization.yaml",
+      "staging/kustomization.yaml",
+    ].filter((f) => {
       const k = parse(read(f)) as { secretGenerator?: unknown[] };
       return (k.secretGenerator?.length ?? 0) > 0;
     });
@@ -206,8 +191,8 @@ describe("the Kubernetes manifests", () => {
     /**
      * A cross-artefact agreement with no other link between the two files.
      *
-     * `networkpolicy.yaml` names the pods allowed to connect to Postgres and
-     * Neo4j. A workload given `sightline-app` - which carries `DATABASE_URL` -
+     * `networkpolicy.yaml` names the pods allowed to connect to Postgres. A
+     * workload given `sightline-app` - which carries `DATABASE_URL` -
      * clearly intends to connect, so if it is missing from that list it is
      * denied, and the symptom is a connection timeout rather than anything
      * saying "policy". Derived from the manifests rather than listed here, so a
@@ -246,71 +231,49 @@ describe("the Kubernetes manifests", () => {
     const denied = needsDatabase.filter((name) => !allowed.has(name));
     expect(
       denied,
-      "these workloads are given DATABASE_URL but are not allowed to reach Postgres or Neo4j by " +
+      "these workloads are given DATABASE_URL but are not allowed to reach Postgres by " +
         "`datastores-from-app-only`, so every connection they make will time out. Add them to " +
         "the policy's values, or stop giving them the secret.",
     ).toEqual([]);
   });
+});
 
-  it("gives Neo4j a memory limit above the memory it is told to use", () => {
-    /**
-     * The silent one. Neo4j's heap and page cache are configured in
-     * `datastores.yaml`; the container's limit is patched in
-     * `prod/sizing.yaml`. If the limit does not exceed their sum plus the JVM's
-     * own non-heap use - metaspace, thread stacks, direct buffers - the
-     * container is killed while the JVM believes it is comfortably within its
-     * heap, and nothing in Neo4j's logs explains it.
-     *
-     * Two files, no link between them, and the failure arrives under load.
-     */
-    const neo4j = manifests().find((m) => m.kind === "StatefulSet" && m.metadata?.name === "neo4j");
-    expect(neo4j, "no neo4j StatefulSet").toBeTruthy();
+describe("the staging overlay", () => {
+  interface Kustomization {
+    namespace?: string;
+    images?: { name: string; newTag?: string }[];
+    patches?: { target?: { kind?: string; name?: string }; patch?: string }[];
+  }
+  const staging = () => parse(read("staging/kustomization.yaml")) as Kustomization;
+  const prod = () => parse(read("prod/kustomization.yaml")) as Kustomization;
+  const tags = (k: Kustomization) => new Map(k.images?.map((i) => [i.name, i.newTag]));
 
-    const container = (
-      (neo4j!.spec as { template?: { spec?: PodSpec } }).template?.spec?.containers ?? []
-    ).find((c) => c.name === "neo4j");
-    const env = Object.fromEntries(
-      (container?.env ?? []).map((e) => [e.name, e.value ?? ""]),
-    ) as Record<string, string>;
-
-    const heap = bytes(env["NEO4J_server_memory_heap_max__size"]!);
-    const pageCache = bytes(env["NEO4J_server_memory_pagecache_size"]!);
-
-    // The limit lives in the overlay patch, which is where sizing belongs.
-    const patch = parse(read("prod/sizing.yaml")) as {
-      spec?: { template?: { spec?: PodSpec } };
-    };
-    const limit = patch.spec?.template?.spec?.containers?.find((c) => c.name === "neo4j")?.resources
-      ?.limits?.["memory"];
-    expect(limit, "prod/sizing.yaml no longer sets a memory limit for neo4j").toBeTruthy();
-
-    const configured = heap + pageCache;
-    const headroom = bytes(limit!) - configured;
-    expect(
-      headroom,
-      `the limit (${limit}) must exceed heap + page cache (${env["NEO4J_server_memory_heap_max__size"]} + ` +
-        `${env["NEO4J_server_memory_pagecache_size"]}) by enough for the JVM's non-heap use, or the ` +
-        "container is killed while the JVM thinks it is fine",
-    ).toBeGreaterThan(0.1 * configured);
+  it("cannot touch prod's objects", () => {
+    // A shared namespace would share the secrets, the volume and the Services.
+    expect(staging().namespace).toBeTruthy();
+    expect(staging().namespace).not.toBe(prod().namespace);
   });
 
-  it("asks for an initial heap equal to the maximum", () => {
-    // A JVM resizing its heap mid-scan presents as the scan being slow rather
-    // than as a configuration choice. Same reasoning as docker-compose.yml, and
-    // the two are easy to change independently.
-    const text = read("base/datastores.yaml");
-    const initial = /NEO4J_server_memory_heap_initial__size, value: "([^"]+)"/.exec(text)?.[1];
-    const max = /NEO4J_server_memory_heap_max__size, value: "([^"]+)"/.exec(text)?.[1];
-    expect(initial, "no initial heap size is set").toBeTruthy();
-    expect(initial).toBe(max);
+  it("runs images of its own, so importing a staging build cannot roll prod", () => {
+    // Prod takes its tags from the base; staging must override every one.
+    const base = tags(parse(read("base/kustomization.yaml")) as Kustomization);
+    const own = tags(staging());
+    for (const [image, tag] of base) {
+      expect(own.get(image), `staging runs ${image}:${tag}, which is prod's tag`).toBeTruthy();
+      expect(own.get(image)).not.toBe(tag);
+    }
   });
 
-  it("loads no Neo4j plugins and unrestricts no procedures", () => {
-    // The same guard as `infra/neo4jSettings.test.ts` applies to compose: APOC
-    // was loaded `unrestricted` and called by nothing, on the database holding
-    // every tenant's inventory.
-    const text = read("base/datastores.yaml");
-    expect(text).not.toMatch(/NEO4J_PLUGINS/);
-    expect(text).not.toMatch(/security_procedures/);
+  it("drops what would duplicate prod's: backups, and the dashboards Grafana reads everywhere", () => {
+    const deleted = (staging().patches ?? [])
+      .filter((p) => p.patch?.includes("$patch: delete"))
+      .map((p) => `${p.target?.kind}/${p.target?.name ?? "*"}`);
+    expect(deleted).toEqual(
+      expect.arrayContaining([
+        "CronJob/postgres-backup",
+        "ConfigMap/sightline-dashboards",
+        "PodDisruptionBudget/*",
+      ]),
+    );
   });
 });

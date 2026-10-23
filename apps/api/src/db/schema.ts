@@ -55,11 +55,11 @@ export const scanRuns = pgTable(
     apiCalls: integer("api_calls").notNull().default(0),
     error: text("error"),
     /**
-     * When this scan's graph projection committed, or null if it never did.
+     * When this scan became its connection's graph, or null if it never did.
      *
-     * This single column *is* the flip in write-then-flip: a scan projects into
-     * its own Neo4j scope while the previous graph stays readable, and setting
-     * this is what makes the new one current. The connection's graph is
+     * This single column *is* the flip in write-then-flip: a scan writes its
+     * snapshots while the previous scan stays readable, and setting this is
+     * what makes the new one current. The connection's graph is
      * therefore "its latest scan with a projected_at", which needs no pointer
      * to keep in step and leaves a record of which scans were ever projected.
      */
@@ -153,7 +153,16 @@ export const relationshipSnapshots = pgTable(
     relType: text("rel_type").$type<Relationship["type"]>().notNull(),
     properties: jsonb("properties").$type<Relationship["properties"]>().notNull().default({}),
   },
-  (t) => [index("relationship_snapshots_scan").on(t.scanId)],
+  /**
+   * Both directions, led by the scan, because every graph question is "edges
+   * of this type into (or out of) these resources, in this scan". Scan alone
+   * made each such join read the scan's every edge: at 110,000 edges the admin
+   * and open-security-group panels took half a minute each.
+   */
+  (t) => [
+    index("relationship_snapshots_from").on(t.scanId, t.fromArn, t.relType),
+    index("relationship_snapshots_to").on(t.scanId, t.toArn, t.relType),
+  ],
 );
 
 /**
@@ -481,4 +490,104 @@ export const auditLog = pgTable(
     createdAt: timestamp("created_at", tz).notNull().defaultNow(),
   },
   (t) => [index("audit_log_tenant").on(t.tenantId, t.createdAt.desc())],
+);
+
+/**
+ * A finding, tracked across scans.
+ *
+ * The verdicts live on each scan's snapshots and are recomputed every time;
+ * this is what a person decided about one. One row per account, category and
+ * resource, so "accepted" survives the next scan and a resolved finding that
+ * comes back reopens rather than arriving as new.
+ */
+export const findings = pgTable(
+  "findings",
+  {
+    id: uuid("id").primaryKey(),
+    tenantId: uuid("tenant_id")
+      .notNull()
+      .references(() => tenants.id, { onDelete: "cascade" }),
+    connectionId: uuid("connection_id")
+      .notNull()
+      .references(() => connections.id, { onDelete: "cascade" }),
+    category: text("category").$type<FindingCategory>().notNull(),
+    resourceArn: text("resource_arn").notNull(),
+    resourceName: text("resource_name").notNull(),
+    resourceKind: text("resource_kind").notNull(),
+    reason: text("reason"),
+    status: text("status").$type<FindingStatus>().notNull().default("open"),
+    /** Why it was accepted. Required to accept: a risk without a reason is a shrug. */
+    statusReason: text("status_reason"),
+    statusBy: uuid("status_by").references(() => users.id, { onDelete: "set null" }),
+    statusAt: timestamp("status_at", tz),
+    firstSeenAt: timestamp("first_seen_at", tz).notNull().defaultNow(),
+    lastSeenAt: timestamp("last_seen_at", tz).notNull().defaultNow(),
+    lastScanId: uuid("last_scan_id").references(() => scanRuns.id, { onDelete: "set null" }),
+    resolvedAt: timestamp("resolved_at", tz),
+  },
+  (t) => [
+    uniqueIndex("findings_identity").on(t.connectionId, t.category, t.resourceArn),
+    index("findings_connection_status").on(t.connectionId, t.status),
+    check("findings_status", sql`${t.status} IN ('open','accepted','resolved')`),
+    check("findings_category", sql`${t.category} IN ('exposed','admin','idle','unguarded')`),
+  ],
+);
+
+export type FindingCategory = "exposed" | "admin" | "idle" | "unguarded";
+export type FindingStatus = "open" | "accepted" | "resolved";
+
+/**
+ * IAM policy documents, stored once per tenant by content hash.
+ *
+ * Every principal carries the documents of the policies it holds, so an
+ * AWS-managed policy attached to a thousand roles was stored a thousand times
+ * per scan: 75% of a 50,000-resource scan's payload. Snapshots now hold a
+ * `documentRef` where the document was, and reads put it back.
+ *
+ * `last_used_at` is what lets pruning delete documents safely without
+ * scanning every snapshot for references: each save refreshes the documents it
+ * refers to, so one older than the tenant's oldest retained scan is
+ * referenced by nothing.
+ */
+export const policyDocuments = pgTable(
+  "policy_documents",
+  {
+    tenantId: uuid("tenant_id")
+      .notNull()
+      .references(() => tenants.id, { onDelete: "cascade" }),
+    hash: text("hash").notNull(),
+    document: jsonb("document").notNull(),
+    lastUsedAt: timestamp("last_used_at", tz).notNull().defaultNow(),
+  },
+  (t) => [primaryKey({ columns: [t.tenantId, t.hash] })],
+);
+
+/**
+ * A request to try a connection's role, answered by the worker.
+ *
+ * Only the worker holds the identity that can assume customers' roles, so the
+ * API cannot test a connection itself. It writes one of these, the worker
+ * answers it - usually within a second, over `NOTIFY` - and the API reads the
+ * answer back. Rows older than an hour are deleted as new ones arrive.
+ */
+export const connectionChecks = pgTable(
+  "connection_checks",
+  {
+    id: uuid("id").primaryKey(),
+    tenantId: uuid("tenant_id")
+      .notNull()
+      .references(() => tenants.id, { onDelete: "cascade" }),
+    connectionId: uuid("connection_id")
+      .notNull()
+      .references(() => connections.id, { onDelete: "cascade" }),
+    status: text("status").$type<"queued" | "running" | "done">().notNull().default("queued"),
+    result: jsonb("result"),
+    lockedBy: text("locked_by"),
+    requestedAt: timestamp("requested_at", tz).notNull().defaultNow(),
+    finishedAt: timestamp("finished_at", tz),
+  },
+  (t) => [
+    index("connection_checks_queued").on(t.status, t.requestedAt),
+    check("connection_checks_status", sql`${t.status} IN ('queued','running','done')`),
+  ],
 );

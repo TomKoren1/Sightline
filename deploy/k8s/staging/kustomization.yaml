@@ -1,0 +1,59 @@
+# Staging: the same base, in its own namespace, on the same node.
+#
+# For rehearsing a release before prod sees it - a new image, its migrations,
+# a restored copy of prod's data - so it differs from prod only where it has
+# to, and each difference is below with its reason. Reached by
+# `kubectl port-forward` on loopback rather than a tunnel: nobody else should
+# reach a staging copy, and hosted mode accepts plain http on loopback.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: sightline-staging
+
+resources:
+  - namespace.yaml
+  - ../base
+
+images:
+  # Its own tag, so a build imported for staging cannot roll prod's pods.
+  - name: sightline-api
+    newTag: staging
+  - name: sightline-web
+    newTag: staging
+
+patches:
+  # One of each, to fit beside prod on one node: about 1 GB together.
+  - target: { kind: Deployment, name: "api|web" }
+    patch: |-
+      - op: replace
+        path: /spec/replicas
+        value: 1
+  # With one replica, `minAvailable: 1` would block every node drain.
+  - target: { kind: PodDisruptionBudget }
+    patch: |-
+      $patch: delete
+      apiVersion: policy/v1
+      kind: PodDisruptionBudget
+      metadata: { name: any }
+  # Staging data is disposable; its backups would be a second copy of prod's
+  # on the same disk.
+  - target: { kind: CronJob, name: postgres-backup }
+    patch: |-
+      $patch: delete
+      apiVersion: batch/v1
+      kind: CronJob
+      metadata: { name: postgres-backup }
+  - target: { kind: PersistentVolumeClaim, name: backups }
+    patch: |-
+      $patch: delete
+      apiVersion: v1
+      kind: PersistentVolumeClaim
+      metadata: { name: backups }
+  # Grafana's sidecar reads every namespace, so a second copy of the
+  # dashboards would show every panel twice.
+  - target: { kind: ConfigMap, name: sightline-dashboards }
+    patch: |-
+      $patch: delete
+      apiVersion: v1
+      kind: ConfigMap
+      metadata: { name: sightline-dashboards }

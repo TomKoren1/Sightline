@@ -12,11 +12,9 @@
  */
 
 import {
-  GLOBAL_SERVICES,
   SCANNABLE_SERVICES,
   rollUpStatus,
   type ScanEvent,
-  type ScannableService,
   type ScanResult,
   type ScanUnit,
   errorMessage,
@@ -30,23 +28,9 @@ import type { ScanTarget } from "../tenancy/scanTarget.js";
 import { resolveRegions } from "../aws/regions.js";
 import { discoverActiveRegions, narrowRegions } from "../aws/resourceExplorer.js";
 import { runWithConcurrency } from "./limiter.js";
-import { mergeOutputs, type Collector, type CollectorOutput } from "./collectors/types.js";
-import { collectEc2 } from "./collectors/ec2.js";
-import { collectVpc } from "./collectors/vpc.js";
-import { collectS3 } from "./collectors/s3.js";
-import { collectIam } from "./collectors/iam.js";
-import { collectRds } from "./collectors/rds.js";
-import { collectLambda } from "./collectors/lambda.js";
+import { mergeOutputs, type CollectorOutput } from "./collectors/types.js";
+import { COLLECTORS } from "./collectors/registry.js";
 import { annotate } from "./pipeline.js";
-
-const COLLECTORS: Record<ScannableService, Collector> = {
-  ec2: collectEc2,
-  vpc: collectVpc,
-  s3: collectS3,
-  iam: collectIam,
-  rds: collectRds,
-  lambda: collectLambda,
-};
 
 export interface ScanOptions {
   /** Which account to scan. There is deliberately no default. */
@@ -78,7 +62,12 @@ function errorCodeOf(err: unknown): string | undefined {
  * The raw SDK message for a missing permission is accurate and useless; what
  * the user needs to know is which permission to add.
  */
-function explainFailure(service: string, region: string | null, err: unknown): string {
+function explainFailure(
+  service: string,
+  region: string | null,
+  err: unknown,
+  permissions: readonly string[],
+): string {
   const code = errorCodeOf(err);
   const where = region ? `${service} in ${region}` : service;
   const message = errorMessage(err);
@@ -87,7 +76,7 @@ function explainFailure(service: string, region: string | null, err: unknown): s
     case "UnauthorizedOperation":
     case "AccessDenied":
     case "AccessDeniedException":
-      return `Not permitted to read ${where}. The role is missing a Describe/List permission for this service.`;
+      return `Not permitted to read ${where}. The role needs: ${permissions.join(", ")}.`;
     case "Throttling":
     case "ThrottlingException":
     case "RequestLimitExceeded":
@@ -103,7 +92,24 @@ function explainFailure(service: string, region: string | null, err: unknown): s
   }
 }
 
+/** What collection produced, before any analysis. */
+export interface CollectedEstate {
+  accountId: string;
+  regions: string[];
+  units: ScanUnit[];
+  collected: CollectorOutput;
+}
+
 export async function runScan(options: ScanOptions): Promise<ScanResult & { units: ScanUnit[] }> {
+  const { accountId, regions, units, collected } = await collectEstate(options);
+  return { ...annotate(accountId, regions, collected), units };
+}
+
+/**
+ * Every collector, every region, and nothing else. Separate from `runScan` so
+ * the load test can take a real estate's raw shape and multiply it.
+ */
+export async function collectEstate(options: ScanOptions): Promise<CollectedEstate> {
   const { scanId, onEvent, target } = options;
   const counter = options.counter ?? new CallCounter();
   const ctx: AwsContext = { target, counter };
@@ -151,7 +157,7 @@ export async function runScan(options: ScanOptions): Promise<ScanResult & { unit
   // immediately and fill it in, rather than growing a list as work completes.
   const units: ScanUnit[] = [];
   for (const service of SCANNABLE_SERVICES) {
-    if (GLOBAL_SERVICES.has(service)) {
+    if (COLLECTORS[service].scope === "global") {
       units.push({
         service,
         region: null,
@@ -203,7 +209,7 @@ export async function runScan(options: ScanOptions): Promise<ScanResult & { unit
         throw injected;
       }
 
-      const output = await COLLECTORS[unit.service]({
+      const output = await COLLECTORS[unit.service].collect({
         ...ctx,
         region: unit.region,
         accountId: session.accountId,
@@ -213,7 +219,12 @@ export async function runScan(options: ScanOptions): Promise<ScanResult & { unit
       unit.resourceCount = output.resources.length;
     } catch (err) {
       unit.status = "failed";
-      unit.error = explainFailure(unit.service, unit.region, err);
+      unit.error = explainFailure(
+        unit.service,
+        unit.region,
+        err,
+        COLLECTORS[unit.service].permissions,
+      );
       unit.errorCode = errorCodeOf(err);
       console.warn(`  ${key}: ${unit.error}`);
     } finally {
@@ -228,10 +239,7 @@ export async function runScan(options: ScanOptions): Promise<ScanResult & { unit
 
   await runWithConcurrency(tasks, cfg.SCAN_CONCURRENCY);
 
-  const merged = mergeOutputs(outputs);
-  const annotated = annotate(session.accountId, regions, merged);
-
-  return { ...annotated, units };
+  return { accountId: session.accountId, regions, units, collected: mergeOutputs(outputs) };
 }
 
 export { rollUpStatus };

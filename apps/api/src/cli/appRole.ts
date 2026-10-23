@@ -88,6 +88,8 @@ try {
   } else {
     console.log(`\n${role} can connect, and row-level security applies to it.`);
   }
+
+  if (cfg.DATABASE_URL_SYSTEM) await configureSystemRole(cfg.DATABASE_URL_SYSTEM);
 } catch (err) {
   console.error(`\n${err instanceof Error ? err.message : String(err)}`);
   process.exitCode = 1;
@@ -98,4 +100,44 @@ try {
 /** A single-quoted SQL literal, escaped the way Postgres expects. */
 function quoteLiteral(value: string): string {
   return `'${value.replace(/'/g, "''")}'`;
+}
+
+/**
+ * The cross-tenant role the API and worker use instead of the owner (0010):
+ * it must bypass the policies, as `system` exists to, and must not be able to
+ * change the schema, which is the reason it is not the owner.
+ */
+async function configureSystemRole(connectionString: string): Promise<void> {
+  const url = new URL(connectionString);
+  const role = decodeURIComponent(url.username);
+  const password = decodeURIComponent(url.password);
+  if (!role || !password) {
+    throw new Error("DATABASE_URL_SYSTEM must carry both a username and a password.");
+  }
+  await system.execute(
+    `DO $$
+     BEGIN
+       EXECUTE format('ALTER ROLE %I PASSWORD %L', ${quoteLiteral(role)}, ${quoteLiteral(password)});
+     END
+     $$;`,
+  );
+  const { Client } = await import("pg");
+  const probe = new Client({ connectionString });
+  await probe.connect();
+  const { rows } = await probe.query<{ super: boolean; bypass: boolean; owns: number }>(
+    `SELECT r.rolsuper AS super, r.rolbypassrls AS bypass,
+            (SELECT count(*)::int FROM pg_tables WHERE tableowner = current_user) AS owns
+       FROM pg_roles r WHERE r.rolname = current_user`,
+  );
+  await probe.end();
+  const [r] = rows;
+  if (!r?.bypass || r.super || r.owns > 0) {
+    console.error(
+      `\n${role} must have BYPASSRLS, and be neither a superuser nor the owner of any table.` +
+        `\nRun: ALTER ROLE ${role} NOSUPERUSER BYPASSRLS;`,
+    );
+    process.exitCode = 1;
+  } else {
+    console.log(`${role} can connect, reaches every tenant's rows, and cannot change the schema.`);
+  }
 }

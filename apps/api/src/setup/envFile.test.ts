@@ -23,7 +23,7 @@ import {
 const sample = [
   "# Databases",
   "DATABASE_URL=postgres://sightline:sightline@localhost:5432/sightline",
-  "NEO4J_URI=bolt://localhost:7687",
+  "APP_DATABASE_POOL=10",
   "",
   "# AWS",
   "AWS_MODE=mock",
@@ -82,12 +82,12 @@ describe("diffEnv", () => {
     const diff = diffEnv(sample, [
       { key: "AWS_MODE", value: "real" },
       { key: "AWS_REGION", value: "us-east-1" },
-      { key: "NEO4J_URI", value: "bolt://localhost:7687" },
+      { key: "APP_DATABASE_POOL", value: "10" },
     ]);
     expect(diff.map((d) => [d.key, d.kind])).toEqual([
       ["AWS_MODE", "update"],
       ["AWS_REGION", "add"],
-      ["NEO4J_URI", "unchanged"],
+      ["APP_DATABASE_POOL", "unchanged"],
     ]);
   });
 
@@ -214,14 +214,14 @@ describe("untouchedKeys", () => {
   it("names a key that changed without being declared", () => {
     // The backstop: if applyEnvEdits ever damages an unrelated line, the script
     // refuses to write rather than trusting the implementation above.
-    const damaged = sample.replace("NEO4J_URI=bolt://localhost:7687", "NEO4J_URI=broken");
+    const damaged = sample.replace("APP_DATABASE_POOL=10", "APP_DATABASE_POOL=broken");
     expect(untouchedKeys(sample, damaged, [{ key: "AWS_MODE", value: "real" }])).toEqual([
-      "NEO4J_URI",
+      "APP_DATABASE_POOL",
     ]);
   });
 
   it("notices a key that was deleted entirely", () => {
-    const damaged = sample.replace("NEO4J_URI=bolt://localhost:7687\n", "");
-    expect(untouchedKeys(sample, damaged, [])).toContain("NEO4J_URI");
+    const damaged = sample.replace("APP_DATABASE_POOL=10\n", "");
+    expect(untouchedKeys(sample, damaged, [])).toContain("APP_DATABASE_POOL");
   });
 });

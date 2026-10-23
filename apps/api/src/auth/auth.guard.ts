@@ -33,8 +33,8 @@ const MUTATING = new Set(["POST", "PUT", "PATCH", "DELETE"]);
  * A header a cross-site form cannot set.
  *
  * `SameSite=Lax` on the session cookie is the primary defence and already
- * refuses a cross-site POST. This is the second layer, for the same reason the
- * Cypher guard is two: a custom header cannot be produced by a plain HTML form,
+ * refuses a cross-site POST. This is the second layer, because one layer is a
+ * single mistake away from none: a custom header cannot be produced by a plain HTML form,
  * and a cross-origin `fetch` that tries triggers a preflight this service's
  * CORS configuration does not answer.
  */

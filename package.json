@@ -24,10 +24,12 @@
     "evals": "node scripts/deps.mjs && npm run evals -w @sightline/api",
     "verify": "node scripts/deps.mjs && npm run typecheck && npm run lint && vitest run --exclude '**/evals/groundTruth.test.ts' && npm run build -w @sightline/web",
     "drift": "node scripts/deps.mjs && npm run drift -w @sightline/mock-aws",
-    "setup": "node scripts/deps.mjs && tsx apps/api/src/cli/setup.ts"
+    "setup": "node scripts/deps.mjs && tsx apps/api/src/cli/setup.ts",
+    "e2e": "node scripts/deps.mjs && playwright test -c e2e/playwright.config.ts"
   },
   "devDependencies": {
     "@eslint/js": "^9.39.5",
+    "@playwright/test": "1.64.0",
     "@types/node": "^22.10.2",
     "drizzle-orm": "^0.45.4",
     "eslint": "^9.39.5",

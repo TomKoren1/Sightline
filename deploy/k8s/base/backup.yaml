@@ -15,9 +15,11 @@
 # backups they cannot decrypt. A symmetric passphrase in a Secret would hand
 # them the history as well.
 #
-# `openssl smime` rather than gpg or age because the postgres image already has
-# openssl and adding a package to a backup job is adding a way for the backup
-# job to fail.
+# `openssl smime` rather than gpg or age because the Debian postgres image
+# already has openssl, and adding a package to a backup job is adding a way for
+# the backup job to fail. The Alpine image does *not* have it, which is why this
+# job is on `bookworm` while the server is on `alpine`: on Alpine every run
+# died with `openssl: not found`, and nothing but a run proved otherwise.
 #
 # ## Restoring
 #
@@ -60,7 +62,8 @@ spec:
               # The same major version as the server: `pg_dump` from an older
               # client refuses to dump a newer server, which would present as
               # the backup having silently stopped working after an upgrade.
-              image: postgres:16-alpine
+              # Debian, not Alpine: see the note on openssl at the top.
+              image: postgres:16.15-bookworm@sha256:d81f7b51697014367236d07ec58b54153fc28f828b72bf247fe5c7487520bcb0
               env:
                 - name: PGHOST
                   value: postgres
@@ -86,6 +89,15 @@ spec:
               command: ["/bin/sh", "-eu", "-c"]
               args:
                 - |
+                  # A new pod's address reaches the network policy a few seconds
+                  # after the pod starts, and until then Postgres refuses it.
+                  # Every attempt failed on that race before this wait.
+                  for i in $(seq 1 30); do
+                    pg_isready -q && break
+                    sleep 2
+                  done
+                  pg_isready
+
                   stamp="$(date -u +%Y%m%dT%H%M%SZ)"
                   out="/backups/sightline-${stamp}.dump.enc"
 

@@ -1,33 +1,37 @@
 /**
- * Two tenants in one graph, and nothing of one may reach the other.
+ * Two tenants in one database, and nothing of one may reach the other.
  *
- * The control the tenancy design rests on. The static guard (every query binds
- * `$tenantId` and `$scanId`) and the runtime one (`readScoped` refuses Cypher
- * that does not) both pass a query that binds them and still leaks - a pattern
- * scoped on one side of a relationship only. Running two tenants is what
- * catches that.
+ * The control the tenancy design rests on. Row-level security and the scan
+ * filter in every graph query both pass a query that is still wrong - a join
+ * scoped on one side only. Running two tenants is what catches that.
  *
  * Queries are discovered **by reflection**, so a new one that nobody covered
  * fails this file for not being covered before it can fail for leaking.
  *
  * Both tenants hold the synthetic `Internet` node, whose ARN is a constant for
- * everyone: under a plain `arn` constraint the second could not be projected at
- * all, and ARN-matched edges would join one tenant's relationships to the
- * other's nodes. Requires Postgres and Neo4j.
+ * everyone, so a path search that joined edges by ARN alone would hang one
+ * tenant's hosts off the other's internet. Requires Postgres.
  */
 
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { randomUUID } from "node:crypto";
 import { INTERNET_ARN, type Relationship, type Resource } from "@sightline/shared";
 
-import { projectGraph, sweepSupersededScans, type GraphScope } from "./neo4j.js";
-import * as queries from "./queries.js";
-import { asScanId, asTenantId } from "../tenancy/ids.js";
+import { eq } from "drizzle-orm";
+
+import * as queries from "./graph.js";
+import type { GraphScope } from "./graph.js";
+import { system } from "./postgres.js";
+import { createScanRun, markProjected, saveScanResult } from "./repository.js";
+import * as schema from "./schema.js";
+import { runTool, RAW_QUERY_TOOL } from "../agent/tools.js";
+import { asConnectionId, asTenantId } from "../tenancy/ids.js";
 
 const HAS_INFRA = !process.env["SKIP_INTEGRATION"];
 
 interface Fixture {
   scope: GraphScope;
+  connectionId: ReturnType<typeof asConnectionId>;
   /** A distinguishing substring present in every one of this tenant's names. */
   tag: string;
   arns: string[];
@@ -117,14 +121,30 @@ function build(
 }
 
 async function project(tag: string, account: string): Promise<Fixture> {
-  const scope: GraphScope = {
-    tenantId: asTenantId(randomUUID()),
-    scanId: asScanId(randomUUID()),
-  };
+  const tenantId = asTenantId(randomUUID());
+  const connectionId = asConnectionId(randomUUID());
+  await system.insert(schema.tenants).values({ id: tenantId, name: `isolation.${tag}` });
+  await system.insert(schema.connections).values({
+    id: connectionId,
+    tenantId,
+    kind: "demo",
+    label: tag,
+    externalIdSource: "demo",
+  });
+  const owner = { tenantId, connectionId };
   const { resources, relationships } = build(tag, account);
-  await projectGraph(scope, resources, relationships);
+  const scanId = await createScanRun(owner, account, ["us-east-1"]);
+  await saveScanResult(owner, scanId, {
+    status: "succeeded",
+    units: [],
+    resources,
+    relationships,
+    apiCalls: 0,
+  });
+  await markProjected(owner, scanId);
   return {
-    scope,
+    scope: { tenantId, scanId },
+    connectionId,
     tag,
     arns: resources.map((x) => x.arn),
     names: {
@@ -156,6 +176,9 @@ const CALLS: Record<string, (f: Fixture) => Promise<unknown>> = {
   // Matches a substring both tenants' names share, so a leak is *likely* rather
   // than merely possible: an unscoped version returns both tenants' rows.
   searchResources: (f) => queries.searchResources(f.scope, { text: "-db" }),
+  // The agent's paged reader, through the finder most likely to leak; its
+  // counts run a second query over the same rows, so both are checked.
+  pageOf: (f) => queries.pageOf("searchResources", f.scope, { text: "-db" }),
   summariseAccount: (f) => queries.summariseAccount(f.scope),
   fetchGraph: (f) => queries.fetchGraph(f.scope, {}),
 };
@@ -204,9 +227,8 @@ beforeAll(async () => {
 
 afterAll(async () => {
   if (!available) return;
-  // Keep nothing: an empty keep list deletes every scope for that tenant.
   for (const f of [a, b]) {
-    await sweepSupersededScans(f.scope.tenantId, []).catch(() => 0);
+    await system.delete(schema.tenants).where(eq(schema.tenants.id, f.scope.tenantId));
   }
 });
 
@@ -216,8 +238,8 @@ describe.runIf(HAS_INFRA)("tenant isolation in the graph", () => {
     const exported = Object.entries(queries)
       .filter(([, v]) => typeof v === "function")
       .map(([k]) => k)
-      // Not a query: a helper that happens to be exported.
-      .filter((k) => k !== "clamp");
+      // Not a query: the property flattener shared with remediation.
+      .filter((k) => k !== "flattenResource");
     const uncovered = exported.filter((name) => !(name in CALLS));
     expect(
       uncovered,
@@ -239,10 +261,8 @@ describe.runIf(HAS_INFRA)("tenant isolation in the graph", () => {
     }
   });
 
-  it("projected both tenants, including the shared Internet node", async () => {
+  it("holds both tenants' copies of the shared Internet node", async () => {
     if (!available) return;
-    // Proves the composite identity works: under `arn IS UNIQUE` the second
-    // tenant's Internet node could not have been created at all.
     const [one, two] = await Promise.all([
       queries.getResource(a.scope, INTERNET_ARN),
       queries.getResource(b.scope, INTERNET_ARN),
@@ -293,9 +313,8 @@ describe.runIf(HAS_INFRA)("tenant isolation in the graph", () => {
      * The case that an unscoped relationship pattern would fail.
      *
      * Both tenants have `Internet -> host -> db`, and the Internet node is the
-     * same ARN. If the projection had matched edge endpoints by ARN alone, one
-     * tenant's host would hang off the other's Internet node and this would
-     * return two paths.
+     * same ARN. If the edges were read by ARN alone, one tenant's host would
+     * hang off the other's Internet node and this would return two paths.
      */
     const paths = await queries.findNetworkPaths(a.scope, { target: a.names.database });
     expect(paths).toHaveLength(1);
@@ -317,13 +336,24 @@ describe.runIf(HAS_INFRA)("tenant isolation in the graph", () => {
     expect(summary.idleCount).toBe(1);
   });
 
-  it("refuses a query that does not bind the scope", async () => {
+  it("returns nothing for a scan id that belongs to the other tenant", async () => {
     if (!available) return;
-    // The runtime guard, from the outside: this is the mistake the static and
-    // behavioural checks are both too late to catch during development.
-    const { readScoped } = await import("./neo4j.js");
-    await expect(readScoped(a.scope, "MATCH (n:Resource) RETURN n.arn AS arn")).rejects.toThrow(
-      /does not bind \$tenantId/,
+    // A stale page or a bug hands over the wrong scan id: row-level security
+    // and the scan filter must each, independently, make that an empty answer.
+    const crossed: GraphScope = { tenantId: a.scope.tenantId, scanId: b.scope.scanId };
+    expect(await queries.listResources(crossed, {})).toEqual([]);
+    expect(await queries.getResource(crossed, b.names.bucket)).toBeNull();
+  });
+
+  it("confines the agent's raw SQL to one tenant's one scan", async () => {
+    if (!available) return;
+    const result = await runTool(
+      { scope: { tenantId: a.scope.tenantId, connectionId: a.connectionId }, graph: a.scope },
+      RAW_QUERY_TOOL,
+      { sql: "SELECT arn, name FROM resources" } as never,
     );
+    const seen = strings(result.rows);
+    expect(seen.some((x) => x.includes(a.tag))).toBe(true);
+    expect(seen.filter((x) => x.includes(b.tag))).toEqual([]);
   });
 });

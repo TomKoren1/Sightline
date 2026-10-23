@@ -2,12 +2,12 @@
  * A bad `?limit` is refused, and a good one is honoured.
  *
  * `?limit=abc` answered **200 with an empty graph**: `Number("abc")` is `NaN`,
- * every clamp preserved it - `Math.max(1, NaN)` is `NaN` - and it reached Neo4j
- * as `LIMIT 0`. Worse than a 500, because an empty result looks like an answer
+ * every clamp preserved it - `Math.max(1, NaN)` is `NaN` - and it reached the
+ * database as `LIMIT 0`. Worse than a 500, because an empty result looks like an answer
  * and sends the reader to look for a problem in their AWS account.
  *
  * Both halves are asserted, since a guard that refused everything would also
- * pass the first. Requires Postgres and Neo4j: the assertion counts nodes, so
+ * pass the first. Requires Postgres: the assertion counts nodes, so
  * there have to be some.
  */
 

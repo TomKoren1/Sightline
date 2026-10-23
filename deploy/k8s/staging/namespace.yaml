@@ -1,0 +1,8 @@
+# Its own namespace, so nothing here can be mistaken for prod's - not a secret,
+# not a volume, not a Service name another pod resolves.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: sightline-staging
+  labels:
+    app.kubernetes.io/part-of: sightline

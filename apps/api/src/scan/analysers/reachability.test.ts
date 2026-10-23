@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { INTERNET_ARN, type Relationship, type Resource } from "@sightline/shared";
-import { analyseReachability, transitiveFromInternet } from "./reachability.js";
+import { analyseReachability } from "./reachability.js";
+import { hopsFrom, indexReach } from "./reachIndex.js";
 
 /** Terse builders, so each test reads as a topology rather than as plumbing. */
 const sg = (id: string, ingress: unknown[]): Resource => ({
@@ -91,9 +92,13 @@ describe("analyseReachability", () => {
       { from: "host:app1", to: "sg:app", type: "HAS_SECURITY_GROUP" },
     ];
     const { edges } = analyseReachability(resources, relationships);
-    const edge = edges.find((e) => e.from === "host:web1" && e.to === "host:app1");
-    expect(edge).toBeDefined();
-    expect(edge?.properties?.["reason"]).toContain("web1 belongs to");
+    // Stored once, from the source group; the index expands it per member.
+    const edge = edges.find((e) => e.from === "sg:web" && e.to === "host:app1");
+    expect(edge?.properties?.["reason"]).toContain("from members of web");
+    const hop = indexReach([...relationships, ...edges])
+      .next("host:web1")
+      .find((h) => h.to === "host:app1");
+    expect(hop).toBeDefined();
   });
 
   it("walks a three-hop chain from the internet to a private database", () => {
@@ -141,7 +146,8 @@ describe("analyseReachability", () => {
       { from: "a", to: "b", type: "CAN_REACH" },
       { from: "b", to: "a", type: "CAN_REACH" },
     ];
-    expect([...transitiveFromInternet(edges)].sort()).toEqual(["a", "b"]);
+    const reached = hopsFrom(indexReach(edges), INTERNET_ARN);
+    expect([...reached.keys()].sort()).toEqual(["a", "b", INTERNET_ARN].sort());
   });
 
   it("does not emit a self-edge for hosts sharing one group", () => {
@@ -150,6 +156,25 @@ describe("analyseReachability", () => {
       { from: "host:h1", to: "sg:shared", type: "HAS_SECURITY_GROUP" },
     ];
     const { edges } = analyseReachability(resources, relationships);
-    expect(edges.find((e) => e.from === "host:h1" && e.to === "host:h1")).toBeUndefined();
+    const next = indexReach([...relationships, ...edges]).next("host:h1");
+    expect(next.find((h) => h.to === "host:h1")).toBeUndefined();
+  });
+
+  it("stays linear when many hosts share a self-referencing group", () => {
+    // The default-group pattern: every member admits every other. Per member
+    // pair this was n² edges; per group it is n.
+    const n = 400;
+    const hosts = Array.from({ length: n }, (_, i) => host(`h${i}`, "x"));
+    const resources = [sg("default", [fromSg(0, "default")]), ...hosts];
+    const relationships: Relationship[] = hosts.map((h) => ({
+      from: h.arn,
+      to: "sg:default",
+      type: "HAS_SECURITY_GROUP",
+    }));
+    const { edges } = analyseReachability(resources, relationships);
+    expect(edges.length).toBeLessThanOrEqual(n);
+    const index = indexReach([...relationships, ...edges]);
+    expect(index.next("host:h0").map((h) => h.to)).toContain("host:h399");
+    expect(index.prev("host:h0")).toContain("host:h399");
   });
 });

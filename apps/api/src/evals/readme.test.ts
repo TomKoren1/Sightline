@@ -38,7 +38,7 @@ const scripts = {
  */
 function documentedCommands(): { raw: string; script: string; workspace: string }[] {
   const found: { raw: string; script: string; workspace: string }[] = [];
-  const pattern = /\bnpm run ([a-z:-]+)(?:\s+-w\s+(@sightline\/[a-z]+))?/g;
+  const pattern = /\bnpm run ([a-z0-9:-]+)(?:\s+-w\s+(@sightline\/[a-z]+))?/g;
   for (const match of readme.matchAll(pattern)) {
     found.push({ raw: match[0], script: match[1]!, workspace: match[2] ?? "root" });
   }
@@ -110,6 +110,15 @@ describe("the numbers the README quotes are true", () => {
     nineteen: 19,
     twenty: 20,
     "twenty-one": 21,
+    "twenty-two": 22,
+    "twenty-three": 23,
+    "twenty-four": 24,
+    "twenty-five": 25,
+    "twenty-six": 26,
+    "twenty-seven": 27,
+    "twenty-eight": 28,
+    "twenty-nine": 29,
+    thirty: 30,
   };
 
   function quoted(pattern: RegExp): number | null {
@@ -124,7 +133,7 @@ describe("the numbers the README quotes are true", () => {
     // Tool definitions only: the dispatch switch repeats every name.
     const actual = (tools.match(/^ {4}name: "/gm) ?? []).length;
     // The README's wording, since this claim used to live in a file that is gone.
-    expect(quoted(/free-form Cypher\.\*\* ([A-Za-z-]+) tools/)).toBe(actual);
+    expect(quoted(/free-form SQL\.\*\* ([A-Za-z-]+) tools/)).toBe(actual);
   });
 
   it("states the real number of tier-2 eval cases", () => {

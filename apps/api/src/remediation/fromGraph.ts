@@ -1,8 +1,8 @@
 /**
  * Rebuilding a remediation input from a graph row.
  *
- * Neo4j properties must be primitives, so the projection stores nested values
- * as JSON strings (see `db/neo4j.ts`). This is the only place that knows it
+ * The graph's flat property bag holds nested values as JSON strings (see
+ * `flattenResource` in `db/graph.ts`). This is the only place that knows it
  * does, which keeps `remediation.ts` a pure function of a plain object.
  *
  * Parsing is best-effort: an unparseable property is dropped rather than thrown
@@ -18,16 +18,19 @@ const STRUCTURED_KEYS = [
   "ingress",
   "attachedPolicies",
   "inlinePolicies",
+  "groupPolicies",
+  "permissionsBoundary",
   "aclGrants",
 ] as const;
 
-/** Derived-fact keys, promoted to top level by the projection. */
+/** Derived-fact keys, promoted to top level in the property bag. */
 const DERIVED_KEYS = [
   "isPublic",
   "publicReason",
   "isUnprotected",
   "unprotectedReason",
   "isAdmin",
+  "adminVia",
   "adminReason",
   "isIdle",
   "idleReason",

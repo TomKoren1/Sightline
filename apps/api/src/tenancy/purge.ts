@@ -1,11 +1,8 @@
 /**
  * Deleting an account, and everything Sightline holds about it.
  *
- * Neo4j first, then Postgres, and the order is the whole correctness of it:
- * Postgres cascades from the tenant row, scan ids included, so dropping the
- * graph second and failing would orphan nodes with nothing left to identify
- * them by. This way a failure is recoverable, and a partial graph deletion is
- * harmless because the next attempt finishes it.
+ * One cascading delete from the tenant row: every table holding this tenant's
+ * data, the scan snapshots that are the graph included, references it.
  *
  * It cannot delete the CloudFormation stack in the customer's account. Only
  * they can, and the response says so: telling somebody their access was
@@ -14,7 +11,6 @@
 
 import { eq, inArray } from "drizzle-orm";
 
-import { dropTenantGraph } from "../db/neo4j.js";
 import { system } from "../db/postgres.js";
 import {
   connections,
@@ -28,8 +24,6 @@ import {
 import type { TenantId } from "./ids.js";
 
 export interface PurgeResult {
-  /** Graph nodes removed from Neo4j. */
-  graphNodes: number;
   /** Counted before the delete, because afterwards there is nothing to count. */
   connections: number;
   scans: number;
@@ -75,9 +69,6 @@ export async function purgeTenant(tenantId: TenantId): Promise<PurgeResult> {
           ).length,
   };
 
-  // Neo4j first; see the note at the top of this file.
-  const graphNodes = await dropTenantGraph(tenantId);
-
   /**
    * One statement. Every table that holds this tenant's data references
    * `tenants.id` with `ON DELETE CASCADE`, directly or through `users`, so this
@@ -92,7 +83,7 @@ export async function purgeTenant(tenantId: TenantId): Promise<PurgeResult> {
    */
   await system.delete(tenants).where(eq(tenants.id, tenantId));
 
-  return { graphNodes, ...counts };
+  return counts;
 }
 
 /** How many of this tenant's rows a table holds. */

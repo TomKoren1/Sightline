@@ -10,7 +10,7 @@
  * parameter, not only uuids. 500 is the one wrong answer: it tells an operator
  * to investigate and a client to retry.
  *
- * Requires Postgres and Neo4j - a route that cannot reach its database answers
+ * Requires Postgres - a route that cannot reach its database answers
  * 500 for reasons unrelated to the id.
  */
 

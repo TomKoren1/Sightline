@@ -22,9 +22,6 @@ configMapGenerator:
   - name: sightline-config
     literals:
       - DEPLOYMENT_MODE=hosted
-      # Where the datastores are, as Service DNS. The password halves come from
-      # the secret; these are just addresses.
-      - NEO4J_URI=bolt://neo4j:7687
       # Scans run in the worker deployment, never in the API.
       - SCAN_WORKER=separate
       - SCAN_WORKER_CONCURRENCY=1

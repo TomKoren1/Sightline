@@ -401,7 +401,7 @@ async function runDisconnect(current: string, opts: Options): Promise<void> {
     `  This deletes the CloudFormation stack ${bold("sightline-readonly")} in ${region},`,
   );
   console.log(`  removing the ${READ_ONLY_ROLE_NAME} role and therefore all access.`);
-  console.log(dim("  Your inventory data in Postgres and Neo4j is not touched."));
+  console.log(dim("  Your inventory data in Postgres is not touched."));
 
   if (opts.dryRun) {
     console.log(`\n  ${dim("--dry-run: nothing deleted")}`);

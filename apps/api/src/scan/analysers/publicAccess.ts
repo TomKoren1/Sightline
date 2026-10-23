@@ -12,6 +12,8 @@
  * "public" direction, never too permissive.
  */
 
+import { conditionRestricts } from "./policy.js";
+
 const ALL_USERS = "http://acs.amazonaws.com/groups/global/AllUsers";
 const AUTHENTICATED_USERS = "http://acs.amazonaws.com/groups/global/AuthenticatedUsers";
 
@@ -82,9 +84,9 @@ export function policyAllowsWildcardPrincipal(policyJson: string | null): boolea
     };
     for (const stmt of doc.Statement ?? []) {
       if (stmt.Effect !== "Allow") continue;
-      // A condition can scope a wildcard principal down to something safe
-      // (a VPC endpoint, a source account), so it is not counted as public.
-      if (stmt.Condition && Object.keys(stmt.Condition).length > 0) continue;
+      // A condition can scope a wildcard principal down to something safe (a
+      // VPC endpoint, a source account); one that excludes nobody cannot.
+      if (conditionRestricts(stmt.Condition)) continue;
       const principal = stmt.Principal;
       if (principal === "*") return true;
       if (typeof principal === "object" && principal !== null) {

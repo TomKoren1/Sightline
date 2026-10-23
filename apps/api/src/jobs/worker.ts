@@ -18,6 +18,7 @@ import { hostname } from "node:os";
 import pg from "pg";
 
 import { cfg } from "../config.js";
+import { answerChecks, CHECK_QUEUE_CHANNEL } from "./connectionChecks.js";
 import { asScanId } from "../tenancy/ids.js";
 import type { Scope } from "../tenancy/scope.js";
 import {
@@ -56,8 +57,8 @@ export interface WorkerOptions {
    * How many scans this worker runs at once.
    *
    * One by default, and the default is the point: a scan holds an account's
-   * whole inventory in memory and then projects it, so concurrency here
-   * multiplies the peak memory of both this process and Neo4j. Raising it is a
+   * whole inventory in memory while it is analysed, so concurrency here
+   * multiplies this process's peak memory. Raising it is a
    * decision about the machine, which is why it is configuration rather than a
    * number chosen here.
    */
@@ -151,6 +152,7 @@ export class ScanWorker {
         this.listener = null;
       });
       await client.query(`LISTEN ${SCAN_QUEUE_CHANNEL}`);
+      await client.query(`LISTEN ${CHECK_QUEUE_CHANNEL}`);
       this.listener = client;
     } catch (err) {
       this.log.error({ err, worker: this.id }, "could not listen for scan jobs; polling only");
@@ -170,10 +172,12 @@ export class ScanWorker {
      * stuck. Reclaim is skipped too - requeueing a job nothing will claim just
      * churns the row.
      */
-    if (!scanningEnabled()) return;
-
     this.draining = true;
     try {
+      // Before the kill switch: a connection check is one AssumeRole, not a
+      // scan, and someone is watching the onboarding screen for its answer.
+      await answerChecks(this.id);
+      if (!scanningEnabled()) return;
       await this.reclaim();
       while (this.running && this.inFlight.size < this.concurrency) {
         const job = await claimNextJob(this.id);

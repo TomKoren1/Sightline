@@ -19,12 +19,20 @@ import type { AgentEvent, AgentMessage, ToolCallTrace } from "@sightline/shared"
 
 import { cfg } from "../config.js";
 import { getLatestScan } from "../db/repository.js";
-import { summariseAccount } from "../db/queries.js";
+import { summariseAccount } from "../db/graph.js";
 import { CitationTracker, validateCitations } from "./citations.js";
 import { buildSystemPrompt } from "./prompt.js";
-import { availableTools, runTool, type ToolContext } from "./tools.js";
+import {
+  arnsIn,
+  availableTools,
+  encodeCursor,
+  runTool,
+  type ToolContext,
+  type ToolResult,
+} from "./tools.js";
 import { enforceReadOnlyNotice } from "./readOnlyGuard.js";
 import { errorMessage } from "@sightline/shared";
+import { fitRows, type Fitted } from "./fit.js";
 import {
   agentDuration,
   agentQuestions,
@@ -43,7 +51,7 @@ import {
  */
 const MAX_STEPS = 8;
 
-/** Results are truncated before going back to the model, to bound context. */
+/** Results are fitted to this before going back to the model, to bound context. */
 const MAX_RESULT_CHARS = 12_000;
 
 function configuredModel(): LanguageModel {
@@ -74,16 +82,66 @@ export interface AskOptions {
   model?: LanguageModel;
 }
 
-/** Serialise a tool result for the model, truncating rather than blowing context. */
-function serialiseResult(result: { rows: unknown[]; note?: string }): string {
-  const body = JSON.stringify(result.rows);
-  if (body.length > MAX_RESULT_CHARS) agentTruncatedResults.inc();
-  const truncated =
-    body.length > MAX_RESULT_CHARS
-      ? body.slice(0, MAX_RESULT_CHARS) +
-        `\n... truncated. ${result.rows.length} rows returned; narrow the query if you need the rest.`
-      : body;
-  return result.note ? `${result.note}\n${truncated}` : truncated;
+/** Counts as a line: the largest few, and how many more there are. */
+function counts(label: string, entries: { name: string; count: number }[]): string {
+  const shown = entries.slice(0, 8).map((e) => `${e.name} ${e.count}`);
+  const rest = entries.length - shown.length;
+  return `${label}: ${shown.join(", ")}${rest > 0 ? `, and ${rest} more` : ""}.`;
+}
+
+/**
+ * Where a list tool's rows sit in the whole answer, and how to get the rest.
+ * The cursor follows the rows actually shown, not the rows fetched: when the
+ * context budget drops some, the next page starts at the first one dropped.
+ */
+export function pageLine(
+  page: NonNullable<ToolResult["page"]>,
+  shown: number,
+  scanId: string,
+): string {
+  if (page.total === 0) return "No rows match.";
+  const parts = [
+    `Rows ${page.offset + 1}-${page.offset + shown} of ${page.total}.`,
+    counts(
+      "By kind",
+      page.byKind.map((k) => ({ name: k.kind, count: k.count })),
+    ),
+    counts(
+      "By region",
+      page.byRegion.map((r) => ({ name: r.region ?? "global", count: r.count })),
+    ),
+  ];
+  const next = page.offset + shown;
+  if (next < page.total) {
+    parts.push(
+      `${page.total - next} more: call again with the same arguments and cursor "${encodeCursor(scanId, next)}". ` +
+        "For how many, use the counts above rather than paging.",
+    );
+  }
+  return parts.join(" ");
+}
+
+/** Serialise a tool result for the model, fitted to the context budget. */
+function serialiseResult(result: ToolResult, fitted: Fitted, scanId: string): string {
+  const parts = [result.note];
+  if (result.page) {
+    parts.push(pageLine(result.page, fitted.rows.length, scanId));
+    if (fitted.shortened) parts.push("Long values were shortened.");
+  }
+  parts.push(JSON.stringify(fitted.rows));
+  if (fitted.omitted > 0 || fitted.shortened) agentTruncatedResults.inc();
+  if (!result.page && (fitted.omitted > 0 || fitted.shortened)) {
+    parts.push(
+      [
+        fitted.omitted > 0 ? `${fitted.omitted} more rows were not shown.` : "",
+        fitted.shortened ? "Long values were shortened." : "",
+        "Narrow the question - a kind, a region, a name - to see the rest.",
+      ]
+        .filter(Boolean)
+        .join(" "),
+    );
+  }
+  return parts.filter(Boolean).join("\n");
 }
 
 /**
@@ -103,7 +161,7 @@ function buildTools(ctx: {
 }): ToolSet {
   return Object.fromEntries(
     // `availableTools()`, not the whole list: hosted mode does not offer the
-    // raw-Cypher escape hatch at all (ADR-016), and the dispatch refuses it too.
+    // raw-SQL escape hatch at all (ADR-016), and the dispatch refuses it too.
     availableTools().map((definition) => [
       definition.name,
       tool({
@@ -128,7 +186,12 @@ function buildTools(ctx: {
              * into the tracker before they go anywhere else, including back to
              * the model.
              */
-            ctx.tracker.record(result.rows, result.arns);
+            // Only what the model will see is citable: an ARN from a row that
+            // was cut must not validate an answer that happens to name it.
+            const fitted = fitRows(result.rows, MAX_RESULT_CHARS);
+            const shown =
+              fitted.omitted > 0 || fitted.shortened ? arnsIn(fitted.rows) : result.arns;
+            ctx.tracker.record(fitted.rows, shown);
 
             const durationMs = Date.now() - startedAt;
             ctx.traces.push({
@@ -146,7 +209,7 @@ function buildTools(ctx: {
               resultCount: result.rows.length,
               durationMs,
             });
-            return serialiseResult(result);
+            return serialiseResult(result, fitted, ctx.tools.graph.scanId);
           } catch (err) {
             // Returned rather than thrown: the model can often recover by
             // trying a different tool, and failing the step would end the turn

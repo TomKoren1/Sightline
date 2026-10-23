@@ -20,10 +20,3 @@ resources:
   # values would deploy, start, and fail at the first sign-in with an error
   # about Google rather than about configuration.
   #- secrets.sealed.yaml
-
-patches:
-  # Resource sizing lives in the overlay rather than the base, because it is the
-  # one thing that genuinely depends on the machine. The base's numbers suit a
-  # box with memory to spare; these are for the single node this runs on.
-  - path: sizing.yaml
-    target: { kind: StatefulSet, name: neo4j }

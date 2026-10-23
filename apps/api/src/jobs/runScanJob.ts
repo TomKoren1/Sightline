@@ -9,11 +9,9 @@
  * orphaning it, and what lets the scan run in a process that has no connection
  * to the browser at all.
  *
- * The write order at the end is still the whole of write-then-flip: persist to
- * Postgres, project into a *new* graph scope, and only then mark the scan
- * projected. Until that last statement the connection still reads its previous
- * graph, so a projection that fails costs nothing and no reader sees a
- * half-built one.
+ * The write order at the end is write-then-flip: persist the snapshots, and
+ * only then mark the scan projected. Until that statement the connection still
+ * reads its previous scan, so no reader ever sees a half-written one.
  */
 
 import {
@@ -25,17 +23,20 @@ import {
 } from "@sightline/shared";
 
 import { CallCounter } from "../aws/clients.js";
-import { projectGraph, sweepSupersededScans } from "../db/neo4j.js";
+import { cfg } from "../config.js";
 import {
   createScanRun,
   failScanRun,
   getScan,
   markProjected,
-  projectedScanIdsToKeep,
+  pruneScanHistory,
   recordScanUnit,
+  refreshSnapshotStatistics,
   saveScanResult,
   startScanUnits,
+  STATISTICS_REFRESH_THRESHOLD,
 } from "../db/repository.js";
+import { syncFindings } from "../db/findings.js";
 import { runScan } from "../scan/runner.js";
 import { markScanned, markVerified } from "../tenancy/connections.js";
 import { resolveScanTarget } from "../tenancy/scanTarget.js";
@@ -43,7 +44,6 @@ import type { ScanId } from "../tenancy/ids.js";
 import { tooManyResources } from "../tenancy/limits.js";
 import type { Scope } from "../tenancy/scope.js";
 import {
-  projectionDuration,
   scanDuration,
   scanResources,
   scanUnitDuration,
@@ -65,7 +65,6 @@ export interface ScanJobOutcome {
   summary?: {
     resources: number;
     relationships: number;
-    graph: { nodes: number; edges: number };
     apiCalls: number;
     units: ScanUnit[];
   };
@@ -210,22 +209,22 @@ export async function runScanJob(options: RunScanJobOptions): Promise<ScanJobOut
         "The scan completed without reading anything: no service and region produced a result.";
       await failScanRun(scope, scanId, problem);
       emit({ type: "scan.failed", scanId, error: problem });
-      // Returns before projecting. Flipping an empty projection would make a
-      // scan that read nothing into this connection's current graph, which
+      // Returns before the flip. Flipping an empty scan would make one that
+      // read nothing into this connection's current graph, which
       // reads to the user as every resource having disappeared.
       return { status: "failed", scanId, error: problem };
     }
     const status = rolled;
 
     /**
-     * Too big to project.
+     * Too big to publish.
      *
-     * Checked after `saveScanResult` would have run, and before the projection,
-     * so the scan is still *recorded* - the counts and the per-unit outcomes are
+     * Checked where `saveScanResult` would have run, and before the flip, so
+     * the scan is still *recorded* - the counts and the per-unit outcomes are
      * real findings about the account, and throwing them away would hide the
      * very thing the operator needs to see. What is skipped is the flip, so the
-     * tenant keeps reading the graph they already had rather than one built
-     * from a projection that ran Neo4j out of heap.
+     * tenant keeps reading the graph they already had rather than one too
+     * large to query or render.
      */
     const size = tooManyResources(result.resources.length);
     if (!size.allowed) {
@@ -254,18 +253,14 @@ export async function runScanJob(options: RunScanJobOptions): Promise<ScanJobOut
       apiCalls: counter.total(),
     });
 
-    // Into its own scope. Nothing is deleted, and the previous graph stays
-    // current until `markProjected` below.
-    const projectionStartedAt = Date.now();
-    const projected = await projectGraph(
-      { tenantId: scope.tenantId, scanId },
-      result.resources,
-      result.relationships,
-    );
-    // Separate from the scan's own duration: collection is bounded by AWS and
-    // projection by Neo4j, and a slow scan is one or the other, never both.
-    projectionDuration.observe((Date.now() - projectionStartedAt) / 1000);
     scanResources.observe(result.resources.length);
+    if (result.resources.length >= STATISTICS_REFRESH_THRESHOLD) {
+      await refreshSnapshotStatistics();
+    }
+    // Before the flip, so the scan that becomes current already has its
+    // findings' history behind it. Only a scan that read everything may
+    // resolve what it did not see.
+    await syncFindings(scope, scanId, status === "succeeded");
     await markProjected(scope, scanId);
 
     // The scan reaching the account *is* a successful verification, and it pins
@@ -273,15 +268,7 @@ export async function runScanJob(options: RunScanJobOptions): Promise<ScanJobOut
     await markVerified(scope, result.accountId);
     await markScanned(scope);
 
-    /**
-     * Every account's current graph, not just this one's.
-     *
-     * The sweep matches on the tenant, so a keep-list of only this
-     * connection's scans deleted every other connected account's graph - and
-     * Postgres went on claiming those scans were projected, so switching
-     * account showed an empty graph instead of an error.
-     */
-    await sweep(scope, await projectedScanIdsToKeep(scope.tenantId));
+    await prune(scope);
 
     scanDuration.observe({ outcome: status }, (Date.now() - startedAt) / 1000);
 
@@ -295,7 +282,6 @@ export async function runScanJob(options: RunScanJobOptions): Promise<ScanJobOut
       summary: {
         resources: result.resources.length,
         relationships: result.relationships.length,
-        graph: projected,
         apiCalls: counter.total(),
         units: result.units,
       },
@@ -323,20 +309,11 @@ export async function runScanJob(options: RunScanJobOptions): Promise<ScanJobOut
   }
 }
 
-/**
- * Drop graph scopes nobody reads any more.
- *
- * The keep-list comes from `projectedScanIdsToKeep`, which returns the two
- * most recent projected scans of *every* connection this tenant has - the
- * current graph of each, plus the one before it so that a request which
- * resolved a scan id a moment before the flip still finds its graph. Failures
- * are swallowed: a scan that succeeded must not be reported as failed because
- * tidying up afterwards did not.
- */
-async function sweep(scope: Scope, keep: string[]): Promise<void> {
+/** Best effort: history left behind is pruned after the next scan. */
+async function prune(scope: Scope): Promise<void> {
   try {
-    await sweepSupersededScans(scope.tenantId, keep);
+    await pruneScanHistory(scope, cfg.SCAN_HISTORY_KEEP);
   } catch {
-    // Leaves superseded nodes behind; the next scan sweeps them.
+    // Retention is housekeeping; a scan that succeeded must not report failure.
   }
 }

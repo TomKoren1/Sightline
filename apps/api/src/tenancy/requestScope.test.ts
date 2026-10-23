@@ -9,7 +9,7 @@
  * Runs self-hosted, which is the mode a clone runs and - since the fix below -
  * the same code path hosted mode takes.
  *
- * Requires Postgres and Neo4j; skipped without them.
+ * Requires Postgres; skipped without it.
  */
 
 import { afterAll, beforeAll, describe, expect, it } from "vitest";

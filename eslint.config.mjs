@@ -71,6 +71,26 @@ export default tseslint.config(
   },
 
   {
+    // The running service may read the demo account's answer key, never the
+    // code that seeds or drifts it: that holds AWS clients that write.
+    files: ["apps/api/src/**/*.ts"],
+    ignores: ["**/*.test.ts"],
+    rules: {
+      "no-restricted-imports": [
+        "error",
+        {
+          paths: [
+            {
+              name: "@sightline/mock-aws",
+              message: "Import the answer key from '@sightline/mock-aws/answer-key'.",
+            },
+          ],
+        },
+      ],
+    },
+  },
+
+  {
     // Nest injects controller and service parameters, so these classes often
     // have no `this` — which is what the rule objects to.
     files: ["apps/api/src/**/*.controller.ts", "apps/api/src/**/*.service.ts"],

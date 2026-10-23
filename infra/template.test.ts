@@ -106,7 +106,11 @@ describe("the permissions the template claims", () => {
   });
 
   it("grants the inventory reads the scanner actually makes", () => {
-    for (const action of ["s3:GetBucketPolicyStatus", "s3:GetBucketPublicAccessBlock"]) {
+    for (const action of [
+      "s3:GetBucketPolicyStatus",
+      "s3:GetBucketPublicAccessBlock",
+      "ec2:SearchTransitGatewayRoutes",
+    ]) {
       expect(template, action).toContain(action);
     }
   });

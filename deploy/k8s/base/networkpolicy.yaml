@@ -47,20 +47,20 @@ spec:
             matchLabels: { kubernetes.io/metadata.name: monitoring }
       ports: [{ protocol: TCP, port: 9464 }]
 ---
-# The datastores accept connections from the api and the worker, and from
+# The database accepts connections from the api and the worker, and from
 # nothing else.
 #
 # This is the policy that matters. Postgres holds the encrypted ExternalIds and
-# every tenant's scan history; Neo4j holds every tenant's inventory. Neither has
-# any business being reachable from the web pods, from the tunnel, or from
-# whatever else ends up in this namespace later.
+# every tenant's inventory and scan history. It has no business being reachable
+# from the web pods, from the tunnel, or from whatever else ends up in this
+# namespace later.
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata: { name: datastores-from-app-only }
 spec:
   podSelector:
     matchExpressions:
-      - { key: app.kubernetes.io/name, operator: In, values: [postgres, neo4j] }
+      - { key: app.kubernetes.io/name, operator: In, values: [postgres] }
   policyTypes: [Ingress]
   ingress:
     - from:

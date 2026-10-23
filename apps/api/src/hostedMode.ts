@@ -123,14 +123,37 @@ export function hostedInvariantViolations(env: Env): string[] {
       "PUBLIC_BASE_URL is required in hosted mode: it is the OAuth redirect's origin and it " +
         "decides whether the session cookie is Secure.",
     );
-  } else if (!base.startsWith("https://")) {
+  } else if (!base.startsWith("https://") && !isLoopback(base)) {
     problems.push(
       `PUBLIC_BASE_URL is "${base}". A public deployment must be https: the session cookie ` +
         "is only Secure when it is, and over plain http a session is readable in transit.",
     );
   }
 
+  // The browser suite's stand-ins. Each would be a hijack in a real deployment
+  // - a KMS that keeps the keys, a "GitHub" that signs anyone in as anybody -
+  // so they need a loopback base URL, which no reachable deployment can have:
+  // the OAuth redirect would send every visitor to their own machine.
+  for (const key of ["KMS_ENDPOINT_URL", "E2E_IDENTITY_PROVIDER_URL"]) {
+    if (set(env, key) && !(base && isLoopback(base))) {
+      problems.push(
+        `${key} is a test seam for the browser suite, and hosted mode allows it only when ` +
+          "PUBLIC_BASE_URL is loopback (http://localhost or 127.0.0.1).",
+      );
+    }
+  }
+
   return problems;
+}
+
+/** A base URL only the machine itself can reach. */
+export function isLoopback(base: string): boolean {
+  try {
+    const host = new URL(base).hostname;
+    return host === "localhost" || host === "127.0.0.1" || host === "[::1]";
+  } catch {
+    return false;
+  }
 }
 
 /**
@@ -147,4 +170,35 @@ export function assertHostedInvariants(env: Env = process.env): void {
       .map((p, i) => `  ${i + 1}. ${p}`)
       .join("\n\n")}\n`,
   );
+}
+
+/**
+ * Credentials the API process holds but has no use for.
+ *
+ * Warnings, not refusals: each is a deployment that works and is merely wider
+ * than it needs to be, and refusing would take down a running service on the
+ * upgrade that introduced the check. `ownsSchema` is asked of the database by
+ * the caller; everything else is the environment.
+ */
+export function apiPrivilegeWarnings(
+  env: Env,
+  facts: { workerMode: string; ownsSchema: boolean },
+): string[] {
+  if (env["DEPLOYMENT_MODE"] !== "hosted") return [];
+  const warnings: string[] = [];
+  if (facts.workerMode === "separate" && looksLikeRealAccessKey(env["AWS_ACCESS_KEY_ID"])) {
+    warnings.push(
+      "The API holds AWS_ACCESS_KEY_ID, the identity that can assume every customer's role, " +
+        "but scans and connection checks run in the worker. Move it to the worker's own " +
+        "secret and give the API KMS_ACCESS_KEY_ID/KMS_SECRET_ACCESS_KEY instead.",
+    );
+  }
+  if (facts.ownsSchema) {
+    warnings.push(
+      "DATABASE_URL connects as a role that owns the schema, so this process could drop " +
+        "tables. Point it at sightline_system (npm run db:app-role) and keep the owner for the " +
+        "migrate Job.",
+    );
+  }
+  return warnings;
 }

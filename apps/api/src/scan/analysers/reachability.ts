@@ -1,22 +1,23 @@
 /**
- * Network reachability: security group rules as a walkable graph, so "what can
- * reach the production database?" is a path query rather than manual reading.
+ * Network reachability as a walkable graph, so "what can reach the production
+ * database?" is a path query. Edges, each justified by rules that exist:
  *
- *   Internet -> resource   a group admits 0.0.0.0/0 AND the resource is
- *                          actually exposed (public subnet, public address, or
- *                          flagged accessible). An open rule on an instance in
- *                          a private subnet would otherwise bury real findings.
- *   resource -> resource   the target's group admits a group the source is in.
- *                          This is what makes multi-hop paths visible.
+ *   Internet -> host/entry  an open rule on an exposed host (its ACL agreeing), or an
+ *                           internet-facing load balancer, distribution or API
+ *   group/subnet -> target  a rule admitting the group, or a CIDR covering the subnet
+ *                           with routes both ways (`routing.ts`); linear, not per pair
+ *   entry -> backend        LB to admitted targets, CDN to origins, API to integrations,
+ *                           interface endpoint to the NLB behind its PrivateLink service
  *
- * Not modelled: NACLs, route tables, VPC peering, Transit Gateway, PrivateLink,
- * on-premises. Each would add edges, so this is conservative - it can miss a
- * path, but a path it reports is justified by rules that exist, and every edge
- * carries the rule that produced it.
+ * Not modelled: VPN and Direct Connect, and PrivateLink services in other accounts.
  */
 
 import { INTERNET_ARN, type Relationship, type Resource } from "@sightline/shared";
 import { formatPortRange } from "@sightline/shared";
+
+import { blockedByNacl, type NaclEntry, type TrafficSpec } from "./nacl.js";
+import { hopsFrom, indexReach } from "./reachIndex.js";
+import { cidrContains, cidrOverlaps, parseCidr, RoutingModel } from "./routing.js";
 
 /** An ingress rule, flattened by the VPC collector. */
 interface IngressRule {
@@ -37,6 +38,17 @@ export interface ReachabilityResult {
   internetReachable: Set<string>;
 }
 
+const push = <K, V>(map: Map<K, V[]>, key: K, value: V) =>
+  (map.get(key) ?? map.set(key, []).get(key)!).push(value);
+
+/** Whether a rule admits TCP on this port. */
+function admitsPort(rule: IngressRule, port: number | null): boolean {
+  if (rule.protocol === "-1") return true;
+  if (rule.protocol !== "tcp" && rule.protocol !== "6") return false;
+  if (port === null || rule.fromPort === null || rule.toPort === null) return true;
+  return rule.fromPort <= port && rule.toPort >= port;
+}
+
 export function analyseReachability(
   resources: Resource[],
   relationships: Relationship[],
@@ -51,27 +63,52 @@ export function analyseReachability(
     if (typeof groupId === "string") sgArnByGroupId.set(groupId, r.arn);
   }
 
-  // resource -> the security groups attached to it, and the inverse.
   const sgsOfResource = new Map<string, string[]>();
-  const membersOfSg = new Map<string, string[]>();
+  // A load balancer sits in several subnets; everything else in one.
+  const subnetsOfResource = new Map<string, string[]>();
+  const naclOfSubnet = new Map<string, NaclEntry[]>();
+  const outgoing = new Map<string, Relationship[]>();
   for (const rel of relationships) {
-    if (rel.type !== "HAS_SECURITY_GROUP") continue;
-    (sgsOfResource.get(rel.from) ?? sgsOfResource.set(rel.from, []).get(rel.from)!).push(rel.to);
-    (membersOfSg.get(rel.to) ?? membersOfSg.set(rel.to, []).get(rel.to)!).push(rel.from);
+    if (rel.type === "HAS_SECURITY_GROUP") push(sgsOfResource, rel.from, rel.to);
+    else if (rel.type === "IN_SUBNET") push(subnetsOfResource, rel.from, rel.to);
+    else if (rel.type === "HAS_NACL") {
+      const acl = byArn.get(rel.to);
+      if (acl) naclOfSubnet.set(rel.from, (acl.properties["entries"] ?? []) as NaclEntry[]);
+    }
+    push(outgoing, rel.from, rel);
   }
+  const membersOfSubnet = new Map<string, Resource[]>();
+  for (const [member, subnets] of subnetsOfResource) {
+    const resource = byArn.get(member);
+    if (resource) for (const subnet of subnets) push(membersOfSubnet, subnet, resource);
+  }
+  const routing = new RoutingModel(resources);
+  const outOf = (arn: string, type: Relationship["type"]) =>
+    (outgoing.get(arn) ?? []).filter((r) => r.type === type);
 
-  // resource -> subnet, so we can tell whether it sits on the public side.
-  const subnetOfResource = new Map<string, string>();
-  for (const rel of relationships) {
-    if (rel.type === "IN_SUBNET") subnetOfResource.set(rel.from, rel.to);
-  }
+  const rulesOf = (arn: string): { sg: Resource; rule: IngressRule }[] =>
+    (sgsOfResource.get(arn) ?? []).flatMap((sgArn) => {
+      const sg = byArn.get(sgArn);
+      if (!sg) return [];
+      return ((sg.properties["ingress"] ?? []) as IngressRule[]).map((rule) => ({ sg, rule }));
+    });
 
   /** Is this resource actually exposed, independent of its rules? */
   function exposure(resource: Resource): string | null {
-    const subnetArn = subnetOfResource.get(resource.arn);
-    const subnet = subnetArn ? byArn.get(subnetArn) : undefined;
-    if (subnet?.derived.isPublic) {
-      return `it sits in public subnet ${subnet.name}`;
+    if (resource.kind === "EcsService") {
+      // A task in a public subnet still has no address to reach unless the
+      // service gives it one.
+      if (resource.properties["assignPublicIp"] !== true) return null;
+    }
+    if (resource.kind === "LoadBalancer") {
+      // Its subnets are public either way; the scheme is what decides.
+      return resource.properties["internetFacing"] === true
+        ? `it is an internet-facing load balancer`
+        : null;
+    }
+    for (const subnetArn of subnetsOfResource.get(resource.arn) ?? []) {
+      const subnet = byArn.get(subnetArn);
+      if (subnet?.derived.isPublic) return `it sits in public subnet ${subnet.name}`;
     }
     if (typeof resource.properties["publicIpAddress"] === "string") {
       return `it has public IP ${resource.properties["publicIpAddress"]}`;
@@ -82,95 +119,296 @@ export function analyseReachability(
     return null;
   }
 
+  /**
+   * Null if some subnet the resource sits in lets this traffic in from the
+   * internet and back out, otherwise why none does. A subnet with no ACL
+   * recorded uses its VPC's default, which allows everything.
+   */
+  function naclBlock(arn: string, traffic: TrafficSpec): string | null {
+    const subnets = subnetsOfResource.get(arn) ?? [];
+    if (subnets.length === 0) return null;
+    const reasons: string[] = [];
+    for (const subnetArn of subnets) {
+      const entries = naclOfSubnet.get(subnetArn);
+      if (!entries) return null;
+      const blocked = blockedByNacl(entries, traffic);
+      if (!blocked) return null;
+      reasons.push(`the network ACL on ${byArn.get(subnetArn)?.name ?? subnetArn}: ${blocked}`);
+    }
+    return reasons.join("; ");
+  }
+
   const edges: Relationship[] = [];
   const seen = new Set<string>();
-  const push = (edge: Relationship) => {
+  const add = (edge: Relationship) => {
     const key = `${edge.from}|${edge.to}|${JSON.stringify(edge.properties ?? {})}`;
     if (seen.has(key)) return;
     seen.add(key);
     edges.push(edge);
   };
 
+  // --- Security group rules -------------------------------------------------
   for (const target of resources) {
-    const targetSgs = sgsOfResource.get(target.arn);
-    if (!targetSgs || targetSgs.length === 0) continue;
+    for (const { sg, rule } of rulesOf(target.arn)) {
+      const ports = formatPortRange(rule);
 
-    for (const sgArn of targetSgs) {
-      const sg = byArn.get(sgArn);
-      if (!sg) continue;
-      const rules = (sg.properties["ingress"] ?? []) as IngressRule[];
+      if (rule.source === "cidr" && rule.cidr && OPEN_CIDRS.has(rule.cidr)) {
+        const why = exposure(target);
+        // An open rule on something that is not exposed is a latent risk,
+        // not a live path. Recorded on the group, not as an internet edge.
+        if (!why) continue;
+        // Open in the group, dropped by the subnet: no path either.
+        if (naclBlock(target.arn, rule)) continue;
+        add({
+          from: INTERNET_ARN,
+          to: target.arn,
+          type: "CAN_REACH",
+          properties: {
+            ports,
+            via: sg.name,
+            viaArn: sg.arn,
+            reason: `Security group ${sg.name} allows ${ports} from ${rule.cidr}, and ${why}`,
+          },
+        });
+        continue;
+      }
 
-      for (const rule of rules) {
-        const ports = formatPortRange(rule);
+      if (rule.source === "cidr" && rule.cidr) {
+        privateCidrEdges(target, sg, rule.cidr, ports);
+        continue;
+      }
 
-        if (rule.source === "cidr" && rule.cidr && OPEN_CIDRS.has(rule.cidr)) {
-          const why = exposure(target);
-          // An open rule on something that is not exposed is a latent risk,
-          // not a live path. Recorded on the group, not as an internet edge.
-          if (!why) continue;
-          push({
-            from: INTERNET_ARN,
-            to: target.arn,
+      if (rule.source === "securityGroup" && rule.groupId) {
+        const sourceSgArn = sgArnByGroupId.get(rule.groupId);
+        if (!sourceSgArn) continue;
+        const sourceSg = byArn.get(sourceSgArn);
+        // From the source *group*, not each member: see reachIndex.ts.
+        add({
+          from: sourceSgArn,
+          to: target.arn,
+          type: "CAN_REACH",
+          properties: {
+            ports,
+            via: sg.name,
+            viaArn: sg.arn,
+            sourceGroup: sourceSg?.name ?? rule.groupId,
+            reason: `Security group ${sg.name} allows ${ports} from members of ${sourceSg?.name ?? rule.groupId}`,
+          },
+        });
+      }
+    }
+  }
+
+  // --- Entry points ---------------------------------------------------------
+  for (const entry of resources) {
+    if (entry.kind === "LoadBalancer") loadBalancerEdges(entry);
+
+    if (entry.kind === "EksCluster" && entry.properties["endpointPublicAccess"] === true) {
+      const cidrs = (entry.properties["publicAccessCidrs"] ?? []) as string[];
+      // An empty list is AWS's default, which is everywhere.
+      const open = cidrs.length === 0 || cidrs.some((c) => OPEN_CIDRS.has(c));
+      if (open) {
+        add({
+          from: INTERNET_ARN,
+          to: entry.arn,
+          type: "CAN_REACH",
+          properties: {
+            ports: "tcp/443",
+            via: entry.name,
+            reason: `EKS cluster ${entry.name} has a public API endpoint open to 0.0.0.0/0`,
+          },
+        });
+      }
+    }
+
+    if (entry.kind === "CloudFrontDistribution" && entry.properties["enabled"] === true) {
+      add({
+        from: INTERNET_ARN,
+        to: entry.arn,
+        type: "CAN_REACH",
+        properties: {
+          ports: "tcp/443",
+          via: entry.name,
+          reason: `CloudFront distribution ${entry.name} serves anyone on the internet`,
+        },
+      });
+    }
+
+    if (entry.kind === "ApiGateway" && entry.properties["isPrivate"] !== true) {
+      const endpointType = entry.properties["endpointType"];
+      const endpoint = typeof endpointType === "string" ? endpointType.toLowerCase() : "public";
+      add({
+        from: INTERNET_ARN,
+        to: entry.arn,
+        type: "CAN_REACH",
+        properties: {
+          ports: "tcp/443",
+          via: entry.name,
+          reason: `API ${entry.name} has a ${endpoint} endpoint anyone can call`,
+        },
+      });
+    }
+
+    if (entry.kind === "VpcEndpoint" && entry.properties["state"] === "available") {
+      for (const link of outOf(entry.arn, "CONNECTS_TO")) {
+        const service = byArn.get(link.to);
+        for (const served of outOf(link.to, "SERVED_BY")) {
+          const nlb = byArn.get(served.to);
+          if (!service || !nlb) continue;
+          add({
+            from: entry.arn,
+            to: nlb.arn,
             type: "CAN_REACH",
             properties: {
-              ports,
-              via: sg.name,
-              viaArn: sg.arn,
-              reason: `Security group ${sg.name} allows ${ports} from ${rule.cidr}, and ${why}`,
+              ports: "service ports",
+              via: service.name,
+              reason: `Interface endpoint ${entry.name} delivers to ${nlb.name} through PrivateLink service ${service.name}`,
             },
           });
+        }
+      }
+    }
+
+    if (entry.kind === "CloudFrontDistribution" || entry.kind === "ApiGateway") {
+      for (const link of [
+        ...outOf(entry.arn, "HAS_ORIGIN"),
+        ...outOf(entry.arn, "INTEGRATES_WITH"),
+      ]) {
+        const backend = byArn.get(link.to);
+        if (!backend) continue;
+        add({
+          from: entry.arn,
+          to: backend.arn,
+          type: "CAN_REACH",
+          properties: {
+            ports: "tcp/443",
+            via: entry.name,
+            reason:
+              link.type === "HAS_ORIGIN"
+                ? `${backend.name} is an origin of CloudFront distribution ${entry.name}`
+                : `API ${entry.name} invokes ${backend.name}`,
+          },
+        });
+      }
+    }
+  }
+
+  /**
+   * A rule admitting a private range: every subnet in it that routes to the
+   * target and back, as one edge per subnet - members are expanded when the
+   * path is walked, as groups are. A subnet only partly inside the range
+   * contributes just the hosts whose private address falls in it.
+   */
+  function privateCidrEdges(target: Resource, sg: Resource, cidrText: string, ports: string) {
+    const range = parseCidr(cidrText);
+    const targetSubnets = (subnetsOfResource.get(target.arn) ?? [])
+      .map((arn) => routing.subnets.get(arn))
+      .filter((s) => s !== undefined);
+    if (!range || targetSubnets.length === 0) return;
+
+    const vpcs = new Set(targetSubnets.flatMap((s) => [...routing.connectedVpcs(s.vpcId)]));
+    for (const vpc of vpcs) {
+      for (const source of routing.subnetsByVpc.get(vpc) ?? []) {
+        if (!cidrOverlaps(range, source.cidr)) continue;
+        let how: string | null = null;
+        for (const dest of targetSubnets) {
+          how = routing.pathBetween(source, dest);
+          if (how !== null) break;
+        }
+        if (how === null) continue;
+        const reason =
+          `Security group ${sg.name} allows ${ports} from ${cidrText}, which covers ` +
+          `subnet ${source.name}${how ? `, ${how}` : ""}`;
+        const edge = (from: string, why: string) =>
+          add({
+            from,
+            to: target.arn,
+            type: "CAN_REACH",
+            properties: { ports, via: sg.name, viaArn: sg.arn, reason: why },
+          });
+
+        if (cidrContains(range, source.cidr)) {
+          edge(source.arn, reason);
           continue;
         }
-
-        if (rule.source === "securityGroup" && rule.groupId) {
-          const sourceSgArn = sgArnByGroupId.get(rule.groupId);
-          if (!sourceSgArn) continue;
-          const sourceSg = byArn.get(sourceSgArn);
-          for (const memberArn of membersOfSg.get(sourceSgArn) ?? []) {
-            if (memberArn === target.arn) continue;
-            const member = byArn.get(memberArn);
-            push({
-              from: memberArn,
-              to: target.arn,
-              type: "CAN_REACH",
-              properties: {
-                ports,
-                via: sg.name,
-                viaArn: sg.arn,
-                reason: `Security group ${sg.name} allows ${ports} from ${sourceSg?.name ?? rule.groupId}, which ${member?.name ?? memberArn} belongs to`,
-              },
-            });
+        for (const member of membersOfSubnet.get(source.arn) ?? []) {
+          const ip = parseCidr(member.properties["privateIpAddress"]);
+          if (member.arn !== target.arn && ip && cidrContains(range, ip)) {
+            edge(member.arn, `${reason}, at ${String(member.properties["privateIpAddress"])}`);
           }
         }
       }
     }
   }
 
-  return { edges, internetReachable: transitiveFromInternet(edges) };
-}
+  function loadBalancerEdges(lb: Resource) {
+    const listeners = (lb.properties["listeners"] ?? []) as { port: number | null }[];
+    const lbGroupIds = new Set(
+      (sgsOfResource.get(lb.arn) ?? []).map((a) => byArn.get(a)?.properties["groupId"]),
+    );
 
-/**
- * Everything reachable from the internet by following CAN_REACH edges.
- *
- * Plain breadth-first search. The visited set makes cycles harmless, which
- * matters because security groups routinely reference each other both ways.
- */
-export function transitiveFromInternet(edges: Relationship[]): Set<string> {
-  const outgoing = new Map<string, string[]>();
-  for (const edge of edges) {
-    if (edge.type !== "CAN_REACH") continue;
-    (outgoing.get(edge.from) ?? outgoing.set(edge.from, []).get(edge.from)!).push(edge.to);
-  }
+    // A network load balancer with no security group admits whatever its
+    // listeners accept; one with groups was handled with the rules above.
+    if (exposure(lb) && lbGroupIds.size === 0) {
+      for (const listener of listeners) {
+        const traffic = { protocol: "tcp", fromPort: listener.port, toPort: listener.port };
+        if (naclBlock(lb.arn, traffic)) continue;
+        add({
+          from: INTERNET_ARN,
+          to: lb.arn,
+          type: "CAN_REACH",
+          properties: {
+            ports: `tcp/${listener.port}`,
+            via: lb.name,
+            reason: `${lb.name} is an internet-facing load balancer with no security group, listening on ${listener.port}`,
+          },
+        });
+      }
+    }
 
-  const reachable = new Set<string>();
-  const queue = [INTERNET_ARN];
-  while (queue.length > 0) {
-    const current = queue.shift()!;
-    for (const next of outgoing.get(current) ?? []) {
-      if (reachable.has(next)) continue;
-      reachable.add(next);
-      queue.push(next);
+    // To the targets its listeners forward to, where the targets' groups
+    // admit it on the target port. Registered is not reachable.
+    for (const forward of outOf(lb.arn, "FORWARDS_TO")) {
+      const group = byArn.get(forward.to);
+      if (!group) continue;
+      const groupPort = (group.properties["port"] as number | null) ?? null;
+      for (const registered of outOf(group.arn, "TARGETS")) {
+        const target = byArn.get(registered.to);
+        if (!target) continue;
+        const port = (registered.properties?.["port"] as number | null) ?? groupPort;
+        let because: string | null = null;
+        if (target.kind === "LambdaFunction") {
+          because = `invokes ${target.name}`;
+        } else {
+          const admit = rulesOf(target.arn).find(
+            ({ rule }) =>
+              admitsPort(rule, port) &&
+              ((rule.source === "securityGroup" && lbGroupIds.has(rule.groupId)) ||
+                rule.source === "cidr"),
+          );
+          if (admit) {
+            const from =
+              admit.rule.source === "cidr" ? admit.rule.cidr : "the load balancer's group";
+            because = `forwards port ${port} to ${target.name}, which ${admit.sg.name} admits from ${from}`;
+          }
+        }
+        if (!because) continue;
+        add({
+          from: lb.arn,
+          to: target.arn,
+          type: "CAN_REACH",
+          properties: {
+            ports: port === null ? "target port" : `tcp/${port}`,
+            via: group.name,
+            reason: `${lb.name} ${because}, through target group ${group.name}`,
+          },
+        });
+      }
     }
   }
-  return reachable;
+
+  const index = indexReach([...relationships, ...edges]);
+  const reachable = hopsFrom(index, INTERNET_ARN);
+  reachable.delete(INTERNET_ARN);
+  return { edges, internetReachable: new Set(reachable.keys()) };
 }

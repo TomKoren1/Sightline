@@ -73,7 +73,15 @@ function decryptLocal(envelope: string): string {
  */
 async function kmsClient() {
   const { KMSClient } = await import("@aws-sdk/client-kms");
-  return new KMSClient({ region: cfg.AWS_REGION });
+  const credentials =
+    cfg.KMS_ACCESS_KEY_ID && cfg.KMS_SECRET_ACCESS_KEY
+      ? { accessKeyId: cfg.KMS_ACCESS_KEY_ID, secretAccessKey: cfg.KMS_SECRET_ACCESS_KEY }
+      : undefined;
+  return new KMSClient({
+    region: cfg.AWS_REGION,
+    ...(credentials ? { credentials } : {}),
+    ...(cfg.KMS_ENDPOINT_URL ? { endpoint: cfg.KMS_ENDPOINT_URL } : {}),
+  });
 }
 
 async function encryptKms(plaintext: string): Promise<string> {

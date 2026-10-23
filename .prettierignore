@@ -28,3 +28,8 @@ LICENSE
 # can read - `{{- range }}` is not a key. The chart's values and dashboards are
 # still formatted; only `templates/` is exempt.
 helm/*/templates/
+
+# Generated from the collector registry by `npm run gen:collectors`, and
+# compared byte for byte by infra/collectorsGenerated.test.ts: reformatting it
+# would make the generated file stale by definition.
+apps/api/src/scan/collectors/README.md

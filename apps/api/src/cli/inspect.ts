@@ -1,11 +1,11 @@
 #!/usr/bin/env tsx
 /**
- * Run a scan and print what it found, without touching either database.
+ * Run a scan and print what it found, without touching the database.
  *
  * This is the fastest way to see whether the scanner and the analysers agree
  * with reality, and it is what to reach for when a graph query returns
  * something surprising - it isolates "did we collect it correctly" from "did
- * we project it correctly".
+ * we store it correctly".
  *
  *   npm run inspect -w @sightline/api
  */
@@ -15,6 +15,7 @@ import { runScan } from "../scan/runner.js";
 import { CallCounter } from "../aws/clients.js";
 import { ensureLocalTenant, localScope } from "../tenancy/local.js";
 import { resolveScanTarget } from "../tenancy/scanTarget.js";
+import { indexReach } from "../scan/analysers/reachIndex.js";
 
 const bold = (s: string) => `\x1b[1m${s}\x1b[0m`;
 const dim = (s: string) => `\x1b[2m${s}\x1b[0m`;
@@ -82,10 +83,13 @@ for (const edge of canReach.filter((e) => e.from === INTERNET_ARN)) {
 
 console.log(`\n${bold("Who can reach the production database")}`);
 const db = result.resources.find((r) => r.name === "northwind-prod-db");
-for (const edge of canReach.filter((e) => e.to === db?.arn)) {
-  const source = result.resources.find((r) => r.arn === edge.from);
+// Through the index: a rule admitting a group is one edge from the group.
+const reach = indexReach(result.relationships);
+for (const arn of db ? reach.prev(db.arn) : []) {
+  const source = result.resources.find((r) => r.arn === arn);
+  const hop = reach.next(arn).find((h) => h.to === db?.arn);
   console.log(
-    `  ${source?.name} -> northwind-prod-db\n     ${dim(asText(edge.properties?.["reason"]))}`,
+    `  ${source?.name} -> northwind-prod-db\n     ${dim(asText(hop?.edges[0]?.properties?.["reason"]))}`,
   );
 }
 

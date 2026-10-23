@@ -18,6 +18,19 @@ import { IAMClient } from "@aws-sdk/client-iam";
 import { RDSClient } from "@aws-sdk/client-rds";
 import { LambdaClient } from "@aws-sdk/client-lambda";
 import { ResourceExplorer2Client } from "@aws-sdk/client-resource-explorer-2";
+import { ElasticLoadBalancingV2Client } from "@aws-sdk/client-elastic-load-balancing-v2";
+import { CloudFrontClient } from "@aws-sdk/client-cloudfront";
+import { APIGatewayClient } from "@aws-sdk/client-api-gateway";
+import { ApiGatewayV2Client } from "@aws-sdk/client-apigatewayv2";
+import { SQSClient } from "@aws-sdk/client-sqs";
+import { SNSClient } from "@aws-sdk/client-sns";
+import { KMSClient } from "@aws-sdk/client-kms";
+import { SecretsManagerClient } from "@aws-sdk/client-secrets-manager";
+import { DynamoDBClient } from "@aws-sdk/client-dynamodb";
+import { ECSClient } from "@aws-sdk/client-ecs";
+import { EKSClient } from "@aws-sdk/client-eks";
+import { Route53Client } from "@aws-sdk/client-route-53";
+import { AutoScalingClient } from "@aws-sdk/client-auto-scaling";
 
 import { credentialProvider } from "./credentials.js";
 import type { ScanTarget } from "../tenancy/scanTarget.js";
@@ -142,6 +155,42 @@ export const rdsClient = (ctx: AwsContext, region: string) =>
 export const lambdaClient = (ctx: AwsContext, region: string) =>
   instrument(new LambdaClient(baseConfig(ctx, region)), ctx.counter, `lambda:${region}`);
 
+export const elbv2Client = (ctx: AwsContext, region: string) =>
+  instrument(
+    new ElasticLoadBalancingV2Client(baseConfig(ctx, region)),
+    ctx.counter,
+    `elbv2:${region}`,
+  );
+
+/** CloudFront is global and answers in us-east-1, whatever region a scan runs in. */
+export const cloudfrontClient = (ctx: AwsContext) =>
+  instrument(new CloudFrontClient(baseConfig(ctx, "us-east-1")), ctx.counter, "cloudfront:global");
+
+export const apigatewayClient = (ctx: AwsContext, region: string) =>
+  instrument(new APIGatewayClient(baseConfig(ctx, region)), ctx.counter, `apigateway:${region}`);
+
+export const apigatewayV2Client = (ctx: AwsContext, region: string) =>
+  instrument(new ApiGatewayV2Client(baseConfig(ctx, region)), ctx.counter, `apigateway:${region}`);
+
+/** One regional client factory per service, counted under that service's unit. */
+const regional =
+  <T extends object>(Client: new (config: ReturnType<typeof baseConfig>) => T, service: string) =>
+  (ctx: AwsContext, region: string) =>
+    instrument(new Client(baseConfig(ctx, region)), ctx.counter, `${service}:${region}`);
+
+export const sqsClient = regional(SQSClient, "sqs");
+export const snsClient = regional(SNSClient, "sns");
+export const kmsClient = regional(KMSClient, "kms");
+export const secretsClient = regional(SecretsManagerClient, "secretsmanager");
+export const dynamodbClient = regional(DynamoDBClient, "dynamodb");
+export const ecsClient = regional(ECSClient, "ecs");
+export const eksClient = regional(EKSClient, "eks");
+export const autoScalingClient = regional(AutoScalingClient, "autoscaling");
+
+/** Route 53 is global and answers in us-east-1. */
+export const route53Client = (ctx: AwsContext) =>
+  instrument(new Route53Client(baseConfig(ctx, "us-east-1")), ctx.counter, "route53:global");
+
 export const resourceExplorerClient = (ctx: AwsContext, region: string) =>
   instrument(
     new ResourceExplorer2Client(baseConfig(ctx, region)),
@@ -157,7 +206,9 @@ export const s3Client = (ctx: AwsContext, region: string) =>
       ...(ctx.target.kind === "demo" ? { forcePathStyle: true } : {}),
     }),
     ctx.counter,
-    `s3:${region}`,
+    // Counted under the global unit the runner reports, whichever region a
+    // bucket lives in.
+    "s3:global",
   );
 
 /** IAM is global. Its endpoint lives in us-east-1 regardless of where we scan. */

@@ -87,6 +87,12 @@ const schema = z.object({
    * exist and filter nothing. Hosted mode refuses to start without it.
    */
   DATABASE_URL_APP: blankAsUnset(z.string().optional()),
+  /**
+   * Read only by `npm run db:app-role`, to set the password of the cross-tenant
+   * role (0010). API and worker pods get that URL *as* their `DATABASE_URL`,
+   * so the owner's credentials go only to the migrate Job.
+   */
+  DATABASE_URL_SYSTEM: blankAsUnset(z.string().optional()),
 
   /**
    * Whether this process applies migrations before it starts listening.
@@ -100,10 +106,6 @@ const schema = z.object({
    * Defaulted below rather than here, because it depends on DEPLOYMENT_MODE.
    */
   MIGRATE_ON_BOOT: blankAsUnset(z.enum(["true", "false"]).optional()),
-
-  NEO4J_URI: blankAsUnset(z.string().default("bolt://localhost:7687")),
-  NEO4J_USER: blankAsUnset(z.string().default("neo4j")),
-  NEO4J_PASSWORD: blankAsUnset(z.string().default("neo4jneo4j")),
 
   /**
    * `mock` points every AWS client at moto and uses static source credentials.
@@ -126,6 +128,25 @@ const schema = z.object({
   SCAN_OPERATOR: blankAsUnset(z.string().default("system")),
   AWS_ACCESS_KEY_ID: blankAsUnset(z.string().optional()),
   AWS_SECRET_ACCESS_KEY: blankAsUnset(z.string().optional()),
+
+  /**
+   * A separate identity for the secrets key, allowed `kms:Encrypt` and
+   * `kms:Decrypt` on `AWS_KMS_KEY_ID` and nothing else. The API needs KMS to
+   * store and show a connection's ExternalId, but must not hold the scanner
+   * identity that can assume every customer's role - so the API gets these and
+   * only the worker gets `AWS_ACCESS_KEY_ID`. Unset, KMS uses the default chain.
+   */
+  KMS_ACCESS_KEY_ID: blankAsUnset(z.string().optional()),
+  KMS_SECRET_ACCESS_KEY: blankAsUnset(z.string().optional()),
+
+  /**
+   * Test seams for the browser suite (`e2e/`): a KMS other than AWS's, and an
+   * identity provider standing in for GitHub. Hosted mode refuses both unless
+   * PUBLIC_BASE_URL is loopback, so a deployment anyone else can reach cannot
+   * have either - see `hostedMode.ts`.
+   */
+  KMS_ENDPOINT_URL: blankAsUnset(z.string().optional()),
+  E2E_IDENTITY_PROVIDER_URL: blankAsUnset(z.string().optional()),
 
   /**
    * Regions to scan. Empty means "discover them", which on a real account
@@ -156,8 +177,8 @@ const schema = z.object({
    * How many scans one worker runs at once.
    *
    * One, and the default is the point: a scan holds an account's whole
-   * inventory in memory and then projects it, so this multiplies the peak
-   * memory of both the worker and Neo4j. Raising it is a statement about the
+   * inventory in memory while it is analysed, so this multiplies the worker's
+   * peak memory. Raising it is a statement about the
    * machine, which is why it is configuration rather than a constant.
    */
   SCAN_WORKER_CONCURRENCY: blankAsUnset(z.coerce.number().int().positive().default(1)),
@@ -198,10 +219,18 @@ const schema = z.object({
    * checked the collectors have already held every resource in an array, so an
    * account large enough to exhaust the worker exhausts it before this fires.
    * Fixing that needs streaming collection, which this is not. What it does buy
-   * is a clear message instead of a projection that runs Neo4j out of heap, and
+   * is a clear message instead of a graph too large to query or render, and
    * that is worth having on its own.
    */
   MAX_RESOURCES_PER_SCAN: blankAsUnset(z.coerce.number().int().positive().default(100_000)),
+
+  /**
+   * Finished scans kept per account; older ones are deleted with their
+   * snapshots. Every scan holds a full copy of the estate, so without a limit
+   * a daily scan of a large account grows the database without end. At least
+   * two, so the latest scan always has one to be diffed against.
+   */
+  SCAN_HISTORY_KEEP: blankAsUnset(z.coerce.number().int().min(2).default(30)),
 
   /**
    * Questions one tenant may ask the agent per hour.

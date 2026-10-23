@@ -1,6 +1,6 @@
 {
   "uid": "sightline-pipeline",
-  "title": "Sightline \u2014 the scan pipeline",
+  "title": "Sightline — the scan pipeline",
   "description": "Where a scan's time and money go, and whether the two stores still agree afterwards.",
   "tags": ["sightline"],
   "timezone": "browser",
@@ -161,49 +161,6 @@
         "overrides": []
       },
       "description": "Failures are timed too: a scan that takes four minutes to fail is a different problem from one that fails immediately."
-    },
-    {
-      "id": 5,
-      "title": "Collection against projection",
-      "type": "timeseries",
-      "gridPos": {
-        "h": 8,
-        "w": 12,
-        "x": 12,
-        "y": 7
-      },
-      "datasource": {
-        "type": "prometheus",
-        "uid": "Prometheus"
-      },
-      "targets": [
-        {
-          "refId": "A",
-          "datasource": {
-            "type": "prometheus",
-            "uid": "Prometheus"
-          },
-          "expr": "histogram_quantile(0.95, sum by (le) (rate(sightline_scan_duration_seconds_bucket[1h])))",
-          "legendFormat": "whole scan p95"
-        },
-        {
-          "refId": "B",
-          "datasource": {
-            "type": "prometheus",
-            "uid": "Prometheus"
-          },
-          "expr": "histogram_quantile(0.95, sum by (le) (rate(sightline_projection_duration_seconds_bucket[1h])))",
-          "legendFormat": "projection p95"
-        }
-      ],
-      "fieldConfig": {
-        "defaults": {
-          "custom": {},
-          "unit": "s"
-        },
-        "overrides": []
-      },
-      "description": "The two halves have different causes - collection is bounded by AWS, projection by Neo4j - and a slow scan is one or the other, never both."
     },
     {
       "id": 6,
@@ -370,59 +327,6 @@
         "overrides": []
       },
       "description": "Also the thing MAX_RESOURCES_PER_SCAN bounds. A number approaching it means a customer is about to be refused."
-    },
-    {
-      "id": 11,
-      "title": "Postgres and Neo4j disagreeing",
-      "type": "stat",
-      "gridPos": {
-        "h": 6,
-        "w": 24,
-        "x": 0,
-        "y": 31
-      },
-      "datasource": {
-        "type": "prometheus",
-        "uid": "Prometheus"
-      },
-      "targets": [
-        {
-          "refId": "A",
-          "datasource": {
-            "type": "prometheus",
-            "uid": "Prometheus"
-          },
-          "expr": "sightline_graph_reconciliation_mismatches",
-          "legendFormat": "connections mismatched"
-        }
-      ],
-      "fieldConfig": {
-        "defaults": {
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green",
-                "value": null
-              },
-              {
-                "color": "red",
-                "value": 1
-              }
-            ]
-          }
-        },
-        "overrides": []
-      },
-      "description": "Must be zero. Anything else means a connection's graph does not match what Postgres recorded - that account renders as an empty graph rather than an error, which reads to the customer as an empty AWS account. This is the check whose absence hid a sweep deleting other accounts' graphs.",
-      "options": {
-        "colorMode": "background",
-        "reduceOptions": {
-          "calcs": ["lastNotNull"],
-          "fields": "",
-          "values": false
-        }
-      }
     }
   ]
 }

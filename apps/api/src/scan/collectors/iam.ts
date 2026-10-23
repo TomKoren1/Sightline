@@ -1,29 +1,31 @@
 /**
- * IAM roles, their policies, and instance profiles.
+ * IAM roles, users, groups, their policies, and instance profiles.
  *
- * More work per resource than any other collector, because "which roles have
- * admin access?" cannot be answered from a listing: effective permissions are
- * the union of attached and inline policies, and a policy's *name* tells you
- * nothing - the mock holds a `LegacyDeployRole` whose inline policy grants `*`
- * on `*`. So every document is fetched and the verdict computed by a unit-
- * testable analyser.
+ * "Which principals are administrators?" cannot be answered from a listing: a
+ * policy's *name* says nothing (the mock holds a `LegacyDeployRole` whose
+ * inline policy grants `*` on `*`), so every document is collected and the
+ * verdict computed by a unit-testable analyser.
  *
- * Managed documents are cached: on a real account a handful of policies are
- * attached to hundreds of roles, which is one API call rather than hundreds.
+ * One `GetAccountAuthorizationDetails` sweep returns every principal with its
+ * inline and attached policies, and every managed policy's versions. The
+ * per-principal calls it replaces cost about three requests per role against
+ * IAM's global, low rate limit - 10k calls on an account with 3,000 roles.
+ * `ListRoles` and `ListUsers` still run, as cheap paged listings, for the few
+ * fields the sweep omits (description, session length, password last used).
  */
 
 import {
-  paginateListRoles,
-  paginateListInstanceProfiles,
-  paginateListUsers,
-  ListAttachedRolePoliciesCommand,
-  ListRolePoliciesCommand,
-  GetRolePolicyCommand,
-  ListAttachedUserPoliciesCommand,
-  ListUserPoliciesCommand,
-  GetUserPolicyCommand,
   GetPolicyCommand,
   GetPolicyVersionCommand,
+  paginateGetAccountAuthorizationDetails,
+  paginateListRoles,
+  paginateListUsers,
+  type GroupDetail,
+  type ManagedPolicyDetail,
+  type Role,
+  type RoleDetail,
+  type User,
+  type UserDetail,
 } from "@aws-sdk/client-iam";
 import type { Relationship, Resource } from "@sightline/shared";
 
@@ -41,6 +43,7 @@ export interface PolicyDocument {
     Action?: string | string[];
     NotAction?: string | string[];
     Resource?: string | string[];
+    NotResource?: string | string[];
     Condition?: Record<string, unknown>;
   }[];
 }
@@ -56,18 +59,72 @@ export function decodePolicyDocument(doc: string | undefined): PolicyDocument | 
   }
 }
 
+export interface AttachedPolicy {
+  policyArn: string;
+  policyName: string;
+  document: PolicyDocument | null;
+}
+
+export interface InlinePolicy {
+  policyName: string;
+  document: PolicyDocument | null;
+}
+
+/** A policy a user holds through a group, kept apart so remediation can say so. */
+export interface GroupPolicy {
+  groupName: string;
+  policyName: string;
+  kind: "managed" | "inline";
+  policyArn?: string;
+  document: PolicyDocument | null;
+}
+
+interface AuthorizationDetails {
+  roles: RoleDetail[];
+  users: UserDetail[];
+  groups: GroupDetail[];
+  policies: ManagedPolicyDetail[];
+}
+
 export async function collectIam(ctx: CollectorContext): Promise<CollectorOutput> {
   const client = iamClient(ctx);
   const resources: Resource[] = [];
   const relationships: Relationship[] = [];
 
-  /** Managed policy ARN -> its default-version document. Fetched at most once. */
-  const managedPolicyCache = new Map<string, PolicyDocument | null>();
+  const details: AuthorizationDetails = { roles: [], users: [], groups: [], policies: [] };
+  for await (const page of paginateGetAccountAuthorizationDetails(
+    { client },
+    { Filter: ["Role", "User", "Group", "LocalManagedPolicy", "AWSManagedPolicy"] },
+  )) {
+    details.roles.push(...(page.RoleDetailList ?? []));
+    details.users.push(...(page.UserDetailList ?? []));
+    details.groups.push(...(page.GroupDetailList ?? []));
+    details.policies.push(...(page.Policies ?? []));
+  }
 
+  const roleMeta = new Map<string, Role>();
+  for await (const page of paginateListRoles({ client }, {})) {
+    for (const role of page.Roles ?? []) if (role.RoleName) roleMeta.set(role.RoleName, role);
+  }
+  const userMeta = new Map<string, User>();
+  for await (const page of paginateListUsers({ client }, {})) {
+    for (const user of page.Users ?? []) if (user.UserName) userMeta.set(user.UserName, user);
+  }
+
+  /** Managed policy ARN -> its default-version document. */
+  const managedDocuments = new Map<string, PolicyDocument | null>();
+  for (const policy of details.policies) {
+    if (!policy.Arn) continue;
+    const version = policy.PolicyVersionList?.find((v) => v.IsDefaultVersion);
+    managedDocuments.set(policy.Arn, decodePolicyDocument(version?.Document));
+  }
+
+  /**
+   * The sweep may omit an AWS-managed policy (it lists those in use, and a
+   * partial page or a moto gap can drop one), so fall back to fetching it.
+   */
   async function managedPolicyDocument(policyArn: string): Promise<PolicyDocument | null> {
-    const cached = managedPolicyCache.get(policyArn);
-    if (cached !== undefined) return cached;
-
+    if (managedDocuments.has(policyArn)) return managedDocuments.get(policyArn) ?? null;
     let document: PolicyDocument | null = null;
     try {
       const meta = await client.send(new GetPolicyCommand({ PolicyArn: policyArn }));
@@ -79,237 +136,242 @@ export async function collectIam(ctx: CollectorContext): Promise<CollectorOutput
         document = decodePolicyDocument(version.PolicyVersion?.Document);
       }
     } catch (err) {
-      // A policy we cannot read is recorded as unreadable rather than absent,
-      // so the admin analyser can say "unknown" instead of silently "no".
+      // Recorded as unreadable rather than absent, so the analyser can say
+      // "unknown" instead of silently "no".
       console.warn(`  iam: could not read ${policyArn}: ${errorMessage(err)}`);
     }
-
-    managedPolicyCache.set(policyArn, document);
+    managedDocuments.set(policyArn, document);
     return document;
   }
 
-  // --- Roles --------------------------------------------------------------
-  for await (const page of paginateListRoles({ client }, {})) {
-    for (const role of page.Roles ?? []) {
-      if (!role.RoleName) continue;
-      const roleName = role.RoleName;
-      const arn = role.Arn ?? iamArn(ctx.accountId, "role", roleName);
-
-      const attached = await client
-        .send(new ListAttachedRolePoliciesCommand({ RoleName: roleName }))
-        .catch(() => null);
-
-      const attachedPolicies: {
-        policyArn: string;
-        policyName: string;
-        document: PolicyDocument | null;
-      }[] = [];
-      for (const p of attached?.AttachedPolicies ?? []) {
-        if (!p.PolicyArn) continue;
-        attachedPolicies.push({
-          policyArn: p.PolicyArn,
-          policyName: p.PolicyName ?? p.PolicyArn.split("/").pop() ?? p.PolicyArn,
-          document: await managedPolicyDocument(p.PolicyArn),
-        });
-      }
-
-      const inlineNames = await client
-        .send(new ListRolePoliciesCommand({ RoleName: roleName }))
-        .catch(() => null);
-
-      const inlinePolicies: { policyName: string; document: PolicyDocument | null }[] = [];
-      for (const policyName of inlineNames?.PolicyNames ?? []) {
-        const inline = await client
-          .send(new GetRolePolicyCommand({ RoleName: roleName, PolicyName: policyName }))
-          .catch(() => null);
-        inlinePolicies.push({
-          policyName,
-          document: decodePolicyDocument(inline?.PolicyDocument),
-        });
-      }
-
-      const tags = tagsToRecord(role.Tags);
-      const trustPolicy = decodePolicyDocument(role.AssumeRolePolicyDocument);
-
-      resources.push({
-        arn,
-        kind: "IamRole",
-        name: roleName,
-        region: null,
-        accountId: ctx.accountId,
-        tags,
-        properties: {
-          roleName,
-          path: role.Path ?? "/",
-          description: role.Description ?? null,
-          createdAt: role.CreateDate?.toISOString() ?? null,
-          maxSessionDuration: role.MaxSessionDuration ?? null,
-          trustPolicy,
-          /** Service principals allowed to assume this role, e.g. ec2, lambda. */
-          trustedServices: (trustPolicy?.Statement ?? [])
-            .flatMap((s) => {
-              const principal = (s as { Principal?: { Service?: string | string[] } }).Principal;
-              const svc = principal?.Service;
-              return svc ? (Array.isArray(svc) ? svc : [svc]) : [];
-            })
-            .filter(Boolean),
-          attachedPolicies,
-          inlinePolicies,
-          attachedPolicyCount: attachedPolicies.length,
-          inlinePolicyCount: inlinePolicies.length,
-        },
-        derived: {},
-        raw: role,
+  async function attachedPolicies(
+    list: { PolicyArn?: string; PolicyName?: string }[] | undefined,
+  ): Promise<AttachedPolicy[]> {
+    const out: AttachedPolicy[] = [];
+    for (const p of list ?? []) {
+      if (!p.PolicyArn) continue;
+      out.push({
+        policyArn: p.PolicyArn,
+        policyName: p.PolicyName ?? p.PolicyArn.split("/").pop() ?? p.PolicyArn,
+        document: await managedPolicyDocument(p.PolicyArn),
       });
+    }
+    return out;
+  }
 
-      for (const p of attachedPolicies) {
-        relationships.push({
-          from: arn,
-          to: p.policyArn,
-          type: "HAS_POLICY",
-          properties: { policyName: p.policyName, kind: "managed" },
-        });
-        // Managed policies are shared, including AWS-owned ones outside this
-        // account. Emit a node for each so the edge has a target to land on.
-        if (!resources.some((r) => r.arn === p.policyArn)) {
-          const awsManaged = p.policyArn.startsWith("arn:aws:iam::aws:");
-          resources.push({
-            arn: p.policyArn,
-            kind: "IamPolicy",
-            name: p.policyName,
-            region: null,
-            accountId: awsManaged ? "aws" : ctx.accountId,
-            tags: {},
-            properties: {
-              policyName: p.policyName,
-              awsManaged,
-              document: p.document,
-            },
-            derived: {},
-          });
-        }
-      }
+  const inlinePolicies = (
+    list: { PolicyName?: string; PolicyDocument?: string }[] | undefined,
+  ): InlinePolicy[] =>
+    (list ?? [])
+      .filter((p) => p.PolicyName)
+      .map((p) => ({
+        policyName: p.PolicyName!,
+        document: decodePolicyDocument(p.PolicyDocument),
+      }));
+
+  /** A principal's permissions boundary, with its document, when it has one. */
+  async function boundaryOf(
+    attached: { PermissionsBoundaryArn?: string } | undefined,
+  ): Promise<AttachedPolicy | null> {
+    const policyArn = attached?.PermissionsBoundaryArn;
+    if (!policyArn) return null;
+    return {
+      policyArn,
+      policyName: policyArn.split("/").pop() ?? policyArn,
+      document: await managedPolicyDocument(policyArn),
+    };
+  }
+
+  const policyNodes = new Set<string>();
+  function linkPolicies(from: string, attached: AttachedPolicy[]) {
+    for (const p of attached) {
+      relationships.push({
+        from,
+        to: p.policyArn,
+        type: "HAS_POLICY",
+        properties: { policyName: p.policyName, kind: "managed" },
+      });
+      // Managed policies are shared, including AWS-owned ones outside this
+      // account. Emit a node for each so the edge has a target to land on.
+      if (policyNodes.has(p.policyArn)) continue;
+      policyNodes.add(p.policyArn);
+      const awsManaged = p.policyArn.startsWith("arn:aws:iam::aws:");
+      resources.push({
+        arn: p.policyArn,
+        kind: "IamPolicy",
+        name: p.policyName,
+        region: null,
+        accountId: awsManaged ? "aws" : ctx.accountId,
+        tags: {},
+        properties: { policyName: p.policyName, awsManaged, document: p.document },
+        derived: {},
+      });
+    }
+  }
+
+  // --- Roles --------------------------------------------------------------
+  const instanceProfiles = new Map<
+    string,
+    { name: string; roles: { name: string; arn: string }[] }
+  >();
+  for (const role of details.roles) {
+    if (!role.RoleName) continue;
+    const roleName = role.RoleName;
+    const arn = role.Arn ?? iamArn(ctx.accountId, "role", roleName);
+    const meta = roleMeta.get(roleName);
+    const attached = await attachedPolicies(role.AttachedManagedPolicies);
+    const inline = inlinePolicies(role.RolePolicyList);
+    const trustPolicy = decodePolicyDocument(role.AssumeRolePolicyDocument);
+
+    resources.push({
+      arn,
+      kind: "IamRole",
+      name: roleName,
+      region: null,
+      accountId: ctx.accountId,
+      tags: tagsToRecord(role.Tags),
+      properties: {
+        roleName,
+        path: role.Path ?? "/",
+        description: meta?.Description ?? null,
+        createdAt: role.CreateDate?.toISOString() ?? null,
+        maxSessionDuration: meta?.MaxSessionDuration ?? null,
+        lastUsedAt: role.RoleLastUsed?.LastUsedDate?.toISOString() ?? null,
+        permissionsBoundary: await boundaryOf(role.PermissionsBoundary),
+        trustPolicy,
+        /** Service principals allowed to assume this role, e.g. ec2, lambda. */
+        trustedServices: (trustPolicy?.Statement ?? [])
+          .flatMap((s) => {
+            const principal = (s as { Principal?: { Service?: string | string[] } }).Principal;
+            const svc = principal?.Service;
+            return svc ? (Array.isArray(svc) ? svc : [svc]) : [];
+          })
+          .filter(Boolean),
+        attachedPolicies: attached,
+        inlinePolicies: inline,
+        attachedPolicyCount: attached.length,
+        inlinePolicyCount: inline.length,
+      },
+      derived: {},
+      raw: role,
+    });
+    linkPolicies(arn, attached);
+
+    for (const profile of role.InstanceProfileList ?? []) {
+      if (!profile.InstanceProfileName) continue;
+      const profileArn =
+        profile.Arn ?? iamArn(ctx.accountId, "instance-profile", profile.InstanceProfileName);
+      const entry = instanceProfiles.get(profileArn) ?? {
+        name: profile.InstanceProfileName,
+        roles: [],
+      };
+      entry.roles.push({ name: roleName, arn });
+      instanceProfiles.set(profileArn, entry);
     }
   }
 
   // --- Instance profiles --------------------------------------------------
-  // The join between an EC2 instance and the role it runs as.
-  for await (const page of paginateListInstanceProfiles({ client }, {})) {
-    for (const profile of page.InstanceProfiles ?? []) {
-      if (!profile.InstanceProfileName) continue;
-      const arn =
-        profile.Arn ?? iamArn(ctx.accountId, "instance-profile", profile.InstanceProfileName);
-
-      resources.push({
-        arn,
-        kind: "InstanceProfile",
-        name: profile.InstanceProfileName,
-        region: null,
-        accountId: ctx.accountId,
-        tags: tagsToRecord(profile.Tags),
-        properties: {
-          instanceProfileName: profile.InstanceProfileName,
-          roleNames: (profile.Roles ?? []).map((r) => r.RoleName).filter(Boolean),
-        },
-        derived: {},
-        raw: profile,
-      });
-
-      for (const role of profile.Roles ?? []) {
-        if (!role.RoleName) continue;
-        relationships.push({
-          from: arn,
-          to: role.Arn ?? iamArn(ctx.accountId, "role", role.RoleName),
-          type: "PROVIDES_ROLE",
-        });
-      }
+  // The join between an EC2 instance and the role it runs as. A profile with
+  // no role grants nothing, so the ones the role sweep reaches are the ones
+  // that matter.
+  for (const [arn, profile] of instanceProfiles) {
+    resources.push({
+      arn,
+      kind: "InstanceProfile",
+      name: profile.name,
+      region: null,
+      accountId: ctx.accountId,
+      tags: {},
+      properties: {
+        instanceProfileName: profile.name,
+        roleNames: profile.roles.map((r) => r.name),
+      },
+      derived: {},
+    });
+    for (const role of profile.roles) {
+      relationships.push({ from: arn, to: role.arn, type: "PROVIDES_ROLE" });
     }
   }
 
-  /**
-   * --- Users ---------------------------------------------------------------
-   *
-   * Users carry their policies for the same reason roles do: the admin
-   * analyser asks "which principals are administrators?", and for a long time
-   * this collector answered only for roles. Users were inventoried with their
-   * name and creation date and nothing about what they could do, so an account
-   * whose only administrators were IAM users reported no administrators at
-   * all - a false negative in the one analysis a reader is most likely to check
-   * first. Found against a real account with two `AdministratorAccess` users
-   * and an empty findings panel.
-   *
-   * Roles remain the more interesting case in a mature account, but "no admin
-   * roles" and "no admins" are different statements and the tool was making the
-   * second while only checking the first.
-   */
-  for await (const page of paginateListUsers({ client }, {})) {
-    for (const user of page.Users ?? []) {
-      if (!user.UserName) continue;
-      const userName = user.UserName;
+  // --- Groups -------------------------------------------------------------
+  // Collected because a user's permissions include its groups': a user with
+  // no policies of its own can be an administrator through one.
+  const groupPolicies = new Map<string, GroupPolicy[]>();
+  const groupArns = new Map<string, string>();
+  for (const group of details.groups) {
+    if (!group.GroupName) continue;
+    const groupName = group.GroupName;
+    const arn = group.Arn ?? iamArn(ctx.accountId, "group", groupName);
+    groupArns.set(groupName, arn);
+    const attached = await attachedPolicies(group.AttachedManagedPolicies);
+    const inline = inlinePolicies(group.GroupPolicyList);
+    groupPolicies.set(groupName, [
+      ...attached.map((p) => ({ groupName, kind: "managed" as const, ...p })),
+      ...inline.map((p) => ({ groupName, kind: "inline" as const, ...p })),
+    ]);
 
-      const attached = await client
-        .send(new ListAttachedUserPoliciesCommand({ UserName: userName }))
-        .catch(() => null);
+    resources.push({
+      arn,
+      kind: "IamGroup",
+      name: groupName,
+      region: null,
+      accountId: ctx.accountId,
+      tags: {},
+      properties: {
+        groupName,
+        path: group.Path ?? "/",
+        createdAt: group.CreateDate?.toISOString() ?? null,
+        attachedPolicies: attached,
+        inlinePolicies: inline,
+      },
+      derived: {},
+      raw: group,
+    });
+    linkPolicies(arn, attached);
+  }
 
-      const attachedPolicies: {
-        policyArn: string;
-        policyName: string;
-        document: PolicyDocument | null;
-      }[] = [];
-      for (const p of attached?.AttachedPolicies ?? []) {
-        if (!p.PolicyArn) continue;
-        attachedPolicies.push({
-          policyArn: p.PolicyArn,
-          policyName: p.PolicyName ?? p.PolicyArn.split("/").pop() ?? p.PolicyArn,
-          // Shares the cache with roles, so AdministratorAccess attached to
-          // several principals is fetched once.
-          document: await managedPolicyDocument(p.PolicyArn),
-        });
-      }
+  // --- Users --------------------------------------------------------------
+  // Users carry their policies for the same reason roles do: an account whose
+  // only administrators are IAM users once reported no administrators at all.
+  for (const user of details.users) {
+    if (!user.UserName) continue;
+    const userName = user.UserName;
+    const arn = user.Arn ?? iamArn(ctx.accountId, "user", userName);
+    const meta = userMeta.get(userName);
+    const attached = await attachedPolicies(user.AttachedManagedPolicies);
+    const inline = inlinePolicies(user.UserPolicyList);
+    const groups = (user.GroupList ?? []).filter(Boolean);
 
-      const inlineNames = await client
-        .send(new ListUserPoliciesCommand({ UserName: userName }))
-        .catch(() => null);
-
-      const inlinePolicies: { policyName: string; document: PolicyDocument | null }[] = [];
-      for (const policyName of inlineNames?.PolicyNames ?? []) {
-        const inline = await client
-          .send(new GetUserPolicyCommand({ UserName: userName, PolicyName: policyName }))
-          .catch(() => null);
-        inlinePolicies.push({
-          policyName,
-          document: decodePolicyDocument(inline?.PolicyDocument),
-        });
-      }
-
-      resources.push({
-        arn: user.Arn ?? iamArn(ctx.accountId, "user", userName),
-        kind: "IamUser",
-        name: userName,
-        region: null,
-        accountId: ctx.accountId,
-        tags: tagsToRecord(user.Tags),
-        properties: {
-          userName,
-          path: user.Path ?? "/",
-          createdAt: user.CreateDate?.toISOString() ?? null,
-          passwordLastUsed: user.PasswordLastUsed?.toISOString() ?? null,
-          attachedPolicies,
-          inlinePolicies,
-          attachedPolicyCount: attachedPolicies.length,
-          inlinePolicyCount: inlinePolicies.length,
-        },
-        derived: {},
-        raw: user,
+    resources.push({
+      arn,
+      kind: "IamUser",
+      name: userName,
+      region: null,
+      accountId: ctx.accountId,
+      tags: tagsToRecord(user.Tags),
+      properties: {
+        userName,
+        path: user.Path ?? "/",
+        createdAt: user.CreateDate?.toISOString() ?? null,
+        passwordLastUsed: meta?.PasswordLastUsed?.toISOString() ?? null,
+        permissionsBoundary: await boundaryOf(user.PermissionsBoundary),
+        groups,
+        attachedPolicies: attached,
+        inlinePolicies: inline,
+        groupPolicies: groups.flatMap((g) => groupPolicies.get(g) ?? []),
+        attachedPolicyCount: attached.length,
+        inlinePolicyCount: inline.length,
+      },
+      derived: {},
+      raw: user,
+    });
+    linkPolicies(arn, attached);
+    for (const groupName of groups) {
+      relationships.push({
+        from: arn,
+        to: groupArns.get(groupName) ?? iamArn(ctx.accountId, "group", groupName),
+        type: "MEMBER_OF",
       });
-
-      for (const p of attachedPolicies) {
-        relationships.push({
-          from: user.Arn ?? iamArn(ctx.accountId, "user", userName),
-          to: p.policyArn,
-          type: "HAS_POLICY",
-        });
-      }
     }
   }
 

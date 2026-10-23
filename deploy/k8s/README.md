@@ -13,28 +13,18 @@ What is where:
 
 |                           |                                                                 |
 | ------------------------- | --------------------------------------------------------------- |
-| `base/datastores.yaml`    | Postgres and Neo4j StatefulSets, one replica each               |
+| `base/datastores.yaml`    | the Postgres StatefulSet, one replica                           |
 | `base/app.yaml`           | the migrate Job, then `api`, `worker` and `web`                 |
 | `base/networkpolicy.yaml` | default-deny ingress, then the flows that exist                 |
 | `base/backup.yaml`        | nightly `pg_dump`, encrypted to a key the cluster does not hold |
 | `prod/cloudflared.yaml`   | the tunnel — no inbound port, no static IP                      |
+| `staging/`                | the same base in `sightline-staging`, for rehearsing a release  |
 
-## Before you deploy: this needs about 3 GB
+## Before you deploy: this needs about 1.5 GB
 
-Neo4j is configured for a 1 GB heap and a 512 MB page cache, with a 2 GB pod
-limit to leave room for the JVM's non-heap use. Add Postgres, two API replicas
-and a worker and the namespace wants roughly 3 GB.
-
-**Measured on this machine, not estimated:** 9 GB total, of which other
-workloads hold about 2.5 GB and the development `docker compose` stack another
-2 GB while it is up — so **stop the compose stack first** (`docker compose
-down`) and this fits with room to spare. It does not fit alongside it.
-
-To give Neo4j more, raise the heap and page cache in `base/datastores.yaml`
-_and_ the limit in `prod/sizing.yaml` — both, because changing the limit
-without the heap wastes the difference, and changing the heap without the limit
-gets the container killed while the JVM believes it is fine.
-`infra/k8sManifests.test.ts` fails if they disagree.
+Postgres, two API replicas and a worker want roughly 1.5 GB between them. The
+worker is the one that grows: it holds a scan's inventory in memory while it is
+analysed, so a very large account needs its limit raised in `base/app.yaml`.
 
 ## Images
 
@@ -57,6 +47,50 @@ Re-importing an image with the same tag does **not** restart the pods. Either
 bump the tag in `base/kustomization.yaml` (`images:`) or
 `kubectl -n sightline rollout restart deploy/api deploy/worker deploy/web`.
 
+## Staging
+
+`staging/` deploys the same base into `sightline-staging` on the same node, so a
+release can be rehearsed — the new image, its migrations, even a restored copy of
+prod's data — before prod runs it. It differs from prod only where it must: its
+own namespace and image tag, one replica of each (about 1 GB beside prod), no
+backups, no second copy of the dashboards, and no tunnel. Nobody else should
+reach a staging copy, so it is reached through `kubectl port-forward` on
+loopback, which hosted mode accepts over plain http.
+
+```bash
+# 1. Build the candidate under the staging tag, which prod never runs.
+docker build --target api -t sightline-api:staging .
+docker build --target web -t sightline-web:staging .
+docker save sightline-api:staging | sudo k3s ctr images import -
+docker save sightline-web:staging | sudo k3s ctr images import -
+
+# 2. Its own secrets, the same five names as prod's in the new namespace
+#    (see Secrets below). Two values differ: PUBLIC_BASE_URL is
+#    http://localhost:8081, and sign-in needs a second GitHub OAuth app whose
+#    callback is http://localhost:8081/api/auth/github/callback. The KMS key and
+#    its key pair can be prod's.
+kubectl create namespace sightline-staging
+
+# 3. Deploy, then give the database roles their passwords, as for prod.
+kubectl apply -k deploy/k8s/staging
+kubectl -n sightline-staging wait --for=condition=complete job/sightline-migrate --timeout=5m
+
+# 4. Open it: on the server, then tunnel the port to your own machine.
+kubectl -n sightline-staging port-forward svc/web 8081:80
+ssh -L 8081:localhost:8081 <server>        # from your machine; open http://localhost:8081
+```
+
+To rehearse against real data, restore prod's newest backup into staging's
+Postgres with the steps under [Restoring](#restoring), using
+`-n sightline-staging`. When the candidate is good, promote the same image
+rather than rebuilding it — `docker tag sightline-api:staging sightline-api:dev`
+(and the web image), import both, rerun prod's migrations with
+`kubectl -n sightline delete job sightline-migrate && kubectl apply -k deploy/k8s/prod`,
+then `kubectl -n sightline rollout restart deploy/api deploy/worker deploy/web`.
+
+Staging holds memory while idle, so pause it between releases with
+`kubectl -n sightline-staging scale deploy,statefulset --all --replicas=0`.
+
 ## Reaching it without a domain (testing only)
 
 `prod/cloudflared.yaml` runs a **named** tunnel, which needs a domain on
@@ -68,7 +102,7 @@ a random `https://<words>.trycloudflare.com` hostname for free:
 kubectl -n sightline scale deploy/cloudflared --replicas=0
 
 # A quick tunnel, wearing BOTH labels the NetworkPolicy expects.
-kubectl -n sightline run quicktunnel --image=cloudflare/cloudflared:latest \
+kubectl -n sightline run quicktunnel --image=cloudflare/cloudflared:2026.10.3 \
   --labels='app.kubernetes.io/name=cloudflared,app.kubernetes.io/part-of=sightline' \
   --restart=Never -- tunnel --no-autoupdate --url http://web:80
 
@@ -109,8 +143,11 @@ this machine. Nothing in this repository contains a credential, and
 create it — a placeholder with fake values would deploy, start, and fail at the
 first sign-in with an error about Google rather than about configuration.
 
-Three secrets are needed. Create each locally, seal it, commit the sealed
-version, and delete the plaintext:
+Five secrets are needed. Create each locally, seal it, commit the sealed
+version, and delete the plaintext. They are split by who needs what: only the
+migrate Job holds the database owner, and only the worker holds the identity
+that can assume customers' roles. The API, which faces the internet, holds
+neither.
 
 **For a throwaway test, skip `kubeseal`.** Drop the `--dry-run=client -o yaml`
 and the pipe, and `kubectl create secret generic` applies the secret straight
@@ -119,21 +156,26 @@ source of truth and a rebuilt cluster has to reproduce them; the secret names
 and keys are identical either way.
 
 ```bash
-# 1. The datastores' own credentials.
+# 1. The database's own credentials.
 kubectl -n sightline create secret generic sightline-db --dry-run=client -o yaml \
   --from-literal=POSTGRES_DB=sightline \
   --from-literal=POSTGRES_USER=sightline \
   --from-literal=POSTGRES_PASSWORD="$(openssl rand -base64 24)" \
-  --from-literal=NEO4J_AUTH="neo4j/$(openssl rand -base64 24 | tr -d /+=)" \
+\
   | kubeseal --format yaml > /tmp/db.sealed.yaml
 
-# 2. What the application needs. DATABASE_URL_APP is not optional here: hosted
-#    mode refuses to start without it, because DATABASE_URL is the owner and
-#    the owner bypasses every row-level security policy.
+# 2. What the API and the worker need. DATABASE_URL is the cross-tenant
+#    sightline_system role, not the owner: it reaches every tenant's rows for
+#    sign-in and the job queue, and cannot change the schema. DATABASE_URL_APP
+#    is the restricted role row-level security applies to; hosted mode refuses
+#    to start without it. KMS_* is an IAM user allowed only kms:Encrypt and
+#    kms:Decrypt on AWS_KMS_KEY_ID.
 kubectl -n sightline create secret generic sightline-app --dry-run=client -o yaml \
-  --from-literal=DATABASE_URL="postgres://sightline:<password>@postgres:5432/sightline" \
-  --from-literal=DATABASE_URL_APP="postgres://sightline_app:<other-password>@postgres:5432/sightline" \
-  --from-literal=NEO4J_PASSWORD="<the half after the slash above>" \
+  --from-literal=DATABASE_URL="postgres://sightline_system:<system-password>@postgres:5432/sightline" \
+  --from-literal=DATABASE_URL_APP="postgres://sightline_app:<app-password>@postgres:5432/sightline" \
+\
+  --from-literal=KMS_ACCESS_KEY_ID=... \
+  --from-literal=KMS_SECRET_ACCESS_KEY=... \
   --from-literal=SESSION_SECRET="$(openssl rand -base64 48)" \
   --from-literal=PUBLIC_BASE_URL="https://sightline.example.com" \
   --from-literal=GOOGLE_CLIENT_ID=... \
@@ -144,16 +186,42 @@ kubectl -n sightline create secret generic sightline-app --dry-run=client -o yam
   --from-literal=ANTHROPIC_API_KEY=... \
   | kubeseal --format yaml > /tmp/app.sealed.yaml
 
-# 3. The tunnel token, from the Cloudflare dashboard.
+# 3. The owner, for the migrate Job only. Its DATABASE_URL overrides the one in
+#    sightline-app for that Job and nothing else.
+kubectl -n sightline create secret generic sightline-db-owner --dry-run=client -o yaml \
+  --from-literal=DATABASE_URL="postgres://sightline:<password>@postgres:5432/sightline" \
+  | kubeseal --format yaml > /tmp/owner.sealed.yaml
+
+# 4. The scanner identity, for the worker only: the IAM user named by
+#    SCANNER_PRINCIPAL_ARN, allowed sts:AssumeRole on customers' roles. The
+#    API sends connection checks to the worker rather than holding this.
+kubectl -n sightline create secret generic sightline-scanner --dry-run=client -o yaml \
+  --from-literal=AWS_ACCESS_KEY_ID=... \
+  --from-literal=AWS_SECRET_ACCESS_KEY=... \
+  | kubeseal --format yaml > /tmp/scanner.sealed.yaml
+
+# 5. The tunnel token, from the Cloudflare dashboard.
 kubectl -n sightline create secret generic sightline-tunnel --dry-run=client -o yaml \
   --from-literal=TUNNEL_TOKEN=... \
   | kubeseal --format yaml > /tmp/tunnel.sealed.yaml
 
 cat /tmp/*.sealed.yaml > deploy/k8s/prod/secrets.sealed.yaml
-rm /tmp/db.sealed.yaml /tmp/app.sealed.yaml /tmp/tunnel.sealed.yaml
+rm /tmp/db.sealed.yaml /tmp/app.sealed.yaml /tmp/owner.sealed.yaml \
+  /tmp/scanner.sealed.yaml /tmp/tunnel.sealed.yaml
 ```
 
 Then uncomment `secrets.sealed.yaml` in `prod/kustomization.yaml`.
+
+The two database roles get their passwords from `npm run db:app-role`, run
+once with the owner's `DATABASE_URL` plus `DATABASE_URL_APP` and
+`DATABASE_URL_SYSTEM` set to the URLs above. It also checks that each role has
+exactly the privileges it should.
+
+**Upgrading a cluster created with three secrets.** Nothing breaks: the two new
+secrets are optional, so until they exist every pod runs as before, and the API
+logs a warning naming each credential it holds but does not need. Create
+`sightline-db-owner` and `sightline-scanner`, then change `sightline-app`'s
+`DATABASE_URL` to the system role and move the AWS keys out of it.
 
 A sealed secret is encrypted to _this cluster's_ controller key. It is safe in a
 public repository and it is useless to anyone else — including you, on a rebuilt
@@ -247,8 +315,16 @@ kubectl -n sightline create configmap sightline-backup-key --from-file=backup-ce
 ### Restoring
 
 ```bash
-kubectl -n sightline exec deploy/api -- ls -la /backups        # pick one
-kubectl -n sightline cp api-xxxxx:/backups/sightline-....dump.enc ./restore.enc
+# Nothing long-running mounts the backups volume, so start a pod that does and
+# copy through `exec`. Not `kubectl run -i`: when its attach fails it falls back
+# to streaming logs and the file arrives twice over, which openssl reports as
+# "header too long". This copies the newest dump; swap the `ls` to pick another.
+kubectl -n sightline run backup-peek --restart=Never --image=busybox:1.36   --overrides='{"spec":{"volumes":[{"name":"b","persistentVolumeClaim":{"claimName":"backups"}}],
+    "containers":[{"name":"p","image":"busybox:1.36","command":["sleep","600"],
+    "volumeMounts":[{"name":"b","mountPath":"/b"}]}]}}'
+kubectl -n sightline wait --for=condition=Ready pod/backup-peek
+kubectl -n sightline exec backup-peek -- sh -c 'cat $(ls -t /b/*.enc | head -1)' > restore.enc
+kubectl -n sightline delete pod backup-peek
 
 openssl smime -decrypt -binary -inform DER -in restore.enc \
   -inkey backup-key.pem -out restore.dump

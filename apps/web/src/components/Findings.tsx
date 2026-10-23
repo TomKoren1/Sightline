@@ -4,10 +4,23 @@
  * Standing answers to the questions a DevOps engineer opens this tool to ask,
  * available without typing anything. Clicking any row highlights it in the
  * graph, which is the same mechanism the agent's citations use.
+ *
+ * A finding can be accepted with a reason - the website bucket that is meant
+ * to be public - and then leaves its list for a collapsed "accepted" section
+ * under it, where it can be reopened. The decision survives rescans; fixing the
+ * resource resolves it, and a finding that comes back asks again.
  */
 
 import { useState } from "react";
-import type { Findings as FindingsData, GraphNode, Summary } from "../api.js";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
+import {
+  api,
+  type FindingCategory,
+  type FindingState,
+  type Findings as FindingsData,
+  type GraphNode,
+  type Summary,
+} from "../api.js";
 import { ChangesPanel } from "./ChangesPanel.js";
 
 export interface FindingsProps {
@@ -40,12 +53,29 @@ export function Findings({ summary, findings, loading, onHighlight }: FindingsPr
     );
   }
 
+  // The summary counts every verdict; what still needs somebody is that less
+  // what somebody has already accepted.
+  const acceptedIn = (category: FindingCategory) =>
+    findings.accepted.filter((f) => f.category === category);
+  const open = (count: number, category: FindingCategory) =>
+    Math.max(0, count - acceptedIn(category).length);
+
   const tabs: { id: Tab; label: string; count?: number; tone?: string }[] = [
     { id: "overview", label: "Overview" },
-    { id: "exposed", label: "Exposed", count: summary.publicCount, tone: "text-danger" },
-    { id: "admin", label: "Admin", count: summary.adminCount, tone: "text-warn" },
-    { id: "idle", label: "Idle", count: summary.idleCount },
-    { id: "unprotected", label: "Unguarded", count: summary.unprotectedCount, tone: "text-warn" },
+    {
+      id: "exposed",
+      label: "Exposed",
+      count: open(summary.publicCount, "exposed"),
+      tone: "text-danger",
+    },
+    { id: "admin", label: "Admin", count: open(summary.adminCount, "admin"), tone: "text-warn" },
+    { id: "idle", label: "Idle", count: open(summary.idleCount, "idle") },
+    {
+      id: "unprotected",
+      label: "Unguarded",
+      count: open(summary.unprotectedCount, "unguarded"),
+      tone: "text-warn",
+    },
     { id: "changes", label: "Changes" },
   ];
 
@@ -80,10 +110,22 @@ export function Findings({ summary, findings, loading, onHighlight }: FindingsPr
         {tab === "overview" && (
           <div className="space-y-3">
             <div className="grid grid-cols-2 gap-1.5">
-              <Stat label="Exposed" value={summary.publicCount} tone="text-danger" />
-              <Stat label="Admin principals" value={summary.adminCount} tone="text-warn" />
-              <Stat label="Idle" value={summary.idleCount} />
-              <Stat label="Unguarded" value={summary.unprotectedCount} tone="text-warn" />
+              <Stat
+                label="Exposed"
+                value={open(summary.publicCount, "exposed")}
+                tone="text-danger"
+              />
+              <Stat
+                label="Admin principals"
+                value={open(summary.adminCount, "admin")}
+                tone="text-warn"
+              />
+              <Stat label="Idle" value={open(summary.idleCount, "idle")} />
+              <Stat
+                label="Unguarded"
+                value={open(summary.unprotectedCount, "unguarded")}
+                tone="text-warn"
+              />
               <Stat
                 label="Idle cost"
                 value={`$${Math.round(summary.idleCost)}/mo`}
@@ -106,6 +148,7 @@ export function Findings({ summary, findings, loading, onHighlight }: FindingsPr
         {tab === "exposed" && (
           <FindingList
             items={findings.publicResources}
+            accepted={acceptedIn("exposed")}
             empty="Nothing in this account is reachable from the internet."
             onHighlight={onHighlight}
           />
@@ -114,6 +157,7 @@ export function Findings({ summary, findings, loading, onHighlight }: FindingsPr
         {tab === "admin" && (
           <FindingList
             items={findings.adminPrincipals}
+            accepted={acceptedIn("admin")}
             empty="No role or user grants unrestricted access."
             onHighlight={onHighlight}
             extra={(item) => {
@@ -149,6 +193,7 @@ export function Findings({ summary, findings, loading, onHighlight }: FindingsPr
             </p>
             <FindingList
               items={findings.unprotected}
+              accepted={acceptedIn("unguarded")}
               empty="Every bucket has Block Public Access fully enabled."
               onHighlight={onHighlight}
               extra={(item) =>
@@ -165,6 +210,7 @@ export function Findings({ summary, findings, loading, onHighlight }: FindingsPr
         {tab === "idle" && (
           <FindingList
             items={findings.idle}
+            accepted={acceptedIn("idle")}
             empty="Nothing obviously idle."
             onHighlight={onHighlight}
             extra={(item) =>
@@ -206,38 +252,176 @@ function Row({ left, right }: { left: string; right: string }) {
   );
 }
 
+type Item = GraphNode & { reason?: string | null; finding?: FindingState | null };
+
 function FindingList({
   items,
+  accepted,
   empty,
   onHighlight,
   extra,
 }: {
-  items: (GraphNode & { reason?: string | null })[];
+  items: Item[];
+  accepted: Item[];
   empty: string;
   onHighlight: (arns: string[]) => void;
-  extra?: (item: GraphNode & { reason?: string | null }) => string | undefined;
+  extra?: (item: Item) => string | undefined;
 }) {
-  if (items.length === 0) {
-    return <p className="py-3 text-center text-[12px] text-good">{empty}</p>;
-  }
+  const [showAccepted, setShowAccepted] = useState(false);
   return (
     <div className="space-y-1.5">
-      {items.map((item) => (
-        <button
-          key={item.arn}
-          onClick={() => onHighlight([item.arn])}
-          className="block w-full rounded border border-ink-800 bg-ink-850 px-2 py-1.5 text-left transition hover:border-ink-600"
-        >
-          <div className="flex items-baseline justify-between gap-2">
-            <span className="truncate text-[12px] font-medium text-ink-100">{item.name}</span>
-            <span className="shrink-0 text-[10px] text-ink-400">{item.region ?? "global"}</span>
-          </div>
-          {extra?.(item) && <div className="text-[10px] text-ink-300">{extra(item)}</div>}
-          {item.reason && (
-            <div className="mt-0.5 text-[10px] leading-snug text-ink-400">{item.reason}</div>
+      {items.length === 0 ? (
+        <p className="py-3 text-center text-[12px] text-good">{empty}</p>
+      ) : (
+        items.map((item) => (
+          <FindingRow key={item.arn} item={item} onHighlight={onHighlight} extra={extra} />
+        ))
+      )}
+      {accepted.length > 0 && (
+        <div className="pt-1">
+          <button
+            onClick={() => setShowAccepted((v) => !v)}
+            aria-expanded={showAccepted}
+            className="text-[10px] font-semibold uppercase tracking-wider text-ink-400 hover:text-ink-300"
+          >
+            {showAccepted ? "▾" : "▸"} Accepted ({accepted.length})
+          </button>
+          {showAccepted && (
+            <div className="mt-1.5 space-y-1.5">
+              {accepted.map((item) => (
+                <FindingRow key={item.arn} item={item} onHighlight={onHighlight} />
+              ))}
+            </div>
           )}
-        </button>
-      ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/**
+ * One finding. The row itself highlights; accepting is a separate control
+ * beside it rather than inside it, because a button inside a button is invalid
+ * markup and swallows the inner click in some browsers.
+ */
+function FindingRow({
+  item,
+  onHighlight,
+  extra,
+}: {
+  item: Item;
+  onHighlight: (arns: string[]) => void;
+  extra?: (item: Item) => string | undefined;
+}) {
+  const queryClient = useQueryClient();
+  const [accepting, setAccepting] = useState(false);
+  const [reason, setReason] = useState("");
+  const finding = item.finding ?? null;
+  const isAccepted = finding?.status === "accepted";
+
+  const change = useMutation({
+    mutationFn: (body: { status: "accepted"; reason: string } | { status: "open" }) =>
+      api.setFindingStatus(finding!.id, body),
+    onSuccess: async () => {
+      setAccepting(false);
+      setReason("");
+      await queryClient.invalidateQueries({ queryKey: ["findings"] });
+    },
+  });
+
+  const detail = extra?.(item);
+  return (
+    <div
+      className={`rounded border border-ink-800 bg-ink-850 transition hover:border-ink-600 ${
+        isAccepted ? "opacity-70" : ""
+      }`}
+    >
+      <button
+        onClick={() => onHighlight([item.arn])}
+        className="block w-full px-2 pb-1 pt-1.5 text-left"
+      >
+        <div className="flex items-baseline justify-between gap-2">
+          <span className="truncate text-[12px] font-medium text-ink-100">{item.name}</span>
+          <span className="shrink-0 text-[10px] text-ink-400">{item.region ?? "global"}</span>
+        </div>
+        {detail && <div className="text-[10px] text-ink-300">{detail}</div>}
+        {item.reason && (
+          <div className="mt-0.5 text-[10px] leading-snug text-ink-400">{item.reason}</div>
+        )}
+        {isAccepted && finding.statusReason && (
+          <div className="mt-0.5 text-[10px] leading-snug text-ink-300">
+            Accepted: {finding.statusReason}
+          </div>
+        )}
+      </button>
+
+      {/* A finding no scan has recorded yet - the account was last scanned
+          before tracking existed - has nothing to accept until the next scan. */}
+      {finding && (
+        <div className="px-2 pb-1.5">
+          {accepting ? (
+            <form
+              className="space-y-1"
+              onSubmit={(e) => {
+                e.preventDefault();
+                change.mutate({ status: "accepted", reason: reason.trim() });
+              }}
+            >
+              <input
+                autoFocus
+                value={reason}
+                onChange={(e) => setReason(e.target.value)}
+                maxLength={500}
+                placeholder="Why is this acceptable?"
+                aria-label={`Reason for accepting ${item.name}`}
+                className="w-full rounded border border-ink-700 bg-ink-900 px-1.5 py-1 text-[11px] text-ink-100 placeholder:text-ink-400 focus:border-accent focus:outline-none"
+              />
+              <div className="flex gap-2 text-[10px]">
+                <button
+                  type="submit"
+                  disabled={reason.trim().length < 3 || change.isPending}
+                  className="text-accent disabled:text-ink-400"
+                >
+                  Accept risk
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setAccepting(false)}
+                  className="text-ink-400 hover:text-ink-300"
+                >
+                  Cancel
+                </button>
+              </div>
+            </form>
+          ) : (
+            <div className="flex items-center justify-between text-[10px]">
+              <span className="text-ink-400">
+                Since {new Date(finding.firstSeenAt).toLocaleDateString()}
+              </span>
+              {isAccepted ? (
+                <button
+                  onClick={() => change.mutate({ status: "open" })}
+                  disabled={change.isPending}
+                  className="text-ink-400 hover:text-ink-100"
+                >
+                  Reopen
+                </button>
+              ) : (
+                <button
+                  onClick={() => setAccepting(true)}
+                  aria-label={`Accept the risk of ${item.name}`}
+                  className="text-ink-400 hover:text-ink-100"
+                >
+                  Accept…
+                </button>
+              )}
+            </div>
+          )}
+          {change.isError && (
+            <div className="mt-0.5 text-[10px] text-danger">{change.error.message}</div>
+          )}
+        </div>
+      )}
     </div>
   );
 }

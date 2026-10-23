@@ -19,7 +19,14 @@ import type {
   ScanUnit,
 } from "@sightline/shared";
 
-import { db, fingerprint, withTenant, type Database } from "./postgres.js";
+import { db, fingerprint, system, withTenant, type Database } from "./postgres.js";
+import {
+  documentRefs,
+  extractDocuments,
+  restoreDocuments,
+  selectDocuments,
+  upsertDocuments,
+} from "./policyDocuments.js";
 
 /**
  * Anything that can run a write: the pool, or a transaction on it.
@@ -31,7 +38,7 @@ import { db, fingerprint, withTenant, type Database } from "./postgres.js";
  */
 type Writer = Database | Parameters<Parameters<Database["transaction"]>[0]>[0];
 import { relationshipSnapshots, resourceSnapshots, scanRuns, scanUnits } from "./schema.js";
-import type { ScanId, TenantId } from "../tenancy/ids.js";
+import type { ScanId } from "../tenancy/ids.js";
 import type { Scope } from "../tenancy/scope.js";
 
 /**
@@ -87,12 +94,12 @@ export async function failScanRun(scope: Scope, scanId: string, error: string): 
 }
 
 /**
- * Make this scan's graph projection the current one.
+ * Make this scan the one its connection reads.
  *
- * The flip in write-then-flip, and deliberately one statement: the projection
- * has already committed into its own Neo4j scope by the time this runs, so
- * there is no window in which a reader sees a half-built graph, and a
- * projection that failed simply never gets here.
+ * The flip in write-then-flip, and deliberately one statement: the scan's
+ * snapshots have already committed by the time this runs, so there is no
+ * window in which a reader sees a half-written graph, and a save that failed
+ * simply never gets here.
  */
 export async function markProjected(scope: Scope, scanId: string): Promise<void> {
   return withTenant(scope.tenantId, async () => {
@@ -101,32 +108,51 @@ export async function markProjected(scope: Scope, scanId: string): Promise<void>
 }
 
 /**
- * Every graph scope this tenant still reads, across all of its accounts.
+ * Delete this account's finished scans beyond the newest `keep`.
  *
- * The sweep matches on `tenantId`, so what it keeps has to be every
- * connection's current graph. Assembling that list at the call site is what
- * went wrong: a scan passed its own scan id and the previous one, and the sweep
- * deleted the graphs of every other account the tenant had connected - while
- * Postgres went on calling them projected, so those accounts rendered as an
- * empty graph rather than an error.
- *
- * Two per connection, so a request that resolved a scan id just before a flip
- * still finds its graph. Derived here rather than by the caller, so a
- * connection added later is covered without anybody remembering.
+ * Snapshots, units and relationships go with them by cascade; conversations
+ * and jobs keep their rows with the scan id cleared. The two most recent
+ * projected scans are never deleted whatever their age, because a reader may
+ * be on either, and a running scan is never touched.
  */
-export async function projectedScanIdsToKeep(tenantId: TenantId): Promise<string[]> {
-  return withTenant(tenantId, async () => {
+export async function pruneScanHistory(scope: Scope, keep: number): Promise<number> {
+  return withTenant(scope.tenantId, async () => {
     const { rows } = await db.execute<{ id: string }>(sql`
-      SELECT id FROM (
-        SELECT
-          id,
-          ROW_NUMBER() OVER (PARTITION BY connection_id ORDER BY projected_at DESC) AS recency
-        FROM scan_runs
-        WHERE tenant_id = ${tenantId} AND projected_at IS NOT NULL
-      ) ranked
-      WHERE recency <= 2
+      DELETE FROM scan_runs
+      WHERE tenant_id = ${scope.tenantId}
+        AND connection_id = ${scope.connectionId}
+        AND status <> 'running'
+        AND id NOT IN (
+          SELECT id FROM scan_runs
+          WHERE tenant_id = ${scope.tenantId} AND connection_id = ${scope.connectionId}
+          ORDER BY started_at DESC
+          LIMIT ${keep}
+        )
+        AND id NOT IN (
+          SELECT id FROM scan_runs
+          WHERE tenant_id = ${scope.tenantId} AND connection_id = ${scope.connectionId}
+            AND projected_at IS NOT NULL
+          ORDER BY projected_at DESC
+          LIMIT 2
+        )
+      RETURNING id
     `);
-    return rows.map((r) => r.id);
+    if (rows.length > 0) {
+      // Documents no retained scan can refer to: every save marks the ones it
+      // uses, so anything last used before the oldest remaining scan began is
+      // referenced by nothing. Across the tenant, because documents are shared
+      // by all of its accounts. An hour's margin, because the two times come
+      // from different clocks - `started_at` the app's, `last_used_at` the
+      // database's - and an app clock running ahead would otherwise delete a
+      // document a retained scan still refers to. Late deletion costs nothing.
+      await db.execute(sql`
+        DELETE FROM policy_documents
+         WHERE tenant_id = ${scope.tenantId}
+           AND last_used_at < (SELECT min(started_at) FROM scan_runs
+                                WHERE tenant_id = ${scope.tenantId}) - interval '1 hour'
+      `);
+    }
+    return rows.length;
   });
 }
 
@@ -267,10 +293,14 @@ export async function saveScanResult(
 
       for (let i = 0; i < params.resources.length; i += BATCH_SIZE) {
         const batch = params.resources.slice(i, i + BATCH_SIZE);
+        // Documents first, so no snapshot ever refers to one not yet stored.
+        const extracted = batch.map((r) => extractDocuments(r));
+        const documents = new Map(extracted.flatMap((e) => [...e.documents]));
+        if (documents.size > 0) await tx.execute(upsertDocuments(scope.tenantId, documents));
         await tx
           .insert(resourceSnapshots)
           .values(
-            batch.map((r) => ({
+            batch.map((r, j) => ({
               tenantId: scope.tenantId,
               scanId,
               arn: r.arn,
@@ -279,8 +309,10 @@ export async function saveScanResult(
               region: r.region,
               accountId: r.accountId,
               tags: r.tags,
-              properties: r.properties,
+              properties: extracted[j]!.properties,
               derived: r.derived,
+              // Of the resource as collected: a document's content, not where
+              // it is stored, is what makes two scans of a role differ.
               fingerprint: fingerprint(r),
             })),
           )
@@ -359,6 +391,35 @@ async function unitsFor(scope: Scope, scanIds: string[]): Promise<Map<string, Sc
   return map;
 }
 
+/**
+ * Refresh the planner's statistics on the snapshot tables after a large write.
+ *
+ * A scan of tens of thousands of resources arrives faster than autovacuum
+ * notices it, and until it does the planner believes the new scan holds a row
+ * or two - so it chooses nested loops that rescan the scan for every edge. The
+ * open-security-group panel took 26 seconds on a fresh 50,000-resource scan
+ * and 39 milliseconds after `ANALYZE`. Sampled, so it costs well under a
+ * second whatever the table's size.
+ *
+ * On the owner connection: `ANALYZE` is the table owner's to run, and the
+ * statistics are about the table rather than any tenant's rows - housekeeping,
+ * in `system`'s terms. Never fatal: stale statistics make a query slow, not
+ * wrong, and a scan that is already saved must not fail over it.
+ */
+export async function refreshSnapshotStatistics(): Promise<void> {
+  try {
+    await system.execute(sql`SELECT refresh_snapshot_statistics()`);
+  } catch (err) {
+    console.warn(
+      "Refreshing snapshot statistics failed; queries may plan badly until autovacuum runs:",
+      err,
+    );
+  }
+}
+
+/** A scan large enough that the planner's view of the tables is out of date. */
+export const STATISTICS_REFRESH_THRESHOLD = 5_000;
+
 export async function listScans(scope: Scope, limit = 20): Promise<ScanRun[]> {
   return withTenant(scope.tenantId, async () => {
     const rows = await db
@@ -424,8 +485,22 @@ export async function loadResources(scope: Scope, scanId: string): Promise<Resou
       .where(
         and(eq(resourceSnapshots.scanId, scanId), eq(resourceSnapshots.tenantId, scope.tenantId)),
       );
-    return rows;
+    return withDocuments(scope.tenantId, rows);
   });
+}
+
+/** Put stored policy documents back into snapshots that refer to them. */
+export async function withDocuments<T extends { properties: Resource["properties"] }>(
+  tenantId: string,
+  rows: T[],
+): Promise<T[]> {
+  const hashes = [...new Set(rows.flatMap((r) => documentRefs(r.properties)))];
+  if (hashes.length === 0) return rows;
+  const { rows: found } = await db.execute<{ hash: string; document: unknown }>(
+    selectDocuments(tenantId, hashes),
+  );
+  const documents = new Map(found.map((d) => [d.hash, d.document]));
+  return rows.map((r) => ({ ...r, properties: restoreDocuments(r.properties, documents) }));
 }
 
 export async function loadRelationships(scope: Scope, scanId: string): Promise<Relationship[]> {

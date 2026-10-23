@@ -2,9 +2,8 @@
 
 import { buildApp } from "./app.js";
 import { cfg, migrateOnBoot, scanWorkerMode } from "./config.js";
-import { assertSchemaCurrent, migrate, closePool } from "./db/postgres.js";
-import { closeDriver } from "./db/neo4j.js";
-import { assertHostedInvariants } from "./hostedMode.js";
+import { assertSchemaCurrent, connectedAsOwner, migrate, closePool } from "./db/postgres.js";
+import { apiPrivilegeWarnings, assertHostedInvariants } from "./hostedMode.js";
 import { ScanWorker } from "./jobs/worker.js";
 import { ensureLocalTenant } from "./tenancy/local.js";
 import { pruneExpiredSessions } from "./auth/session.js";
@@ -51,6 +50,12 @@ try {
     await migrate();
   } else {
     await assertSchemaCurrent();
+  }
+  for (const warning of apiPrivilegeWarnings(process.env, {
+    workerMode: scanWorkerMode(),
+    ownsSchema: !migrateOnBoot() && (await connectedAsOwner()),
+  })) {
+    log.warn(warning);
   }
   // A clone is one tenant with two connections. No-op in hosted mode, where
   // tenants arrive by signing up.
@@ -114,7 +119,6 @@ for (const signal of ["SIGINT", "SIGTERM"] as const) {
         // than the process having been asked to stop.
         await worker.stop();
         await app.close();
-        await closeDriver();
         await closePool();
         process.exit(0);
       } catch (err) {

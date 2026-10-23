@@ -198,11 +198,10 @@ export async function mayChat(scope: Scope): Promise<Decision> {
 }
 
 /**
- * Whether a scan is too big to project.
+ * Whether a scan is too big to publish as the current graph.
  *
  * Checked after collection, so it bounds the graph rather than the scan's own
- * peak memory - see the note on `MAX_RESOURCES_PER_SCAN`. What it prevents is a
- * projection that runs Neo4j out of heap and reports it as a timeout.
+ * peak memory - see the note on `MAX_RESOURCES_PER_SCAN`.
  */
 export function tooManyResources(found: number): Decision {
   const ceiling = cfg.MAX_RESOURCES_PER_SCAN;

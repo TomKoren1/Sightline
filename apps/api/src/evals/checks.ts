@@ -15,7 +15,8 @@
  * its evidence. Nothing here calls AWS, so running them is free and instant.
  */
 
-import { GROUND_TRUTH } from "@sightline/mock-aws";
+import { GROUND_TRUTH } from "@sightline/mock-aws/answer-key";
+import { hopsFrom, indexReach } from "../scan/analysers/reachIndex.js";
 import { INTERNET_ARN, type Relationship, type Resource } from "@sightline/shared";
 
 export interface CheckResult {
@@ -113,6 +114,49 @@ export const CHECKS: CheckDefinition[] = [
     },
   },
   {
+    id: "escalation-admin",
+    description: "A role that can make itself an administrator is reported as one, with the path",
+    rationale:
+      "NorthwindBuildRole holds no '*', but iam:PassRole with Lambda create and invoke lets it run code as an admin role. Reading only for '*' calls it harmless.",
+    run: ({ resources }) => {
+      const failures = Object.keys(GROUND_TRUTH.escalationAdminRoles).filter((name) => {
+        const role = resources.find((r) => r.kind === "IamRole" && r.name === name);
+        return (
+          role?.derived.adminVia !== "escalation" ||
+          !(role.derived.adminReason ?? "").includes("iam:PassRole")
+        );
+      });
+      return {
+        passed: failures.length === 0,
+        detail:
+          failures.length === 0
+            ? "escalation found and the path named"
+            : `missed or unexplained: ${failures.join(", ")}`,
+      };
+    },
+  },
+  {
+    id: "notaction-admin",
+    description: "NotAction that leaves IAM writable is admin; NotAction excluding IAM is not",
+    rationale:
+      "'Everything except billing' includes iam:*, so it is administrator access. PowerUserAccess's shape excludes IAM and must not be flagged.",
+    run: ({ resources }) => {
+      const failures: string[] = GROUND_TRUTH.notActionAdminRoles.filter((name) => {
+        const role = resources.find((r) => r.kind === "IamRole" && r.name === name);
+        return (
+          !role?.derived.isAdmin ||
+          !(role.derived.adminReason ?? "").includes("every action except")
+        );
+      });
+      const powerUser = resources.find((r) => r.name === "NorthwindPowerUserRole");
+      if (powerUser?.derived.isAdmin) failures.push("NorthwindPowerUserRole (wrongly flagged)");
+      return {
+        passed: failures.length === 0,
+        detail: failures.length === 0 ? "NotAction read correctly both ways" : failures.join(", "),
+      };
+    },
+  },
+  {
     id: "admin-users",
     description: "Every effectively-administrator IAM user is found",
     rationale:
@@ -161,6 +205,27 @@ export const CHECKS: CheckDefinition[] = [
           failures.length === 0
             ? `${GROUND_TRUTH.inlineAdminUsers.join(", ")} correctly attributed to an inline policy`
             : `not attributed correctly: ${failures.join(", ")}`,
+      };
+    },
+  },
+  {
+    id: "group-admin-user",
+    description: "Admin held through an IAM group is found and attributed to the group",
+    rationale:
+      "A user with no policies of its own can be an administrator through its groups. Groups were not collected, so such a user read as unprivileged.",
+    run: ({ resources }) => {
+      const failures = Object.entries(GROUND_TRUTH.groupAdminUsers).filter(([name, group]) => {
+        const user = resources.find((r) => r.kind === "IamUser" && r.name === name);
+        return (
+          !user?.derived.isAdmin || !(user.derived.adminReason ?? "").includes(`group "${group}"`)
+        );
+      });
+      return {
+        passed: failures.length === 0,
+        detail:
+          failures.length === 0
+            ? "group-granted admin found and attributed to its group"
+            : `not found or not attributed: ${failures.map(([n]) => n).join(", ")}`,
       };
     },
   },
@@ -220,9 +285,8 @@ export const CHECKS: CheckDefinition[] = [
     rationale: "Reporting only the obvious route would leave the bastion open and unmentioned.",
     run: ({ resources, relationships }) => {
       const db = resources.find((r) => r.name === "northwind-prod-db");
-      const reachers = relationships
-        .filter((r) => r.type === "CAN_REACH" && r.to === db?.arn)
-        .map((r) => resources.find((x) => x.arn === r.from)?.name)
+      const reachers = (db ? indexReach(relationships).prev(db.arn) : [])
+        .map((arn) => resources.find((x) => x.arn === arn)?.name)
         .filter(Boolean) as string[];
       const missing = ["prod-bastion", "prod-app-1"].filter((n) => !reachers.includes(n));
       return {
@@ -248,7 +312,7 @@ export const CHECKS: CheckDefinition[] = [
           continue;
         }
         if (db.derived.isPublic) failures.push(`${name} wrongly reported exposed`);
-        const paths = relationships.filter((r) => r.type === "CAN_REACH" && r.to === db.arn);
+        const paths = indexReach(relationships).prev(db.arn);
         if (paths.length > 0) failures.push(`${name} has ${paths.length} inbound paths`);
       }
       return {
@@ -270,14 +334,163 @@ export const CHECKS: CheckDefinition[] = [
         ...new Set(
           relationships
             .filter((r) => r.type === "CAN_REACH" && r.from === INTERNET_ARN)
-            .map((r) => resources.find((x) => x.arn === r.to)?.name)
-            .filter(Boolean) as string[],
+            .map((r) => resources.find((x) => x.arn === r.to))
+            // Hosts only: entry points are checked in their own right below.
+            .filter((x) => x?.kind === "Ec2Instance")
+            .map((x) => x!.name),
         ),
       ].sort();
-      const expected = ["prod-bastion", "prod-web-1", "prod-web-2", "staging-rdp-host"];
+      const expected = [
+        "prod-bastion",
+        "prod-web-1",
+        "prod-web-2",
+        "staging-rdp-host",
+        "status-page",
+      ];
       return {
         passed: same(direct, expected),
         detail: `directly exposed: ${direct.join(", ") || "none"}`,
+      };
+    },
+  },
+  {
+    id: "entry-points",
+    description:
+      "Internet-facing load balancers, CloudFront and public APIs are entry points; an internal load balancer is not",
+    rationale:
+      "In a real estate the internet reaches a load balancer, not an instance. prod-internal-alb's group is open to 0.0.0.0/0, and it is still unreachable because it is internal.",
+    run: ({ resources }) => {
+      const failures: string[] = [];
+      for (const name of GROUND_TRUTH.entryPoints) {
+        if (!resources.find((r) => r.name === name)?.derived.isPublic)
+          failures.push(`${name} not reachable`);
+      }
+      for (const name of GROUND_TRUTH.internalEntryPoints) {
+        if (resources.find((r) => r.name === name)?.derived.isPublic)
+          failures.push(`${name} wrongly reachable`);
+      }
+      return {
+        passed: failures.length === 0,
+        detail:
+          failures.length === 0 ? "entry points read correctly both ways" : failures.join("; "),
+      };
+    },
+  },
+  {
+    id: "routes-through-entry-points",
+    description: "Paths through a load balancer and an API reach what they front",
+    rationale:
+      "prod-alb forwards to prod-app-1 through its target group, and northwind-orders-api invokes order-processor. Both lead on to the production database.",
+    run: ({ resources, relationships }) => {
+      const reach = indexReach(relationships);
+      const name = (arn: string) => resources.find((r) => r.arn === arn)?.name;
+      const failures = GROUND_TRUTH.entryRoutes.filter(([entry, backend]) => {
+        const backendArn = resources.find((r) => r.name === backend)?.arn;
+        return !backendArn || !reach.prev(backendArn).map(name).includes(entry);
+      });
+      return {
+        passed: failures.length === 0,
+        detail:
+          failures.length === 0
+            ? GROUND_TRUTH.entryRoutes.map(([a, b]) => `${a} -> ${b}`).join(", ")
+            : `missing: ${failures.map(([a, b]) => `${a} -> ${b}`).join(", ")}`,
+      };
+    },
+  },
+  {
+    id: "nacl-blocks",
+    description:
+      "A host whose open security group is overruled by its subnet's network ACL is not exposed",
+    rationale:
+      "staging-ssh-host has SSH open to 0.0.0.0/0 and sits in a public subnet, but the subnet's ACL denies port 22. Reading security groups alone calls it exposed.",
+    run: ({ resources }) => {
+      const wrong = GROUND_TRUTH.naclBlockedHosts.filter(
+        (name) => resources.find((r) => r.name === name)?.derived.isPublic,
+      );
+      return {
+        passed: wrong.length === 0,
+        detail: wrong.length === 0 ? "the ACL is honoured" : `wrongly exposed: ${wrong.join(", ")}`,
+      };
+    },
+  },
+  {
+    id: "public-resource-policies",
+    description:
+      "Queues and secrets anyone can use are public; SNS's owner-conditioned default is not",
+    rationale:
+      'A resource policy with Principal * and no narrowing condition is public, whatever the network says. SNS\'s default policy grants {"AWS": "*"} and is safe, because it is conditioned on the topic\'s owner.',
+    run: ({ resources }) => {
+      const failures: string[] = [];
+      for (const name of GROUND_TRUTH.publicPolicyResources) {
+        if (!resources.find((r) => r.name === name)?.derived.isPublic)
+          failures.push(`${name} missed`);
+      }
+      for (const name of GROUND_TRUTH.privatePolicyResources) {
+        if (resources.find((r) => r.name === name)?.derived.isPublic)
+          failures.push(`${name} wrongly public`);
+      }
+      return {
+        passed: failures.length === 0,
+        detail:
+          failures.length === 0
+            ? "resource policies read correctly both ways"
+            : failures.join("; "),
+      };
+    },
+  },
+  {
+    id: "public-cluster-endpoints",
+    description: "A Kubernetes API endpoint open to 0.0.0.0/0 is reported as reachable",
+    rationale: "The cluster's API is the door to every workload in it.",
+    run: ({ resources }) => {
+      const missed = GROUND_TRUTH.publicClusterEndpoints.filter(
+        (name) => !resources.find((r) => r.name === name)?.derived.isPublic,
+      );
+      return {
+        passed: missed.length === 0,
+        detail: missed.length === 0 ? "found" : `missed: ${missed.join(", ")}`,
+      };
+    },
+  },
+  {
+    id: "admin-containers",
+    description: "Containers running as an administrator are linked to the role",
+    rationale:
+      "checkout's task role is LegacyDeployRole, which grants *:* inline. 'What uses this admin role' has to include containers, not only instances and functions.",
+    run: ({ resources, relationships }) => {
+      const failures = Object.entries(GROUND_TRUTH.adminContainers).filter(([svc, role]) => {
+        const from = resources.find((r) => r.kind === "EcsService" && r.name === svc)?.arn;
+        const to = resources.find((r) => r.kind === "IamRole" && r.name === role);
+        return (
+          !from ||
+          !to?.derived.isAdmin ||
+          !relationships.some((r) => r.type === "EXECUTES_AS" && r.from === from && r.to === to.arn)
+        );
+      });
+      return {
+        passed: failures.length === 0,
+        detail:
+          failures.length === 0 ? "linked" : `not linked: ${failures.map(([s]) => s).join(", ")}`,
+      };
+    },
+  },
+  {
+    id: "dns-names-entry-points",
+    description: "The customer's domain is joined to the load balancer and CDN it names",
+    rationale:
+      "'What is app.northwind.example?' is answered by following the record, not guessing.",
+    run: ({ resources, relationships }) => {
+      const name = (arn: string) => resources.find((r) => r.arn === arn)?.name;
+      const failures = GROUND_TRUTH.dnsTargets.filter(
+        ([zone, target]) =>
+          !relationships.some(
+            (r) => r.type === "POINTS_TO" && name(r.from) === zone && name(r.to) === target,
+          ),
+      );
+      return {
+        passed: failures.length === 0,
+        detail:
+          failures.length === 0 ? "joined" : `missing: ${failures.map(([, t]) => t).join(", ")}`,
       };
     },
   },
@@ -292,6 +505,90 @@ export const CHECKS: CheckDefinition[] = [
       return {
         passed: same(found, expected),
         detail: `idle: ${found.join(", ") || "none"} (expected ${expected.join(", ")})`,
+      };
+    },
+  },
+  {
+    id: "private-network-paths",
+    description: "Paths across VPCs are found where routes carry them, and only there",
+    rationale:
+      "A rule admitting 10.1.0.0/16 is a path only if that range can route here and back: over a peering routed both ways, or a transit gateway whose own table carries it. A peering routed one way looks connected in the console and carries nothing.",
+    run: ({ resources, relationships }) => {
+      const index = indexReach(relationships);
+      const arn = (name: string) => resources.find((r) => r.name === name)?.arn;
+      const reaches = (from: string, to: string) => {
+        const [a, b] = [arn(from), arn(to)];
+        return Boolean(a && b && hopsFrom(index, a).has(b));
+      };
+      const failures = [
+        ...GROUND_TRUTH.privateNetworkPaths
+          .filter(([from, to]) => !reaches(from, to))
+          .map(([from, to]) => `${from} -> ${to} missed`),
+        ...GROUND_TRUTH.unroutedPaths
+          .filter(([from, to]) => reaches(from, to))
+          .map(([from, to]) => `${from} -> ${to} reported, with no route to carry it`),
+      ];
+      return {
+        passed: failures.length === 0,
+        detail:
+          failures.length === 0
+            ? `${GROUND_TRUTH.privateNetworkPaths.length} paths found, ${GROUND_TRUTH.unroutedPaths.length} unrouted ones refused`
+            : failures.join("; "),
+      };
+    },
+  },
+  {
+    id: "main-route-table",
+    description: "A subnet with no route table of its own is judged by its VPC's main one",
+    rationale:
+      "AWS applies the main route table silently. Reading only explicit associations calls a subnet private while the internet reaches it.",
+    run: ({ resources, relationships }) => {
+      const wrong = GROUND_TRUTH.publicByMainRouteTable.filter((name) => {
+        const host = resources.find((r) => r.name === name);
+        const subnetArn = relationships.find(
+          (rel) => rel.from === host?.arn && rel.type === "IN_SUBNET",
+        )?.to;
+        const subnet = resources.find((r) => r.arn === subnetArn);
+        return !(
+          subnet?.derived.isPublic &&
+          (subnet.derived.publicReason ?? "").includes("main route table")
+        );
+      });
+      return {
+        passed: wrong.length === 0,
+        detail:
+          wrong.length === 0 ? "the main table decides" : `judged private: ${wrong.join(", ")}`,
+      };
+    },
+  },
+  {
+    id: "pod-roles",
+    description: "Roles a cluster's pods can assume are found, with which pods",
+    rationale:
+      "IRSA lives in the role's trust policy, not in the cluster, so it is missed by anything reading EKS alone. A trust policy that checks the audience but not the service account lets every pod assume the role.",
+    run: ({ resources, relationships }) => {
+      const name = (arn: string) => resources.find((r) => r.arn === arn)?.name;
+      const found = relationships
+        .filter((r) => r.type === "CAN_ASSUME")
+        .map((r) => [
+          name(r.from),
+          name(r.to),
+          ((r.properties?.["serviceAccounts"] ?? []) as string[]).join(","),
+        ]);
+      const missing = GROUND_TRUTH.podRoles.filter(
+        (want) => !found.some((f) => f.join("|") === want.join("|")),
+      );
+      const ssh = GROUND_TRUTH.sshOpenNodeGroups.filter(
+        (n) => resources.find((r) => r.name === n)?.properties["sshOpenToWorld"] !== true,
+      );
+      const failures = [
+        ...missing.map((m) => `${m.join(" -> ")} missed`),
+        ...ssh.map((n) => `${n} not flagged for SSH from anywhere`),
+      ];
+      return {
+        passed: failures.length === 0,
+        detail:
+          failures.length === 0 ? `${found.length} pod role grants found` : failures.join("; "),
       };
     },
   },

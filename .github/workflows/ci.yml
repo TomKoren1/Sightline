@@ -63,7 +63,7 @@ jobs:
   integration:
     name: End-to-end scan against the mock account
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 25
     steps:
       - uses: actions/checkout@v4
 
@@ -74,7 +74,7 @@ jobs:
 
       - run: npm ci
 
-      - name: Start Postgres, Neo4j and the mock AWS control plane
+      - name: Start Postgres and the mock AWS control plane
         run: |
           cp .env.example .env
           docker compose up -d
@@ -136,9 +136,74 @@ jobs:
             exit 1
           fi
 
+      - name: Large-account load test (50,000 resources)
+        # The demo estate multiplied to a large account and put through
+        # analysis, the snapshot write, findings sync and every dashboard and
+        # agent query, against time budgets. Last, because it is the slowest
+        # step and leaves nothing behind for the others to trip over.
+        env:
+          LOAD_TEST: "1"
+          # The scan copied into two more accounts, so queries filter tables
+          # three times its size. The million-resource run is nightly.
+          LOAD_ACCOUNTS: "3"
+        run: npx vitest run apps/api/src/load/largeAccount.test.ts
+
       - name: Service logs on failure
         if: failure()
         run: docker compose logs --tail 100
+
+  # The hosted product, driven through a real browser the way a customer drives
+  # it: sign in, scan, read the findings, ask, connect. GitHub and Anthropic are
+  # stood in for on loopback (`e2e/stubs.ts`); everything between them is the
+  # real code, with the API and the worker as separate processes.
+  browser:
+    name: Sign in, scan and ask, in a browser
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      - run: npm ci
+
+      - name: Start Postgres and the mock AWS control plane
+        run: |
+          cp .env.example .env
+          docker compose up -d
+
+      - name: Install Chromium
+        # While the services start.
+        run: npx playwright install --with-deps chromium
+
+      - name: Wait for services to be healthy
+        run: |
+          for i in $(seq 1 60); do
+            unhealthy=$(docker compose ps --format json \
+              | jq -r 'select(.Health != "healthy" and .Health != "") | .Service' || true)
+            if [ -z "$unhealthy" ]; then echo "all services healthy"; exit 0; fi
+            echo "waiting for: $unhealthy"
+            sleep 3
+          done
+          docker compose ps
+          exit 1
+
+      - name: Seed the mock AWS account
+        run: npm run seed
+
+      - name: The journey
+        run: npm run e2e
+
+      - name: Traces and screenshots on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: browser-suite
+          path: test-results/
+          retention-days: 7
 
   # The README offers a second way to run the project. A documented path that CI
   # does not exercise is worse than no path at all, because it is a claim nobody

@@ -22,7 +22,6 @@ import pino from "pino";
 
 import { cfg, scanWorkerMode } from "./config.js";
 import { assertSchemaCurrent, closePool } from "./db/postgres.js";
-import { closeDriver } from "./db/neo4j.js";
 import { assertHostedInvariants } from "./hostedMode.js";
 import { ScanWorker } from "./jobs/worker.js";
 import { loggerOptions } from "./observability/logging.js";
@@ -89,7 +88,6 @@ for (const signal of ["SIGINT", "SIGTERM"] as const) {
     void (async () => {
       try {
         await worker.stop();
-        await closeDriver();
         await closePool();
         process.exit(0);
       } catch (err) {

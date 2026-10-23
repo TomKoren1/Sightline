@@ -5,7 +5,8 @@
   "type": "module",
   "main": "./src/index.ts",
   "exports": {
-    ".": "./src/index.ts"
+    ".": "./src/index.ts",
+    "./answer-key": "./src/answerKey.ts"
   },
   "scripts": {
     "seed": "tsx src/cli.ts",
@@ -13,11 +14,24 @@
     "drift": "tsx src/driftCli.ts"
   },
   "dependencies": {
+    "@aws-sdk/client-api-gateway": "^3.1156.0",
+    "@aws-sdk/client-apigatewayv2": "^3.1156.0",
+    "@aws-sdk/client-auto-scaling": "^3.1156.0",
+    "@aws-sdk/client-cloudfront": "^3.1156.0",
+    "@aws-sdk/client-dynamodb": "^3.1156.0",
     "@aws-sdk/client-ec2": "^3.716.0",
+    "@aws-sdk/client-ecs": "^3.1156.0",
+    "@aws-sdk/client-eks": "^3.1156.0",
+    "@aws-sdk/client-elastic-load-balancing-v2": "^3.1156.0",
     "@aws-sdk/client-iam": "^3.716.0",
+    "@aws-sdk/client-kms": "^3.1156.0",
     "@aws-sdk/client-lambda": "^3.716.0",
     "@aws-sdk/client-rds": "^3.716.0",
+    "@aws-sdk/client-route-53": "^3.1156.0",
     "@aws-sdk/client-s3": "^3.716.0",
+    "@aws-sdk/client-secrets-manager": "^3.1156.0",
+    "@aws-sdk/client-sns": "^3.1156.0",
+    "@aws-sdk/client-sqs": "^3.1156.0",
     "@aws-sdk/client-sts": "^3.716.0",
     "@sightline/shared": "*",
     "dotenv": "^16.4.7"

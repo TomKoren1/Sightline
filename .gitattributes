@@ -1,0 +1,4 @@
+# LF everywhere, whatever the platform's git defaults to. Windows checkouts with
+# core.autocrlf=true got CRLF, which broke Prettier's check and every test that
+# reads a YAML template or the Dockerfile by line.
+* text=auto eol=lf

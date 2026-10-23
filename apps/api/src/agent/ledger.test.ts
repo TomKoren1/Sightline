@@ -19,7 +19,7 @@ import type { LanguageModelV4StreamPart, LanguageModelV4Usage } from "@ai-sdk/pr
 import type { AgentEvent } from "@sightline/shared";
 
 import { ask } from "./agent.js";
-import * as queries from "../db/queries.js";
+import * as queries from "../db/graph.js";
 import * as repository from "../db/repository.js";
 import * as tools from "./tools.js";
 import { asConnectionId, asScanId, asTenantId } from "../tenancy/ids.js";
@@ -211,12 +211,12 @@ describe("every ARN in an answer is checked against what the tools returned", ()
   });
 
   it("hands a tool failure back to the model instead of ending the turn", async () => {
-    const spy = vi.spyOn(tools, "runTool").mockRejectedValue(new Error("neo4j is down"));
+    const spy = vi.spyOn(tools, "runTool").mockRejectedValue(new Error("the database is down"));
     const restoreContext = stubPromptContext();
     try {
       const { message } = await askWith("I could not look that up.");
       expect(message.content).toContain("could not look that up");
-      expect(message.toolCalls![0]!.error).toBe("neo4j is down");
+      expect(message.toolCalls![0]!.error).toBe("the database is down");
       expect(message.toolCalls![0]!.resultCount).toBe(0);
     } finally {
       spy.mockRestore();

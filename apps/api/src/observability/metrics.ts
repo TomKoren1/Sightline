@@ -108,16 +108,9 @@ export const scanJobsReclaimed = new Counter({
 
 export const scanDuration = new Histogram({
   name: "sightline_scan_duration_seconds",
-  help: "Wall-clock time for a whole scan, collection through projection.",
+  help: "Wall-clock time for a whole scan, collection through persistence.",
   labelNames: ["outcome"],
   buckets: [1, 5, 15, 30, 60, 120, 300, 600, 1800],
-  registers: [registry],
-});
-
-export const projectionDuration = new Histogram({
-  name: "sightline_projection_duration_seconds",
-  help: "Time to project one scan's resources into the graph.",
-  buckets: [0.1, 0.5, 2, 5, 10, 30, 120],
   registers: [registry],
 });
 
@@ -157,22 +150,6 @@ export const awsThrottles = new Counter({
   name: "sightline_aws_throttles_total",
   help: "Throttling responses from AWS, by service.",
   labelNames: ["service"],
-  registers: [registry],
-});
-
-// --- the two stores agreeing with each other --------------------------------
-
-/**
- * Connections whose graph does not match what Postgres recorded.
- *
- * The signal that was missing when a sweep deleted other accounts' graphs while
- * `scan_runs.projected_at` went on claiming they were there. One number rather
- * than a series per connection: the question is "is anything wrong", and the
- * answer being a count keeps it free of tenant labels.
- */
-export const graphMismatches = new Gauge({
-  name: "sightline_graph_reconciliation_mismatches",
-  help: "Connections where the graph's node count disagrees with Postgres.",
   registers: [registry],
 });
 
@@ -246,15 +223,16 @@ export const agentTruncatedResults = new Counter({
 });
 
 /**
- * Raw-Cypher requests refused, by cause.
+ * Raw-SQL requests refused, by cause.
  *
- * `hosted` is the ADR-016 gate rather than a bad query: the model reached for
- * an escape hatch this deployment does not have, which is a prompt problem,
- * not an attack. The rest come from `cypherGuard`'s closed cause set.
+ * `hosted` is a deployment gate rather than a bad query: the model reached for
+ * an escape hatch this deployment does not offer. `execution` is a query the
+ * guard passed that Postgres then failed or timed out. The rest come from
+ * `sqlGuard`'s closed cause set.
  */
-export const agentRawCypherRefused = new Counter({
-  name: "sightline_agent_raw_cypher_refused_total",
-  help: "Raw-Cypher requests refused, by cause.",
+export const agentRawQueryRefused = new Counter({
+  name: "sightline_agent_raw_query_refused_total",
+  help: "Raw-SQL requests refused, by cause.",
   labelNames: ["reason"],
   registers: [registry],
 });

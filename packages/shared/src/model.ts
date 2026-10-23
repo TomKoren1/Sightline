@@ -5,7 +5,7 @@
  * on `Resource`, and the `CAN_REACH` relationship. "Which buckets are public?"
  * is security reasoning, not a lookup - it means combining a policy with its
  * ACLs and access block - and that reasoning happens deterministically in code
- * at projection time, never in the model.
+ * at ingest time, never in the model.
  *
  * The model selects the query, reads computed facts and explains them. That is
  * what makes its answers auditable: every claim traces to a unit-tested
@@ -22,17 +22,38 @@ export const RESOURCE_KINDS = [
   "InternetGateway",
   "NatGateway",
   "RouteTable",
+  "NetworkAcl",
+  "VpcPeeringConnection",
+  "TransitGateway",
+  "VpcEndpoint",
+  "VpcEndpointService",
+  "LoadBalancer",
+  "TargetGroup",
+  "CloudFrontDistribution",
+  "ApiGateway",
+  "HostedZone",
   "Ec2Instance",
+  "AutoScalingGroup",
+  "EcsCluster",
+  "EcsService",
+  "EksCluster",
+  "EksNodeGroup",
   "EbsVolume",
   "ElasticIp",
   "S3Bucket",
   "IamRole",
   "IamUser",
+  "IamGroup",
   "IamPolicy",
   "InstanceProfile",
   "RdsInstance",
   "DbSubnetGroup",
   "LambdaFunction",
+  "SqsQueue",
+  "SnsTopic",
+  "KmsKey",
+  "Secret",
+  "DynamoTable",
   "Internet",
 ] as const;
 
@@ -49,6 +70,32 @@ export const RELATIONSHIP_TYPES = [
   "HAS_INSTANCE_PROFILE",
   "PROVIDES_ROLE",
   "HAS_POLICY",
+  "MEMBER_OF",
+  /** Subnet -> the network ACL that filters its traffic. */
+  "HAS_NACL",
+  /** Subnet -> the route table that decides where its traffic goes, explicit or main. */
+  "USES_ROUTE_TABLE",
+  /** Peering connection -> each of the two VPCs it joins. */
+  "PEERS_WITH",
+  /** Interface endpoint -> the PrivateLink service it connects to. */
+  "CONNECTS_TO",
+  /** PrivateLink service -> the network load balancer behind it. */
+  "SERVED_BY",
+  /** Load balancer -> a target group a listener forwards to. */
+  "FORWARDS_TO",
+  /** Target group -> a registered target. */
+  "TARGETS",
+  /** CloudFront distribution -> the resource an origin points at. */
+  "HAS_ORIGIN",
+  /** API -> the backend an integration invokes. */
+  "INTEGRATES_WITH",
+  /** Hosted zone -> what one of its records resolves to. */
+  "POINTS_TO",
+  /** ECS service -> its cluster. */
+  "IN_CLUSTER",
+  /** Auto Scaling group -> an instance it launched. */
+  "MANAGES",
+  /** Cluster -> a role its pods can assume, through IRSA or Pod Identity. */
   "CAN_ASSUME",
   "EXECUTES_AS",
   /**
@@ -73,8 +120,12 @@ export interface DerivedFacts {
   isPublic?: boolean;
   publicReason?: string;
 
-  /** Grants effective `*:*`, via any combination of managed and inline policy. */
+  /**
+   * Effectively an administrator: granted everything (`direct`), or able to
+   * grant itself everything through a known escalation path (`escalation`).
+   */
   isAdmin?: boolean;
+  adminVia?: "direct" | "escalation";
   adminReason?: string;
 
   /** Provisioned and billable but showing no sign of use. */
@@ -149,7 +200,10 @@ export function isGlobalKind(kind: ResourceKind): boolean {
     kind === "Account" ||
     kind === "IamRole" ||
     kind === "IamUser" ||
+    kind === "IamGroup" ||
     kind === "IamPolicy" ||
+    kind === "CloudFrontDistribution" ||
+    kind === "HostedZone" ||
     kind === "InstanceProfile" ||
     kind === "Internet"
   );

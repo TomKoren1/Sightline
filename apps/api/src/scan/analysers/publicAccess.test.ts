@@ -235,3 +235,30 @@ describe("disabledBlockSettings", () => {
     ).toEqual([]);
   });
 });
+
+describe("wildcard principals behind a condition", () => {
+  const policy = (condition: object) =>
+    JSON.stringify({
+      Statement: [
+        {
+          Effect: "Allow",
+          Principal: "*",
+          Action: "s3:GetObject",
+          Resource: "arn:aws:s3:::b/*",
+          Condition: condition,
+        },
+      ],
+    });
+
+  it("counts a condition that admits every address as public", () => {
+    expect(
+      policyAllowsWildcardPrincipal(policy({ IpAddress: { "aws:SourceIp": "0.0.0.0/0" } })),
+    ).toBe(true);
+  });
+
+  it("still trusts a condition that scopes access to a VPC endpoint", () => {
+    expect(
+      policyAllowsWildcardPrincipal(policy({ StringEquals: { "aws:SourceVpce": "vpce-1" } })),
+    ).toBe(false);
+  });
+});

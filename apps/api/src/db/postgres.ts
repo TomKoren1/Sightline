@@ -61,6 +61,16 @@ export const appPool = new pg.Pool({
   ...poolOptions,
 });
 
+/** Whether the `system` connection could change the schema: superuser, or a table owner. */
+export async function connectedAsOwner(): Promise<boolean> {
+  const { rows } = await pool.query<{ owner: boolean }>(
+    `SELECT r.rolsuper OR EXISTS (SELECT 1 FROM pg_tables WHERE tableowner = current_user
+                                     AND schemaname = 'public') AS owner
+       FROM pg_roles r WHERE r.rolname = current_user`,
+  );
+  return rows[0]?.owner ?? false;
+}
+
 /** Whether a role separate from the owner is actually configured. */
 export const rlsRoleConfigured = (): boolean =>
   Boolean(cfg.DATABASE_URL_APP && cfg.DATABASE_URL_APP !== cfg.DATABASE_URL);
@@ -112,7 +122,7 @@ export type Database = typeof db;
  *
  * Holds one connection for the duration, set at session level: a transaction
  * per query would cost a BEGIN and COMMIT each, and one transaction per request
- * would stay open across AWS and Neo4j calls that take minutes.
+ * would stay open across AWS calls that take minutes.
  *
  * Nested calls reuse the outer connection - with a pool of ten and a scan
  * holding one for minutes, nesting that acquired would deadlock against itself.
@@ -163,6 +173,34 @@ export async function withTenant<T>(tenantId: string, fn: () => Promise<T>): Pro
     }
     client.release(!reset);
   }
+}
+
+/**
+ * Run one statement as the tenant, read-only and on a clock.
+ *
+ * For the agent's SQL escape hatch: `READ ONLY` makes any write fail inside
+ * Postgres whatever the guard missed, and the timeout bounds a query that is
+ * merely expensive. The tenant's row-level security applies as for any read.
+ */
+export async function readOnlyAsTenant<T>(
+  tenantId: string,
+  text: string,
+  values: unknown[],
+  timeoutMs: number,
+): Promise<T[]> {
+  return withTenant(tenantId, async () => {
+    const { client } = bound.getStore()!;
+    await client.query("BEGIN READ ONLY");
+    try {
+      await client.query(`SET LOCAL statement_timeout = ${Math.max(1, Math.floor(timeoutMs))}`);
+      const result = await client.query(text, values);
+      await client.query("COMMIT");
+      return result.rows as T[];
+    } catch (err) {
+      await client.query("ROLLBACK").catch(() => undefined);
+      throw err;
+    }
+  });
 }
 
 /** The tenant the current context is scoped to, if any. For diagnostics. */
@@ -259,7 +297,7 @@ export function fingerprint(
 }
 
 /** Key order must not affect the hash, so it is normalised recursively. */
-function sortKeys(value: unknown): unknown {
+export function sortKeys(value: unknown): unknown {
   if (Array.isArray(value)) return value.map(sortKeys);
   if (value && typeof value === "object") {
     return Object.fromEntries(

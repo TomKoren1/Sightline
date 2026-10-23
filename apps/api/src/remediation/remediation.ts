@@ -17,6 +17,8 @@ import type { Remediation } from "@sightline/shared";
 import { asText, formatPortRange, shellQuote } from "@sightline/shared";
 
 import { disabledBlockSettings } from "../scan/analysers/publicAccess.js";
+import { documentGrantsAdmin } from "../scan/analysers/policy.js";
+import type { GroupPolicy, PolicyDocument } from "../scan/collectors/iam.js";
 
 /** The resource shape these generators need — properties plus derived facts. */
 export interface RemediationInput {
@@ -31,6 +33,7 @@ export interface RemediationInput {
     isUnprotected?: boolean;
     unprotectedReason?: string;
     isAdmin?: boolean;
+    adminVia?: "direct" | "escalation";
     adminReason?: string;
     isIdle?: boolean;
     idleReason?: string;
@@ -174,6 +177,7 @@ function s3Remediations(input: RemediationInput): Remediation[] {
 interface PolicyRef {
   policyArn?: string;
   policyName?: string;
+  document?: PolicyDocument | null;
 }
 
 function iamRemediations(input: RemediationInput): Remediation[] {
@@ -231,8 +235,10 @@ function iamRemediations(input: RemediationInput): Remediation[] {
     });
   }
 
+  // Only the inline policies that grant admin themselves: offering to rewrite
+  // an unrelated one, with a summary saying it grants "*", fixes nothing.
   for (const policy of inline) {
-    if (!policy.policyName) continue;
+    if (!policy.policyName || !documentGrantsAdmin(policy.document ?? null).yes) continue;
     out.push({
       id: `iam-inline-${policy.policyName}`,
       addresses: "admin",
@@ -251,6 +257,53 @@ function iamRemediations(input: RemediationInput): Remediation[] {
         `  --policy-name ${shellQuote(policy.policyName)} --policy-document file://scoped.json`,
       ],
       verify: `aws iam get-${noun}-policy ${nameFlag} ${name} --policy-name ${shellQuote(policy.policyName)}`,
+    });
+  }
+
+  if (input.derived.adminVia === "escalation") {
+    out.push({
+      id: "iam-escalation",
+      addresses: "admin",
+      title: `Remove the permissions that let this ${noun} make itself an administrator`,
+      summary:
+        `${input.derived.adminReason ?? "It holds a known privilege-escalation combination."} ` +
+        "Removing any one action in the combination closes the path; scoping its Resource to " +
+        "named ARNs, or adding a permissions boundary, closes it without removing the capability.",
+      caution: `Each action in the path is usually there for a reason. ${usedByText} Narrow the Resource first; remove the action only if nothing needs it.`,
+      risk: "medium",
+      cli: [
+        `# what it has actually called recently (read-only):`,
+        `aws iam generate-service-last-accessed-details --arn ${shellQuote(input.arn)}`,
+        `# then edit the policies named above, or cap the ${noun} with a boundary:`,
+        `aws iam put-${noun}-permissions-boundary ${nameFlag} ${name} \\`,
+        `  --permissions-boundary arn:aws:iam::<account>:policy/<boundary>`,
+      ],
+      verify: `aws iam simulate-principal-policy --policy-source-arn ${shellQuote(input.arn)} --action-names iam:PassRole iam:CreatePolicyVersion`,
+    });
+  }
+
+  // Admin held through a group is fixed on the group, and fixing it there
+  // changes every member, so both routes are offered and the cost named.
+  const groupGrants = ((input.properties["groupPolicies"] ?? []) as GroupPolicy[]).filter(
+    (p) => documentGrantsAdmin(p.document).yes,
+  );
+  for (const group of new Set(groupGrants.map((p) => p.groupName))) {
+    const policies = groupGrants.filter((p) => p.groupName === group).map((p) => p.policyName);
+    out.push({
+      id: `iam-group-${group}`,
+      addresses: "admin",
+      title: `Remove this user from the group ${group}`,
+      summary:
+        `The admin grant comes from the group, through ${policies.join(", ")}. Removing the ` +
+        "membership takes it from this user alone; scoping the group's policy takes it from " +
+        "every member.",
+      caution: `Removing the membership drops every permission the group gives, not only the admin grant. ${usedByText} Editing the group's policy instead changes every other member at once — list them first.`,
+      risk: "high",
+      cli: [
+        `aws iam get-group --group-name ${shellQuote(group)} --query 'Users[].UserName'`,
+        `aws iam remove-user-from-group --group-name ${shellQuote(group)} --user-name ${name}`,
+      ],
+      verify: `aws iam list-groups-for-user --user-name ${name}`,
     });
   }
 

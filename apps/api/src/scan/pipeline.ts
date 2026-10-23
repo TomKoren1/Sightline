@@ -11,8 +11,12 @@ import { INTERNET_ARN, type Relationship, type Resource, type ScanResult } from 
 
 import { accountArn, regionArn } from "../aws/arns.js";
 import { evaluateAdmin, type PolicyRef } from "./analysers/policy.js";
+import type { AttachedPolicy, GroupPolicy } from "./collectors/iam.js";
 import { evaluateBucketPublicAccess, type AclGrant } from "./analysers/publicAccess.js";
 import { analyseIdleResources } from "./analysers/idle.js";
+import { linkEntryPoints } from "./analysers/entryPoints.js";
+import { linkIrsa } from "./analysers/irsa.js";
+import { POLICY_KINDS, resourcePolicyVerdict } from "./analysers/resourcePolicy.js";
 import { analyseReachability } from "./analysers/reachability.js";
 
 /** Synthetic nodes: the account, its regions, and the internet. */
@@ -97,6 +101,8 @@ export function annotate(
       document: unknown;
     }[];
 
+    const groupPolicies = (resource.properties["groupPolicies"] ?? []) as GroupPolicy[];
+
     const refs: PolicyRef[] = [
       ...attached.map((p) => ({
         policyName: p.policyName,
@@ -108,10 +114,22 @@ export function annotate(
         kind: "inline" as const,
         document: p.document as PolicyRef["document"],
       })),
+      ...groupPolicies.map((p) => ({
+        policyName: p.policyName,
+        kind: p.kind,
+        document: p.document,
+        viaGroup: p.groupName,
+      })),
     ];
 
-    const verdict = evaluateAdmin(refs);
+    const boundary = resource.properties["permissionsBoundary"] as AttachedPolicy | null;
+    const verdict = evaluateAdmin(refs, {
+      boundary: boundary
+        ? { policyName: boundary.policyName, kind: "managed", document: boundary.document }
+        : null,
+    });
     resource.derived.isAdmin = verdict.isAdmin;
+    if (verdict.adminVia) resource.derived.adminVia = verdict.adminVia;
     resource.derived.adminReason = verdict.reason;
   }
 
@@ -133,23 +151,44 @@ export function annotate(
     }
   }
 
+  // --- Which queues, topics, secrets and keys does anyone at all reach? -----
+  for (const resource of resources) {
+    if (!POLICY_KINDS.has(resource.kind)) continue;
+    const verdict = resourcePolicyVerdict(
+      resource.kind,
+      (resource.properties["policy"] ?? null) as string | null,
+    );
+    resource.derived.isPublic = verdict.isPublic;
+    resource.derived.publicReason = verdict.reason;
+  }
+
   // --- What is billable and doing nothing? --------------------------------
   analyseIdleResources(resources, relationships);
 
   // --- What can reach what? -----------------------------------------------
+  // Appended one at a time: spreading an analyser's output into `push` puts
+  // every edge on the stack, and a large estate overflows it.
+  const append = (more: Relationship[]) => {
+    for (const r of more) relationships.push(r);
+  };
+  append(linkEntryPoints(resources));
+  // --- Which roles can a cluster's pods assume? ----------------------------
+  append(linkIrsa(resources));
   const { edges, internetReachable } = analyseReachability(resources, relationships);
-  relationships.push(...edges);
+  append(edges);
 
   // Fold reachability back onto the resources, so a node carries its own
   // verdict and the UI does not have to re-derive it from edges.
   for (const resource of resources) {
+    // Their exposure is their policy's, decided above, not the network's.
     if (resource.kind === "S3Bucket" || resource.kind === "Internet") continue;
+    if (POLICY_KINDS.has(resource.kind)) continue;
     if (!internetReachable.has(resource.arn)) continue;
     const direct = edges.find((e) => e.from === INTERNET_ARN && e.to === resource.arn);
     resource.derived.isPublic = true;
     resource.derived.publicReason =
       (direct?.properties?.["reason"] as string | undefined) ??
-      "Reachable from the internet through a chain of security group rules";
+      "Reachable from the internet through other resources; its network paths show the route";
   }
 
   return { accountId, regions, units: [], resources, relationships };
