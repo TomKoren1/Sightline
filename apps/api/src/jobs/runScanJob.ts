@@ -25,6 +25,7 @@ import {
 } from "@sightline/shared";
 
 import { CallCounter } from "../aws/clients.js";
+import { cfg } from "../config.js";
 import { projectGraph, sweepSupersededScans } from "../db/neo4j.js";
 import {
   createScanRun,
@@ -32,6 +33,7 @@ import {
   getScan,
   markProjected,
   projectedScanIdsToKeep,
+  pruneScanHistory,
   recordScanUnit,
   saveScanResult,
   startScanUnits,
@@ -282,6 +284,7 @@ export async function runScanJob(options: RunScanJobOptions): Promise<ScanJobOut
      * account showed an empty graph instead of an error.
      */
     await sweep(scope, await projectedScanIdsToKeep(scope.tenantId));
+    await prune(scope);
 
     scanDuration.observe({ outcome: status }, (Date.now() - startedAt) / 1000);
 
@@ -338,5 +341,14 @@ async function sweep(scope: Scope, keep: string[]): Promise<void> {
     await sweepSupersededScans(scope.tenantId, keep);
   } catch {
     // Leaves superseded nodes behind; the next scan sweeps them.
+  }
+}
+
+/** Best effort, like the sweep: history left behind is pruned after the next scan. */
+async function prune(scope: Scope): Promise<void> {
+  try {
+    await pruneScanHistory(scope, cfg.SCAN_HISTORY_KEEP);
+  } catch {
+    // Retention is housekeeping; a scan that succeeded must not report failure.
   }
 }

@@ -131,6 +131,40 @@ export async function projectedScanIdsToKeep(tenantId: TenantId): Promise<string
 }
 
 /**
+ * Delete this account's finished scans beyond the newest `keep`.
+ *
+ * Snapshots, units and relationships go with them by cascade; conversations
+ * and jobs keep their rows with the scan id cleared. The two most recent
+ * projected scans are never deleted whatever their age, because a reader may
+ * be on either, and a running scan is never touched.
+ */
+export async function pruneScanHistory(scope: Scope, keep: number): Promise<number> {
+  return withTenant(scope.tenantId, async () => {
+    const { rows } = await db.execute<{ id: string }>(sql`
+      DELETE FROM scan_runs
+      WHERE tenant_id = ${scope.tenantId}
+        AND connection_id = ${scope.connectionId}
+        AND status <> 'running'
+        AND id NOT IN (
+          SELECT id FROM scan_runs
+          WHERE tenant_id = ${scope.tenantId} AND connection_id = ${scope.connectionId}
+          ORDER BY started_at DESC
+          LIMIT ${keep}
+        )
+        AND id NOT IN (
+          SELECT id FROM scan_runs
+          WHERE tenant_id = ${scope.tenantId} AND connection_id = ${scope.connectionId}
+            AND projected_at IS NOT NULL
+          ORDER BY projected_at DESC
+          LIMIT 2
+        )
+      RETURNING id
+    `);
+    return rows.length;
+  });
+}
+
+/**
  * The scan whose graph this connection currently reads, if any.
  *
  * "Latest projected", rather than a pointer kept in step by hand - one fewer

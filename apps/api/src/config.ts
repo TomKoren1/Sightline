@@ -204,6 +204,14 @@ const schema = z.object({
   MAX_RESOURCES_PER_SCAN: blankAsUnset(z.coerce.number().int().positive().default(100_000)),
 
   /**
+   * Finished scans kept per account; older ones are deleted with their
+   * snapshots. Every scan holds a full copy of the estate, so without a limit
+   * a daily scan of a large account grows the database without end. At least
+   * two, so the latest scan always has one to be diffed against.
+   */
+  SCAN_HISTORY_KEEP: blankAsUnset(z.coerce.number().int().min(2).default(30)),
+
+  /**
    * Questions one tenant may ask the agent per hour.
    *
    * Without this the Anthropic key is a free Claude proxy for anyone who signs
