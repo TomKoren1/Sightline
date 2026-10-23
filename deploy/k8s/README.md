@@ -18,6 +18,7 @@ What is where:
 | `base/networkpolicy.yaml` | default-deny ingress, then the flows that exist                 |
 | `base/backup.yaml`        | nightly `pg_dump`, encrypted to a key the cluster does not hold |
 | `prod/cloudflared.yaml`   | the tunnel — no inbound port, no static IP                      |
+| `staging/`                | the same base in `sightline-staging`, for rehearsing a release  |
 
 ## Before you deploy: this needs about 1.5 GB
 
@@ -45,6 +46,50 @@ setting `Never` would make a future move to a registry fail confusingly.
 Re-importing an image with the same tag does **not** restart the pods. Either
 bump the tag in `base/kustomization.yaml` (`images:`) or
 `kubectl -n sightline rollout restart deploy/api deploy/worker deploy/web`.
+
+## Staging
+
+`staging/` deploys the same base into `sightline-staging` on the same node, so a
+release can be rehearsed — the new image, its migrations, even a restored copy of
+prod's data — before prod runs it. It differs from prod only where it must: its
+own namespace and image tag, one replica of each (about 1 GB beside prod), no
+backups, no second copy of the dashboards, and no tunnel. Nobody else should
+reach a staging copy, so it is reached through `kubectl port-forward` on
+loopback, which hosted mode accepts over plain http.
+
+```bash
+# 1. Build the candidate under the staging tag, which prod never runs.
+docker build --target api -t sightline-api:staging .
+docker build --target web -t sightline-web:staging .
+docker save sightline-api:staging | sudo k3s ctr images import -
+docker save sightline-web:staging | sudo k3s ctr images import -
+
+# 2. Its own secrets, the same five names as prod's in the new namespace
+#    (see Secrets below). Two values differ: PUBLIC_BASE_URL is
+#    http://localhost:8081, and sign-in needs a second GitHub OAuth app whose
+#    callback is http://localhost:8081/api/auth/github/callback. The KMS key and
+#    its key pair can be prod's.
+kubectl create namespace sightline-staging
+
+# 3. Deploy, then give the database roles their passwords, as for prod.
+kubectl apply -k deploy/k8s/staging
+kubectl -n sightline-staging wait --for=condition=complete job/sightline-migrate --timeout=5m
+
+# 4. Open it: on the server, then tunnel the port to your own machine.
+kubectl -n sightline-staging port-forward svc/web 8081:80
+ssh -L 8081:localhost:8081 <server>        # from your machine; open http://localhost:8081
+```
+
+To rehearse against real data, restore prod's newest backup into staging's
+Postgres with the steps under [Restoring](#restoring), using
+`-n sightline-staging`. When the candidate is good, promote the same image
+rather than rebuilding it — `docker tag sightline-api:staging sightline-api:dev`
+(and the web image), import both, rerun prod's migrations with
+`kubectl -n sightline delete job sightline-migrate && kubectl apply -k deploy/k8s/prod`,
+then `kubectl -n sightline rollout restart deploy/api deploy/worker deploy/web`.
+
+Staging holds memory while idle, so pause it between releases with
+`kubectl -n sightline-staging scale deploy,statefulset --all --replicas=0`.
 
 ## Reaching it without a domain (testing only)
 

@@ -39,6 +39,7 @@ function manifests(): Manifest[] {
     "base/backup.yaml",
     "prod/cloudflared.yaml",
     "prod/namespace.yaml",
+    "staging/namespace.yaml",
   ];
   return files.flatMap((f) =>
     parseAllDocuments(read(f))
@@ -127,7 +128,11 @@ describe("the Kubernetes manifests", () => {
      * `secretGenerator` is not used - a guard that trips on the prose
      * describing the rule is a guard somebody deletes.
      */
-    const generators = ["base/kustomization.yaml", "prod/kustomization.yaml"].filter((f) => {
+    const generators = [
+      "base/kustomization.yaml",
+      "prod/kustomization.yaml",
+      "staging/kustomization.yaml",
+    ].filter((f) => {
       const k = parse(read(f)) as { secretGenerator?: unknown[] };
       return (k.secretGenerator?.length ?? 0) > 0;
     });
@@ -230,5 +235,45 @@ describe("the Kubernetes manifests", () => {
         "`datastores-from-app-only`, so every connection they make will time out. Add them to " +
         "the policy's values, or stop giving them the secret.",
     ).toEqual([]);
+  });
+});
+
+describe("the staging overlay", () => {
+  interface Kustomization {
+    namespace?: string;
+    images?: { name: string; newTag?: string }[];
+    patches?: { target?: { kind?: string; name?: string }; patch?: string }[];
+  }
+  const staging = () => parse(read("staging/kustomization.yaml")) as Kustomization;
+  const prod = () => parse(read("prod/kustomization.yaml")) as Kustomization;
+  const tags = (k: Kustomization) => new Map(k.images?.map((i) => [i.name, i.newTag]));
+
+  it("cannot touch prod's objects", () => {
+    // A shared namespace would share the secrets, the volume and the Services.
+    expect(staging().namespace).toBeTruthy();
+    expect(staging().namespace).not.toBe(prod().namespace);
+  });
+
+  it("runs images of its own, so importing a staging build cannot roll prod", () => {
+    // Prod takes its tags from the base; staging must override every one.
+    const base = tags(parse(read("base/kustomization.yaml")) as Kustomization);
+    const own = tags(staging());
+    for (const [image, tag] of base) {
+      expect(own.get(image), `staging runs ${image}:${tag}, which is prod's tag`).toBeTruthy();
+      expect(own.get(image)).not.toBe(tag);
+    }
+  });
+
+  it("drops what would duplicate prod's: backups, and the dashboards Grafana reads everywhere", () => {
+    const deleted = (staging().patches ?? [])
+      .filter((p) => p.patch?.includes("$patch: delete"))
+      .map((p) => `${p.target?.kind}/${p.target?.name ?? "*"}`);
+    expect(deleted).toEqual(
+      expect.arrayContaining([
+        "CronJob/postgres-backup",
+        "ConfigMap/sightline-dashboards",
+        "PodDisruptionBudget/*",
+      ]),
+    );
   });
 });
