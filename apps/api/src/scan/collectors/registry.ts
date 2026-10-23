@@ -189,8 +189,15 @@ export const COLLECTORS: Record<ScannableService, CollectorPlugin> = {
   },
   eks: {
     scope: "regional",
-    kinds: ["EksCluster"],
-    permissions: ["eks:ListClusters", "eks:DescribeCluster"],
+    kinds: ["EksCluster", "EksNodeGroup"],
+    permissions: [
+      "eks:ListClusters",
+      "eks:DescribeCluster",
+      "eks:ListNodegroups",
+      "eks:DescribeNodegroup",
+      "eks:ListPodIdentityAssociations",
+      "eks:DescribePodIdentityAssociation",
+    ],
     collect: collectEks,
   },
   route53: {

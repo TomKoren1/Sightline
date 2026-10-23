@@ -32,6 +32,7 @@ export const KIND_STYLES: Record<string, KindStyle> = {
   EcsCluster: { label: "ECS cluster", color: "#b98a4a", group: "compute" },
   EcsService: { label: "ECS service", color: "#d1974f", group: "compute" },
   EksCluster: { label: "EKS cluster", color: "#c2873f", group: "compute" },
+  EksNodeGroup: { label: "EKS node group", color: "#b67f3b", group: "compute" },
   SqsQueue: { label: "SQS queue", color: "#5fa88f", group: "data" },
   SnsTopic: { label: "SNS topic", color: "#56a083", group: "data" },
   KmsKey: { label: "KMS key", color: "#8a7fc0", group: "identity" },

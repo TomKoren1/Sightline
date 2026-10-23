@@ -37,6 +37,7 @@ export const RESOURCE_KINDS = [
   "EcsCluster",
   "EcsService",
   "EksCluster",
+  "EksNodeGroup",
   "EbsVolume",
   "ElasticIp",
   "S3Bucket",
@@ -94,6 +95,7 @@ export const RELATIONSHIP_TYPES = [
   "IN_CLUSTER",
   /** Auto Scaling group -> an instance it launched. */
   "MANAGES",
+  /** Cluster -> a role its pods can assume, through IRSA or Pod Identity. */
   "CAN_ASSUME",
   "EXECUTES_AS",
   /**

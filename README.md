@@ -154,7 +154,7 @@ fail for leaking. See [SECURITY.md](SECURITY.md).
 
 ### How the answers are checked
 
-Two eval tiers that fail for different reasons: **twenty-seven ground-truth checks**
+Two eval tiers that fail for different reasons: **twenty-eight ground-truth checks**
 against the hand-written answer key, needing no model and no API key, running in CI
 on every commit; and **twenty-one cases** against the live agent, scored on the
 resources each answer cites, with traps that a tool reading flags rather than

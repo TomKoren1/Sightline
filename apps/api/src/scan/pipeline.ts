@@ -15,6 +15,7 @@ import type { AttachedPolicy, GroupPolicy } from "./collectors/iam.js";
 import { evaluateBucketPublicAccess, type AclGrant } from "./analysers/publicAccess.js";
 import { analyseIdleResources } from "./analysers/idle.js";
 import { linkEntryPoints } from "./analysers/entryPoints.js";
+import { linkIrsa } from "./analysers/irsa.js";
 import { POLICY_KINDS, resourcePolicyVerdict } from "./analysers/resourcePolicy.js";
 import { analyseReachability } from "./analysers/reachability.js";
 
@@ -166,6 +167,8 @@ export function annotate(
 
   // --- What can reach what? -----------------------------------------------
   relationships.push(...linkEntryPoints(resources));
+  // --- Which roles can a cluster's pods assume? ----------------------------
+  relationships.push(...linkIrsa(resources));
   const { edges, internetReachable } = analyseReachability(resources, relationships);
   relationships.push(...edges);
 

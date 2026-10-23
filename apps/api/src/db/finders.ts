@@ -86,6 +86,12 @@ const FINDERS = {
           FROM admins a
           JOIN ${e} ex ON ex.rel_type = 'EXECUTES_AS' AND ex.to_arn = a.arn
           JOIN ${r} f ON f.arn = ex.from_arn
+        UNION
+        -- A cluster whose pods can assume it through IRSA or Pod Identity.
+        SELECT a.arn, c.arn, c.name, c.kind
+          FROM admins a
+          JOIN ${e} ca ON ca.rel_type = 'CAN_ASSUME' AND ca.to_arn = a.arn
+          JOIN ${r} c ON c.arn = ca.from_arn AND c.kind = 'EksCluster'
       )
       SELECT a.arn, a.kind, a.name, NULL::text AS region,
              a.derived->>'adminReason' AS reason,

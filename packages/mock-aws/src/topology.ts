@@ -54,6 +54,7 @@ export const GROUND_TRUTH = {
     "UnusedAdminRole",
     "NorthwindBuildRole",
     "NorthwindPlatformRole",
+    "PlatformPodAdminRole",
   ],
 
   /** Admin with no "*" anywhere: a known escalation path, by its id. */
@@ -139,6 +140,18 @@ export const GROUND_TRUTH = {
   /** Resource policies that let anyone in, and look-alikes that do not. */
   publicPolicyResources: ["orders-queue", "prod/db-password"],
   privatePolicyResources: ["internal-events", "alerts", "prod/api-key", "northwind-data"],
+
+  /**
+   * Roles a cluster's pods can assume through IRSA, `[cluster, role, service
+   * account]`, where `*` is every service account: no `sub` condition.
+   */
+  podRoles: [
+    ["prod-eks", "OrdersPodRole", "orders/orders-api"],
+    ["prod-eks", "PlatformPodAdminRole", "*"],
+  ],
+
+  /** Node groups whose SSH key is usable from anywhere: no source groups. */
+  sshOpenNodeGroups: ["prod-nodes"],
 
   /** A Kubernetes API endpoint on the internet. */
   publicClusterEndpoints: ["prod-eks"],

@@ -16,9 +16,14 @@ import {
 } from "@aws-sdk/client-ecs";
 import {
   DescribeClusterCommand,
+  DescribeNodegroupCommand,
+  DescribePodIdentityAssociationCommand,
   paginateListClusters as paginateListEksClusters,
+  paginateListNodegroups,
+  paginateListPodIdentityAssociations,
+  type EKSClient,
 } from "@aws-sdk/client-eks";
-import type { Relationship, Resource } from "@sightline/shared";
+import { errorMessage, type Relationship, type Resource } from "@sightline/shared";
 
 import { ecsClient, eksClient } from "../../aws/clients.js";
 import { ec2Arn, regionArn } from "../../aws/arns.js";
@@ -163,6 +168,8 @@ export async function collectEks(ctx: CollectorContext): Promise<CollectorOutput
           roleArn: cluster.roleArn ?? null,
           secretsEncrypted: (cluster.encryptionConfig ?? []).length > 0,
           loggingEnabled: (cluster.logging?.clusterLogging ?? []).some((l) => l.enabled),
+          // Matched against IAM trust policies by the IRSA analyser.
+          oidcIssuer: cluster.identity?.oidc?.issuer ?? null,
         },
         derived: {},
       });
@@ -181,7 +188,117 @@ export async function collectEks(ctx: CollectorContext): Promise<CollectorOutput
           type: "IN_SUBNET",
         });
       }
+      await collectNodeGroups(ctx, client, cluster.arn, name, resources, relationships);
+      relationships.push(...(await podIdentityGrants(client, cluster.arn, name)));
     }
   }
   return { resources, relationships };
+}
+
+/** Managed node groups: the instances' role, where they run, and who can SSH in. */
+async function collectNodeGroups(
+  ctx: CollectorContext,
+  client: EKSClient,
+  clusterArn: string,
+  clusterName: string,
+  resources: Resource[],
+  relationships: Relationship[],
+) {
+  const region = ctx.region!;
+  for await (const page of paginateListNodegroups({ client }, { clusterName })) {
+    for (const nodegroupName of page.nodegroups ?? []) {
+      const { nodegroup: ng } = await client.send(
+        new DescribeNodegroupCommand({ clusterName, nodegroupName }),
+      );
+      if (!ng?.nodegroupArn) continue;
+      const remote = ng.remoteAccess;
+      // A key with no source groups is AWS's default for remote access:
+      // port 22 open to 0.0.0.0/0 on every node.
+      const sshOpenToWorld =
+        Boolean(remote?.ec2SshKey) && (remote?.sourceSecurityGroups ?? []).length === 0;
+      resources.push({
+        arn: ng.nodegroupArn,
+        kind: "EksNodeGroup",
+        name: nodegroupName,
+        region,
+        accountId: ctx.accountId,
+        tags: ng.tags ?? {},
+        properties: {
+          clusterName,
+          status: ng.status ?? null,
+          version: ng.version ?? null,
+          capacityType: ng.capacityType ?? null,
+          amiType: ng.amiType ?? null,
+          instanceTypes: ng.instanceTypes ?? [],
+          minSize: ng.scalingConfig?.minSize ?? null,
+          maxSize: ng.scalingConfig?.maxSize ?? null,
+          desiredSize: ng.scalingConfig?.desiredSize ?? null,
+          nodeRole: ng.nodeRole ?? null,
+          sshKey: remote?.ec2SshKey ?? null,
+          sshSourceSecurityGroups: remote?.sourceSecurityGroups ?? [],
+          sshOpenToWorld,
+          autoScalingGroups: (ng.resources?.autoScalingGroups ?? []).map((a) => a.name),
+        },
+        derived: {},
+      });
+      relationships.push(
+        { from: ng.nodegroupArn, to: regionArn(ctx.accountId, region), type: "IN_REGION" },
+        { from: ng.nodegroupArn, to: clusterArn, type: "IN_CLUSTER" },
+      );
+      if (ng.nodeRole) {
+        relationships.push({ from: ng.nodegroupArn, to: ng.nodeRole, type: "EXECUTES_AS" });
+      }
+      for (const subnet of ng.subnets ?? []) {
+        relationships.push({
+          from: ng.nodegroupArn,
+          to: ec2Arn(region, ctx.accountId, "subnet", subnet),
+          type: "IN_SUBNET",
+        });
+      }
+    }
+  }
+}
+
+/**
+ * EKS Pod Identity: the newer way to give a service account a role, recorded
+ * on the cluster rather than in the role's trust policy - so it is read here,
+ * and joins the IRSA analyser's edges as the same `CAN_ASSUME`. Best effort:
+ * clusters and regions predating it refuse the call, and so does moto.
+ */
+async function podIdentityGrants(
+  client: EKSClient,
+  clusterArn: string,
+  clusterName: string,
+): Promise<Relationship[]> {
+  const grants: Relationship[] = [];
+  try {
+    for await (const page of paginateListPodIdentityAssociations({ client }, { clusterName })) {
+      for (const summary of page.associations ?? []) {
+        if (!summary.associationId) continue;
+        const { association } = await client.send(
+          new DescribePodIdentityAssociationCommand({
+            clusterName,
+            associationId: summary.associationId,
+          }),
+        );
+        if (!association?.roleArn) continue;
+        const account = `${association.namespace ?? "?"}/${association.serviceAccount ?? "?"}`;
+        grants.push({
+          from: clusterArn,
+          to: association.roleArn,
+          type: "CAN_ASSUME",
+          properties: {
+            via: "Pod Identity",
+            serviceAccounts: [account],
+            reason: `Pods running as ${account} in ${clusterName} are given this role by an EKS Pod Identity association`,
+          },
+        });
+      }
+    }
+  } catch (err) {
+    console.warn(
+      `  eks: Pod Identity associations not read for ${clusterName} - ${errorMessage(err)}`,
+    );
+  }
+  return grants;
 }

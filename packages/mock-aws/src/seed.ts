@@ -96,6 +96,7 @@ import {
 import { ACCOUNT_ID, LEGACY_REGION, PROD_REGION, STAGING_REGION, TAGS } from "./topology.js";
 import { allowIngress, tagSpec, type Tags } from "./seedHelpers.js";
 import { seedConnectivity } from "./seedConnectivity.js";
+import { seedEks } from "./seedEks.js";
 
 /** A minimal but valid zip containing an empty index.js, for Lambda code. */
 const LAMBDA_ZIP = Buffer.from(
@@ -1058,6 +1059,7 @@ async function seedServices(opts: {
       },
     }),
   );
+  await seedEks({ clusterName: "prod-eks", subnetId: opts.publicSubnetId });
 
   // The customer's domain, naming the front doors.
   const dns = route53();

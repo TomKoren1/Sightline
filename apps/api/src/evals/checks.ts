@@ -562,6 +562,37 @@ export const CHECKS: CheckDefinition[] = [
     },
   },
   {
+    id: "pod-roles",
+    description: "Roles a cluster's pods can assume are found, with which pods",
+    rationale:
+      "IRSA lives in the role's trust policy, not in the cluster, so it is missed by anything reading EKS alone. A trust policy that checks the audience but not the service account lets every pod assume the role.",
+    run: ({ resources, relationships }) => {
+      const name = (arn: string) => resources.find((r) => r.arn === arn)?.name;
+      const found = relationships
+        .filter((r) => r.type === "CAN_ASSUME")
+        .map((r) => [
+          name(r.from),
+          name(r.to),
+          ((r.properties?.["serviceAccounts"] ?? []) as string[]).join(","),
+        ]);
+      const missing = GROUND_TRUTH.podRoles.filter(
+        (want) => !found.some((f) => f.join("|") === want.join("|")),
+      );
+      const ssh = GROUND_TRUTH.sshOpenNodeGroups.filter(
+        (n) => resources.find((r) => r.name === n)?.properties["sshOpenToWorld"] !== true,
+      );
+      const failures = [
+        ...missing.map((m) => `${m.join(" -> ")} missed`),
+        ...ssh.map((n) => `${n} not flagged for SSH from anywhere`),
+      ];
+      return {
+        passed: failures.length === 0,
+        detail:
+          failures.length === 0 ? `${found.length} pod role grants found` : failures.join("; "),
+      };
+    },
+  },
+  {
     id: "subnets-by-routing",
     description: "Subnets are classified public by routing, not by name or tag",
     rationale:
