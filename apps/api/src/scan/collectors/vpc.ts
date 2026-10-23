@@ -25,7 +25,7 @@ import {
   paginateDescribeNetworkAcls,
   type RouteTable,
 } from "@aws-sdk/client-ec2";
-import type { Relationship, Resource } from "@sightline/shared";
+import { errorMessage, type Relationship, type Resource } from "@sightline/shared";
 
 import { ec2Client } from "../../aws/clients.js";
 import { ec2Arn, nameFromTags, regionArn, tagsToRecord } from "../../aws/arns.js";
@@ -362,9 +362,16 @@ export async function collectVpc(ctx: CollectorContext): Promise<CollectorOutput
   }
 
   // Peering, transit gateways and PrivateLink: read against the routes above.
-  const connectivity = await collectConnectivity(ctx, client);
-  resources.push(...connectivity.resources);
-  relationships.push(...connectivity.relationships);
+  // Additive, so a refusal - a role deployed before these calls were needed -
+  // costs the paths between VPCs, which are then missed rather than invented,
+  // and not the subnets and groups this unit has already read.
+  try {
+    const connectivity = await collectConnectivity(ctx, client);
+    resources.push(...connectivity.resources);
+    relationships.push(...connectivity.relationships);
+  } catch (err) {
+    console.warn(`  vpc: connections between VPCs not read in ${region} - ${errorMessage(err)}`);
+  }
 
   return { resources, relationships };
 }

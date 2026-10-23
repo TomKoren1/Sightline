@@ -40,6 +40,8 @@ export interface TgwRoute {
   state: string | null;
 }
 
+const REFUSED = new Set(["UnauthorizedOperation", "AccessDenied", "AccessDeniedException"]);
+
 export async function collectConnectivity(
   ctx: CollectorContext,
   client: EC2Client,
@@ -129,12 +131,24 @@ export async function collectConnectivity(
       if (!table.TransitGatewayId || !table.TransitGatewayRouteTableId) continue;
       // Not paginated: AWS returns up to its default of 1,000 and flags more.
       // `MaxResults` is left unset because moto answers it with a 500.
-      const found = await client.send(
-        new SearchTransitGatewayRoutesCommand({
-          TransitGatewayRouteTableId: table.TransitGatewayRouteTableId,
-          Filters: [{ Name: "state", Values: ["active", "blackhole"] }],
-        }),
-      );
+      // SecurityAudit does not grant this call, so a role deployed before it
+      // was needed refuses it: the table is then empty, and paths through
+      // this gateway are missed rather than invented.
+      const found = await client
+        .send(
+          new SearchTransitGatewayRoutesCommand({
+            TransitGatewayRouteTableId: table.TransitGatewayRouteTableId,
+            Filters: [{ Name: "state", Values: ["active", "blackhole"] }],
+          }),
+        )
+        .catch((err: unknown) => {
+          const name = err instanceof Error ? err.name : "";
+          if (!REFUSED.has(name)) throw err;
+          console.warn(
+            `  vpc: ${name} reading transit gateway routes; paths through it are not modelled`,
+          );
+          return { Routes: [] };
+        });
       const list = tablesOf.get(table.TransitGatewayId) ?? [];
       list.push({
         routeTableId: table.TransitGatewayRouteTableId,
