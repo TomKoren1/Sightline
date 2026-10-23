@@ -171,7 +171,7 @@ apps/api              backend: scanner, analysers, graph, agent, HTTP API
   src/config.ts       every setting, with the reason for each default
   src/hostedMode.ts   configuration the public service refuses to start with
   src/aws/            credentials, instrumented clients, region discovery
-  src/scan/           collectors, analysers, orchestration
+  src/scan/           collectors, analysers, orchestration; collectors/README.md lists each
   src/db/             Drizzle schema and migrations, repository, the graph queries
   src/agent/          tools, SQL guard, citation validation, the loop
   src/auth/           OIDC against Google and GitHub, sessions, route guard
@@ -426,32 +426,33 @@ the API and nginx containers are left running against databases that no longer e
 
 ## Every command
 
-| Command                                        | What it does                                                 |
-| ---------------------------------------------- | ------------------------------------------------------------ |
-| `docker compose up -d`                         | Postgres and moto — just the dependencies                    |
-| `docker compose --profile app up -d --build`   | The whole thing in Docker, served on `:8080`                 |
-| `docker compose --profile app down -v`         | Tear it all down, volumes included                           |
-| `npm run setup`                                | Connect an AWS account, or switch back to the demo one       |
-| `npm run seed`                                 | Rebuild the mock account from scratch                        |
-| `npm run scan`                                 | Scan, persist, project the graph                             |
-| `npm run drift`                                | Change the mock account, so a second scan has a diff         |
-| `npm run inspect -w @sightline/api`            | Scan and print findings without touching the databases       |
-| `npm run query -w @sightline/api`              | Run every curated query against the graph                    |
-| `npm run dev:worker`                           | Run scans in their own process, as a hosted deployment does  |
-| `npm test`                                     | 754 unit tests — integration ones skip without databases     |
-| `npm run e2e`                                  | The browser suite, against the compose stack                 |
-| `npm run lint`                                 | Prettier and ESLint, both in check mode                      |
-| `npm run format`                               | Fix everything those two can fix automatically               |
-| `npm run typecheck`                            | `tsc` over every workspace, and over `infra/` and `scripts/` |
-| `npm run verify`                               | Everything CI's static job runs — use before pushing         |
-| `npm run evals:ground-truth -w @sightline/api` | Tier-1 evals — no API key needed                             |
-| `npm run evals -w @sightline/api`              | Tier-2 agent evals — needs a key                             |
-| `npm run db:app-role -w @sightline/api`        | Set the restricted role's password, for row-level security   |
-| `./scripts/backup-restore-test.sh`             | Back up, restore, and check an ExternalId still decrypts     |
-| `helm template monitoring helm/monitoring`     | Render the monitoring stack without deploying it             |
-| `npm run db:generate -w @sightline/api`        | Generate a migration after editing `src/db/schema.ts`        |
-| `npm run db:migrate -w @sightline/api`         | Apply pending migrations — a clone also does this on boot    |
-| `npm run db:studio -w @sightline/api`          | Browse the database in Drizzle Studio                        |
+| Command                                        | What it does                                                                   |
+| ---------------------------------------------- | ------------------------------------------------------------------------------ |
+| `docker compose up -d`                         | Postgres and moto — just the dependencies                                      |
+| `docker compose --profile app up -d --build`   | The whole thing in Docker, served on `:8080`                                   |
+| `docker compose --profile app down -v`         | Tear it all down, volumes included                                             |
+| `npm run setup`                                | Connect an AWS account, or switch back to the demo one                         |
+| `npm run seed`                                 | Rebuild the mock account from scratch                                          |
+| `npm run scan`                                 | Scan, persist, project the graph                                               |
+| `npm run drift`                                | Change the mock account, so a second scan has a diff                           |
+| `npm run inspect -w @sightline/api`            | Scan and print findings without touching the databases                         |
+| `npm run query -w @sightline/api`              | Run every curated query against the graph                                      |
+| `npm run dev:worker`                           | Run scans in their own process, as a hosted deployment does                    |
+| `npm test`                                     | 754 unit tests — integration ones skip without databases                       |
+| `npm run e2e`                                  | The browser suite, against the compose stack                                   |
+| `npm run lint`                                 | Prettier and ESLint, both in check mode                                        |
+| `npm run format`                               | Fix everything those two can fix automatically                                 |
+| `npm run typecheck`                            | `tsc` over every workspace, and over `infra/` and `scripts/`                   |
+| `npm run verify`                               | Everything CI's static job runs — use before pushing                           |
+| `npm run evals:ground-truth -w @sightline/api` | Tier-1 evals — no API key needed                                               |
+| `npm run evals -w @sightline/api`              | Tier-2 agent evals — needs a key                                               |
+| `npm run gen:collectors -w @sightline/api`     | Regenerate the role template's grants and the collector list from the registry |
+| `npm run db:app-role -w @sightline/api`        | Set the restricted role's password, for row-level security                     |
+| `./scripts/backup-restore-test.sh`             | Back up, restore, and check an ExternalId still decrypts                       |
+| `helm template monitoring helm/monitoring`     | Render the monitoring stack without deploying it                               |
+| `npm run db:generate -w @sightline/api`        | Generate a migration after editing `src/db/schema.ts`                          |
+| `npm run db:migrate -w @sightline/api`         | Apply pending migrations — a clone also does this on boot                      |
+| `npm run db:studio -w @sightline/api`          | Browse the database in Drizzle Studio                                          |
 
 ---
 
