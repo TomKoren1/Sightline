@@ -8,7 +8,7 @@
 
 import { randomUUID } from "node:crypto";
 import { ConflictException, Injectable } from "@nestjs/common";
-import { and, asc, eq } from "drizzle-orm";
+import { and, asc, desc, eq } from "drizzle-orm";
 import type { AgentEvent, AgentMessage } from "@sightline/shared";
 
 import { ask } from "../agent/agent.js";
@@ -18,6 +18,9 @@ import { getLatestScan } from "../db/repository.js";
 import { requireGraphScope } from "../tenancy/graphScope.js";
 import type { ConversationId } from "../tenancy/ids.js";
 import type { Scope } from "../tenancy/scope.js";
+
+/** Earlier messages sent back to the model: enough for follow-ups, bounded for cost. */
+const HISTORY_LIMIT = 20;
 
 @Injectable()
 export class ChatService {
@@ -37,6 +40,46 @@ export class ChatService {
       });
     }
     return latest;
+  }
+
+  /**
+   * The transcript the agent continues from, read from what was persisted.
+   *
+   * Never from the request: a client-supplied history lets a user invent the
+   * assistant's earlier answers, which the agent then builds on as its own. An
+   * id that is not this connection's conversation starts a fresh one rather
+   * than failing, so switching accounts mid-chat simply begins again.
+   */
+  async continueConversation(
+    scope: Scope,
+    conversationId: string | undefined,
+  ): Promise<{
+    conversationId: string;
+    history: { role: "user" | "assistant"; content: string }[];
+  }> {
+    if (!conversationId) return { conversationId: randomUUID(), history: [] };
+
+    return withTenant(scope.tenantId, async () => {
+      const [owned] = await db
+        .select({ id: conversations.id })
+        .from(conversations)
+        .where(
+          and(
+            eq(conversations.id, conversationId),
+            eq(conversations.tenantId, scope.tenantId),
+            eq(conversations.connectionId, scope.connectionId),
+          ),
+        );
+      if (!owned) return { conversationId: randomUUID(), history: [] };
+
+      const recent = await db
+        .select({ role: messages.role, content: messages.content })
+        .from(messages)
+        .where(and(eq(messages.conversationId, owned.id), eq(messages.tenantId, scope.tenantId)))
+        .orderBy(desc(messages.createdAt))
+        .limit(HISTORY_LIMIT);
+      return { conversationId: owned.id, history: recent.reverse() };
+    });
   }
 
   async answer(params: {

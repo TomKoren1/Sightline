@@ -41,6 +41,8 @@ export interface AgentMessage {
 
 /** Server-sent events emitted while the agent works. */
 export type AgentEvent =
+  /** First on every stream: the id to send back to continue this conversation. */
+  | { type: "agent.conversation"; conversationId: string }
   | { type: "agent.started"; messageId: string }
   | { type: "agent.thinking"; text: string }
   | { type: "agent.tool_call"; name: string; input: Record<string, unknown> }

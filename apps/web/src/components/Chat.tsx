@@ -68,6 +68,8 @@ export function Chat({ ready, onCitations }: ChatProps) {
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const scrollRef = useRef<HTMLDivElement>(null);
   const abortRef = useRef<AbortController | null>(null);
+  // Issued by the server on the first answer; the transcript itself stays there.
+  const conversationRef = useRef<string | undefined>(undefined);
 
   useEffect(() => {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" });
@@ -78,11 +80,6 @@ export function Chat({ ready, onCitations }: ChatProps) {
   const send = useCallback(
     async (question: string) => {
       if (!question.trim() || busy) return;
-
-      const history = messages
-        .filter((m) => !m.error)
-        .slice(-8)
-        .map((m) => ({ role: m.role, content: m.content }));
 
       setMessages((prev) => [...prev, { id: `u-${Date.now()}`, role: "user", content: question }]);
       setInput("");
@@ -97,9 +94,12 @@ export function Chat({ ready, onCitations }: ChatProps) {
       try {
         await askAgent(
           question,
-          history,
+          conversationRef.current,
           (event: AgentEvent) => {
             switch (event.type) {
+              case "agent.conversation":
+                conversationRef.current = event.conversationId;
+                break;
               case "agent.tool_call":
                 setActivity(TOOL_LABELS[event.name] ?? `Running ${event.name}`);
                 break;
@@ -160,7 +160,7 @@ export function Chat({ ready, onCitations }: ChatProps) {
         abortRef.current = null;
       }
     },
-    [busy, messages, onCitations],
+    [busy, onCitations],
   );
 
   return (
@@ -173,6 +173,7 @@ export function Chat({ ready, onCitations }: ChatProps) {
           <button
             onClick={() => {
               setMessages([]);
+              conversationRef.current = undefined;
               onCitations([]);
             }}
             className="text-[11px] text-ink-400 hover:text-ink-100"

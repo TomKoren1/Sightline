@@ -19,7 +19,6 @@ import {
   Res,
 } from "@nestjs/common";
 import type { FastifyReply, FastifyRequest } from "fastify";
-import { randomUUID } from "node:crypto";
 import type { AgentEvent } from "@sightline/shared";
 
 import { CurrentScope } from "../tenancy/currentScope.decorator.js";
@@ -52,7 +51,7 @@ export class ChatController {
     if (!parsed.success) {
       throw new BadRequestException({ error: "Invalid request", details: parsed.error.flatten() });
     }
-    const { question, history } = parsed.data;
+    const { question } = parsed.data;
 
     /**
      * Checked before a byte of the stream is written, for the same reason the
@@ -80,7 +79,10 @@ export class ChatController {
     // Resolved before a byte of the stream is written, so a missing scan is
     // still a status code rather than an error event nobody can act on.
     const latest = await this.chat.requireScan(scope);
-    const conversationId = parsed.data.conversationId ?? randomUUID();
+    const { conversationId, history } = await this.chat.continueConversation(
+      scope,
+      parsed.data.conversationId,
+    );
 
     reply.raw.writeHead(200, {
       "Content-Type": "text/event-stream",
@@ -90,12 +92,13 @@ export class ChatController {
     });
 
     const send = (event: AgentEvent) => reply.raw.write(`data: ${JSON.stringify(event)}\n\n`);
+    send({ type: "agent.conversation", conversationId });
 
     try {
       const message = await this.chat.answer({
         scope,
         question,
-        history: history ?? [],
+        history,
         onEvent: send,
       });
 

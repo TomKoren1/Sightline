@@ -10,9 +10,10 @@ import { z } from "zod";
  */
 export const askSchema = z.object({
   question: z.string().min(1).max(2000),
+  /**
+   * The only way to continue a conversation. History is never accepted from
+   * the client: a client-supplied transcript lets a user put words in the
+   * assistant's mouth, which the agent then treats as its own earlier answers.
+   */
   conversationId: z.string().uuid().optional(),
-  history: z
-    .array(z.object({ role: z.enum(["user", "assistant"]), content: z.string() }))
-    .max(20)
-    .optional(),
 });

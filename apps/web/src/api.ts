@@ -481,9 +481,15 @@ export const watchScan = (
 
 export const askAgent = (
   question: string,
-  history: { role: "user" | "assistant"; content: string }[],
+  conversationId: string | undefined,
   onEvent: (event: AgentEvent) => void,
   signal?: AbortSignal,
-) => streamPost<AgentEvent>("/api/chat", { question, history }, onEvent, signal);
+) =>
+  streamPost<AgentEvent>(
+    "/api/chat",
+    conversationId ? { question, conversationId } : { question },
+    onEvent,
+    signal,
+  );
 
 export type { AgentEvent, AgentMessage, ScanEvent, ScanRun, ScanDiff };
