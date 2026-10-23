@@ -372,7 +372,10 @@ export function App() {
       )}
 
       <div className="flex min-h-0 flex-1">
-        <aside className="flex w-72 shrink-0 flex-col overflow-hidden border-r border-ink-800 bg-ink-900">
+        <aside
+          aria-label="Findings"
+          className="flex w-72 shrink-0 flex-col overflow-hidden border-r border-ink-800 bg-ink-900"
+        >
           <Findings
             summary={summary.data}
             findings={findings.data}
@@ -493,7 +496,7 @@ export function App() {
           </aside>
         )}
 
-        <aside className="w-96 shrink-0 border-l border-ink-800">
+        <aside aria-label="Ask" className="w-96 shrink-0 border-l border-ink-800">
           <Chat ready={hasScan} onCitations={setCitedArns} />
         </aside>
       </div>

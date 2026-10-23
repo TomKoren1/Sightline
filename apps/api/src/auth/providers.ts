@@ -23,10 +23,21 @@ const GOOGLE_AUTH = "https://accounts.google.com/o/oauth2/v2/auth";
 const GOOGLE_TOKEN = "https://oauth2.googleapis.com/token";
 const GOOGLE_ISSUERS = new Set(["https://accounts.google.com", "accounts.google.com"]);
 
-const GITHUB_AUTH = "https://github.com/login/oauth/authorize";
-const GITHUB_TOKEN = "https://github.com/login/oauth/access_token";
-const GITHUB_USER = "https://api.github.com/user";
-const GITHUB_EMAILS = "https://api.github.com/user/emails";
+/**
+ * GitHub's endpoints, or the browser suite's stand-in for them, which hosted
+ * mode permits only on loopback (`hostedMode.ts`). Read per call so a test can
+ * set it after this module loads.
+ */
+function github(path: "authorize" | "token" | "user" | "emails"): string {
+  const stub = cfg.E2E_IDENTITY_PROVIDER_URL?.replace(/\/$/, "");
+  if (stub) return `${stub}/github/${path}`;
+  return {
+    authorize: "https://github.com/login/oauth/authorize",
+    token: "https://github.com/login/oauth/access_token",
+    user: "https://api.github.com/user",
+    emails: "https://api.github.com/user/emails",
+  }[path];
+}
 
 /** Where to send the browser to begin. */
 export function authorizationUrl(provider: ProviderName, state: string): string {
@@ -49,7 +60,7 @@ export function authorizationUrl(provider: ProviderName, state: string): string 
       prompt: "select_account",
     }).toString()}`;
   }
-  return `${GITHUB_AUTH}?${new URLSearchParams({
+  return `${github("authorize")}?${new URLSearchParams({
     client_id: id,
     redirect_uri: redirectUri("github"),
     scope: "read:user user:email",
@@ -196,7 +207,7 @@ export function primaryGithubEmail(emails: unknown): { address: string; verified
 async function exchangeGithub(code: string, fetchImpl: typeof fetch): Promise<ExternalIdentity> {
   const { id, secret } = clientCredentials("github");
   const body = await postForm(
-    GITHUB_TOKEN,
+    github("token"),
     { code, client_id: id, client_secret: secret, redirect_uri: redirectUri("github") },
     fetchImpl,
   );
@@ -209,8 +220,8 @@ async function exchangeGithub(code: string, fetchImpl: typeof fetch): Promise<Ex
     "User-Agent": "sightline",
   };
   const [userRes, emailRes] = await Promise.all([
-    fetchImpl(GITHUB_USER, { headers }),
-    fetchImpl(GITHUB_EMAILS, { headers }),
+    fetchImpl(github("user"), { headers }),
+    fetchImpl(github("emails"), { headers }),
   ]);
   if (!userRes.ok) throw new Error(`GitHub /user failed (${userRes.status})`);
 

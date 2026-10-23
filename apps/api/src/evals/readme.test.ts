@@ -38,7 +38,7 @@ const scripts = {
  */
 function documentedCommands(): { raw: string; script: string; workspace: string }[] {
   const found: { raw: string; script: string; workspace: string }[] = [];
-  const pattern = /\bnpm run ([a-z:-]+)(?:\s+-w\s+(@sightline\/[a-z]+))?/g;
+  const pattern = /\bnpm run ([a-z0-9:-]+)(?:\s+-w\s+(@sightline\/[a-z]+))?/g;
   for (const match of readme.matchAll(pattern)) {
     found.push({ raw: match[0], script: match[1]!, workspace: match[2] ?? "root" });
   }

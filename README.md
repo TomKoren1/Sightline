@@ -192,6 +192,7 @@ deploy/               nginx config, and the AWS profile mount for containers
 helm/monitoring/      Prometheus, Grafana and Loki, with this project's dashboards
 argocd/               the Application that deploys that chart
 scripts/              the dependency guard every npm script runs first
+e2e/                  the browser suite: the hosted product, signed in and driven
 Dockerfile            API and frontend images, used only by the `app` profile
 ```
 
@@ -229,6 +230,16 @@ rejoins it. To run scans in their own process as a hosted deployment does, set
 `SCAN_WORKER=separate` and also run `npm run dev:worker`.
 
 Both paths are covered by CI, and nothing about the product differs between them.
+
+The browser suite drives the **hosted** product the way a customer does — sign in,
+scan, read the findings, ask, start connecting an account — with GitHub and the model
+stood in for on loopback. With the compose stack up and seeded:
+
+```bash
+npx playwright install chromium   # once
+npm run e2e                       # starts its own API, worker and frontend
+```
+
 Run `npm run verify` before pushing — it is everything CI's static job runs.
 
 For a hosted deployment on Kubernetes — kustomize manifests, a Cloudflare tunnel,
@@ -427,6 +438,7 @@ the API and nginx containers are left running against databases that no longer e
 | `npm run query -w @sightline/api`              | Run every curated query against the graph                    |
 | `npm run dev:worker`                           | Run scans in their own process, as a hosted deployment does  |
 | `npm test`                                     | 754 unit tests — integration ones skip without databases     |
+| `npm run e2e`                                  | The browser suite, against the compose stack                 |
 | `npm run lint`                                 | Prettier and ESLint, both in check mode                      |
 | `npm run format`                               | Fix everything those two can fix automatically               |
 | `npm run typecheck`                            | `tsc` over every workspace, and over `infra/` and `scripts/` |

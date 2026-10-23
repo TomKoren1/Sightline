@@ -136,6 +136,28 @@ describe("hosted invariants", () => {
     expect(reasons({ ...valid, PUBLIC_BASE_URL: "" })).toMatch(/PUBLIC_BASE_URL is required/);
   });
 
+  it("allows plain http on loopback, which nobody else can reach", () => {
+    expect(
+      hostedInvariantViolations({ ...valid, PUBLIC_BASE_URL: "http://localhost:5173" }),
+    ).toEqual([]);
+    expect(reasons({ ...valid, PUBLIC_BASE_URL: "http://localhost.example" })).toMatch(
+      /must be https/,
+    );
+  });
+
+  it("refuses the browser suite's stand-ins anywhere but loopback", () => {
+    for (const key of ["KMS_ENDPOINT_URL", "E2E_IDENTITY_PROVIDER_URL"]) {
+      expect(reasons({ ...valid, [key]: "http://127.0.0.1:4010" })).toMatch(/test seam/);
+      expect(
+        hostedInvariantViolations({
+          ...valid,
+          PUBLIC_BASE_URL: "http://127.0.0.1:5173",
+          [key]: "http://127.0.0.1:4010",
+        }),
+      ).toEqual([]);
+    }
+  });
+
   it("reports every problem at once", () => {
     // One restart per problem is a bad way to learn about three.
     const broken = hostedInvariantViolations({

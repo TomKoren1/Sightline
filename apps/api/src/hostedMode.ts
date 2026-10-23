@@ -123,14 +123,37 @@ export function hostedInvariantViolations(env: Env): string[] {
       "PUBLIC_BASE_URL is required in hosted mode: it is the OAuth redirect's origin and it " +
         "decides whether the session cookie is Secure.",
     );
-  } else if (!base.startsWith("https://")) {
+  } else if (!base.startsWith("https://") && !isLoopback(base)) {
     problems.push(
       `PUBLIC_BASE_URL is "${base}". A public deployment must be https: the session cookie ` +
         "is only Secure when it is, and over plain http a session is readable in transit.",
     );
   }
 
+  // The browser suite's stand-ins. Each would be a hijack in a real deployment
+  // - a KMS that keeps the keys, a "GitHub" that signs anyone in as anybody -
+  // so they need a loopback base URL, which no reachable deployment can have:
+  // the OAuth redirect would send every visitor to their own machine.
+  for (const key of ["KMS_ENDPOINT_URL", "E2E_IDENTITY_PROVIDER_URL"]) {
+    if (set(env, key) && !(base && isLoopback(base))) {
+      problems.push(
+        `${key} is a test seam for the browser suite, and hosted mode allows it only when ` +
+          "PUBLIC_BASE_URL is loopback (http://localhost or 127.0.0.1).",
+      );
+    }
+  }
+
   return problems;
+}
+
+/** A base URL only the machine itself can reach. */
+export function isLoopback(base: string): boolean {
+  try {
+    const host = new URL(base).hostname;
+    return host === "localhost" || host === "127.0.0.1" || host === "[::1]";
+  } catch {
+    return false;
+  }
 }
 
 /**

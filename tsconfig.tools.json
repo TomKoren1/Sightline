@@ -12,5 +12,11 @@
     "checkJs": true,
     "types": ["node"]
   },
-  "include": ["infra/**/*.ts", "scripts/**/*.mjs", "vitest.config.ts", "eslint.config.mjs"]
+  "include": [
+    "infra/**/*.ts",
+    "e2e/**/*.ts",
+    "scripts/**/*.mjs",
+    "vitest.config.ts",
+    "eslint.config.mjs"
+  ]
 }

@@ -140,6 +140,15 @@ const schema = z.object({
   KMS_SECRET_ACCESS_KEY: blankAsUnset(z.string().optional()),
 
   /**
+   * Test seams for the browser suite (`e2e/`): a KMS other than AWS's, and an
+   * identity provider standing in for GitHub. Hosted mode refuses both unless
+   * PUBLIC_BASE_URL is loopback, so a deployment anyone else can reach cannot
+   * have either - see `hostedMode.ts`.
+   */
+  KMS_ENDPOINT_URL: blankAsUnset(z.string().optional()),
+  E2E_IDENTITY_PROVIDER_URL: blankAsUnset(z.string().optional()),
+
+  /**
    * Regions to scan. Empty means "discover them", which on a real account
    * means every region enabled for the account.
    */

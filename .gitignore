@@ -34,3 +34,6 @@ pnpm-debug.log*
 .scan-cache/
 evals/results/
 *.local.json
+
+# Browser suite output
+test-results/
