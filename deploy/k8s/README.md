@@ -68,7 +68,7 @@ a random `https://<words>.trycloudflare.com` hostname for free:
 kubectl -n sightline scale deploy/cloudflared --replicas=0
 
 # A quick tunnel, wearing BOTH labels the NetworkPolicy expects.
-kubectl -n sightline run quicktunnel --image=cloudflare/cloudflared:latest \
+kubectl -n sightline run quicktunnel --image=cloudflare/cloudflared:2026.10.3 \
   --labels='app.kubernetes.io/name=cloudflared,app.kubernetes.io/part-of=sightline' \
   --restart=Never -- tunnel --no-autoupdate --url http://web:80
 

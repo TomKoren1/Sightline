@@ -30,7 +30,7 @@ spec:
     spec:
       containers:
         - name: cloudflared
-          image: cloudflare/cloudflared:latest
+          image: cloudflare/cloudflared:2026.10.3@sha256:faa8e0a1475f137c910be6025f43c8e4092fdd35461b31e19fd1390657a1ff39
           # `--no-autoupdate`: an unattended binary replacement inside a
           # container is a surprise, and the image tag is how this gets updated.
           # The token carries the tunnel's identity and its routing, so there is

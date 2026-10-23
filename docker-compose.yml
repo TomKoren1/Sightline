@@ -22,7 +22,7 @@
 
 services:
   postgres:
-    image: postgres:16-alpine
+    image: postgres:16.15-alpine@sha256:721873c34ceb9f8d8fc265984940dc982404c105f19ad51be9fdc5970a6080ea
     container_name: sightline-postgres
     restart: unless-stopped
     environment:
@@ -40,7 +40,7 @@ services:
       retries: 10
 
   neo4j:
-    image: neo4j:5-community
+    image: neo4j:5.26.31-community@sha256:ab3aafb0020e6fed65bb2b59f7db1fabd7ee0568c4da46f3cc3b8fad77801d61
     container_name: sightline-neo4j
     restart: unless-stopped
     environment:
@@ -92,7 +92,7 @@ services:
   # namespaces resources by the account ID carried in the credentials, so a
   # mismatch silently writes into a different account. See ENGINEERING-LOG #2.
   moto:
-    image: motoserver/moto:latest
+    image: motoserver/moto:5.2.3@sha256:91fd602a21f49cf9eb82fdf474015a3c131d40104c8297ea6a2ca920708ae32c
     container_name: sightline-moto
     restart: unless-stopped
     environment:

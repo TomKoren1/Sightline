@@ -60,7 +60,7 @@ spec:
               # The same major version as the server: `pg_dump` from an older
               # client refuses to dump a newer server, which would present as
               # the backup having silently stopped working after an upgrade.
-              image: postgres:16-alpine
+              image: postgres:16.15-alpine@sha256:721873c34ceb9f8d8fc265984940dc982404c105f19ad51be9fdc5970a6080ea
               env:
                 - name: PGHOST
                   value: postgres

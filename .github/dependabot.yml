@@ -41,9 +41,15 @@ updates:
     schedule:
       interval: monthly
 
-  # Base images. `node:22-alpine` and `nginx:alpine` float on patch, so this is
-  # what notices a major going out of support rather than a silent rebuild.
+  # Every image is pinned to a version and digest (infra/imagePins.test.ts), so
+  # nothing changes without a PR; these are what raise that PR. `docker` reads
+  # the Dockerfile and the Kubernetes manifests, `docker-compose` the stack.
   - package-ecosystem: docker
+    directories: ["/", "/deploy/k8s/base", "/deploy/k8s/prod"]
+    schedule:
+      interval: monthly
+
+  - package-ecosystem: docker-compose
     directory: /
     schedule:
       interval: monthly

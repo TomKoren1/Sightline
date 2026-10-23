@@ -47,7 +47,7 @@ spec:
         fsGroup: 999
       containers:
         - name: postgres
-          image: postgres:16-alpine
+          image: postgres:16.15-alpine@sha256:721873c34ceb9f8d8fc265984940dc982404c105f19ad51be9fdc5970a6080ea
           ports: [{ name: postgres, containerPort: 5432 }]
           env:
             # PGDATA in a subdirectory of the mount, not at its root. A
@@ -116,7 +116,7 @@ spec:
         fsGroup: 7474
       containers:
         - name: neo4j
-          image: neo4j:5-community
+          image: neo4j:5.26.31-community@sha256:ab3aafb0020e6fed65bb2b59f7db1fabd7ee0568c4da46f3cc3b8fad77801d61
           ports:
             - { name: bolt, containerPort: 7687 }
             - { name: http, containerPort: 7474 }
