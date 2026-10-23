@@ -1,18 +1,15 @@
 /**
- * Network reachability: rules as a walkable graph, so "what can reach the
- * production database?" is a path query rather than manual reading.
+ * Network reachability as a walkable graph, so "what can reach the production
+ * database?" is a path query. Edges, each justified by rules that exist:
  *
- *   Internet -> host     an open rule, on a host that is actually exposed (public
- *                        subnet or address), whose subnet ACL lets it in and out
- *   group -> resource    the target's group admits a group: one edge per group,
- *                        not per member pair, so a shared group stays linear
- *   Internet -> entry    an internet-facing load balancer, an enabled CloudFront
- *                        distribution, an API that is not private
- *   entry -> backend     a load balancer to registered targets whose group admits
- *                        it; a distribution to its origins; an API to what it calls
+ *   Internet -> host/entry  an open rule on an exposed host (its ACL agreeing), or an
+ *                           internet-facing load balancer, distribution or API
+ *   group/subnet -> target  a rule admitting the group, or a CIDR covering the subnet
+ *                           with routes both ways (`routing.ts`); linear, not per pair
+ *   entry -> backend        LB to admitted targets, CDN to origins, API to integrations,
+ *                           interface endpoint to the NLB behind its PrivateLink service
  *
- * Not modelled: peering, Transit Gateway, PrivateLink, on-premises. A missed
- * path is possible; a reported one is justified by rules that exist.
+ * Not modelled: VPN and Direct Connect, and PrivateLink services in other accounts.
  */
 
 import { INTERNET_ARN, type Relationship, type Resource } from "@sightline/shared";
@@ -20,6 +17,7 @@ import { formatPortRange } from "@sightline/shared";
 
 import { blockedByNacl, type NaclEntry, type TrafficSpec } from "./nacl.js";
 import { hopsFrom, indexReach } from "./reachIndex.js";
+import { cidrContains, cidrOverlaps, parseCidr, RoutingModel } from "./routing.js";
 
 /** An ingress rule, flattened by the VPC collector. */
 interface IngressRule {
@@ -79,6 +77,12 @@ export function analyseReachability(
     }
     push(outgoing, rel.from, rel);
   }
+  const membersOfSubnet = new Map<string, Resource[]>();
+  for (const [member, subnets] of subnetsOfResource) {
+    const resource = byArn.get(member);
+    if (resource) for (const subnet of subnets) push(membersOfSubnet, subnet, resource);
+  }
+  const routing = new RoutingModel(resources);
   const outOf = (arn: string, type: Relationship["type"]) =>
     (outgoing.get(arn) ?? []).filter((r) => r.type === type);
 
@@ -169,6 +173,11 @@ export function analyseReachability(
         continue;
       }
 
+      if (rule.source === "cidr" && rule.cidr) {
+        privateCidrEdges(target, sg, rule.cidr, ports);
+        continue;
+      }
+
       if (rule.source === "securityGroup" && rule.groupId) {
         const sourceSgArn = sgArnByGroupId.get(rule.groupId);
         if (!sourceSgArn) continue;
@@ -240,6 +249,26 @@ export function analyseReachability(
       });
     }
 
+    if (entry.kind === "VpcEndpoint" && entry.properties["state"] === "available") {
+      for (const link of outOf(entry.arn, "CONNECTS_TO")) {
+        const service = byArn.get(link.to);
+        for (const served of outOf(link.to, "SERVED_BY")) {
+          const nlb = byArn.get(served.to);
+          if (!service || !nlb) continue;
+          add({
+            from: entry.arn,
+            to: nlb.arn,
+            type: "CAN_REACH",
+            properties: {
+              ports: "service ports",
+              via: service.name,
+              reason: `Interface endpoint ${entry.name} delivers to ${nlb.name} through PrivateLink service ${service.name}`,
+            },
+          });
+        }
+      }
+    }
+
     if (entry.kind === "CloudFrontDistribution" || entry.kind === "ApiGateway") {
       for (const link of [
         ...outOf(entry.arn, "HAS_ORIGIN"),
@@ -260,6 +289,54 @@ export function analyseReachability(
                 : `API ${entry.name} invokes ${backend.name}`,
           },
         });
+      }
+    }
+  }
+
+  /**
+   * A rule admitting a private range: every subnet in it that routes to the
+   * target and back, as one edge per subnet - members are expanded when the
+   * path is walked, as groups are. A subnet only partly inside the range
+   * contributes just the hosts whose private address falls in it.
+   */
+  function privateCidrEdges(target: Resource, sg: Resource, cidrText: string, ports: string) {
+    const range = parseCidr(cidrText);
+    const targetSubnets = (subnetsOfResource.get(target.arn) ?? [])
+      .map((arn) => routing.subnets.get(arn))
+      .filter((s) => s !== undefined);
+    if (!range || targetSubnets.length === 0) return;
+
+    const vpcs = new Set(targetSubnets.flatMap((s) => [...routing.connectedVpcs(s.vpcId)]));
+    for (const vpc of vpcs) {
+      for (const source of routing.subnetsByVpc.get(vpc) ?? []) {
+        if (!cidrOverlaps(range, source.cidr)) continue;
+        let how: string | null = null;
+        for (const dest of targetSubnets) {
+          how = routing.pathBetween(source, dest);
+          if (how !== null) break;
+        }
+        if (how === null) continue;
+        const reason =
+          `Security group ${sg.name} allows ${ports} from ${cidrText}, which covers ` +
+          `subnet ${source.name}${how ? `, ${how}` : ""}`;
+        const edge = (from: string, why: string) =>
+          add({
+            from,
+            to: target.arn,
+            type: "CAN_REACH",
+            properties: { ports, via: sg.name, viaArn: sg.arn, reason: why },
+          });
+
+        if (cidrContains(range, source.cidr)) {
+          edge(source.arn, reason);
+          continue;
+        }
+        for (const member of membersOfSubnet.get(source.arn) ?? []) {
+          const ip = parseCidr(member.properties["privateIpAddress"]);
+          if (member.arn !== target.arn && ip && cidrContains(range, ip)) {
+            edge(member.arn, `${reason}, at ${String(member.properties["privateIpAddress"])}`);
+          }
+        }
       }
     }
   }

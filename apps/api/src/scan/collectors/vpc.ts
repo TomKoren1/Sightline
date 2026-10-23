@@ -4,8 +4,9 @@
  * This collector produces the structure that every reachability question is
  * later answered from, so it is deliberately thorough about two things:
  *
- *  - **Route tables.** A subnet is public if its associated route table sends
- *    `0.0.0.0/0` to an internet gateway. Not if it is tagged "public". The
+ *  - **Route tables.** A subnet is public if the route table it uses - its
+ *    own, or its VPC's main one - sends `0.0.0.0/0` to an internet gateway.
+ *    Not if it is tagged "public". The
  *    `isPublic` fact recorded here is derived from routing, and the reason
  *    names the gateway that justified it.
  *
@@ -28,6 +29,8 @@ import type { Relationship, Resource } from "@sightline/shared";
 
 import { ec2Client } from "../../aws/clients.js";
 import { ec2Arn, nameFromTags, regionArn, tagsToRecord } from "../../aws/arns.js";
+import { collectConnectivity } from "./connectivity.js";
+import { flattenRoute, internetRoute } from "./routes.js";
 import type { CollectorContext, CollectorOutput } from "./types.js";
 
 export async function collectVpc(ctx: CollectorContext): Promise<CollectorOutput> {
@@ -68,15 +71,12 @@ export async function collectVpc(ctx: CollectorContext): Promise<CollectorOutput
   }
 
   // --- Internet gateways --------------------------------------------------
-  /** Gateway id -> the VPC it is attached to, used to classify route tables. */
-  const igwToVpc = new Map<string, string>();
   for await (const page of paginateDescribeInternetGateways({ client }, {})) {
     for (const igw of page.InternetGateways ?? []) {
       if (!igw.InternetGatewayId) continue;
       const tags = tagsToRecord(igw.Tags);
       const arn = ec2Arn(region, ctx.accountId, "internet-gateway", igw.InternetGatewayId);
       const attachedVpc = igw.Attachments?.[0]?.VpcId;
-      if (attachedVpc) igwToVpc.set(igw.InternetGatewayId, attachedVpc);
       resources.push({
         arn,
         kind: "InternetGateway",
@@ -138,21 +138,28 @@ export async function collectVpc(ctx: CollectorContext): Promise<CollectorOutput
 
   // --- Route tables -------------------------------------------------------
   // Collected before subnets, because a subnet's public/private verdict is
-  // decided by the route table associated with it.
+  // decided by the route table it uses: its own association, or else its
+  // VPC's main table - which AWS applies silently and is easy to forget.
   const routeTables: RouteTable[] = [];
   for await (const page of paginateDescribeRouteTables({ client }, {})) {
     routeTables.push(...(page.RouteTables ?? []));
   }
 
-  /** Subnet id -> the internet gateway that gives it a default route, if any. */
-  const subnetToIgw = new Map<string, string>();
+  const explicitTable = new Map<string, RouteTable>();
+  const mainTable = new Map<string, RouteTable>();
+  for (const rt of routeTables) {
+    for (const assoc of rt.Associations ?? []) {
+      if (assoc.Main && rt.VpcId) mainTable.set(rt.VpcId, rt);
+      if (assoc.SubnetId) explicitTable.set(assoc.SubnetId, rt);
+    }
+  }
+
   for (const rt of routeTables) {
     if (!rt.RouteTableId) continue;
     const tags = tagsToRecord(rt.Tags);
     const arn = ec2Arn(region, ctx.accountId, "route-table", rt.RouteTableId);
-    const defaultRoute = (rt.Routes ?? []).find(
-      (r) => r.DestinationCidrBlock === "0.0.0.0/0" && r.GatewayId?.startsWith("igw-"),
-    );
+    const routes = (rt.Routes ?? []).map(flattenRoute);
+    const internet = internetRoute(routes);
 
     resources.push({
       arn,
@@ -164,9 +171,11 @@ export async function collectVpc(ctx: CollectorContext): Promise<CollectorOutput
       properties: {
         routeTableId: rt.RouteTableId,
         vpcId: rt.VpcId,
-        hasInternetRoute: Boolean(defaultRoute),
-        internetGatewayId: defaultRoute?.GatewayId ?? null,
-        routeCount: (rt.Routes ?? []).length,
+        isMain: (rt.Associations ?? []).some((a) => a.Main),
+        hasInternetRoute: Boolean(internet),
+        internetGatewayId: internet?.targetId ?? null,
+        routeCount: routes.length,
+        routes,
       },
       derived: {},
       raw: rt,
@@ -179,22 +188,15 @@ export async function collectVpc(ctx: CollectorContext): Promise<CollectorOutput
         type: "IN_VPC",
       });
     }
-    if (defaultRoute?.GatewayId) {
+    if (internet?.targetId) {
       relationships.push({
         from: arn,
-        to: ec2Arn(region, ctx.accountId, "internet-gateway", defaultRoute.GatewayId),
+        to: ec2Arn(region, ctx.accountId, "internet-gateway", internet.targetId),
         type: "ROUTES_TO",
-        properties: { destination: "0.0.0.0/0" },
+        properties: { destination: internet.destination },
       });
     }
-
-    for (const assoc of rt.Associations ?? []) {
-      if (assoc.SubnetId && defaultRoute?.GatewayId) {
-        subnetToIgw.set(assoc.SubnetId, defaultRoute.GatewayId);
-      }
-    }
   }
-  void igwToVpc;
 
   // --- Subnets ------------------------------------------------------------
   for await (const page of paginateDescribeSubnets({ client }, {})) {
@@ -202,10 +204,15 @@ export async function collectVpc(ctx: CollectorContext): Promise<CollectorOutput
       if (!subnet.SubnetId) continue;
       const tags = tagsToRecord(subnet.Tags);
       const arn = ec2Arn(region, ctx.accountId, "subnet", subnet.SubnetId);
-      const igw = subnetToIgw.get(subnet.SubnetId);
+      const explicit = explicitTable.get(subnet.SubnetId);
+      const table = explicit ?? (subnet.VpcId ? mainTable.get(subnet.VpcId) : undefined);
+      const igw = table ? internetRoute((table.Routes ?? []).map(flattenRoute))?.targetId : null;
       // Auto-assigned public IPs make a subnet effectively public too, but
       // only routing makes it reachable, so routing is the primary signal.
       const isPublic = Boolean(igw);
+      const which = explicit
+        ? "Its route table"
+        : "Its VPC's main route table, which it uses by default,";
 
       resources.push({
         arn,
@@ -220,13 +227,14 @@ export async function collectVpc(ctx: CollectorContext): Promise<CollectorOutput
           cidrBlock: subnet.CidrBlock,
           availabilityZone: subnet.AvailabilityZone,
           mapPublicIpOnLaunch: subnet.MapPublicIpOnLaunch ?? false,
+          routeTableId: table?.RouteTableId ?? null,
           isPublic,
         },
         derived: {
           isPublic,
           publicReason: isPublic
-            ? `Its route table sends 0.0.0.0/0 to internet gateway ${igw}`
-            : "No route table associated with this subnet has a default route to an internet gateway",
+            ? `${which} sends 0.0.0.0/0 to internet gateway ${igw}`
+            : "The route table this subnet uses has no active default route to an internet gateway",
         },
         raw: subnet,
       });
@@ -236,6 +244,14 @@ export async function collectVpc(ctx: CollectorContext): Promise<CollectorOutput
           from: arn,
           to: ec2Arn(region, ctx.accountId, "vpc", subnet.VpcId),
           type: "IN_VPC",
+        });
+      }
+      if (table?.RouteTableId) {
+        relationships.push({
+          from: arn,
+          to: ec2Arn(region, ctx.accountId, "route-table", table.RouteTableId),
+          type: "USES_ROUTE_TABLE",
+          properties: { main: !explicit },
         });
       }
     }
@@ -344,6 +360,11 @@ export async function collectVpc(ctx: CollectorContext): Promise<CollectorOutput
       }
     }
   }
+
+  // Peering, transit gateways and PrivateLink: read against the routes above.
+  const connectivity = await collectConnectivity(ctx, client);
+  resources.push(...connectivity.resources);
+  relationships.push(...connectivity.relationships);
 
   return { resources, relationships };
 }

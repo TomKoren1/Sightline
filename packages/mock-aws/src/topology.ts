@@ -110,6 +110,7 @@ export const GROUND_TRUTH = {
     "prod-alb",
     "northwind-cdn",
     "northwind-orders-api",
+    "status-page",
   ],
 
   /**
@@ -164,7 +165,28 @@ export const GROUND_TRUTH = {
     "prod-bastion",
     "staging-rdp-host",
     "staging-ssh-host",
+    "status-page",
   ],
+
+  /** Reached across VPCs through private ranges, `[from, to]`: peering, TGW, PrivateLink. */
+  privateNetworkPaths: [
+    ["analytics-worker", "northwind-prod-db"],
+    ["shared-ci-runner", "prod-app-1"],
+    ["analytics-worker", "prod-orders-nlb"],
+  ],
+
+  /**
+   * Admitted by the target's group and carried by no route, `[from, to]`: a
+   * peering routed one way only, and a subnet whose table sends prod's range
+   * to the internet rather than to the transit gateway.
+   */
+  unroutedPaths: [
+    ["partner-reporting", "northwind-prod-db"],
+    ["status-page", "prod-app-1"],
+  ],
+
+  /** Public only through its VPC's main route table, which its subnet uses by default. */
+  publicByMainRouteTable: ["status-page"],
 
   /**
    * Billable but idle, by structural signal alone (attached to nothing,

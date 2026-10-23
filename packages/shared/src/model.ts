@@ -23,6 +23,10 @@ export const RESOURCE_KINDS = [
   "NatGateway",
   "RouteTable",
   "NetworkAcl",
+  "VpcPeeringConnection",
+  "TransitGateway",
+  "VpcEndpoint",
+  "VpcEndpointService",
   "LoadBalancer",
   "TargetGroup",
   "CloudFrontDistribution",
@@ -68,6 +72,14 @@ export const RELATIONSHIP_TYPES = [
   "MEMBER_OF",
   /** Subnet -> the network ACL that filters its traffic. */
   "HAS_NACL",
+  /** Subnet -> the route table that decides where its traffic goes, explicit or main. */
+  "USES_ROUTE_TABLE",
+  /** Peering connection -> each of the two VPCs it joins. */
+  "PEERS_WITH",
+  /** Interface endpoint -> the PrivateLink service it connects to. */
+  "CONNECTS_TO",
+  /** PrivateLink service -> the network load balancer behind it. */
+  "SERVED_BY",
   /** Load balancer -> a target group a listener forwards to. */
   "FORWARDS_TO",
   /** Target group -> a registered target. */

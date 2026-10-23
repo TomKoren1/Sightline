@@ -438,7 +438,11 @@ function reachIndex(scope: GraphScope): Promise<ReachIndex> {
   return index;
 }
 
-/** This scan's reach edges and group memberships, ready to walk. */
+/**
+ * This scan's reach edges and the memberships they expand through: every
+ * group's, and the subnets' that are themselves the source of an edge - not
+ * every IN_SUBNET row, which is most of the resources in an estate.
+ */
 async function loadReachIndex(scope: GraphScope): Promise<ReachIndex> {
   const rows = await read<{
     from_arn: string;
@@ -448,7 +452,10 @@ async function loadReachIndex(scope: GraphScope): Promise<ReachIndex> {
   }>(
     scope,
     (_r, e) => sql`SELECT from_arn, to_arn, rel_type, properties FROM ${e} e
-                    WHERE rel_type IN ('CAN_REACH', 'HAS_SECURITY_GROUP')`,
+                    WHERE rel_type IN ('CAN_REACH', 'HAS_SECURITY_GROUP')
+                       OR (rel_type = 'IN_SUBNET' AND to_arn IN (
+                             SELECT from_arn FROM ${e} s
+                              WHERE rel_type = 'CAN_REACH' AND from_arn LIKE '%:subnet/%'))`,
   );
   return indexReach(
     rows.map((row) => ({

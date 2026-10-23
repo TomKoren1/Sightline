@@ -12,7 +12,6 @@ import {
   AttachInternetGatewayCommand,
   AssociateRouteTableCommand,
   AssociateIamInstanceProfileCommand,
-  AuthorizeSecurityGroupIngressCommand,
   CreateInternetGatewayCommand,
   CreateNatGatewayCommand,
   CreateRouteCommand,
@@ -95,18 +94,8 @@ import {
   waitForMoto,
 } from "./clients.js";
 import { ACCOUNT_ID, LEGACY_REGION, PROD_REGION, STAGING_REGION, TAGS } from "./topology.js";
-
-type Tags = Record<string, string>;
-
-const tagSpec = (resourceType: string, name: string, tags: Tags) => [
-  {
-    ResourceType: resourceType as never,
-    Tags: [
-      { Key: "Name", Value: name },
-      ...Object.entries(tags).map(([Key, Value]) => ({ Key, Value })),
-    ],
-  },
-];
+import { allowIngress, tagSpec, type Tags } from "./seedHelpers.js";
+import { seedConnectivity } from "./seedConnectivity.js";
 
 /** A minimal but valid zip containing an empty index.js, for Lambda code. */
 const LAMBDA_ZIP = Buffer.from(
@@ -201,6 +190,7 @@ async function seedNetwork(
   );
 
   let natId: string | undefined;
+  let privateRtId: string | undefined;
   if (opts.withNat) {
     const eip = await client.send(new AllocateAddressCommand({ Domain: "vpc" }));
     const nat = await client.send(
@@ -218,7 +208,7 @@ async function seedNetwork(
         TagSpecifications: tagSpec("route-table", `${opts.name}-private-rt`, opts.tags),
       }),
     );
-    const privateRtId = privateRt.RouteTable!.RouteTableId!;
+    privateRtId = privateRt.RouteTable!.RouteTableId!;
     await client.send(
       new CreateRouteCommand({
         RouteTableId: privateRtId,
@@ -233,35 +223,19 @@ async function seedNetwork(
     }
   }
 
-  return { vpcId, igwId, publicSubnetId, privateSubnetAId, privateSubnetBId, natId, publicRtId };
+  return {
+    vpcId,
+    igwId,
+    publicSubnetId,
+    privateSubnetAId,
+    privateSubnetBId,
+    natId,
+    publicRtId,
+    privateRtId,
+  };
 }
 
 /** Open a port on a security group, either to a CIDR or from another group. */
-async function allowIngress(
-  client: EC2Client,
-  groupId: string,
-  port: number | "all",
-  source: { cidr: string } | { groupId: string },
-  description: string,
-) {
-  const range =
-    port === "all"
-      ? { IpProtocol: "-1" as const }
-      : { IpProtocol: "tcp", FromPort: port, ToPort: port };
-  await client.send(
-    new AuthorizeSecurityGroupIngressCommand({
-      GroupId: groupId,
-      IpPermissions: [
-        {
-          ...range,
-          ...("cidr" in source
-            ? { IpRanges: [{ CidrIp: source.cidr, Description: description }] }
-            : { UserIdGroupPairs: [{ GroupId: source.groupId, Description: description }] }),
-        },
-      ],
-    }),
-  );
-}
 
 /** IAM is global, so it is seeded once rather than per region. */
 async function seedIam() {
@@ -822,6 +796,15 @@ async function seedProduction(appProfileName: string) {
     appSg,
     app1,
     orderProcessorArn: orderProcessor.FunctionArn!,
+  });
+
+  await seedConnectivity({
+    prodVpcId: net.vpcId,
+    prodPrivateRtId: net.privateRtId!,
+    prodPrivateSubnetId: net.privateSubnetAId,
+    dbSg,
+    appSg,
+    app1,
   });
 
   await seedServices({

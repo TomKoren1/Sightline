@@ -273,6 +273,9 @@ Resources:
                   - "ce:GetCostAndUsage"
                   - "cloudwatch:GetMetricData"
                   - "cloudwatch:GetMetricStatistics"
+                  # SecurityAudit grants ec2:Describe*, not Search*: the routes
+                  # inside a transit gateway route table are only readable by this.
+                  - "ec2:SearchTransitGatewayRoutes"
                 Resource: "*"
 
         - !If

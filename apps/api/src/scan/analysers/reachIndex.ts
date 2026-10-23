@@ -5,7 +5,8 @@
  * *group* to the target, not once per member: a default group shared by N
  * instances would otherwise be N² edges. So a resource's next hops are its own
  * edges plus those of every group it belongs to, worked out when asked, and
- * paths still run resource to resource.
+ * paths still run resource to resource. A rule admitting a subnet's range is
+ * stored as an edge from the subnet, and expands to its members the same way.
  */
 
 import type { Relationship } from "@sightline/shared";
@@ -36,7 +37,7 @@ export function indexReach(relationships: Iterable<Relationship>): ReachIndex {
     if (rel.type === "CAN_REACH") {
       push(out, rel.from, rel);
       push(into, rel.to, rel.from);
-    } else if (rel.type === "HAS_SECURITY_GROUP") {
+    } else if (rel.type === "HAS_SECURITY_GROUP" || rel.type === "IN_SUBNET") {
       push(groupsOf, rel.from, rel.to);
       push(membersOf, rel.to, rel.from);
     }

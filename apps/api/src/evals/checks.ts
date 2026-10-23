@@ -16,7 +16,7 @@
  */
 
 import { GROUND_TRUTH } from "@sightline/mock-aws/answer-key";
-import { indexReach } from "../scan/analysers/reachIndex.js";
+import { hopsFrom, indexReach } from "../scan/analysers/reachIndex.js";
 import { INTERNET_ARN, type Relationship, type Resource } from "@sightline/shared";
 
 export interface CheckResult {
@@ -340,7 +340,13 @@ export const CHECKS: CheckDefinition[] = [
             .map((x) => x!.name),
         ),
       ].sort();
-      const expected = ["prod-bastion", "prod-web-1", "prod-web-2", "staging-rdp-host"];
+      const expected = [
+        "prod-bastion",
+        "prod-web-1",
+        "prod-web-2",
+        "staging-rdp-host",
+        "status-page",
+      ];
       return {
         passed: same(direct, expected),
         detail: `directly exposed: ${direct.join(", ") || "none"}`,
@@ -499,6 +505,59 @@ export const CHECKS: CheckDefinition[] = [
       return {
         passed: same(found, expected),
         detail: `idle: ${found.join(", ") || "none"} (expected ${expected.join(", ")})`,
+      };
+    },
+  },
+  {
+    id: "private-network-paths",
+    description: "Paths across VPCs are found where routes carry them, and only there",
+    rationale:
+      "A rule admitting 10.1.0.0/16 is a path only if that range can route here and back: over a peering routed both ways, or a transit gateway whose own table carries it. A peering routed one way looks connected in the console and carries nothing.",
+    run: ({ resources, relationships }) => {
+      const index = indexReach(relationships);
+      const arn = (name: string) => resources.find((r) => r.name === name)?.arn;
+      const reaches = (from: string, to: string) => {
+        const [a, b] = [arn(from), arn(to)];
+        return Boolean(a && b && hopsFrom(index, a).has(b));
+      };
+      const failures = [
+        ...GROUND_TRUTH.privateNetworkPaths
+          .filter(([from, to]) => !reaches(from, to))
+          .map(([from, to]) => `${from} -> ${to} missed`),
+        ...GROUND_TRUTH.unroutedPaths
+          .filter(([from, to]) => reaches(from, to))
+          .map(([from, to]) => `${from} -> ${to} reported, with no route to carry it`),
+      ];
+      return {
+        passed: failures.length === 0,
+        detail:
+          failures.length === 0
+            ? `${GROUND_TRUTH.privateNetworkPaths.length} paths found, ${GROUND_TRUTH.unroutedPaths.length} unrouted ones refused`
+            : failures.join("; "),
+      };
+    },
+  },
+  {
+    id: "main-route-table",
+    description: "A subnet with no route table of its own is judged by its VPC's main one",
+    rationale:
+      "AWS applies the main route table silently. Reading only explicit associations calls a subnet private while the internet reaches it.",
+    run: ({ resources, relationships }) => {
+      const wrong = GROUND_TRUTH.publicByMainRouteTable.filter((name) => {
+        const host = resources.find((r) => r.name === name);
+        const subnetArn = relationships.find(
+          (rel) => rel.from === host?.arn && rel.type === "IN_SUBNET",
+        )?.to;
+        const subnet = resources.find((r) => r.arn === subnetArn);
+        return !(
+          subnet?.derived.isPublic &&
+          (subnet.derived.publicReason ?? "").includes("main route table")
+        );
+      });
+      return {
+        passed: wrong.length === 0,
+        detail:
+          wrong.length === 0 ? "the main table decides" : `judged private: ${wrong.join(", ")}`,
       };
     },
   },
