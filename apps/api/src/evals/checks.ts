@@ -334,14 +334,76 @@ export const CHECKS: CheckDefinition[] = [
         ...new Set(
           relationships
             .filter((r) => r.type === "CAN_REACH" && r.from === INTERNET_ARN)
-            .map((r) => resources.find((x) => x.arn === r.to)?.name)
-            .filter(Boolean) as string[],
+            .map((r) => resources.find((x) => x.arn === r.to))
+            // Hosts only: entry points are checked in their own right below.
+            .filter((x) => x?.kind === "Ec2Instance")
+            .map((x) => x!.name),
         ),
       ].sort();
       const expected = ["prod-bastion", "prod-web-1", "prod-web-2", "staging-rdp-host"];
       return {
         passed: same(direct, expected),
         detail: `directly exposed: ${direct.join(", ") || "none"}`,
+      };
+    },
+  },
+  {
+    id: "entry-points",
+    description:
+      "Internet-facing load balancers, CloudFront and public APIs are entry points; an internal load balancer is not",
+    rationale:
+      "In a real estate the internet reaches a load balancer, not an instance. prod-internal-alb's group is open to 0.0.0.0/0, and it is still unreachable because it is internal.",
+    run: ({ resources }) => {
+      const failures: string[] = [];
+      for (const name of GROUND_TRUTH.entryPoints) {
+        if (!resources.find((r) => r.name === name)?.derived.isPublic)
+          failures.push(`${name} not reachable`);
+      }
+      for (const name of GROUND_TRUTH.internalEntryPoints) {
+        if (resources.find((r) => r.name === name)?.derived.isPublic)
+          failures.push(`${name} wrongly reachable`);
+      }
+      return {
+        passed: failures.length === 0,
+        detail:
+          failures.length === 0 ? "entry points read correctly both ways" : failures.join("; "),
+      };
+    },
+  },
+  {
+    id: "routes-through-entry-points",
+    description: "Paths through a load balancer and an API reach what they front",
+    rationale:
+      "prod-alb forwards to prod-app-1 through its target group, and northwind-orders-api invokes order-processor. Both lead on to the production database.",
+    run: ({ resources, relationships }) => {
+      const reach = indexReach(relationships);
+      const name = (arn: string) => resources.find((r) => r.arn === arn)?.name;
+      const failures = GROUND_TRUTH.entryRoutes.filter(([entry, backend]) => {
+        const backendArn = resources.find((r) => r.name === backend)?.arn;
+        return !backendArn || !reach.prev(backendArn).map(name).includes(entry);
+      });
+      return {
+        passed: failures.length === 0,
+        detail:
+          failures.length === 0
+            ? GROUND_TRUTH.entryRoutes.map(([a, b]) => `${a} -> ${b}`).join(", ")
+            : `missing: ${failures.map(([a, b]) => `${a} -> ${b}`).join(", ")}`,
+      };
+    },
+  },
+  {
+    id: "nacl-blocks",
+    description:
+      "A host whose open security group is overruled by its subnet's network ACL is not exposed",
+    rationale:
+      "staging-ssh-host has SSH open to 0.0.0.0/0 and sits in a public subnet, but the subnet's ACL denies port 22. Reading security groups alone calls it exposed.",
+    run: ({ resources }) => {
+      const wrong = GROUND_TRUTH.naclBlockedHosts.filter(
+        (name) => resources.find((r) => r.name === name)?.derived.isPublic,
+      );
+      return {
+        passed: wrong.length === 0,
+        detail: wrong.length === 0 ? "the ACL is honoured" : `wrongly exposed: ${wrong.join(", ")}`,
       };
     },
   },

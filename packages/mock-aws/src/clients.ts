@@ -14,6 +14,9 @@ import { S3Client } from "@aws-sdk/client-s3";
 import { IAMClient } from "@aws-sdk/client-iam";
 import { RDSClient } from "@aws-sdk/client-rds";
 import { LambdaClient } from "@aws-sdk/client-lambda";
+import { ElasticLoadBalancingV2Client } from "@aws-sdk/client-elastic-load-balancing-v2";
+import { CloudFrontClient } from "@aws-sdk/client-cloudfront";
+import { ApiGatewayV2Client } from "@aws-sdk/client-apigatewayv2";
 import { errorMessage } from "@sightline/shared";
 
 const endpoint = process.env.AWS_ENDPOINT_URL ?? "http://localhost:5000";
@@ -29,6 +32,9 @@ export const ec2 = (region: string) => new EC2Client(base(region));
 export const s3 = (region: string) => new S3Client({ ...base(region), forcePathStyle: true });
 export const rds = (region: string) => new RDSClient(base(region));
 export const lambda = (region: string) => new LambdaClient(base(region));
+export const elbv2 = (region: string) => new ElasticLoadBalancingV2Client(base(region));
+export const cloudfront = () => new CloudFrontClient(base("us-east-1"));
+export const apigatewayV2 = (region: string) => new ApiGatewayV2Client(base(region));
 /** IAM is global; region is a formality. */
 export const iam = () => new IAMClient(base("us-east-1"));
 

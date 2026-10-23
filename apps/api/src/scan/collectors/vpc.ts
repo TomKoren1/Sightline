@@ -21,6 +21,7 @@ import {
   paginateDescribeInternetGateways,
   paginateDescribeNatGateways,
   paginateDescribeSecurityGroups,
+  paginateDescribeNetworkAcls,
   type RouteTable,
 } from "@aws-sdk/client-ec2";
 import type { Relationship, Resource } from "@sightline/shared";
@@ -294,6 +295,51 @@ export async function collectVpc(ctx: CollectorContext): Promise<CollectorOutput
           from: arn,
           to: ec2Arn(region, ctx.accountId, "vpc", sg.VpcId),
           type: "IN_VPC",
+        });
+      }
+    }
+  }
+
+  // --- Network ACLs -------------------------------------------------------
+  // Stateless and evaluated per subnet, lowest rule number first. A security
+  // group can admit traffic its subnet's ACL then drops, which is why the
+  // reachability analyser checks both before calling anything exposed.
+  for await (const page of paginateDescribeNetworkAcls({ client }, {})) {
+    for (const acl of page.NetworkAcls ?? []) {
+      if (!acl.NetworkAclId) continue;
+      const tags = tagsToRecord(acl.Tags);
+      const arn = ec2Arn(region, ctx.accountId, "network-acl", acl.NetworkAclId);
+      resources.push({
+        arn,
+        kind: "NetworkAcl",
+        name: nameFromTags(tags, acl.NetworkAclId),
+        region,
+        accountId: ctx.accountId,
+        tags,
+        properties: {
+          networkAclId: acl.NetworkAclId,
+          vpcId: acl.VpcId ?? null,
+          isDefault: acl.IsDefault ?? false,
+          entries: (acl.Entries ?? []).map((e) => ({
+            ruleNumber: e.RuleNumber ?? null,
+            egress: e.Egress ?? false,
+            action: e.RuleAction ?? null,
+            protocol: e.Protocol ?? null,
+            cidr: e.CidrBlock ?? e.Ipv6CidrBlock ?? null,
+            fromPort: e.PortRange?.From ?? null,
+            toPort: e.PortRange?.To ?? null,
+          })),
+        },
+        derived: {},
+        raw: acl,
+      });
+      relationships.push(inRegion(arn));
+      for (const assoc of acl.Associations ?? []) {
+        if (!assoc.SubnetId) continue;
+        relationships.push({
+          from: ec2Arn(region, ctx.accountId, "subnet", assoc.SubnetId),
+          to: arn,
+          type: "HAS_NACL",
         });
       }
     }

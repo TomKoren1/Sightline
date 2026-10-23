@@ -26,6 +26,10 @@ import {
   StopInstancesCommand,
   type EC2Client,
   type _InstanceType,
+  CreateNetworkAclCommand,
+  CreateNetworkAclEntryCommand,
+  DescribeNetworkAclsCommand,
+  ReplaceNetworkAclAssociationCommand,
 } from "@aws-sdk/client-ec2";
 import {
   CreateBucketCommand,
@@ -49,8 +53,27 @@ import {
 } from "@aws-sdk/client-iam";
 import { CreateDBInstanceCommand, CreateDBSubnetGroupCommand } from "@aws-sdk/client-rds";
 import { CreateFunctionCommand } from "@aws-sdk/client-lambda";
+import {
+  CreateListenerCommand,
+  CreateLoadBalancerCommand,
+  CreateTargetGroupCommand,
+  RegisterTargetsCommand,
+} from "@aws-sdk/client-elastic-load-balancing-v2";
+import { CreateDistributionCommand } from "@aws-sdk/client-cloudfront";
+import { CreateApiCommand, CreateIntegrationCommand } from "@aws-sdk/client-apigatewayv2";
 
-import { ec2, iam, lambda, rds, s3, resetMoto, waitForMoto } from "./clients.js";
+import {
+  apigatewayV2,
+  cloudfront,
+  ec2,
+  elbv2,
+  iam,
+  lambda,
+  rds,
+  s3,
+  resetMoto,
+  waitForMoto,
+} from "./clients.js";
 import { ACCOUNT_ID, LEGACY_REGION, PROD_REGION, STAGING_REGION, TAGS } from "./topology.js";
 
 type Tags = Record<string, string>;
@@ -190,7 +213,7 @@ async function seedNetwork(
     }
   }
 
-  return { vpcId, igwId, publicSubnetId, privateSubnetAId, privateSubnetBId, natId };
+  return { vpcId, igwId, publicSubnetId, privateSubnetAId, privateSubnetBId, natId, publicRtId };
 }
 
 /** Open a port on a security group, either to a CIDR or from another group. */
@@ -746,7 +769,7 @@ async function seedProduction(appProfileName: string) {
 
   // Lambda: one correctly scoped and inside the VPC, one running as admin.
   const lambdaClient = lambda(PROD_REGION);
-  await lambdaClient.send(
+  const orderProcessor = await lambdaClient.send(
     new CreateFunctionCommand({
       FunctionName: "order-processor",
       Runtime: "nodejs20.x",
@@ -771,9 +794,146 @@ async function seedProduction(appProfileName: string) {
     }),
   );
 
+  await seedEntryPoints({
+    vpcId: net.vpcId,
+    publicSubnetId: net.publicSubnetId,
+    privateSubnetId: net.privateSubnetAId,
+    mkSg,
+    appSg,
+    app1,
+    orderProcessorArn: orderProcessor.FunctionArn!,
+  });
+
   log(`${PROD_REGION}: 3-tier VPC, 5 instances, 2 RDS, 2 Lambda, 5 security groups`);
   void web1;
   void web2;
+}
+
+/**
+ * How the internet actually arrives: through a load balancer, a CDN, an API.
+ *
+ * Each adds a route into production that a host-only model cannot see, and
+ * one is a trap: an internal load balancer whose group is open to the world
+ * is still not reachable from it.
+ */
+async function seedEntryPoints(opts: {
+  vpcId: string;
+  publicSubnetId: string;
+  privateSubnetId: string;
+  mkSg: (name: string, description: string) => Promise<string>;
+  appSg: string;
+  app1: string;
+  orderProcessorArn: string;
+}) {
+  const client = ec2(PROD_REGION);
+  const lb = elbv2(PROD_REGION);
+
+  // Internet -> prod-alb -> prod-app-1 -> northwind-prod-db: a third route in.
+  const albSg = await opts.mkSg("prod-alb-sg", "Public load balancer");
+  await allowIngress(client, albSg, 443, { cidr: "0.0.0.0/0" }, "HTTPS from the internet");
+  await allowIngress(client, opts.appSg, 9000, { groupId: albSg }, "App traffic from the ALB");
+  const alb = await lb.send(
+    new CreateLoadBalancerCommand({
+      Name: "prod-alb",
+      Subnets: [opts.publicSubnetId],
+      SecurityGroups: [albSg],
+      Scheme: "internet-facing",
+      Type: "application",
+    }),
+  );
+  const albArn = alb.LoadBalancers![0]!.LoadBalancerArn!;
+  const tg = await lb.send(
+    new CreateTargetGroupCommand({
+      Name: "prod-app-tg",
+      Protocol: "HTTP",
+      Port: 9000,
+      VpcId: opts.vpcId,
+      TargetType: "instance",
+    }),
+  );
+  const tgArn = tg.TargetGroups![0]!.TargetGroupArn!;
+  await lb.send(
+    new RegisterTargetsCommand({ TargetGroupArn: tgArn, Targets: [{ Id: opts.app1 }] }),
+  );
+  await lb.send(
+    new CreateListenerCommand({
+      LoadBalancerArn: albArn,
+      Port: 443,
+      Protocol: "HTTP",
+      DefaultActions: [{ Type: "forward", TargetGroupArn: tgArn }],
+    }),
+  );
+
+  // The trap: open to 0.0.0.0/0 in its group, but internal, so nothing outside
+  // the VPC can reach it.
+  const internalSg = await opts.mkSg("prod-internal-alb-sg", "Internal load balancer");
+  await allowIngress(
+    client,
+    internalSg,
+    443,
+    { cidr: "0.0.0.0/0" },
+    "Anything that can route here",
+  );
+  await lb.send(
+    new CreateLoadBalancerCommand({
+      Name: "prod-internal-alb",
+      Subnets: [opts.privateSubnetId],
+      SecurityGroups: [internalSg],
+      Scheme: "internal",
+      Type: "application",
+    }),
+  );
+
+  // A CDN in front of the ALB and the public assets bucket.
+  await cloudfront().send(
+    new CreateDistributionCommand({
+      DistributionConfig: {
+        CallerReference: "northwind-cdn",
+        Comment: "northwind-cdn",
+        Enabled: true,
+        Origins: {
+          Quantity: 2,
+          Items: [
+            {
+              Id: "app",
+              DomainName: alb.LoadBalancers![0]!.DNSName!,
+              CustomOriginConfig: {
+                HTTPPort: 80,
+                HTTPSPort: 443,
+                OriginProtocolPolicy: "https-only",
+              },
+            },
+            {
+              Id: "assets",
+              DomainName: "northwind-public-assets.s3.amazonaws.com",
+              S3OriginConfig: { OriginAccessIdentity: "" },
+            },
+          ],
+        },
+        DefaultCacheBehavior: {
+          TargetOriginId: "app",
+          ViewerProtocolPolicy: "redirect-to-https",
+          ForwardedValues: { QueryString: true, Cookies: { Forward: "all" } },
+          MinTTL: 0,
+          TrustedSigners: { Enabled: false, Quantity: 0 },
+        },
+      },
+    }),
+  );
+
+  // Internet -> northwind-orders-api -> order-processor -> northwind-prod-db.
+  const api = apigatewayV2(PROD_REGION);
+  const created = await api.send(
+    new CreateApiCommand({ Name: "northwind-orders-api", ProtocolType: "HTTP" }),
+  );
+  await api.send(
+    new CreateIntegrationCommand({
+      ApiId: created.ApiId!,
+      IntegrationType: "AWS_PROXY",
+      IntegrationUri: opts.orderProcessorArn,
+      PayloadFormatVersion: "2.0",
+    }),
+  );
 }
 
 /** Staging: smaller, with RDP open to the world. */
@@ -809,7 +969,82 @@ async function seedStaging() {
     }),
   );
 
-  log(`${STAGING_REGION}: VPC, 1 instance, RDP open to 0.0.0.0/0`);
+  // The inverse trap: SSH open to the world in the group and a public subnet,
+  // but the subnet's network ACL denies it. Not reachable.
+  const quarantine = await client.send(
+    new CreateSubnetCommand({
+      VpcId: net.vpcId,
+      CidrBlock: "10.1.9.0/24",
+      AvailabilityZone: `${STAGING_REGION}a`,
+      TagSpecifications: tagSpec("subnet", "staging-quarantine", TAGS.staging),
+    }),
+  );
+  const quarantineId = quarantine.Subnet!.SubnetId!;
+  await client.send(
+    new AssociateRouteTableCommand({ RouteTableId: net.publicRtId, SubnetId: quarantineId }),
+  );
+  const acl = await client.send(
+    new CreateNetworkAclCommand({
+      VpcId: net.vpcId,
+      TagSpecifications: tagSpec("network-acl", "staging-quarantine-acl", TAGS.staging),
+    }),
+  );
+  const aclId = acl.NetworkAcl!.NetworkAclId!;
+  for (const [ruleNumber, egress, action, ports] of [
+    [50, false, "deny", { From: 22, To: 22 }],
+    [100, false, "allow", undefined],
+    [100, true, "allow", undefined],
+  ] as const) {
+    await client.send(
+      new CreateNetworkAclEntryCommand({
+        NetworkAclId: aclId,
+        RuleNumber: ruleNumber,
+        Egress: egress,
+        RuleAction: action,
+        Protocol: ports ? "6" : "-1",
+        CidrBlock: "0.0.0.0/0",
+        ...(ports ? { PortRange: ports } : {}),
+      }),
+    );
+  }
+  const current = await client.send(
+    new DescribeNetworkAclsCommand({
+      Filters: [{ Name: "association.subnet-id", Values: [quarantineId] }],
+    }),
+  );
+  const associationId = current.NetworkAcls?.[0]?.Associations?.find(
+    (a) => a.SubnetId === quarantineId,
+  )?.NetworkAclAssociationId;
+  if (associationId) {
+    await client.send(
+      new ReplaceNetworkAclAssociationCommand({
+        AssociationId: associationId,
+        NetworkAclId: aclId,
+      }),
+    );
+  }
+  const sshSg = await client.send(
+    new CreateSecurityGroupCommand({
+      GroupName: "staging-ssh-sg",
+      Description: "Quarantined host",
+      VpcId: net.vpcId,
+      TagSpecifications: tagSpec("security-group", "staging-ssh-sg", TAGS.staging),
+    }),
+  );
+  await allowIngress(client, sshSg.GroupId!, 22, { cidr: "0.0.0.0/0" }, "SSH from anywhere");
+  await client.send(
+    new RunInstancesCommand({
+      ImageId: "ami-0c02fb55956c7d316",
+      MinCount: 1,
+      MaxCount: 1,
+      InstanceType: "t3.micro",
+      SubnetId: quarantineId,
+      SecurityGroupIds: [sshSg.GroupId!],
+      TagSpecifications: tagSpec("instance", "staging-ssh-host", TAGS.staging),
+    }),
+  );
+
+  log(`${STAGING_REGION}: VPC, 2 instances, RDP open to 0.0.0.0/0, SSH open but blocked by a NACL`);
 }
 
 /** A region nobody has looked at in two years, still costing money. */
@@ -858,6 +1093,6 @@ export async function seed(): Promise<SeedSummary> {
   return {
     accountId: ACCOUNT_ID,
     regions: [PROD_REGION, STAGING_REGION, LEGACY_REGION],
-    counts: { regions: 3, vpcs: 3, instances: 6, buckets: 5, roles: 5, databases: 2, functions: 2 },
+    counts: { regions: 3, vpcs: 3, instances: 7, buckets: 5, roles: 9, databases: 2, functions: 2 },
   };
 }

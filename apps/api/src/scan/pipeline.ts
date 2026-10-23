@@ -14,6 +14,7 @@ import { evaluateAdmin, type PolicyRef } from "./analysers/policy.js";
 import type { AttachedPolicy, GroupPolicy } from "./collectors/iam.js";
 import { evaluateBucketPublicAccess, type AclGrant } from "./analysers/publicAccess.js";
 import { analyseIdleResources } from "./analysers/idle.js";
+import { linkEntryPoints } from "./analysers/entryPoints.js";
 import { analyseReachability } from "./analysers/reachability.js";
 
 /** Synthetic nodes: the account, its regions, and the internet. */
@@ -152,6 +153,7 @@ export function annotate(
   analyseIdleResources(resources, relationships);
 
   // --- What can reach what? -----------------------------------------------
+  relationships.push(...linkEntryPoints(resources));
   const { edges, internetReachable } = analyseReachability(resources, relationships);
   relationships.push(...edges);
 
@@ -164,7 +166,7 @@ export function annotate(
     resource.derived.isPublic = true;
     resource.derived.publicReason =
       (direct?.properties?.["reason"] as string | undefined) ??
-      "Reachable from the internet through a chain of security group rules";
+      "Reachable from the internet through other resources; its network paths show the route";
   }
 
   return { accountId, regions, units: [], resources, relationships };

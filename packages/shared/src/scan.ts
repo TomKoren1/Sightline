@@ -3,11 +3,21 @@
 import type { Resource, Relationship } from "./model.js";
 
 /** AWS services the scanner knows how to enumerate. */
-export const SCANNABLE_SERVICES = ["ec2", "vpc", "s3", "iam", "rds", "lambda"] as const;
+export const SCANNABLE_SERVICES = [
+  "ec2",
+  "vpc",
+  "s3",
+  "iam",
+  "rds",
+  "lambda",
+  "elbv2",
+  "cloudfront",
+  "apigateway",
+] as const;
 export type ScannableService = (typeof SCANNABLE_SERVICES)[number];
 
 /** Services whose resources are global; scanned once, not once per region. */
-export const GLOBAL_SERVICES: ReadonlySet<ScannableService> = new Set(["iam", "s3"]);
+export const GLOBAL_SERVICES: ReadonlySet<ScannableService> = new Set(["iam", "s3", "cloudfront"]);
 
 export type ScanUnitStatus = "pending" | "running" | "succeeded" | "failed" | "skipped";
 

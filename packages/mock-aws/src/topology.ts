@@ -107,6 +107,9 @@ export const GROUND_TRUTH = {
     "prod-bastion",
     "staging-rdp-host",
     "northwind-prod-db",
+    "prod-alb",
+    "northwind-cdn",
+    "northwind-orders-api",
   ],
 
   /**
@@ -119,11 +122,33 @@ export const GROUND_TRUTH = {
     ["Internet", "prod-bastion", "northwind-prod-db"],
   ],
 
+  /** Entry points the internet reaches: a load balancer, a CDN, an API. */
+  entryPoints: ["prod-alb", "northwind-cdn", "northwind-orders-api"],
+
+  /** Open to 0.0.0.0/0 in its group, and internal, so not reachable. */
+  internalEntryPoints: ["prod-internal-alb"],
+
+  /** What each entry point delivers traffic to. */
+  entryRoutes: [
+    ["prod-alb", "prod-app-1"],
+    ["northwind-cdn", "prod-alb"],
+    ["northwind-orders-api", "order-processor"],
+  ],
+
+  /** Open in its security group, in a public subnet, and denied by its ACL. */
+  naclBlockedHosts: ["staging-ssh-host"],
+
   /** Flagged PubliclyAccessible but unreachable - no security group opens a port. */
   falsePositivePublicDb: ["analytics-db"],
 
   /** EC2 instances outside a private subnet. */
-  instancesInPublicSubnets: ["prod-web-1", "prod-web-2", "prod-bastion", "staging-rdp-host"],
+  instancesInPublicSubnets: [
+    "prod-web-1",
+    "prod-web-2",
+    "prod-bastion",
+    "staging-rdp-host",
+    "staging-ssh-host",
+  ],
 
   /**
    * Billable but idle, by structural signal alone (attached to nothing,

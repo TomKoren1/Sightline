@@ -18,6 +18,10 @@ import { IAMClient } from "@aws-sdk/client-iam";
 import { RDSClient } from "@aws-sdk/client-rds";
 import { LambdaClient } from "@aws-sdk/client-lambda";
 import { ResourceExplorer2Client } from "@aws-sdk/client-resource-explorer-2";
+import { ElasticLoadBalancingV2Client } from "@aws-sdk/client-elastic-load-balancing-v2";
+import { CloudFrontClient } from "@aws-sdk/client-cloudfront";
+import { APIGatewayClient } from "@aws-sdk/client-api-gateway";
+import { ApiGatewayV2Client } from "@aws-sdk/client-apigatewayv2";
 
 import { credentialProvider } from "./credentials.js";
 import type { ScanTarget } from "../tenancy/scanTarget.js";
@@ -142,6 +146,23 @@ export const rdsClient = (ctx: AwsContext, region: string) =>
 export const lambdaClient = (ctx: AwsContext, region: string) =>
   instrument(new LambdaClient(baseConfig(ctx, region)), ctx.counter, `lambda:${region}`);
 
+export const elbv2Client = (ctx: AwsContext, region: string) =>
+  instrument(
+    new ElasticLoadBalancingV2Client(baseConfig(ctx, region)),
+    ctx.counter,
+    `elbv2:${region}`,
+  );
+
+/** CloudFront is global and answers in us-east-1, whatever region a scan runs in. */
+export const cloudfrontClient = (ctx: AwsContext) =>
+  instrument(new CloudFrontClient(baseConfig(ctx, "us-east-1")), ctx.counter, "cloudfront:global");
+
+export const apigatewayClient = (ctx: AwsContext, region: string) =>
+  instrument(new APIGatewayClient(baseConfig(ctx, region)), ctx.counter, `apigateway:${region}`);
+
+export const apigatewayV2Client = (ctx: AwsContext, region: string) =>
+  instrument(new ApiGatewayV2Client(baseConfig(ctx, region)), ctx.counter, `apigateway:${region}`);
+
 export const resourceExplorerClient = (ctx: AwsContext, region: string) =>
   instrument(
     new ResourceExplorer2Client(baseConfig(ctx, region)),
@@ -157,7 +178,9 @@ export const s3Client = (ctx: AwsContext, region: string) =>
       ...(ctx.target.kind === "demo" ? { forcePathStyle: true } : {}),
     }),
     ctx.counter,
-    `s3:${region}`,
+    // Counted under the global unit the runner reports, whichever region a
+    // bucket lives in.
+    "s3:global",
   );
 
 /** IAM is global. Its endpoint lives in us-east-1 regardless of where we scan. */

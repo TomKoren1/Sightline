@@ -22,6 +22,11 @@ export const RESOURCE_KINDS = [
   "InternetGateway",
   "NatGateway",
   "RouteTable",
+  "NetworkAcl",
+  "LoadBalancer",
+  "TargetGroup",
+  "CloudFrontDistribution",
+  "ApiGateway",
   "Ec2Instance",
   "EbsVolume",
   "ElasticIp",
@@ -51,6 +56,16 @@ export const RELATIONSHIP_TYPES = [
   "PROVIDES_ROLE",
   "HAS_POLICY",
   "MEMBER_OF",
+  /** Subnet -> the network ACL that filters its traffic. */
+  "HAS_NACL",
+  /** Load balancer -> a target group a listener forwards to. */
+  "FORWARDS_TO",
+  /** Target group -> a registered target. */
+  "TARGETS",
+  /** CloudFront distribution -> the resource an origin points at. */
+  "HAS_ORIGIN",
+  /** API -> the backend an integration invokes. */
+  "INTEGRATES_WITH",
   "CAN_ASSUME",
   "EXECUTES_AS",
   /**
@@ -157,6 +172,7 @@ export function isGlobalKind(kind: ResourceKind): boolean {
     kind === "IamUser" ||
     kind === "IamGroup" ||
     kind === "IamPolicy" ||
+    kind === "CloudFrontDistribution" ||
     kind === "InstanceProfile" ||
     kind === "Internet"
   );
