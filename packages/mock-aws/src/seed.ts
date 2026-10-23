@@ -286,6 +286,73 @@ async function seedIam() {
     }),
   );
 
+  // Admin by escalation: nothing here grants "*", but PassRole with Lambda
+  // create and invoke lets it run code as UnusedAdminRole. A check that reads
+  // only for "*" calls this role harmless.
+  await client.send(
+    new CreateRoleCommand({ RoleName: "NorthwindBuildRole", AssumeRolePolicyDocument: ec2Trust }),
+  );
+  await client.send(
+    new PutRolePolicyCommand({
+      RoleName: "NorthwindBuildRole",
+      PolicyName: "BuildTooling",
+      PolicyDocument: JSON.stringify({
+        Version: "2012-10-17",
+        Statement: [
+          { Effect: "Allow", Action: "iam:PassRole", Resource: "*" },
+          {
+            Effect: "Allow",
+            Action: ["lambda:CreateFunction", "lambda:InvokeFunction"],
+            Resource: "*",
+          },
+        ],
+      }),
+    }),
+  );
+
+  // Admin through NotAction: "everything except billing" still includes IAM.
+  await client.send(
+    new CreateRoleCommand({
+      RoleName: "NorthwindPlatformRole",
+      AssumeRolePolicyDocument: ec2Trust,
+    }),
+  );
+  await client.send(
+    new PutRolePolicyCommand({
+      RoleName: "NorthwindPlatformRole",
+      PolicyName: "PlatformOps",
+      PolicyDocument: JSON.stringify({
+        Version: "2012-10-17",
+        Statement: [{ Effect: "Allow", NotAction: "aws-portal:*", Resource: "*" }],
+      }),
+    }),
+  );
+
+  // The negative for NotAction: PowerUserAccess's shape excludes IAM, so it
+  // is broad but cannot make itself an administrator.
+  await client.send(
+    new CreateRoleCommand({
+      RoleName: "NorthwindPowerUserRole",
+      AssumeRolePolicyDocument: ec2Trust,
+    }),
+  );
+  await client.send(
+    new PutRolePolicyCommand({
+      RoleName: "NorthwindPowerUserRole",
+      PolicyName: "PowerUser",
+      PolicyDocument: JSON.stringify({
+        Version: "2012-10-17",
+        Statement: [
+          {
+            Effect: "Allow",
+            NotAction: ["iam:*", "organizations:*", "account:*"],
+            Resource: "*",
+          },
+        ],
+      }),
+    }),
+  );
+
   // A correctly scoped execution role, so "which roles are admin" has a
   // meaningful negative class to exclude.
   await client.send(
@@ -413,7 +480,7 @@ async function seedIam() {
   );
 
   log(
-    "IAM: 6 roles (3 effectively admin, 1 of them inline-only, 1 service-linked with a long ARN), 4 users (3 admin: 1 inline-only, 1 through a group), 1 group, 1 instance profile",
+    "IAM: 9 roles (5 effectively admin: 1 inline-only, 1 by escalation, 1 by NotAction; 1 PowerUser that is not; 1 service-linked with a long ARN), 4 users (3 admin: 1 inline-only, 1 through a group), 1 group, 1 instance profile",
   );
   return { appProfileName: "NorthwindAppProfile" };
 }

@@ -19,6 +19,8 @@ import { shellQuote } from "@sightline/shared";
 
 import { remediationsFor, type RemediationInput } from "./remediation.js";
 
+const ADMIN_DOC = { Statement: [{ Effect: "Allow", Action: "*", Resource: "*" }] };
+
 function resource(over: Partial<RemediationInput>): RemediationInput {
   return {
     arn: "arn:aws:s3:::example",
@@ -170,7 +172,7 @@ describe("IAM", () => {
     region: null,
     arn: "arn:aws:iam::123456789012:role/LegacyDeployRole",
     derived: { isAdmin: true },
-    properties: { inlinePolicies: [{ policyName: "DeployHelper" }] },
+    properties: { inlinePolicies: [{ policyName: "DeployHelper", document: ADMIN_DOC }] },
   });
 
   /**
@@ -207,7 +209,7 @@ describe("IAM", () => {
       ...adminRole,
       kind: "IamUser",
       name: "ci-deploy",
-      properties: { inlinePolicies: [{ policyName: "DeployHelper" }] },
+      properties: { inlinePolicies: [{ policyName: "DeployHelper", document: ADMIN_DOC }] },
     })[0]!;
     // For a user, "nothing uses it" is not evidence of anything.
     expect(user.caution).toMatch(/long-lived|not evidence it is unused/i);
@@ -427,5 +429,42 @@ describe("shellQuote", () => {
    */
   it("escapes an embedded single quote the way a shell actually parses", () => {
     expect(shellQuote("it's")).toBe("'it'\\''s'");
+  });
+});
+
+describe("IAM remediation targets the policy that grants admin", () => {
+  const principal = (inlinePolicies: object[], derived: object = {}) => ({
+    arn: "arn:aws:iam::123456789012:role/app",
+    kind: "IamRole",
+    name: "app",
+    region: null,
+    properties: { inlinePolicies },
+    derived: { isAdmin: true, adminReason: "x", ...derived },
+  });
+
+  it("does not offer to rewrite an inline policy that grants nothing broad", () => {
+    const out = remediationsFor(
+      principal([
+        {
+          policyName: "Harmless",
+          document: { Statement: [{ Effect: "Allow", Action: "s3:GetObject", Resource: "*" }] },
+        },
+        { policyName: "TheGrant", document: ADMIN_DOC },
+      ]),
+    );
+    const ids = out.map((r) => r.id);
+    expect(ids).toContain("iam-inline-TheGrant");
+    expect(ids).not.toContain("iam-inline-Harmless");
+  });
+
+  it("offers to close an escalation path when that is how it is admin", () => {
+    const out = remediationsFor(
+      principal([], {
+        adminVia: "escalation",
+        adminReason: "Can make itself an administrator: iam:PassRole + ec2:RunInstances ...",
+      }),
+    );
+    const escalation = out.find((r) => r.id === "iam-escalation");
+    expect(escalation?.summary).toContain("iam:PassRole + ec2:RunInstances");
   });
 });

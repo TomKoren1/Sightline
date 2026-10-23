@@ -75,8 +75,12 @@ export interface DerivedFacts {
   isPublic?: boolean;
   publicReason?: string;
 
-  /** Grants effective `*:*`, via any combination of managed and inline policy. */
+  /**
+   * Effectively an administrator: granted everything (`direct`), or able to
+   * grant itself everything through a known escalation path (`escalation`).
+   */
   isAdmin?: boolean;
+  adminVia?: "direct" | "escalation";
   adminReason?: string;
 
   /** Provisioned and billable but showing no sign of use. */

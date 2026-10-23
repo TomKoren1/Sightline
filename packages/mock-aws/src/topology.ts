@@ -48,7 +48,19 @@ export const GROUND_TRUTH = {
   blockedPublicBuckets: ["northwind-reports"],
 
   /** Roles with effective `*:*`. */
-  adminRoles: ["NorthwindAdminRole", "LegacyDeployRole", "UnusedAdminRole"],
+  adminRoles: [
+    "NorthwindAdminRole",
+    "LegacyDeployRole",
+    "UnusedAdminRole",
+    "NorthwindBuildRole",
+    "NorthwindPlatformRole",
+  ],
+
+  /** Admin with no "*" anywhere: a known escalation path, by its id. */
+  escalationAdminRoles: { NorthwindBuildRole: "passrole-lambda" },
+
+  /** Admin through `NotAction` that leaves IAM writable. */
+  notActionAdminRoles: ["NorthwindPlatformRole"],
 
   /**
    * Users with effective `*:*`.

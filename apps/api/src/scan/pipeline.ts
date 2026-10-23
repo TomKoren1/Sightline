@@ -11,7 +11,7 @@ import { INTERNET_ARN, type Relationship, type Resource, type ScanResult } from 
 
 import { accountArn, regionArn } from "../aws/arns.js";
 import { evaluateAdmin, type PolicyRef } from "./analysers/policy.js";
-import type { GroupPolicy } from "./collectors/iam.js";
+import type { AttachedPolicy, GroupPolicy } from "./collectors/iam.js";
 import { evaluateBucketPublicAccess, type AclGrant } from "./analysers/publicAccess.js";
 import { analyseIdleResources } from "./analysers/idle.js";
 import { analyseReachability } from "./analysers/reachability.js";
@@ -119,8 +119,14 @@ export function annotate(
       })),
     ];
 
-    const verdict = evaluateAdmin(refs);
+    const boundary = resource.properties["permissionsBoundary"] as AttachedPolicy | null;
+    const verdict = evaluateAdmin(refs, {
+      boundary: boundary
+        ? { policyName: boundary.policyName, kind: "managed", document: boundary.document }
+        : null,
+    });
     resource.derived.isAdmin = verdict.isAdmin;
+    if (verdict.adminVia) resource.derived.adminVia = verdict.adminVia;
     resource.derived.adminReason = verdict.reason;
   }
 

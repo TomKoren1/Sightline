@@ -169,6 +169,19 @@ export async function collectIam(ctx: CollectorContext): Promise<CollectorOutput
         document: decodePolicyDocument(p.PolicyDocument),
       }));
 
+  /** A principal's permissions boundary, with its document, when it has one. */
+  async function boundaryOf(
+    attached: { PermissionsBoundaryArn?: string } | undefined,
+  ): Promise<AttachedPolicy | null> {
+    const policyArn = attached?.PermissionsBoundaryArn;
+    if (!policyArn) return null;
+    return {
+      policyArn,
+      policyName: policyArn.split("/").pop() ?? policyArn,
+      document: await managedPolicyDocument(policyArn),
+    };
+  }
+
   const policyNodes = new Set<string>();
   function linkPolicies(from: string, attached: AttachedPolicy[]) {
     for (const p of attached) {
@@ -224,7 +237,7 @@ export async function collectIam(ctx: CollectorContext): Promise<CollectorOutput
         createdAt: role.CreateDate?.toISOString() ?? null,
         maxSessionDuration: meta?.MaxSessionDuration ?? null,
         lastUsedAt: role.RoleLastUsed?.LastUsedDate?.toISOString() ?? null,
-        permissionsBoundaryArn: role.PermissionsBoundary?.PermissionsBoundaryArn ?? null,
+        permissionsBoundary: await boundaryOf(role.PermissionsBoundary),
         trustPolicy,
         /** Service principals allowed to assume this role, e.g. ec2, lambda. */
         trustedServices: (trustPolicy?.Statement ?? [])
@@ -341,7 +354,7 @@ export async function collectIam(ctx: CollectorContext): Promise<CollectorOutput
         path: user.Path ?? "/",
         createdAt: user.CreateDate?.toISOString() ?? null,
         passwordLastUsed: meta?.PasswordLastUsed?.toISOString() ?? null,
-        permissionsBoundaryArn: user.PermissionsBoundary?.PermissionsBoundaryArn ?? null,
+        permissionsBoundary: await boundaryOf(user.PermissionsBoundary),
         groups,
         attachedPolicies: attached,
         inlinePolicies: inline,

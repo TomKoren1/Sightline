@@ -113,6 +113,49 @@ export const CHECKS: CheckDefinition[] = [
     },
   },
   {
+    id: "escalation-admin",
+    description: "A role that can make itself an administrator is reported as one, with the path",
+    rationale:
+      "NorthwindBuildRole holds no '*', but iam:PassRole with Lambda create and invoke lets it run code as an admin role. Reading only for '*' calls it harmless.",
+    run: ({ resources }) => {
+      const failures = Object.keys(GROUND_TRUTH.escalationAdminRoles).filter((name) => {
+        const role = resources.find((r) => r.kind === "IamRole" && r.name === name);
+        return (
+          role?.derived.adminVia !== "escalation" ||
+          !(role.derived.adminReason ?? "").includes("iam:PassRole")
+        );
+      });
+      return {
+        passed: failures.length === 0,
+        detail:
+          failures.length === 0
+            ? "escalation found and the path named"
+            : `missed or unexplained: ${failures.join(", ")}`,
+      };
+    },
+  },
+  {
+    id: "notaction-admin",
+    description: "NotAction that leaves IAM writable is admin; NotAction excluding IAM is not",
+    rationale:
+      "'Everything except billing' includes iam:*, so it is administrator access. PowerUserAccess's shape excludes IAM and must not be flagged.",
+    run: ({ resources }) => {
+      const failures: string[] = GROUND_TRUTH.notActionAdminRoles.filter((name) => {
+        const role = resources.find((r) => r.kind === "IamRole" && r.name === name);
+        return (
+          !role?.derived.isAdmin ||
+          !(role.derived.adminReason ?? "").includes("every action except")
+        );
+      });
+      const powerUser = resources.find((r) => r.name === "NorthwindPowerUserRole");
+      if (powerUser?.derived.isAdmin) failures.push("NorthwindPowerUserRole (wrongly flagged)");
+      return {
+        passed: failures.length === 0,
+        detail: failures.length === 0 ? "NotAction read correctly both ways" : failures.join(", "),
+      };
+    },
+  },
+  {
     id: "admin-users",
     description: "Every effectively-administrator IAM user is found",
     rationale:

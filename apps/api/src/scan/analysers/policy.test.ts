@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { documentGrantsAdmin, evaluateAdmin } from "./policy.js";
+import type { PolicyDocument } from "../collectors/iam.js";
+import { documentGrantsAdmin, evaluateAdmin, type PolicyRef } from "./policy.js";
+
+type Statement = NonNullable<PolicyDocument["Statement"]>[number] & { Principal?: unknown };
 
 const adminDoc = {
   Version: "2012-10-17",
@@ -111,5 +114,146 @@ describe("evaluateAdmin", () => {
     expect(verdict.isAdmin).toBe(false);
     expect(verdict.reason).toContain("could not be read");
     expect(verdict.reason).toContain("Unreadable");
+  });
+});
+
+const ref = (statements: Statement[], name = "p"): PolicyRef => ({
+  policyName: name,
+  kind: "inline",
+  document: { Statement: statements },
+});
+
+describe("evaluateAdmin: direct grants beyond the literal *:*", () => {
+  it("treats NotAction that leaves IAM writable as administrator access", () => {
+    const verdict = evaluateAdmin([ref([{ Effect: "Allow", NotAction: "s3:*", Resource: "*" }])]);
+    expect(verdict).toMatchObject({ isAdmin: true, adminVia: "direct" });
+    expect(verdict.reason).toContain("every action except s3:*");
+  });
+
+  it("does not treat a PowerUser-shaped NotAction excluding IAM as admin", () => {
+    const verdict = evaluateAdmin([
+      ref([
+        { Effect: "Allow", NotAction: ["iam:*", "organizations:*", "account:*"], Resource: "*" },
+      ]),
+    ]);
+    expect(verdict.isAdmin).toBe(false);
+  });
+
+  it("treats NotResource as reaching everything it does not name", () => {
+    const verdict = evaluateAdmin([
+      ref([{ Effect: "Allow", Action: "*", NotResource: "arn:aws:s3:::audit-logs" }]),
+    ]);
+    expect(verdict.isAdmin).toBe(true);
+  });
+
+  it("ignores a condition that excludes nobody", () => {
+    const verdict = evaluateAdmin([
+      ref([
+        {
+          Effect: "Allow",
+          Action: "*",
+          Resource: "*",
+          Condition: { IpAddress: { "aws:SourceIp": ["0.0.0.0/0"] } },
+        },
+      ]),
+    ]);
+    expect(verdict.isAdmin).toBe(true);
+  });
+
+  it("lets an explicit Deny on IAM cancel a wildcard Allow", () => {
+    const verdict = evaluateAdmin([
+      ref([{ Effect: "Allow", Action: "*", Resource: "*" }]),
+      ref([{ Effect: "Deny", Action: "iam:*", Resource: "*" }], "deny-iam"),
+    ]);
+    expect(verdict.isAdmin).toBe(false);
+  });
+
+  it("caps the verdict at the permissions boundary", () => {
+    const boundary = ref([{ Effect: "Allow", Action: "s3:*", Resource: "*" }], "S3Only");
+    const verdict = evaluateAdmin([ref([{ Effect: "Allow", Action: "*", Resource: "*" }])], {
+      boundary,
+    });
+    expect(verdict.isAdmin).toBe(false);
+    expect(verdict.reason).toContain('permissions boundary "S3Only"');
+  });
+});
+
+describe("evaluateAdmin: escalation paths", () => {
+  it("finds PassRole with Lambda create and invoke", () => {
+    const verdict = evaluateAdmin([
+      ref(
+        [
+          { Effect: "Allow", Action: "iam:PassRole", Resource: "*" },
+          {
+            Effect: "Allow",
+            Action: ["lambda:CreateFunction", "lambda:InvokeFunction"],
+            Resource: "*",
+          },
+        ],
+        "DeployTooling",
+      ),
+    ]);
+    expect(verdict).toMatchObject({
+      isAdmin: true,
+      adminVia: "escalation",
+      escalation: { id: "passrole-lambda", policies: ["DeployTooling"] },
+    });
+    expect(verdict.reason).toContain("inline policy");
+  });
+
+  it("matches wildcard actions such as iam:Create*", () => {
+    const verdict = evaluateAdmin([
+      ref([{ Effect: "Allow", Action: "iam:Create*", Resource: "*" }]),
+    ]);
+    expect(verdict.escalation?.id).toBe("create-policy-version");
+  });
+
+  it("assembles a path from several policies and names them all", () => {
+    const verdict = evaluateAdmin([
+      ref([{ Effect: "Allow", Action: "iam:PassRole", Resource: "arn:aws:iam::*:role/*" }], "Pass"),
+      ref([{ Effect: "Allow", Action: "ec2:RunInstances", Resource: "*" }], "Launch"),
+    ]);
+    expect(verdict.escalation).toMatchObject({ id: "passrole-ec2", policies: ["Pass", "Launch"] });
+  });
+
+  it("does not count self-service scoped to the caller's own user", () => {
+    const verdict = evaluateAdmin([
+      ref([
+        {
+          Effect: "Allow",
+          Action: ["iam:CreateAccessKey", "iam:UpdateLoginProfile"],
+          Resource: "arn:aws:iam::*:user/${aws:username}",
+        },
+      ]),
+    ]);
+    expect(verdict.isAdmin).toBe(false);
+  });
+
+  it("does not count half a path", () => {
+    const verdict = evaluateAdmin([
+      ref([{ Effect: "Allow", Action: "iam:PassRole", Resource: "*" }]),
+    ]);
+    expect(verdict.isAdmin).toBe(false);
+  });
+
+  it("does not count a path behind a restrictive condition", () => {
+    const verdict = evaluateAdmin([
+      ref([
+        {
+          Effect: "Allow",
+          Action: "iam:CreatePolicyVersion",
+          Resource: "*",
+          Condition: { Bool: { "aws:MultiFactorAuthPresent": "true" } },
+        },
+      ]),
+    ]);
+    expect(verdict.isAdmin).toBe(false);
+  });
+
+  it("does not treat object access in one bucket as reaching every resource", () => {
+    const verdict = evaluateAdmin([
+      ref([{ Effect: "Allow", Action: "*", Resource: "arn:aws:s3:::my-bucket/*" }]),
+    ]);
+    expect(verdict.isAdmin).toBe(false);
   });
 });

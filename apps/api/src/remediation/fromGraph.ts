@@ -19,6 +19,7 @@ const STRUCTURED_KEYS = [
   "attachedPolicies",
   "inlinePolicies",
   "groupPolicies",
+  "permissionsBoundary",
   "aclGrants",
 ] as const;
 
@@ -29,6 +30,7 @@ const DERIVED_KEYS = [
   "isUnprotected",
   "unprotectedReason",
   "isAdmin",
+  "adminVia",
   "adminReason",
   "isIdle",
   "idleReason",
