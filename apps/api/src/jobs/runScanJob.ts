@@ -31,8 +31,10 @@ import {
   markProjected,
   pruneScanHistory,
   recordScanUnit,
+  refreshSnapshotStatistics,
   saveScanResult,
   startScanUnits,
+  STATISTICS_REFRESH_THRESHOLD,
 } from "../db/repository.js";
 import { syncFindings } from "../db/findings.js";
 import { runScan } from "../scan/runner.js";
@@ -252,6 +254,9 @@ export async function runScanJob(options: RunScanJobOptions): Promise<ScanJobOut
     });
 
     scanResources.observe(result.resources.length);
+    if (result.resources.length >= STATISTICS_REFRESH_THRESHOLD) {
+      await refreshSnapshotStatistics();
+    }
     // Before the flip, so the scan that becomes current already has its
     // findings' history behind it. Only a scan that read everything may
     // resolve what it did not see.

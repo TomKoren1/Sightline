@@ -59,10 +59,55 @@ function glob(pattern: string): RegExp {
   return re;
 }
 
+type ActionTest = (action: string) => boolean;
+
+/**
+ * One compiled test per distinct action list, remembering its answers.
+ *
+ * Testing patterns one by one was most of a large scan's analysis time: every
+ * principal asks a few dozen escalation actions of every statement it holds,
+ * and an AWS-managed policy like `ReadOnlyAccess` is hundreds of patterns long
+ * and attached to half the roles in an account. Keyed on the list's contents
+ * rather than the statement object, so the same managed policy on a thousand
+ * roles compiles once and answers each action once.
+ */
+const listTests = new Map<string, ActionTest>();
+const statementTests = new WeakMap<Statement, ActionTest>();
+
+function actionTest(patterns: string[]): ActionTest {
+  // A newline cannot occur in an action name, so it separates them unambiguously.
+  const key = patterns.join("\n");
+  let test = listTests.get(key);
+  if (!test) {
+    // Each glob's body without its anchors, alternated under one pair.
+    const bodies = patterns.map((p) => glob(p).source.slice(1, -1));
+    const re = bodies.length === 0 ? null : new RegExp(`^(?:${bodies.join("|")})$`, "i");
+    const answers = new Map<string, boolean>();
+    test = (action) => {
+      let answer = answers.get(action);
+      if (answer === undefined) {
+        answer = re?.test(action) === true;
+        answers.set(action, answer);
+      }
+      return answer;
+    };
+    listTests.set(key, test);
+  }
+  return test;
+}
+
 function coversAction(stmt: Statement, action: string): boolean {
-  if (stmt.NotAction !== undefined)
-    return !asArray(stmt.NotAction).some((p) => glob(p).test(action));
-  return asArray(stmt.Action).some((p) => glob(p).test(action));
+  let test = statementTests.get(stmt);
+  if (!test) {
+    if (stmt.NotAction !== undefined) {
+      const excluded = actionTest(asArray(stmt.NotAction));
+      test = (a) => !excluded(a);
+    } else {
+      test = actionTest(asArray(stmt.Action));
+    }
+    statementTests.set(stmt, test);
+  }
+  return test(action);
 }
 
 /**

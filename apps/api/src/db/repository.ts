@@ -19,7 +19,7 @@ import type {
   ScanUnit,
 } from "@sightline/shared";
 
-import { db, fingerprint, withTenant, type Database } from "./postgres.js";
+import { db, fingerprint, system, withTenant, type Database } from "./postgres.js";
 
 /**
  * Anything that can run a write: the pool, or a transaction on it.
@@ -362,6 +362,35 @@ async function unitsFor(scope: Scope, scanIds: string[]): Promise<Map<string, Sc
   }
   return map;
 }
+
+/**
+ * Refresh the planner's statistics on the snapshot tables after a large write.
+ *
+ * A scan of tens of thousands of resources arrives faster than autovacuum
+ * notices it, and until it does the planner believes the new scan holds a row
+ * or two - so it chooses nested loops that rescan the scan for every edge. The
+ * open-security-group panel took 26 seconds on a fresh 50,000-resource scan
+ * and 39 milliseconds after `ANALYZE`. Sampled, so it costs well under a
+ * second whatever the table's size.
+ *
+ * On the owner connection: `ANALYZE` is the table owner's to run, and the
+ * statistics are about the table rather than any tenant's rows - housekeeping,
+ * in `system`'s terms. Never fatal: stale statistics make a query slow, not
+ * wrong, and a scan that is already saved must not fail over it.
+ */
+export async function refreshSnapshotStatistics(): Promise<void> {
+  try {
+    await system.execute(sql`ANALYZE resource_snapshots, relationship_snapshots`);
+  } catch (err) {
+    console.warn(
+      "Refreshing snapshot statistics failed; queries may plan badly until autovacuum runs:",
+      err,
+    );
+  }
+}
+
+/** A scan large enough that the planner's view of the tables is out of date. */
+export const STATISTICS_REFRESH_THRESHOLD = 5_000;
 
 export async function listScans(scope: Scope, limit = 20): Promise<ScanRun[]> {
   return withTenant(scope.tenantId, async () => {

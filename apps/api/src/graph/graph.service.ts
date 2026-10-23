@@ -104,10 +104,9 @@ export class GraphService {
     const graph = await graphScopeFor(scope);
     if (!graph) return EMPTY_FINDINGS;
 
-    const states = await listFindingStates(scope);
-    const tracked = new Map(states.map((s) => [`${s.category} ${s.resourceArn}`, s]));
     // Fetch past the accepted ones, so hiding them does not shorten the list.
-    const limit = 50 + states.filter((s) => s.status === "accepted").length;
+    const acceptedCount = (await listFindingStates(scope, { acceptedOr: [] })).length;
+    const limit = 50 + acceptedCount;
 
     const [publicResources, adminPrincipals, idle, exposed, unprotected] = await Promise.all([
       q.findPublicResources(graph, { limit }),
@@ -116,6 +115,13 @@ export class GraphService {
       q.findOpenSecurityGroups(graph, { limit }),
       q.findUnprotectedBuckets(graph, { limit }),
     ]);
+
+    // Only the states of what is about to be shown, plus every acceptance.
+    const shown = [publicResources, adminPrincipals, idle, exposed, unprotected].flatMap((rows) =>
+      rows.map((row) => row.arn),
+    );
+    const states = await listFindingStates(scope, { acceptedOr: shown });
+    const tracked = new Map(states.map((s) => [`${s.category} ${s.resourceArn}`, s]));
 
     const annotate = <T extends q.ResourceRow>(category: FindingCategory, rows: T[]) =>
       rows

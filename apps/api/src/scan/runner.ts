@@ -92,7 +92,24 @@ function explainFailure(
   }
 }
 
+/** What collection produced, before any analysis. */
+export interface CollectedEstate {
+  accountId: string;
+  regions: string[];
+  units: ScanUnit[];
+  collected: CollectorOutput;
+}
+
 export async function runScan(options: ScanOptions): Promise<ScanResult & { units: ScanUnit[] }> {
+  const { accountId, regions, units, collected } = await collectEstate(options);
+  return { ...annotate(accountId, regions, collected), units };
+}
+
+/**
+ * Every collector, every region, and nothing else. Separate from `runScan` so
+ * the load test can take a real estate's raw shape and multiply it.
+ */
+export async function collectEstate(options: ScanOptions): Promise<CollectedEstate> {
   const { scanId, onEvent, target } = options;
   const counter = options.counter ?? new CallCounter();
   const ctx: AwsContext = { target, counter };
@@ -222,10 +239,7 @@ export async function runScan(options: ScanOptions): Promise<ScanResult & { unit
 
   await runWithConcurrency(tasks, cfg.SCAN_CONCURRENCY);
 
-  const merged = mergeOutputs(outputs);
-  const annotated = annotate(session.accountId, regions, merged);
-
-  return { ...annotated, units };
+  return { accountId: session.accountId, regions, units, collected: mergeOutputs(outputs) };
 }
 
 export { rollUpStatus };

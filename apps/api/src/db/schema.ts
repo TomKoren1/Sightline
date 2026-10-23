@@ -153,7 +153,16 @@ export const relationshipSnapshots = pgTable(
     relType: text("rel_type").$type<Relationship["type"]>().notNull(),
     properties: jsonb("properties").$type<Relationship["properties"]>().notNull().default({}),
   },
-  (t) => [index("relationship_snapshots_scan").on(t.scanId)],
+  /**
+   * Both directions, led by the scan, because every graph question is "edges
+   * of this type into (or out of) these resources, in this scan". Scan alone
+   * made each such join read the scan's every edge: at 110,000 edges the admin
+   * and open-security-group panels took half a minute each.
+   */
+  (t) => [
+    index("relationship_snapshots_from").on(t.scanId, t.fromArn, t.relType),
+    index("relationship_snapshots_to").on(t.scanId, t.toArn, t.relType),
+  ],
 );
 
 /**

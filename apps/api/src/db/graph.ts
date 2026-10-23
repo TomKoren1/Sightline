@@ -406,8 +406,38 @@ interface Hop {
   ports: string[];
 }
 
+/**
+ * Recently walked scans' indexes. A scan's snapshot never changes once
+ * written, so an index built for it stays right until the scan is deleted -
+ * and loading one is most of a path query's cost on a large account (about two
+ * seconds at 50,000 resources), paid again by every follow-up question the
+ * agent asks about the same graph. Keyed by tenant as well as scan so that the
+ * cache can never answer one tenant with another's edges, and small, because
+ * the scans worth caching are the few that people are looking at right now.
+ */
+const REACH_CACHE_SIZE = 8;
+const reachCache = new Map<string, Promise<ReachIndex>>();
+
+function reachIndex(scope: GraphScope): Promise<ReachIndex> {
+  const key = `${scope.tenantId}/${scope.scanId}`;
+  let index = reachCache.get(key);
+  if (index) {
+    // Re-inserted to mark it most recently used; Map keeps insertion order.
+    reachCache.delete(key);
+  } else {
+    index = loadReachIndex(scope);
+    // A failed load must not be remembered as the answer.
+    index.catch(() => reachCache.delete(key));
+  }
+  reachCache.set(key, index);
+  while (reachCache.size > REACH_CACHE_SIZE) {
+    reachCache.delete(reachCache.keys().next().value!);
+  }
+  return index;
+}
+
 /** This scan's reach edges and group memberships, ready to walk. */
-async function reachIndex(scope: GraphScope): Promise<ReachIndex> {
+async function loadReachIndex(scope: GraphScope): Promise<ReachIndex> {
   const rows = await read<{
     from_arn: string;
     to_arn: string;

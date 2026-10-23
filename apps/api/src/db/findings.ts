@@ -138,8 +138,21 @@ export interface FindingState {
   lastScanId: string | null;
 }
 
-/** Every finding of this account that is not resolved. */
-export async function listFindingStates(scope: Scope): Promise<FindingState[]> {
+/**
+ * This account's findings that are not resolved: all of them, or only the
+ * accepted ones and those on the given resources.
+ *
+ * The filter is what keeps the dashboard cheap. A large account has tens of
+ * thousands of open findings and the panels show fifty of each; reading every
+ * row to annotate those took two seconds at 50,000 resources.
+ */
+export async function listFindingStates(
+  scope: Scope,
+  only?: { acceptedOr: string[] },
+): Promise<FindingState[]> {
+  const filter = only
+    ? sql`AND (status = 'accepted' OR ${JSON.stringify(only.acceptedOr)}::jsonb ? resource_arn)`
+    : sql``;
   return withTenant(scope.tenantId, async () => {
     const { rows } = await db.execute<FindingState & Record<string, unknown>>(sql`
       SELECT id, category, resource_arn AS "resourceArn", resource_name AS "resourceName",
@@ -147,7 +160,7 @@ export async function listFindingStates(scope: Scope): Promise<FindingState[]> {
              status_at AS "statusAt", first_seen_at AS "firstSeenAt", last_scan_id AS "lastScanId"
         FROM findings
        WHERE tenant_id = ${scope.tenantId} AND connection_id = ${scope.connectionId}
-         AND status <> 'resolved'
+         AND status <> 'resolved' ${filter}
        ORDER BY category, resource_name
     `);
     return rows.map((r) => ({

@@ -63,7 +63,7 @@ jobs:
   integration:
     name: End-to-end scan against the mock account
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 25
     steps:
       - uses: actions/checkout@v4
 
@@ -135,6 +135,15 @@ jobs:
             echo "northwind-reports was reported public; its access block should have neutralised it"
             exit 1
           fi
+
+      - name: Large-account load test (50,000 resources)
+        # The demo estate multiplied to a large account and put through
+        # analysis, the snapshot write, findings sync and every dashboard and
+        # agent query, against time budgets. Last, because it is the slowest
+        # step and leaves nothing behind for the others to trip over.
+        env:
+          LOAD_TEST: "1"
+        run: npx vitest run apps/api/src/load/largeAccount.test.ts
 
       - name: Service logs on failure
         if: failure()
