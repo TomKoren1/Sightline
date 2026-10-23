@@ -236,8 +236,11 @@ kubectl -n sightline create configmap sightline-backup-key --from-file=backup-ce
 ### Restoring
 
 ```bash
-kubectl -n sightline exec deploy/api -- ls -la /backups        # pick one
-kubectl -n sightline cp api-xxxxx:/backups/sightline-....dump.enc ./restore.enc
+# Nothing long-running mounts the backups volume, so read it through a
+# throwaway pod. This copies the newest dump; swap the `ls` to pick another.
+kubectl -n sightline run backup-peek --rm -i --restart=Never -q --image=busybox:1.36   --overrides='{"spec":{"volumes":[{"name":"b","persistentVolumeClaim":{"claimName":"backups"}}],
+    "containers":[{"name":"p","image":"busybox:1.36","command":["sh","-c","cat $(ls -t /b/*.enc | head -1)"],
+    "volumeMounts":[{"name":"b","mountPath":"/b"}]}]}}' > restore.enc
 
 openssl smime -decrypt -binary -inform DER -in restore.enc \
   -inkey backup-key.pem -out restore.dump
