@@ -82,7 +82,7 @@ function coversAllResources(stmt: Statement): boolean {
 }
 
 /** Condition keys whose usual values exclude nobody. */
-function conditionRestricts(condition: Record<string, unknown> | undefined): boolean {
+export function conditionRestricts(condition: Record<string, unknown> | undefined): boolean {
   if (!condition) return false;
   for (const [operator, block] of Object.entries(condition)) {
     if (typeof block !== "object" || block === null) return true;
