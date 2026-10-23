@@ -20,7 +20,10 @@ import { evalRuns } from "../db/schema.js";
 import { getLatestScan, loadRelationships, loadResources } from "../db/repository.js";
 import { getConnection } from "../tenancy/connections.js";
 import type { Scope } from "../tenancy/scope.js";
-import { DRIFT_EXPECTED_CHECK_FAILURES, DRIFT_MARKER_RESOURCES } from "@sightline/mock-aws";
+import {
+  DRIFT_EXPECTED_CHECK_FAILURES,
+  DRIFT_MARKER_RESOURCES,
+} from "@sightline/mock-aws/answer-key";
 
 import { CHECKS, runChecks } from "../evals/checks.js";
 

@@ -15,7 +15,7 @@
  * its evidence. Nothing here calls AWS, so running them is free and instant.
  */
 
-import { GROUND_TRUTH } from "@sightline/mock-aws";
+import { GROUND_TRUTH } from "@sightline/mock-aws/answer-key";
 import { INTERNET_ARN, type Relationship, type Resource } from "@sightline/shared";
 
 export interface CheckResult {
