@@ -233,6 +233,12 @@ For a hosted deployment on Kubernetes — kustomize manifests, a Cloudflare tunn
 sealed secrets, and an encrypted backup with a restore procedure that is tested
 rather than described — see [`deploy/k8s/README.md`](deploy/k8s/README.md).
 
+**Releases** are a version tag: `git tag v0.2.0 && git push origin v0.2.0` builds the
+API and web images once, fails on a critical or high vulnerability with a fix
+available, and pushes them to `ghcr.io/<owner>/sightline-api` and `-web` with an SBOM,
+build provenance and a keyless cosign signature. The run's summary gives each digest
+and the `cosign verify` command; deploy by digest.
+
 What a hosted deployment holds, shares and deletes is in
 [`PRIVACY.md`](PRIVACY.md); the terms are in [`TERMS.md`](TERMS.md); and the
 security properties, including how one customer's data is kept from another's,
