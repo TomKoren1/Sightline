@@ -110,6 +110,15 @@ describe("the numbers the README quotes are true", () => {
     nineteen: 19,
     twenty: 20,
     "twenty-one": 21,
+    "twenty-two": 22,
+    "twenty-three": 23,
+    "twenty-four": 24,
+    "twenty-five": 25,
+    "twenty-six": 26,
+    "twenty-seven": 27,
+    "twenty-eight": 28,
+    "twenty-nine": 29,
+    thirty: 30,
   };
 
   function quoted(pattern: RegExp): number | null {

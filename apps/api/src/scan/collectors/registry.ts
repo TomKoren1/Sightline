@@ -17,6 +17,11 @@ import { collectIam } from "./iam.js";
 import { collectLambda } from "./lambda.js";
 import { collectRds } from "./rds.js";
 import { collectS3 } from "./s3.js";
+import { collectEcs, collectEks } from "./containers.js";
+import { collectAutoScaling, collectRoute53 } from "./dns.js";
+import { collectDynamoDb } from "./dynamodb.js";
+import { collectSns, collectSqs } from "./messaging.js";
+import { collectKms, collectSecrets } from "./secrets.js";
 import type { Collector } from "./types.js";
 import { collectVpc } from "./vpc.js";
 
@@ -120,6 +125,74 @@ export const COLLECTORS: Record<ScannableService, CollectorPlugin> = {
     // API Gateway's IAM actions are HTTP verbs on resource paths.
     permissions: ["apigateway:GET"],
     collect: collectApiGateway,
+  },
+  sqs: {
+    scope: "regional",
+    kinds: ["SqsQueue"],
+    permissions: ["sqs:ListQueues", "sqs:GetQueueAttributes"],
+    collect: collectSqs,
+  },
+  sns: {
+    scope: "regional",
+    kinds: ["SnsTopic"],
+    permissions: ["sns:ListTopics", "sns:GetTopicAttributes"],
+    collect: collectSns,
+  },
+  kms: {
+    scope: "regional",
+    kinds: ["KmsKey"],
+    permissions: [
+      "kms:ListKeys",
+      "kms:DescribeKey",
+      "kms:GetKeyPolicy",
+      "kms:GetKeyRotationStatus",
+    ],
+    collect: collectKms,
+  },
+  secretsmanager: {
+    scope: "regional",
+    kinds: ["Secret"],
+    permissions: ["secretsmanager:ListSecrets", "secretsmanager:GetResourcePolicy"],
+    collect: collectSecrets,
+  },
+  dynamodb: {
+    scope: "regional",
+    kinds: ["DynamoTable"],
+    permissions: [
+      "dynamodb:ListTables",
+      "dynamodb:DescribeTable",
+      "dynamodb:DescribeContinuousBackups",
+    ],
+    collect: collectDynamoDb,
+  },
+  ecs: {
+    scope: "regional",
+    kinds: ["EcsCluster", "EcsService"],
+    permissions: [
+      "ecs:ListClusters",
+      "ecs:ListServices",
+      "ecs:DescribeServices",
+      "ecs:DescribeTaskDefinition",
+    ],
+    collect: collectEcs,
+  },
+  eks: {
+    scope: "regional",
+    kinds: ["EksCluster"],
+    permissions: ["eks:ListClusters", "eks:DescribeCluster"],
+    collect: collectEks,
+  },
+  route53: {
+    scope: "global",
+    kinds: ["HostedZone"],
+    permissions: ["route53:ListHostedZones", "route53:ListResourceRecordSets"],
+    collect: collectRoute53,
+  },
+  autoscaling: {
+    scope: "regional",
+    kinds: ["AutoScalingGroup"],
+    permissions: ["autoscaling:DescribeAutoScalingGroups"],
+    collect: collectAutoScaling,
   },
 };
 

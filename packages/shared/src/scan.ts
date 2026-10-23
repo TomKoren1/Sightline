@@ -13,11 +13,25 @@ export const SCANNABLE_SERVICES = [
   "elbv2",
   "cloudfront",
   "apigateway",
+  "sqs",
+  "sns",
+  "kms",
+  "secretsmanager",
+  "dynamodb",
+  "ecs",
+  "eks",
+  "route53",
+  "autoscaling",
 ] as const;
 export type ScannableService = (typeof SCANNABLE_SERVICES)[number];
 
 /** Services whose resources are global; scanned once, not once per region. */
-export const GLOBAL_SERVICES: ReadonlySet<ScannableService> = new Set(["iam", "s3", "cloudfront"]);
+export const GLOBAL_SERVICES: ReadonlySet<ScannableService> = new Set([
+  "iam",
+  "s3",
+  "cloudfront",
+  "route53",
+]);
 
 export type ScanUnitStatus = "pending" | "running" | "succeeded" | "failed" | "skipped";
 

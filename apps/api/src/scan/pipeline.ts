@@ -15,6 +15,7 @@ import type { AttachedPolicy, GroupPolicy } from "./collectors/iam.js";
 import { evaluateBucketPublicAccess, type AclGrant } from "./analysers/publicAccess.js";
 import { analyseIdleResources } from "./analysers/idle.js";
 import { linkEntryPoints } from "./analysers/entryPoints.js";
+import { POLICY_KINDS, resourcePolicyVerdict } from "./analysers/resourcePolicy.js";
 import { analyseReachability } from "./analysers/reachability.js";
 
 /** Synthetic nodes: the account, its regions, and the internet. */
@@ -149,6 +150,17 @@ export function annotate(
     }
   }
 
+  // --- Which queues, topics, secrets and keys does anyone at all reach? -----
+  for (const resource of resources) {
+    if (!POLICY_KINDS.has(resource.kind)) continue;
+    const verdict = resourcePolicyVerdict(
+      resource.kind,
+      (resource.properties["policy"] ?? null) as string | null,
+    );
+    resource.derived.isPublic = verdict.isPublic;
+    resource.derived.publicReason = verdict.reason;
+  }
+
   // --- What is billable and doing nothing? --------------------------------
   analyseIdleResources(resources, relationships);
 
@@ -160,7 +172,9 @@ export function annotate(
   // Fold reachability back onto the resources, so a node carries its own
   // verdict and the UI does not have to re-derive it from edges.
   for (const resource of resources) {
+    // Their exposure is their policy's, decided above, not the network's.
     if (resource.kind === "S3Bucket" || resource.kind === "Internet") continue;
+    if (POLICY_KINDS.has(resource.kind)) continue;
     if (!internetReachable.has(resource.arn)) continue;
     const direct = edges.find((e) => e.from === INTERNET_ARN && e.to === resource.arn);
     resource.derived.isPublic = true;

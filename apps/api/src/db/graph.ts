@@ -221,7 +221,7 @@ export async function findAdminPrincipals(scope: GraphScope, params: { limit?: n
       SELECT a.arn, f.arn, f.name, f.kind
         FROM admins a
         JOIN ${e} ex ON ex.rel_type = 'EXECUTES_AS' AND ex.to_arn = a.arn
-        JOIN ${r} f ON f.arn = ex.from_arn AND f.kind = 'LambdaFunction'
+        JOIN ${r} f ON f.arn = ex.from_arn
     )
     SELECT a.arn, a.kind, a.name, NULL AS region,
            a.derived->>'adminReason' AS reason,

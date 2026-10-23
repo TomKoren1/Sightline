@@ -135,6 +135,22 @@ export const GROUND_TRUTH = {
     ["northwind-orders-api", "order-processor"],
   ],
 
+  /** Resource policies that let anyone in, and look-alikes that do not. */
+  publicPolicyResources: ["orders-queue", "prod/db-password"],
+  privatePolicyResources: ["internal-events", "alerts", "prod/api-key", "northwind-data"],
+
+  /** A Kubernetes API endpoint on the internet. */
+  publicClusterEndpoints: ["prod-eks"],
+
+  /** Containers running as an administrator: service -> role. */
+  adminContainers: { checkout: "LegacyDeployRole" },
+
+  /** What the customer's domain names point at. */
+  dnsTargets: [
+    ["northwind.example", "prod-alb"],
+    ["northwind.example", "northwind-cdn"],
+  ],
+
   /** Open in its security group, in a public subnet, and denied by its ACL. */
   naclBlockedHosts: ["staging-ssh-host"],
 

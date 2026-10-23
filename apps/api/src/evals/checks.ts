@@ -408,6 +408,87 @@ export const CHECKS: CheckDefinition[] = [
     },
   },
   {
+    id: "public-resource-policies",
+    description:
+      "Queues and secrets anyone can use are public; SNS's owner-conditioned default is not",
+    rationale:
+      'A resource policy with Principal * and no narrowing condition is public, whatever the network says. SNS\'s default policy grants {"AWS": "*"} and is safe, because it is conditioned on the topic\'s owner.',
+    run: ({ resources }) => {
+      const failures: string[] = [];
+      for (const name of GROUND_TRUTH.publicPolicyResources) {
+        if (!resources.find((r) => r.name === name)?.derived.isPublic)
+          failures.push(`${name} missed`);
+      }
+      for (const name of GROUND_TRUTH.privatePolicyResources) {
+        if (resources.find((r) => r.name === name)?.derived.isPublic)
+          failures.push(`${name} wrongly public`);
+      }
+      return {
+        passed: failures.length === 0,
+        detail:
+          failures.length === 0
+            ? "resource policies read correctly both ways"
+            : failures.join("; "),
+      };
+    },
+  },
+  {
+    id: "public-cluster-endpoints",
+    description: "A Kubernetes API endpoint open to 0.0.0.0/0 is reported as reachable",
+    rationale: "The cluster's API is the door to every workload in it.",
+    run: ({ resources }) => {
+      const missed = GROUND_TRUTH.publicClusterEndpoints.filter(
+        (name) => !resources.find((r) => r.name === name)?.derived.isPublic,
+      );
+      return {
+        passed: missed.length === 0,
+        detail: missed.length === 0 ? "found" : `missed: ${missed.join(", ")}`,
+      };
+    },
+  },
+  {
+    id: "admin-containers",
+    description: "Containers running as an administrator are linked to the role",
+    rationale:
+      "checkout's task role is LegacyDeployRole, which grants *:* inline. 'What uses this admin role' has to include containers, not only instances and functions.",
+    run: ({ resources, relationships }) => {
+      const failures = Object.entries(GROUND_TRUTH.adminContainers).filter(([svc, role]) => {
+        const from = resources.find((r) => r.kind === "EcsService" && r.name === svc)?.arn;
+        const to = resources.find((r) => r.kind === "IamRole" && r.name === role);
+        return (
+          !from ||
+          !to?.derived.isAdmin ||
+          !relationships.some((r) => r.type === "EXECUTES_AS" && r.from === from && r.to === to.arn)
+        );
+      });
+      return {
+        passed: failures.length === 0,
+        detail:
+          failures.length === 0 ? "linked" : `not linked: ${failures.map(([s]) => s).join(", ")}`,
+      };
+    },
+  },
+  {
+    id: "dns-names-entry-points",
+    description: "The customer's domain is joined to the load balancer and CDN it names",
+    rationale:
+      "'What is app.northwind.example?' is answered by following the record, not guessing.",
+    run: ({ resources, relationships }) => {
+      const name = (arn: string) => resources.find((r) => r.arn === arn)?.name;
+      const failures = GROUND_TRUTH.dnsTargets.filter(
+        ([zone, target]) =>
+          !relationships.some(
+            (r) => r.type === "POINTS_TO" && name(r.from) === zone && name(r.to) === target,
+          ),
+      );
+      return {
+        passed: failures.length === 0,
+        detail:
+          failures.length === 0 ? "joined" : `missing: ${failures.map(([, t]) => t).join(", ")}`,
+      };
+    },
+  },
+  {
     id: "idle-resources",
     description: "Billable idle resources are found by structural signal",
     rationale:

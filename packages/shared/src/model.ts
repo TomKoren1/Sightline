@@ -27,7 +27,12 @@ export const RESOURCE_KINDS = [
   "TargetGroup",
   "CloudFrontDistribution",
   "ApiGateway",
+  "HostedZone",
   "Ec2Instance",
+  "AutoScalingGroup",
+  "EcsCluster",
+  "EcsService",
+  "EksCluster",
   "EbsVolume",
   "ElasticIp",
   "S3Bucket",
@@ -39,6 +44,11 @@ export const RESOURCE_KINDS = [
   "RdsInstance",
   "DbSubnetGroup",
   "LambdaFunction",
+  "SqsQueue",
+  "SnsTopic",
+  "KmsKey",
+  "Secret",
+  "DynamoTable",
   "Internet",
 ] as const;
 
@@ -66,6 +76,12 @@ export const RELATIONSHIP_TYPES = [
   "HAS_ORIGIN",
   /** API -> the backend an integration invokes. */
   "INTEGRATES_WITH",
+  /** Hosted zone -> what one of its records resolves to. */
+  "POINTS_TO",
+  /** ECS service -> its cluster. */
+  "IN_CLUSTER",
+  /** Auto Scaling group -> an instance it launched. */
+  "MANAGES",
   "CAN_ASSUME",
   "EXECUTES_AS",
   /**
@@ -173,6 +189,7 @@ export function isGlobalKind(kind: ResourceKind): boolean {
     kind === "IamGroup" ||
     kind === "IamPolicy" ||
     kind === "CloudFrontDistribution" ||
+    kind === "HostedZone" ||
     kind === "InstanceProfile" ||
     kind === "Internet"
   );

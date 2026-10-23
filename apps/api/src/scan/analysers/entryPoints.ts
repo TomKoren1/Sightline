@@ -25,10 +25,16 @@ function hostOf(value: string | null | undefined): string | null {
 export function linkEntryPoints(resources: Resource[]): Relationship[] {
   const byHost = new Map<string, string>();
   for (const r of resources) {
-    if (r.kind === "LoadBalancer") {
-      const host = hostOf(r.properties["dnsName"] as string | null);
-      if (host) byHost.set(host, r.arn);
-    }
+    const name =
+      r.kind === "LoadBalancer"
+        ? r.properties["dnsName"]
+        : r.kind === "CloudFrontDistribution"
+          ? r.properties["domainName"]
+          : r.kind === "ApiGateway"
+            ? r.properties["endpoint"]
+            : null;
+    const host = hostOf(name as string | null);
+    if (host) byHost.set(host, r.arn);
   }
   const buckets = new Map(
     resources.filter((r) => r.kind === "S3Bucket").map((r) => [r.name, r.arn]),
@@ -45,6 +51,14 @@ export function linkEntryPoints(resources: Resource[]): Relationship[] {
 
   const links: Relationship[] = [];
   for (const r of resources) {
+    if (r.kind === "HostedZone") {
+      const records = (r.properties["records"] ?? []) as { name: string; target: string | null }[];
+      for (const record of records) {
+        const to = resolve(record.target);
+        if (to)
+          links.push({ from: r.arn, to, type: "POINTS_TO", properties: { record: record.name } });
+      }
+    }
     if (r.kind === "CloudFrontDistribution") {
       const origins = (r.properties["origins"] ?? []) as {
         id: string | null;

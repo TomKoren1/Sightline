@@ -91,6 +91,11 @@ export function analyseReachability(
 
   /** Is this resource actually exposed, independent of its rules? */
   function exposure(resource: Resource): string | null {
+    if (resource.kind === "EcsService") {
+      // A task in a public subnet still has no address to reach unless the
+      // service gives it one.
+      if (resource.properties["assignPublicIp"] !== true) return null;
+    }
     if (resource.kind === "LoadBalancer") {
       // Its subnets are public either way; the scheme is what decides.
       return resource.properties["internetFacing"] === true
@@ -188,6 +193,24 @@ export function analyseReachability(
   // --- Entry points ---------------------------------------------------------
   for (const entry of resources) {
     if (entry.kind === "LoadBalancer") loadBalancerEdges(entry);
+
+    if (entry.kind === "EksCluster" && entry.properties["endpointPublicAccess"] === true) {
+      const cidrs = (entry.properties["publicAccessCidrs"] ?? []) as string[];
+      // An empty list is AWS's default, which is everywhere.
+      const open = cidrs.length === 0 || cidrs.some((c) => OPEN_CIDRS.has(c));
+      if (open) {
+        add({
+          from: INTERNET_ARN,
+          to: entry.arn,
+          type: "CAN_REACH",
+          properties: {
+            ports: "tcp/443",
+            via: entry.name,
+            reason: `EKS cluster ${entry.name} has a public API endpoint open to 0.0.0.0/0`,
+          },
+        });
+      }
+    }
 
     if (entry.kind === "CloudFrontDistribution" && entry.properties["enabled"] === true) {
       add({
