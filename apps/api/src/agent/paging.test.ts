@@ -69,7 +69,7 @@ beforeAll(async () => {
       relationships: [],
       apiCalls: 0,
     });
-    ctx = { scope, graph: { tenantId, scanId: asScanId(scanId) } } as ToolContext;
+    ctx = { scope, graph: { tenantId, scanId: asScanId(scanId) } };
     available = true;
   } catch (err) {
     console.warn("paging.test skipped:", err);
@@ -83,7 +83,7 @@ afterAll(async () => {
 describe.runIf(HAS_INFRA)("list tools", () => {
   it("report the whole answer's size and shape on the first page", async () => {
     if (!available) return;
-    const result = await runTool(ctx, "find_public_resources", {} as never);
+    const result = await runTool(ctx, "find_public_resources", {});
     expect(result.rows).toHaveLength(50);
     expect(result.page).toMatchObject({ total: 125, offset: 0 });
     expect(result.page?.byKind).toEqual([
