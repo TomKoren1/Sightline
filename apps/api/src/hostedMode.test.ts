@@ -1,6 +1,11 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { assertHostedInvariants, hostedInvariantViolations, type Env } from "./hostedMode.js";
+import {
+  apiPrivilegeWarnings,
+  assertHostedInvariants,
+  hostedInvariantViolations,
+  type Env,
+} from "./hostedMode.js";
 
 const ORIGINAL_ENV = { ...process.env };
 
@@ -186,5 +191,44 @@ describe("hosted invariants", () => {
     expect(() => assertHostedInvariants({ DEPLOYMENT_MODE: "hosted" })).toThrow(
       /cannot start with this configuration/,
     );
+  });
+});
+
+describe("API privilege warnings", () => {
+  const SCANNER_KEY = { AWS_ACCESS_KEY_ID: "AKIAIOSFODNN7EXAMPLE", AWS_SECRET_ACCESS_KEY: "x" };
+
+  it("says nothing about a correctly split deployment", () => {
+    expect(apiPrivilegeWarnings(valid, { workerMode: "separate", ownsSchema: false })).toEqual([]);
+  });
+
+  it("flags the scanner identity in an API that runs no scans", () => {
+    const [warning] = apiPrivilegeWarnings(
+      { ...valid, ...SCANNER_KEY },
+      { workerMode: "separate", ownsSchema: false },
+    );
+    expect(warning).toContain("AWS_ACCESS_KEY_ID");
+  });
+
+  it("allows it where the API is the worker", () => {
+    expect(
+      apiPrivilegeWarnings(
+        { ...valid, ...SCANNER_KEY },
+        { workerMode: "embedded", ownsSchema: false },
+      ),
+    ).toEqual([]);
+  });
+
+  it("flags an API connected as the schema's owner", () => {
+    const [warning] = apiPrivilegeWarnings(valid, { workerMode: "separate", ownsSchema: true });
+    expect(warning).toContain("sightline_system");
+  });
+
+  it("stays out of a self-hosted clone, which is one process with every role", () => {
+    expect(
+      apiPrivilegeWarnings(
+        { ...SCANNER_KEY, DEPLOYMENT_MODE: "local" },
+        { workerMode: "embedded", ownsSchema: true },
+      ),
+    ).toEqual([]);
   });
 });

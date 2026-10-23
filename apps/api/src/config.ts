@@ -87,6 +87,12 @@ const schema = z.object({
    * exist and filter nothing. Hosted mode refuses to start without it.
    */
   DATABASE_URL_APP: blankAsUnset(z.string().optional()),
+  /**
+   * Read only by `npm run db:app-role`, to set the password of the cross-tenant
+   * role (0010). API and worker pods get that URL *as* their `DATABASE_URL`,
+   * so the owner's credentials go only to the migrate Job.
+   */
+  DATABASE_URL_SYSTEM: blankAsUnset(z.string().optional()),
 
   /**
    * Whether this process applies migrations before it starts listening.
@@ -122,6 +128,16 @@ const schema = z.object({
   SCAN_OPERATOR: blankAsUnset(z.string().default("system")),
   AWS_ACCESS_KEY_ID: blankAsUnset(z.string().optional()),
   AWS_SECRET_ACCESS_KEY: blankAsUnset(z.string().optional()),
+
+  /**
+   * A separate identity for the secrets key, allowed `kms:Encrypt` and
+   * `kms:Decrypt` on `AWS_KMS_KEY_ID` and nothing else. The API needs KMS to
+   * store and show a connection's ExternalId, but must not hold the scanner
+   * identity that can assume every customer's role - so the API gets these and
+   * only the worker gets `AWS_ACCESS_KEY_ID`. Unset, KMS uses the default chain.
+   */
+  KMS_ACCESS_KEY_ID: blankAsUnset(z.string().optional()),
+  KMS_SECRET_ACCESS_KEY: blankAsUnset(z.string().optional()),
 
   /**
    * Regions to scan. Empty means "discover them", which on a real account

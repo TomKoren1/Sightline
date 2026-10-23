@@ -148,3 +148,34 @@ export function assertHostedInvariants(env: Env = process.env): void {
       .join("\n\n")}\n`,
   );
 }
+
+/**
+ * Credentials the API process holds but has no use for.
+ *
+ * Warnings, not refusals: each is a deployment that works and is merely wider
+ * than it needs to be, and refusing would take down a running service on the
+ * upgrade that introduced the check. `ownsSchema` is asked of the database by
+ * the caller; everything else is the environment.
+ */
+export function apiPrivilegeWarnings(
+  env: Env,
+  facts: { workerMode: string; ownsSchema: boolean },
+): string[] {
+  if (env["DEPLOYMENT_MODE"] !== "hosted") return [];
+  const warnings: string[] = [];
+  if (facts.workerMode === "separate" && looksLikeRealAccessKey(env["AWS_ACCESS_KEY_ID"])) {
+    warnings.push(
+      "The API holds AWS_ACCESS_KEY_ID, the identity that can assume every customer's role, " +
+        "but scans and connection checks run in the worker. Move it to the worker's own " +
+        "secret and give the API KMS_ACCESS_KEY_ID/KMS_SECRET_ACCESS_KEY instead.",
+    );
+  }
+  if (facts.ownsSchema) {
+    warnings.push(
+      "DATABASE_URL connects as a role that owns the schema, so this process could drop " +
+        "tables. Point it at sightline_system (npm run db:app-role) and keep the owner for the " +
+        "migrate Job.",
+    );
+  }
+  return warnings;
+}

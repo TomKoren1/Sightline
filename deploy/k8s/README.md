@@ -98,8 +98,11 @@ this machine. Nothing in this repository contains a credential, and
 create it — a placeholder with fake values would deploy, start, and fail at the
 first sign-in with an error about Google rather than about configuration.
 
-Three secrets are needed. Create each locally, seal it, commit the sealed
-version, and delete the plaintext:
+Five secrets are needed. Create each locally, seal it, commit the sealed
+version, and delete the plaintext. They are split by who needs what: only the
+migrate Job holds the database owner, and only the worker holds the identity
+that can assume customers' roles. The API, which faces the internet, holds
+neither.
 
 **For a throwaway test, skip `kubeseal`.** Drop the `--dry-run=client -o yaml`
 and the pipe, and `kubectl create secret generic` applies the secret straight
@@ -116,13 +119,18 @@ kubectl -n sightline create secret generic sightline-db --dry-run=client -o yaml
 \
   | kubeseal --format yaml > /tmp/db.sealed.yaml
 
-# 2. What the application needs. DATABASE_URL_APP is not optional here: hosted
-#    mode refuses to start without it, because DATABASE_URL is the owner and
-#    the owner bypasses every row-level security policy.
+# 2. What the API and the worker need. DATABASE_URL is the cross-tenant
+#    sightline_system role, not the owner: it reaches every tenant's rows for
+#    sign-in and the job queue, and cannot change the schema. DATABASE_URL_APP
+#    is the restricted role row-level security applies to; hosted mode refuses
+#    to start without it. KMS_* is an IAM user allowed only kms:Encrypt and
+#    kms:Decrypt on AWS_KMS_KEY_ID.
 kubectl -n sightline create secret generic sightline-app --dry-run=client -o yaml \
-  --from-literal=DATABASE_URL="postgres://sightline:<password>@postgres:5432/sightline" \
-  --from-literal=DATABASE_URL_APP="postgres://sightline_app:<other-password>@postgres:5432/sightline" \
+  --from-literal=DATABASE_URL="postgres://sightline_system:<system-password>@postgres:5432/sightline" \
+  --from-literal=DATABASE_URL_APP="postgres://sightline_app:<app-password>@postgres:5432/sightline" \
 \
+  --from-literal=KMS_ACCESS_KEY_ID=... \
+  --from-literal=KMS_SECRET_ACCESS_KEY=... \
   --from-literal=SESSION_SECRET="$(openssl rand -base64 48)" \
   --from-literal=PUBLIC_BASE_URL="https://sightline.example.com" \
   --from-literal=GOOGLE_CLIENT_ID=... \
@@ -133,16 +141,42 @@ kubectl -n sightline create secret generic sightline-app --dry-run=client -o yam
   --from-literal=ANTHROPIC_API_KEY=... \
   | kubeseal --format yaml > /tmp/app.sealed.yaml
 
-# 3. The tunnel token, from the Cloudflare dashboard.
+# 3. The owner, for the migrate Job only. Its DATABASE_URL overrides the one in
+#    sightline-app for that Job and nothing else.
+kubectl -n sightline create secret generic sightline-db-owner --dry-run=client -o yaml \
+  --from-literal=DATABASE_URL="postgres://sightline:<password>@postgres:5432/sightline" \
+  | kubeseal --format yaml > /tmp/owner.sealed.yaml
+
+# 4. The scanner identity, for the worker only: the IAM user named by
+#    SCANNER_PRINCIPAL_ARN, allowed sts:AssumeRole on customers' roles. The
+#    API sends connection checks to the worker rather than holding this.
+kubectl -n sightline create secret generic sightline-scanner --dry-run=client -o yaml \
+  --from-literal=AWS_ACCESS_KEY_ID=... \
+  --from-literal=AWS_SECRET_ACCESS_KEY=... \
+  | kubeseal --format yaml > /tmp/scanner.sealed.yaml
+
+# 5. The tunnel token, from the Cloudflare dashboard.
 kubectl -n sightline create secret generic sightline-tunnel --dry-run=client -o yaml \
   --from-literal=TUNNEL_TOKEN=... \
   | kubeseal --format yaml > /tmp/tunnel.sealed.yaml
 
 cat /tmp/*.sealed.yaml > deploy/k8s/prod/secrets.sealed.yaml
-rm /tmp/db.sealed.yaml /tmp/app.sealed.yaml /tmp/tunnel.sealed.yaml
+rm /tmp/db.sealed.yaml /tmp/app.sealed.yaml /tmp/owner.sealed.yaml \
+  /tmp/scanner.sealed.yaml /tmp/tunnel.sealed.yaml
 ```
 
 Then uncomment `secrets.sealed.yaml` in `prod/kustomization.yaml`.
+
+The two database roles get their passwords from `npm run db:app-role`, run
+once with the owner's `DATABASE_URL` plus `DATABASE_URL_APP` and
+`DATABASE_URL_SYSTEM` set to the URLs above. It also checks that each role has
+exactly the privileges it should.
+
+**Upgrading a cluster created with three secrets.** Nothing breaks: the two new
+secrets are optional, so until they exist every pod runs as before, and the API
+logs a warning naming each credential it holds but does not need. Create
+`sightline-db-owner` and `sightline-scanner`, then change `sightline-app`'s
+`DATABASE_URL` to the system role and move the AWS keys out of it.
 
 A sealed secret is encrypted to _this cluster's_ controller key. It is safe in a
 public repository and it is useless to anyone else — including you, on a rebuilt

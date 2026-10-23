@@ -561,3 +561,33 @@ export const policyDocuments = pgTable(
   },
   (t) => [primaryKey({ columns: [t.tenantId, t.hash] })],
 );
+
+/**
+ * A request to try a connection's role, answered by the worker.
+ *
+ * Only the worker holds the identity that can assume customers' roles, so the
+ * API cannot test a connection itself. It writes one of these, the worker
+ * answers it - usually within a second, over `NOTIFY` - and the API reads the
+ * answer back. Rows older than an hour are deleted as new ones arrive.
+ */
+export const connectionChecks = pgTable(
+  "connection_checks",
+  {
+    id: uuid("id").primaryKey(),
+    tenantId: uuid("tenant_id")
+      .notNull()
+      .references(() => tenants.id, { onDelete: "cascade" }),
+    connectionId: uuid("connection_id")
+      .notNull()
+      .references(() => connections.id, { onDelete: "cascade" }),
+    status: text("status").$type<"queued" | "running" | "done">().notNull().default("queued"),
+    result: jsonb("result"),
+    lockedBy: text("locked_by"),
+    requestedAt: timestamp("requested_at", tz).notNull().defaultNow(),
+    finishedAt: timestamp("finished_at", tz),
+  },
+  (t) => [
+    index("connection_checks_queued").on(t.status, t.requestedAt),
+    check("connection_checks_status", sql`${t.status} IN ('queued','running','done')`),
+  ],
+);

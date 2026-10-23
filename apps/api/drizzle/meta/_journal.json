@@ -64,6 +64,20 @@
       "when": 1792755029484,
       "tag": "0008_policy_documents",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1792765700069,
+      "tag": "0009_connection_checks",
+      "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1792765815021,
+      "tag": "0010_system_role",
+      "breakpoints": true
     }
   ]
 }

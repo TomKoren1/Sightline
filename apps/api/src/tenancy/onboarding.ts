@@ -188,11 +188,8 @@ export class VerifyTooSoon extends Error {
 }
 
 /**
- * Try to assume the role, and pin the account if it works.
- *
- * Read-only by construction: `AssumeRole` followed by `GetCallerIdentity`,
- * which together prove the trust policy works without touching anything in the
- * customer's account.
+ * Try a connection: refuse a retry too soon, then ask the worker, which is the
+ * only process holding an identity that can assume the role.
  */
 export async function verifyConnection(scope: Scope): Promise<VerifyResult> {
   const previous = lastAttempt.get(scope.connectionId);
@@ -200,7 +197,19 @@ export async function verifyConnection(scope: Scope): Promise<VerifyResult> {
     throw new VerifyTooSoon(MIN_ATTEMPT_GAP_MS - (Date.now() - previous));
   }
   lastAttempt.set(scope.connectionId, Date.now());
+  // Imported here: the checks module calls back into this one.
+  const { requestCheck } = await import("../jobs/connectionChecks.js");
+  return requestCheck(scope);
+}
 
+/**
+ * Try to assume the role, and pin the account if it works. Runs in the worker.
+ *
+ * Read-only by construction: `AssumeRole` followed by `GetCallerIdentity`,
+ * which together prove the trust policy works without touching anything in the
+ * customer's account.
+ */
+export async function performVerification(scope: Scope): Promise<VerifyResult> {
   const started = Date.now();
   const connection = await getConnection(scope);
   if (!connection) throw new Error("No such connection");

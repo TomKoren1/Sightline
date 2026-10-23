@@ -43,6 +43,10 @@ spec:
           envFrom:
             - configMapRef: { name: sightline-config }
             - secretRef: { name: sightline-app }
+            # Later sources win: the owner's DATABASE_URL replaces the system
+            # role's, here and nowhere else. Optional so a cluster without
+            # the split secret still migrates with whatever sightline-app holds.
+            - secretRef: { name: sightline-db-owner, optional: true }
           resources:
             requests: { cpu: 50m, memory: 256Mi }
             limits: { memory: 512Mi }
@@ -158,6 +162,9 @@ spec:
           envFrom:
             - configMapRef: { name: sightline-config }
             - secretRef: { name: sightline-app }
+            # The identity that can assume every customer's role: the worker's
+            # alone. Optional for the same transition reason as the owner's.
+            - secretRef: { name: sightline-scanner, optional: true }
           env:
             - { name: SCAN_WORKER, value: separate }
           # No probes, and that is a decision rather than an omission. This

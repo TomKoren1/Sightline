@@ -61,6 +61,16 @@ export const appPool = new pg.Pool({
   ...poolOptions,
 });
 
+/** Whether the `system` connection could change the schema: superuser, or a table owner. */
+export async function connectedAsOwner(): Promise<boolean> {
+  const { rows } = await pool.query<{ owner: boolean }>(
+    `SELECT r.rolsuper OR EXISTS (SELECT 1 FROM pg_tables WHERE tableowner = current_user
+                                     AND schemaname = 'public') AS owner
+       FROM pg_roles r WHERE r.rolname = current_user`,
+  );
+  return rows[0]?.owner ?? false;
+}
+
 /** Whether a role separate from the owner is actually configured. */
 export const rlsRoleConfigured = (): boolean =>
   Boolean(cfg.DATABASE_URL_APP && cfg.DATABASE_URL_APP !== cfg.DATABASE_URL);
