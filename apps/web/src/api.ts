@@ -32,13 +32,32 @@ export interface Summary {
   unprotectedCount: number;
 }
 
+export type FindingCategory = "exposed" | "admin" | "idle" | "unguarded";
+
+/** A finding's tracked state. Null on a finding no scan has recorded yet. */
+export interface FindingState {
+  id: string;
+  status: "open" | "accepted";
+  firstSeenAt: string;
+  statusReason?: string | null;
+  statusAt?: string | null;
+}
+
+type Tracked<T> = T & { reason?: string | null; finding: FindingState | null };
+
 export interface Findings {
-  publicResources: GraphNode[];
+  publicResources: Tracked<GraphNode>[];
   /** Not public, but nothing would stop them becoming public. */
-  unprotected: GraphNode[];
-  adminPrincipals: (GraphNode & { reason?: string; usedBy?: GraphNode[]; useCount?: number })[];
-  idle: GraphNode[];
-  exposed: (GraphNode & { ports?: string[]; securityGroup?: string })[];
+  unprotected: Tracked<GraphNode & { isPublic?: boolean }>[];
+  adminPrincipals: Tracked<GraphNode & { usedBy?: GraphNode[]; useCount?: number }>[];
+  idle: Tracked<GraphNode>[];
+  exposed: Tracked<GraphNode & { ports?: string[]; securityGroup?: string }>[];
+  /** Findings somebody accepted the risk of, still present in the current scan. */
+  accepted: (GraphNode & {
+    category: FindingCategory;
+    reason?: string | null;
+    finding: FindingState;
+  })[];
 }
 
 export interface CheckResult {
@@ -288,6 +307,14 @@ export const api = {
   scans: () => get<{ scans: ScanRun[] }>("/api/scans"),
   summary: () => get<Summary>("/api/summary"),
   findings: () => get<Findings>("/api/findings"),
+  setFindingStatus: (
+    id: string,
+    body: { status: "accepted"; reason: string } | { status: "open" },
+  ) =>
+    send<{ finding: FindingState }>(`/api/findings/${encodeURIComponent(id)}`, {
+      ...asJson(body),
+      method: "PATCH",
+    }),
   graph: (params: { region?: string; kinds?: string[] } = {}) => {
     const search = new URLSearchParams();
     if (params.region) search.set("region", params.region);

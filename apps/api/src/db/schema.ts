@@ -482,3 +482,47 @@ export const auditLog = pgTable(
   },
   (t) => [index("audit_log_tenant").on(t.tenantId, t.createdAt.desc())],
 );
+
+/**
+ * A finding, tracked across scans.
+ *
+ * The verdicts live on each scan's snapshots and are recomputed every time;
+ * this is what a person decided about one. One row per account, category and
+ * resource, so "accepted" survives the next scan and a resolved finding that
+ * comes back reopens rather than arriving as new.
+ */
+export const findings = pgTable(
+  "findings",
+  {
+    id: uuid("id").primaryKey(),
+    tenantId: uuid("tenant_id")
+      .notNull()
+      .references(() => tenants.id, { onDelete: "cascade" }),
+    connectionId: uuid("connection_id")
+      .notNull()
+      .references(() => connections.id, { onDelete: "cascade" }),
+    category: text("category").$type<FindingCategory>().notNull(),
+    resourceArn: text("resource_arn").notNull(),
+    resourceName: text("resource_name").notNull(),
+    resourceKind: text("resource_kind").notNull(),
+    reason: text("reason"),
+    status: text("status").$type<FindingStatus>().notNull().default("open"),
+    /** Why it was accepted. Required to accept: a risk without a reason is a shrug. */
+    statusReason: text("status_reason"),
+    statusBy: uuid("status_by").references(() => users.id, { onDelete: "set null" }),
+    statusAt: timestamp("status_at", tz),
+    firstSeenAt: timestamp("first_seen_at", tz).notNull().defaultNow(),
+    lastSeenAt: timestamp("last_seen_at", tz).notNull().defaultNow(),
+    lastScanId: uuid("last_scan_id").references(() => scanRuns.id, { onDelete: "set null" }),
+    resolvedAt: timestamp("resolved_at", tz),
+  },
+  (t) => [
+    uniqueIndex("findings_identity").on(t.connectionId, t.category, t.resourceArn),
+    index("findings_connection_status").on(t.connectionId, t.status),
+    check("findings_status", sql`${t.status} IN ('open','accepted','resolved')`),
+    check("findings_category", sql`${t.category} IN ('exposed','admin','idle','unguarded')`),
+  ],
+);
+
+export type FindingCategory = "exposed" | "admin" | "idle" | "unguarded";
+export type FindingStatus = "open" | "accepted" | "resolved";

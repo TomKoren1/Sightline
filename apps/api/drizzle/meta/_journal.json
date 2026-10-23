@@ -43,6 +43,13 @@
       "when": 1791950826037,
       "tag": "0005_rls_empty_setting",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1792745017065,
+      "tag": "0006_findings",
+      "breakpoints": true
     }
   ]
 }

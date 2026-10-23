@@ -1,8 +1,34 @@
-import { BadRequestException, Controller, Get, Inject, Param, Query } from "@nestjs/common";
+import {
+  BadRequestException,
+  Body,
+  Controller,
+  Get,
+  Inject,
+  Param,
+  Patch,
+  Query,
+  Req,
+} from "@nestjs/common";
+import type { FastifyRequest } from "fastify";
+import { z } from "zod";
+
+import type { AuthedRequest } from "../auth/auth.guard.js";
 
 import { CurrentScope } from "../tenancy/currentScope.decorator.js";
 import type { Scope } from "../tenancy/scope.js";
 import { GraphService } from "./graph.service.js";
+
+/**
+ * Accepting a risk needs a reason, because the reason is the whole value of the
+ * record: "accepted" alone tells the next engineer nothing about whether the
+ * decision still holds. Reopening needs none.
+ */
+const findingStatusSchema = z.discriminatedUnion("status", [
+  z.object({ status: z.literal("accepted"), reason: z.string().trim().min(3).max(500) }),
+  z.object({ status: z.literal("open") }),
+]);
+
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 @Controller("api")
 export class GraphController {
@@ -55,5 +81,25 @@ export class GraphController {
   @Get("findings")
   findings(@CurrentScope() scope: Scope) {
     return this.graph.findings(scope);
+  }
+
+  @Patch("findings/:id")
+  setFindingStatus(
+    @CurrentScope() scope: Scope,
+    @Param("id") id: string,
+    @Body() body: unknown,
+    @Req() req: FastifyRequest,
+  ) {
+    // Refused here rather than by Postgres, whose answer to a malformed uuid
+    // is a 500.
+    if (!UUID.test(id)) throw new BadRequestException({ error: "Not a finding id" });
+    const input = findingStatusSchema.parse(body ?? {});
+    const session = (req as unknown as AuthedRequest).session;
+    return this.graph.setFindingStatus(scope, {
+      id,
+      status: input.status,
+      reason: input.status === "accepted" ? input.reason : null,
+      actorUserId: session?.userId ?? null,
+    });
   }
 }

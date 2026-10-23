@@ -16,8 +16,10 @@
 
 import { Injectable, NotFoundException } from "@nestjs/common";
 
+import { listFindingStates, setFindingStatus } from "../db/findings.js";
 import * as q from "../db/graph.js";
 import type { GraphScope } from "../db/graph.js";
+import type { FindingCategory } from "../db/schema.js";
 import { graphScopeFor } from "../tenancy/graphScope.js";
 import type { Scope } from "../tenancy/scope.js";
 import { remediationInputFromGraph } from "../remediation/fromGraph.js";
@@ -40,6 +42,7 @@ const EMPTY_FINDINGS = {
   idle: [],
   exposed: [],
   unprotected: [],
+  accepted: [],
 };
 
 @Injectable()
@@ -88,19 +91,90 @@ export class GraphService {
     return { results: await q.searchResources(graph, { text }) };
   }
 
-  /** Findings, for the dashboard panels. */
+  /**
+   * Findings, for the dashboard panels.
+   *
+   * Each item carries its tracked state, when it has one, so the UI can say
+   * how long it has been open and offer to accept it. Accepted findings leave
+   * the lists they would otherwise sit in and are returned on their own: a
+   * decision somebody made should not keep shouting from the same place as
+   * the things nobody has looked at yet.
+   */
   async findings(scope: Scope) {
     const graph = await graphScopeFor(scope);
     if (!graph) return EMPTY_FINDINGS;
 
+    const states = await listFindingStates(scope);
+    const tracked = new Map(states.map((s) => [`${s.category} ${s.resourceArn}`, s]));
+    // Fetch past the accepted ones, so hiding them does not shorten the list.
+    const limit = 50 + states.filter((s) => s.status === "accepted").length;
+
     const [publicResources, adminPrincipals, idle, exposed, unprotected] = await Promise.all([
-      q.findPublicResources(graph, { limit: 50 }),
-      q.findAdminPrincipals(graph, { limit: 50 }),
-      q.findIdleResources(graph, { limit: 50 }),
-      q.findOpenSecurityGroups(graph, { limit: 50 }),
-      q.findUnprotectedBuckets(graph, { limit: 50 }),
+      q.findPublicResources(graph, { limit }),
+      q.findAdminPrincipals(graph, { limit }),
+      q.findIdleResources(graph, { limit }),
+      q.findOpenSecurityGroups(graph, { limit }),
+      q.findUnprotectedBuckets(graph, { limit }),
     ]);
-    return { publicResources, adminPrincipals, idle, exposed, unprotected };
+
+    const annotate = <T extends q.ResourceRow>(category: FindingCategory, rows: T[]) =>
+      rows
+        .map((row) => {
+          const state = tracked.get(`${category} ${row.arn}`);
+          return {
+            ...row,
+            finding: state
+              ? { id: state.id, status: state.status, firstSeenAt: state.firstSeenAt }
+              : null,
+          };
+        })
+        .filter((row) => row.finding?.status !== "accepted")
+        .slice(0, 50);
+
+    // Only what the current scan still shows: an acceptance of a finding a
+    // partial scan did not reach is kept, but not listed as if it were seen.
+    const accepted = states
+      .filter((s) => s.status === "accepted" && s.lastScanId === graph.scanId)
+      .map((s) => ({
+        arn: s.resourceArn,
+        kind: s.resourceKind,
+        name: s.resourceName,
+        region: null,
+        category: s.category,
+        reason: s.reason,
+        finding: {
+          id: s.id,
+          status: s.status,
+          firstSeenAt: s.firstSeenAt,
+          statusReason: s.statusReason,
+          statusAt: s.statusAt,
+        },
+      }));
+
+    return {
+      publicResources: annotate("exposed", publicResources),
+      adminPrincipals: annotate("admin", adminPrincipals),
+      idle: annotate("idle", idle),
+      // Internet-reachable through a rule: the same exposure, named differently.
+      exposed: annotate("exposed", exposed),
+      unprotected: annotate("unguarded", unprotected),
+      accepted,
+    };
+  }
+
+  /** Accept a finding's risk with a reason, or reopen it. */
+  async setFindingStatus(
+    scope: Scope,
+    input: {
+      id: string;
+      status: "accepted" | "open";
+      reason: string | null;
+      actorUserId: string | null;
+    },
+  ) {
+    const finding = await setFindingStatus(scope, input);
+    if (!finding) throw new NotFoundException({ error: "No such open finding" });
+    return { finding };
   }
 
   /**

@@ -34,6 +34,7 @@ import {
   saveScanResult,
   startScanUnits,
 } from "../db/repository.js";
+import { syncFindings } from "../db/findings.js";
 import { runScan } from "../scan/runner.js";
 import { markScanned, markVerified } from "../tenancy/connections.js";
 import { resolveScanTarget } from "../tenancy/scanTarget.js";
@@ -251,6 +252,10 @@ export async function runScanJob(options: RunScanJobOptions): Promise<ScanJobOut
     });
 
     scanResources.observe(result.resources.length);
+    // Before the flip, so the scan that becomes current already has its
+    // findings' history behind it. Only a scan that read everything may
+    // resolve what it did not see.
+    await syncFindings(scope, scanId, status === "succeeded");
     await markProjected(scope, scanId);
 
     // The scan reaching the account *is* a successful verification, and it pins

@@ -55,7 +55,7 @@ const scan = z.object({
 });
 
 interface Contract {
-  method: "GET" | "POST" | "DELETE";
+  method: "GET" | "POST" | "PATCH" | "DELETE";
   /** The path as Fastify registers it, with `:params`. Keyed against the router. */
   route: string;
   /** A concrete URL to call. */
@@ -246,8 +246,25 @@ const CONTRACTS: Contract[] = [
           ),
           exposed: z.array(node.extend({ reason: z.string() })),
           unprotected: z.array(node.extend({ reason: z.string(), isPublic: z.boolean() })),
+          accepted: z.array(
+            node.extend({
+              category: z.string(),
+              finding: z.object({ id: z.string(), status: z.literal("accepted") }),
+            }),
+          ),
         })
         .strict(),
+    },
+  },
+  {
+    method: "PATCH",
+    route: "/api/findings/:id",
+    url: `/api/findings/${UNKNOWN_ID}`,
+    payload: { status: "accepted", reason: "Hosts the public website" },
+    responses: {
+      200: z.object({ finding: z.object({ id: z.string(), status: z.string() }) }).strict(),
+      400: z.object({ error: z.string(), details: z.unknown() }).strict(),
+      404: error,
     },
   },
   {
