@@ -28,6 +28,7 @@ import { loggerOptions } from "./observability/logging.js";
 import { recordBuild, startMetricsServer } from "./observability/metrics.js";
 import { startSnapshotLoop } from "./observability/snapshot.js";
 import { VERSION } from "./version.js";
+import { watchCertificate } from "./aws/certificateWatch.js";
 
 // The same invariants the API checks, for the same reason: every one of them is
 // a configuration mistake that produces a working process with a silently wrong
@@ -59,6 +60,7 @@ try {
    */
   await assertSchemaCurrent();
   await worker.start();
+  watchCertificate(log);
   if (cfg.METRICS_PORT > 0) {
     startMetricsServer(cfg.METRICS_PORT);
     recordBuild(VERSION);

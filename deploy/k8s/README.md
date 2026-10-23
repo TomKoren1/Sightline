@@ -223,6 +223,83 @@ logs a warning naming each credential it holds but does not need. Create
 `sightline-db-owner` and `sightline-scanner`, then change `sightline-app`'s
 `DATABASE_URL` to the system role and move the AWS keys out of it.
 
+### No access keys at all: IAM Roles Anywhere
+
+The scanner's access key is the most valuable secret here: it can assume every
+customer's role, and it never expires. Roles Anywhere swaps it for a
+certificate the worker presents for credentials that last an hour. It is free
+with a CA of your own, which `scripts/roles-anywhere-ca.sh` makes; only AWS
+Private CA would cost money. The API gets its own certificate and a role that
+can only use the KMS key, so the two pods stay apart as they do today.
+
+```bash
+# 1. A CA and a certificate per pod. Keep roles-anywhere/ca.key off the cluster.
+scripts/roles-anywhere-ca.sh init
+scripts/roles-anywhere-ca.sh issue worker
+scripts/roles-anywhere-ca.sh issue api
+
+# 2. Trust the CA. The ARN this prints is the trust anchor.
+aws rolesanywhere create-trust-anchor --name sightline --enabled \
+  --source "sourceType=CERTIFICATE_BUNDLE,sourceData={x509CertificateData=$(cat roles-anywhere/ca.pem)}"
+```
+
+3. Two roles, each trusting `rolesanywhere.amazonaws.com` for one certificate
+   subject. `SightlineScanner`'s trust policy:
+
+   ```json
+   {
+     "Version": "2012-10-17",
+     "Statement": [
+       {
+         "Effect": "Allow",
+         "Principal": { "Service": "rolesanywhere.amazonaws.com" },
+         "Action": ["sts:AssumeRole", "sts:TagSession", "sts:SetSourceIdentity"],
+         "Condition": {
+           "StringEquals": { "aws:PrincipalTag/x509Subject/CN": "sightline-worker" },
+           "ArnEquals": { "aws:SourceArn": "<trust anchor ARN>" }
+         }
+       }
+     ]
+   }
+   ```
+
+   Its permissions: `sts:AssumeRole` and `sts:SetSourceIdentity` on
+   `arn:aws:iam::*:role/SightlineReadOnlyRole`, plus `kms:Encrypt` and
+   `kms:Decrypt` on the key. `SightlineKms` is the same with CN `sightline-api`,
+   and only the two KMS actions.
+
+```bash
+# 4. A profile naming both roles. The ARN it prints is the profile.
+aws rolesanywhere create-profile --name sightline --enabled \
+  --role-arns arn:aws:iam::<account>:role/SightlineScanner arn:aws:iam::<account>:role/SightlineKms
+
+# 5. Hand each pod its certificate, and say where it is and what to ask for.
+for who in worker api; do
+  kubectl -n sightline create secret generic sightline-roles-anywhere-$who \
+    --from-file=certificate.pem=roles-anywhere/$who.pem \
+    --from-file=private-key.pem=roles-anywhere/$who.key
+done
+kubectl -n sightline create configmap sightline-roles-anywhere \
+  --from-literal=certificate=/etc/sightline/roles-anywhere/certificate.pem \
+  --from-literal=privateKey=/etc/sightline/roles-anywhere/private-key.pem \
+  --from-literal=trustAnchorArn=<trust anchor ARN> \
+  --from-literal=profileArn=<profile ARN> \
+  --from-literal=workerRoleArn=arn:aws:iam::<account>:role/SightlineScanner \
+  --from-literal=apiRoleArn=arn:aws:iam::<account>:role/SightlineKms
+
+# 6. The scanner is now a role, so customers' trust policies name it.
+#    Set SCANNER_PRINCIPAL_ARN in sightline-app to the SightlineScanner ARN,
+#    then delete sightline-scanner and remove KMS_* from sightline-app.
+kubectl -n sightline rollout restart deploy/api deploy/worker
+```
+
+Existing customers' stacks name the old scanner user, so keep that user until
+each has updated its stack with the new principal. Certificates last a year:
+both processes log a warning from thirty days out, and
+`scripts/roles-anywhere-ca.sh issue worker` plus a new secret renews one
+without touching AWS. Hosted mode refuses to start with only some of the five
+`ROLES_ANYWHERE_*` values set.
+
 A sealed secret is encrypted to _this cluster's_ controller key. It is safe in a
 public repository and it is useless to anyone else — including you, on a rebuilt
 cluster. Back up the controller's key, or keep the plaintext somewhere you

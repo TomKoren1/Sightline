@@ -36,9 +36,20 @@ spec:
       labels: { app.kubernetes.io/name: migrate }
     spec:
       restartPolicy: Never
+      # The image's own `node` user. fsGroup makes mounted secrets readable to
+      # it, which a root-owned 0400 file is not.
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+        seccompProfile: { type: RuntimeDefault }
       containers:
         - name: migrate
           image: sightline-api
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities: { drop: [ALL] }
           command: ["npm", "run", "db:migrate", "-w", "@sightline/api"]
           envFrom:
             - configMapRef: { name: sightline-config }
@@ -86,9 +97,20 @@ spec:
       # A scan or an agent answer can be streaming when a rollout starts.
       # Long enough for an in-flight response to finish rather than being cut.
       terminationGracePeriodSeconds: 90
+      # The image's own `node` user. fsGroup makes mounted secrets readable to
+      # it, which a root-owned 0400 file is not.
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+        seccompProfile: { type: RuntimeDefault }
       containers:
         - name: api
           image: sightline-api
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities: { drop: [ALL] }
           ports:
             - { name: http, containerPort: 3000 }
             - { name: metrics, containerPort: 9464 }
@@ -102,6 +124,26 @@ spec:
             - { name: SCAN_WORKER, value: separate }
             # The Job above owns the schema; see its comment.
             - { name: MIGRATE_ON_BOOT, value: "false" }
+            # IAM Roles Anywhere, when deploy/k8s/README.md's steps have made
+            # the ConfigMap: a certificate instead of an access key. Every one
+            # optional, so without the ConfigMap nothing changes.
+            - name: ROLES_ANYWHERE_CERTIFICATE
+              valueFrom:
+                configMapKeyRef:
+                  { name: sightline-roles-anywhere, key: certificate, optional: true }
+            - name: ROLES_ANYWHERE_PRIVATE_KEY
+              valueFrom:
+                configMapKeyRef: { name: sightline-roles-anywhere, key: privateKey, optional: true }
+            - name: ROLES_ANYWHERE_TRUST_ANCHOR_ARN
+              valueFrom:
+                configMapKeyRef:
+                  { name: sightline-roles-anywhere, key: trustAnchorArn, optional: true }
+            - name: ROLES_ANYWHERE_PROFILE_ARN
+              valueFrom:
+                configMapKeyRef: { name: sightline-roles-anywhere, key: profileArn, optional: true }
+            - name: ROLES_ANYWHERE_ROLE_ARN
+              valueFrom:
+                configMapKeyRef: { name: sightline-roles-anywhere, key: apiRoleArn, optional: true }
           readinessProbe:
             # `/api/health` reports on Postgres, so a pod whose database is
             # unreachable stops receiving traffic rather than
@@ -118,9 +160,15 @@ spec:
             # a pod out of rotation, not restart it. Restarting on a dependency
             # being slow turns one slow dependency into a crash loop.
             failureThreshold: 6
+          volumeMounts:
+            - { name: roles-anywhere, mountPath: /etc/sightline/roles-anywhere, readOnly: true }
           resources:
             requests: { cpu: 100m, memory: 512Mi }
             limits: { memory: 1Gi }
+      volumes:
+        # This pod's own certificate: the API's cannot assume the scanner role.
+        - name: roles-anywhere
+          secret: { secretName: sightline-roles-anywhere-api, optional: true, defaultMode: 0440 }
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -154,9 +202,20 @@ spec:
       # if it is not enough, the job's heartbeat stops and another worker
       # reclaims it, which costs one stale-detection interval rather than data.
       terminationGracePeriodSeconds: 300
+      # The image's own `node` user. fsGroup makes mounted secrets readable to
+      # it, which a root-owned 0400 file is not.
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+        seccompProfile: { type: RuntimeDefault }
       containers:
         - name: worker
           image: sightline-api
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities: { drop: [ALL] }
           command: ["npm", "run", "worker", "-w", "@sightline/api"]
           ports: [{ name: metrics, containerPort: 9464 }]
           envFrom:
@@ -167,6 +226,29 @@ spec:
             - secretRef: { name: sightline-scanner, optional: true }
           env:
             - { name: SCAN_WORKER, value: separate }
+            # IAM Roles Anywhere, when deploy/k8s/README.md's steps have made
+            # the ConfigMap: a certificate instead of an access key. Every one
+            # optional, so without the ConfigMap nothing changes.
+            - name: ROLES_ANYWHERE_CERTIFICATE
+              valueFrom:
+                configMapKeyRef:
+                  { name: sightline-roles-anywhere, key: certificate, optional: true }
+            - name: ROLES_ANYWHERE_PRIVATE_KEY
+              valueFrom:
+                configMapKeyRef: { name: sightline-roles-anywhere, key: privateKey, optional: true }
+            - name: ROLES_ANYWHERE_TRUST_ANCHOR_ARN
+              valueFrom:
+                configMapKeyRef:
+                  { name: sightline-roles-anywhere, key: trustAnchorArn, optional: true }
+            - name: ROLES_ANYWHERE_PROFILE_ARN
+              valueFrom:
+                configMapKeyRef: { name: sightline-roles-anywhere, key: profileArn, optional: true }
+            - name: ROLES_ANYWHERE_ROLE_ARN
+              valueFrom:
+                configMapKeyRef:
+                  { name: sightline-roles-anywhere, key: workerRoleArn, optional: true }
+          volumeMounts:
+            - { name: roles-anywhere, mountPath: /etc/sightline/roles-anywhere, readOnly: true }
           # No probes, and that is a decision rather than an omission. This
           # process serves no port, so there is nothing to probe over HTTP -
           # and its liveness is already expressed as `scan_jobs.heartbeat_at`,
@@ -178,6 +260,10 @@ spec:
             # account's inventory. A scan that exceeds it is killed here, which
             # is the whole point of it being a separate deployment.
             limits: { memory: 2Gi }
+      volumes:
+        # This pod's own certificate: the API's cannot assume the scanner role.
+        - name: roles-anywhere
+          secret: { secretName: sightline-roles-anywhere-worker, optional: true, defaultMode: 0440 }
 ---
 apiVersion: v1
 kind: Service

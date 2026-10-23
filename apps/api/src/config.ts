@@ -7,6 +7,8 @@ import { existsSync, readdirSync } from "node:fs";
 import { z } from "zod";
 
 import { validateAssumeRoleTarget } from "./aws/principal.js";
+import { rolesAnywhereProvider } from "./aws/rolesAnywhere.js";
+import type { AwsCredentialIdentity, AwsCredentialIdentityProvider } from "@aws-sdk/types";
 
 /**
  * `fileURLToPath`, never `URL.pathname`: the latter is a URL path, so a drive
@@ -146,6 +148,18 @@ const schema = z.object({
    * have either - see `hostedMode.ts`.
    */
   KMS_ENDPOINT_URL: blankAsUnset(z.string().optional()),
+
+  /**
+   * IAM Roles Anywhere: this pod's AWS identity from an X.509 certificate
+   * instead of a long-lived access key (`aws/rolesAnywhere.ts`). All five, or
+   * none. Each pod gets its own certificate and role: the worker's is the
+   * scanner, the API's can only use the KMS key.
+   */
+  ROLES_ANYWHERE_CERTIFICATE: blankAsUnset(z.string().optional()),
+  ROLES_ANYWHERE_PRIVATE_KEY: blankAsUnset(z.string().optional()),
+  ROLES_ANYWHERE_TRUST_ANCHOR_ARN: blankAsUnset(z.string().optional()),
+  ROLES_ANYWHERE_PROFILE_ARN: blankAsUnset(z.string().optional()),
+  ROLES_ANYWHERE_ROLE_ARN: blankAsUnset(z.string().optional()),
   E2E_IDENTITY_PROVIDER_URL: blankAsUnset(z.string().optional()),
 
   /**
@@ -591,12 +605,16 @@ const SDK_ENV_OVERRIDES = [
  */
 export function sourceCredentials(
   isDemo: boolean,
-): { accessKeyId: string; secretAccessKey: string } | undefined {
+): AwsCredentialIdentity | AwsCredentialIdentityProvider | undefined {
   if (isDemo) {
     return cfg.AWS_ACCESS_KEY_ID && cfg.AWS_SECRET_ACCESS_KEY
       ? { accessKeyId: cfg.AWS_ACCESS_KEY_ID, secretAccessKey: cfg.AWS_SECRET_ACCESS_KEY }
       : { accessKeyId: "mock", secretAccessKey: "mock" };
   }
+  // A certificate, when configured, wins over any key: it is the reason to
+  // have no key at all.
+  const certificate = rolesAnywhere();
+  if (certificate) return certificate;
   return looksLikeRealAccessKey(cfg.AWS_ACCESS_KEY_ID) && cfg.AWS_SECRET_ACCESS_KEY
     ? { accessKeyId: cfg.AWS_ACCESS_KEY_ID!, secretAccessKey: cfg.AWS_SECRET_ACCESS_KEY }
     : undefined;
@@ -736,4 +754,31 @@ export function inContainer(): boolean {
 /** The value sent as `sts:SourceIdentity` on every AssumeRole. */
 export function sourceIdentity(): string {
   return toSourceIdentity(cfg.SCAN_OPERATOR);
+}
+
+let rolesAnywhereCache: AwsCredentialIdentityProvider | null | undefined;
+
+/**
+ * This pod's Roles Anywhere provider, shared by every client so they share one
+ * session, or null when it is not configured. Half a configuration is refused
+ * at startup (`hostedMode.ts`), so here it is all or nothing.
+ */
+export function rolesAnywhere(): AwsCredentialIdentityProvider | null {
+  if (rolesAnywhereCache !== undefined) return rolesAnywhereCache;
+  const certificatePath = cfg.ROLES_ANYWHERE_CERTIFICATE;
+  const privateKeyPath = cfg.ROLES_ANYWHERE_PRIVATE_KEY;
+  const trustAnchorArn = cfg.ROLES_ANYWHERE_TRUST_ANCHOR_ARN;
+  const profileArn = cfg.ROLES_ANYWHERE_PROFILE_ARN;
+  const roleArn = cfg.ROLES_ANYWHERE_ROLE_ARN;
+  rolesAnywhereCache =
+    certificatePath && privateKeyPath && trustAnchorArn && profileArn && roleArn
+      ? rolesAnywhereProvider({
+          certificatePath,
+          privateKeyPath,
+          trustAnchorArn,
+          profileArn,
+          roleArn,
+        })
+      : null;
+  return rolesAnywhereCache;
 }

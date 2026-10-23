@@ -19,7 +19,7 @@ import { createCipheriv, createDecipheriv, createHash, randomBytes } from "node:
 
 import { SIGHTLINE_PREFIX } from "@sightline/shared";
 
-import { cfg } from "../config.js";
+import { cfg, rolesAnywhere } from "../config.js";
 
 const KMS_PREFIX = "k1:";
 const LOCAL_PREFIX = "l1:";
@@ -73,10 +73,12 @@ function decryptLocal(envelope: string): string {
  */
 async function kmsClient() {
   const { KMSClient } = await import("@aws-sdk/client-kms");
+  // A dedicated key pair, else this pod's Roles Anywhere identity, else the
+  // standard chain.
   const credentials =
     cfg.KMS_ACCESS_KEY_ID && cfg.KMS_SECRET_ACCESS_KEY
       ? { accessKeyId: cfg.KMS_ACCESS_KEY_ID, secretAccessKey: cfg.KMS_SECRET_ACCESS_KEY }
-      : undefined;
+      : (rolesAnywhere() ?? undefined);
   return new KMSClient({
     region: cfg.AWS_REGION,
     ...(credentials ? { credentials } : {}),

@@ -117,6 +117,23 @@ export function hostedInvariantViolations(env: Env): string[] {
     );
   }
 
+  // All five or none: a partial set would fall back to the standard chain and
+  // pick up whatever identity happens to be lying around.
+  const rolesAnywhere = [
+    "ROLES_ANYWHERE_CERTIFICATE",
+    "ROLES_ANYWHERE_PRIVATE_KEY",
+    "ROLES_ANYWHERE_TRUST_ANCHOR_ARN",
+    "ROLES_ANYWHERE_PROFILE_ARN",
+    "ROLES_ANYWHERE_ROLE_ARN",
+  ];
+  const given = rolesAnywhere.filter((k) => set(env, k));
+  if (given.length > 0 && given.length < rolesAnywhere.length) {
+    problems.push(
+      `Roles Anywhere is half configured: ${rolesAnywhere.filter((k) => !set(env, k)).join(", ")} ` +
+        "missing. Set all five, or none.",
+    );
+  }
+
   const base = env["PUBLIC_BASE_URL"]?.trim();
   if (!base) {
     problems.push(

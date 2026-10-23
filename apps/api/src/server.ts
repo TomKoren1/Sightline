@@ -4,6 +4,7 @@ import { buildApp } from "./app.js";
 import { cfg, migrateOnBoot, scanWorkerMode } from "./config.js";
 import { assertSchemaCurrent, connectedAsOwner, migrate, closePool } from "./db/postgres.js";
 import { apiPrivilegeWarnings, assertHostedInvariants } from "./hostedMode.js";
+import { watchCertificate } from "./aws/certificateWatch.js";
 import { ScanWorker } from "./jobs/worker.js";
 import { ensureLocalTenant } from "./tenancy/local.js";
 import { pruneExpiredSessions } from "./auth/session.js";
@@ -57,6 +58,7 @@ try {
   })) {
     log.warn(warning);
   }
+  watchCertificate(log);
   // A clone is one tenant with two connections. No-op in hosted mode, where
   // tenants arrive by signing up.
   await ensureLocalTenant();
