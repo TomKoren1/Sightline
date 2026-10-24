@@ -50,11 +50,6 @@ export function statusFor(kind: RefusalKind): 429 | 503 {
   return kind === "paused" ? 503 : 429;
 }
 
-/** Seconds until a moment in the future, rounded up and never negative. */
-function secondsUntil(when: Date): number {
-  return Math.max(1, Math.ceil((when.getTime() - Date.now()) / 1000));
-}
-
 /**
  * May this tenant start a scan of this account?
  *
@@ -91,18 +86,25 @@ export async function mayScan(scope: Scope): Promise<Decision> {
        * slow scan would eat its own cooldown and a fast account could be rescanned
        * in a loop. From the finish, the gap is a gap.
        */
+      // Elapsed by the database's clock alone: finished_at was written by it,
+      // and comparing it with this process's clock made the wait off by
+      // however far the two disagree.
       const [last] = await db
-        .select({ finishedAt: sql<Date | null>`max(${scanRuns.finishedAt})` })
+        .select({
+          elapsed: sql<
+            number | null
+          >`extract(epoch from now() - max(${scanRuns.finishedAt}))::float8`,
+        })
         .from(scanRuns)
         .where(
           and(eq(scanRuns.tenantId, scope.tenantId), eq(scanRuns.connectionId, scope.connectionId)),
         );
 
-      const finishedAt = last?.finishedAt ? new Date(last.finishedAt) : null;
-      if (finishedAt) {
-        const nextAllowed = new Date(finishedAt.getTime() + cooldown * 1000);
-        if (nextAllowed.getTime() > Date.now()) {
-          const wait = secondsUntil(nextAllowed);
+      const elapsed = last?.elapsed ?? null;
+      if (elapsed !== null) {
+        const remaining = cooldown - Number(elapsed);
+        if (remaining > 0) {
+          const wait = Math.max(1, Math.ceil(remaining));
           return {
             allowed: false,
             kind: "throttled",
