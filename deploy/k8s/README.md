@@ -163,12 +163,34 @@ is a registrable domain rather than somebody else's subdomain.
 
 `sealed-secrets` is already installed in `kube-system`, and `kubeseal` is on
 this machine. Nothing in this repository contains a credential, and
-`prod/kustomization.yaml` leaves `secrets.sealed.yaml` commented out until you
-create it — a placeholder with fake values would deploy, start, and fail at the
-first sign-in with an error about Google rather than about configuration.
+`prod/kustomization.yaml` leaves `secrets.sealedsecret.yaml` commented out until
+you create it — a placeholder with fake values would deploy, start, and fail at
+the first sign-in with an error about Google rather than about configuration.
+The name must end in `sealedsecret.yaml`: that is the path `.gitleaks.toml`
+exempts, and CI's secret scan fails on the ciphertext of any other.
 
-Five secrets are needed. Create each locally, seal it, commit the sealed
-version, and delete the plaintext. They are split by who needs what: only the
+**When the secrets already exist in the cluster**, made by hand, seal them as
+they are rather than retyping them:
+
+```bash
+scripts/seal-prod-secrets.sh   # reads the live secrets, writes prod/secrets.sealedsecret.yaml
+
+# The controller will not overwrite a Secret it did not create. This lets it
+# adopt each one; until then the SealedSecret reports "already exists and is
+# not managed by SealedSecret" and the live Secret is left as it was.
+for s in sightline-db sightline-app sightline-db-owner sightline-scanner; do
+  kubectl -n sightline annotate secret "$s" sealedsecrets.bitnami.com/managed=true
+done
+```
+
+Then uncomment the file in `prod/kustomization.yaml`, commit both, and sync.
+The script keeps only the keys the manifests use, so a key left from a removed
+component disappears from the live Secret when the controller adopts it.
+
+**Starting from nothing**, create each secret, seal it and commit the result:
+
+Five secrets are needed (four while the tunnel is the quick one). Create each
+locally, seal it, commit the sealed version, and delete the plaintext. They are split by who needs what: only the
 migrate Job holds the database owner, and only the worker holds the identity
 that can assume customers' roles. The API, which faces the internet, holds
 neither.
@@ -229,12 +251,12 @@ kubectl -n sightline create secret generic sightline-tunnel --dry-run=client -o 
   --from-literal=TUNNEL_TOKEN=... \
   | kubeseal --format yaml > /tmp/tunnel.sealed.yaml
 
-cat /tmp/*.sealed.yaml > deploy/k8s/prod/secrets.sealed.yaml
+cat /tmp/*.sealed.yaml > deploy/k8s/prod/secrets.sealedsecret.yaml
 rm /tmp/db.sealed.yaml /tmp/app.sealed.yaml /tmp/owner.sealed.yaml \
   /tmp/scanner.sealed.yaml /tmp/tunnel.sealed.yaml
 ```
 
-Then uncomment `secrets.sealed.yaml` in `prod/kustomization.yaml`.
+Then uncomment `secrets.sealedsecret.yaml` in `prod/kustomization.yaml`.
 
 The two database roles get their passwords from `npm run db:app-role`, run
 once with the owner's `DATABASE_URL` plus `DATABASE_URL_APP` and

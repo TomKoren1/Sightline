@@ -277,3 +277,103 @@ describe("the staging overlay", () => {
     );
   });
 });
+
+describe("prod's sealed secrets", () => {
+  /**
+   * The file is absent until an operator seals the live secrets
+   * (`scripts/seal-prod-secrets.sh`), so most of this runs once the prod
+   * overlay lists it - and from then on, holds it to what the workloads need.
+   */
+  const kustomization = read("prod/kustomization.yaml");
+  // Listed or still commented out: either way, the name it will have.
+  const named = /^\s*#?\s*-\s*(\S*sealed\S*\.ya?ml)\s*$/m.exec(kustomization)?.[1];
+  const listed = Boolean(
+    named && (parse(kustomization) as { resources?: string[] }).resources?.includes(named),
+  );
+
+  interface Sealed {
+    kind?: string;
+    metadata?: { name?: string; namespace?: string; annotations?: Record<string, string> };
+    spec?: { encryptedData?: Record<string, string>; template?: { data?: unknown } };
+    data?: unknown;
+    stringData?: unknown;
+  }
+  const sealed = (): Sealed[] =>
+    parseAllDocuments(read(`prod/${named}`))
+      .map((d) => d.toJS() as Sealed | null)
+      .filter((d): d is Sealed => d !== null && Object.keys(d).length > 0);
+  const keysOf = (name: string) =>
+    Object.keys(sealed().find((s) => s.metadata?.name === name)?.spec?.encryptedData ?? {});
+
+  it("is named so the secret scan's allowlist covers its ciphertext", () => {
+    // `secrets.sealed.yaml`, the name this once had, does not match - the
+    // first commit of it would have failed CI's gitleaks job on entropy.
+    const allow = [...readFileSync(`${root}.gitleaks.toml`, "utf8").matchAll(/'''(.+?)'''/g)]
+      .map((m) => m[1]!)
+      .filter((p) => p.includes("sealed"));
+    expect(named, "prod/kustomization.yaml names no sealed secrets file").toBeTruthy();
+    expect(allow.some((p) => new RegExp(p).test(named!))).toBe(true);
+  });
+
+  it.skipIf(!listed)("is ciphertext only, scoped to this namespace", () => {
+    for (const doc of sealed()) {
+      const name = doc.metadata?.name;
+      expect(doc.kind, `${name} is not a SealedSecret`).toBe("SealedSecret");
+      expect(
+        doc.data ?? doc.stringData ?? doc.spec?.template?.data,
+        `${name} has plaintext`,
+      ).toBeUndefined();
+      expect(
+        Object.keys(doc.spec?.encryptedData ?? {}).length,
+        `${name} seals nothing`,
+      ).toBeGreaterThan(0);
+      expect(doc.metadata?.namespace).toBe("sightline");
+      // Strict scope, kubeseal's default: a copy renamed or moved will not decrypt.
+      const annotations = Object.keys(doc.metadata?.annotations ?? {});
+      expect(annotations.filter((a) => /cluster-wide|namespace-wide/.test(a))).toEqual([]);
+    }
+  });
+
+  it.skipIf(!listed)("provides every secret a running workload cannot start without", () => {
+    const required = new Set<string>();
+    const walk = (node: unknown): void => {
+      if (Array.isArray(node)) return node.forEach(walk);
+      if (!node || typeof node !== "object") return;
+      for (const [key, value] of Object.entries(node)) {
+        const ref = value as { name?: string; optional?: boolean };
+        if ((key === "secretRef" || key === "secretKeyRef") && ref?.name && !ref.optional) {
+          required.add(ref.name);
+        }
+        walk(value);
+      }
+    };
+    for (const m of manifests()) {
+      // A Deployment scaled to zero (the named tunnel, until there is a domain) needs nothing.
+      if ((m.spec as { replicas?: number } | undefined)?.replicas === 0) continue;
+      if (["Deployment", "StatefulSet", "Job", "CronJob"].includes(m.kind ?? "")) walk(m.spec);
+    }
+    const provided = new Set(sealed().map((s) => s.metadata?.name));
+    expect([...required].filter((r) => !provided.has(r))).toEqual([]);
+    expect(keysOf("sightline-db")).toEqual(
+      expect.arrayContaining(["POSTGRES_DB", "POSTGRES_USER", "POSTGRES_PASSWORD"]),
+    );
+    // The graph database is gone; its password should not outlive it.
+    expect(sealed().flatMap((s) => Object.keys(s.spec?.encryptedData ?? {}))).not.toContain(
+      "NEO4J_AUTH",
+    );
+  });
+
+  it.skipIf(!listed)("seals every key hosted mode refuses to start without", () => {
+    // Placeholders that pass each rule, so only a *missing* key can fail it.
+    const placeholder: Env = {
+      DATABASE_URL: "postgres://sightline_system@postgres:5432/sightline",
+      DATABASE_URL_APP: "postgres://sightline_app@postgres:5432/sightline",
+      PUBLIC_BASE_URL: "https://sightline.example.com",
+      AWS_ACCESS_KEY_ID: "AKIAIOSFODNN7EXAMPLE",
+    };
+    const env: Env = Object.fromEntries(
+      keysOf("sightline-app").map((k) => [k, placeholder[k] ?? "sealed"]),
+    );
+    expect(hostedInvariantViolations({ ...env, ...configLiterals() })).toEqual([]);
+  });
+});
