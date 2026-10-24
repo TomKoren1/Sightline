@@ -274,7 +274,18 @@ export async function ask(options: AskOptions): Promise<AgentMessage> {
 
   const result = streamText({
     model: options.model ?? configuredModel(),
-    system,
+    /**
+     * Cached: every step of every answer resends the tool definitions and this
+     * prompt, up to MAX_STEPS times a question. A breakpoint here caches the
+     * whole prefix - tools come before the system prompt - so the steps after
+     * the first, and the next questions about the same scan, read it at a
+     * fraction of the price. Providers without caching ignore the option.
+     */
+    system: {
+      role: "system",
+      content: system,
+      providerOptions: { anthropic: { cacheControl: { type: "ephemeral" } } },
+    },
     messages: [
       ...history.map((h) => ({ role: h.role, content: h.content })),
       {
@@ -339,6 +350,9 @@ export async function ask(options: AskOptions): Promise<AgentMessage> {
     const usage = await result.usage;
     if (usage?.inputTokens) agentTokens.inc({ kind: "input" }, usage.inputTokens);
     if (usage?.outputTokens) agentTokens.inc({ kind: "output" }, usage.outputTokens);
+    // Part of the input above, read from the cache: whether caching pays.
+    const cached = usage?.inputTokenDetails?.cacheReadTokens;
+    if (cached) agentTokens.inc({ kind: "cache_read" }, cached);
   } catch {
     // A question that answered is not a failure because accounting did not.
   }

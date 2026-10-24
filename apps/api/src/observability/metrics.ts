@@ -164,7 +164,7 @@ export const agentQuestions = new Counter({
 
 export const agentTokens = new Counter({
   name: "sightline_agent_tokens_total",
-  help: "Anthropic tokens consumed, by input or output.",
+  help: "Anthropic tokens consumed: input, output, and cache_read (the part of input served from the prompt cache).",
   labelNames: ["kind"],
   registers: [registry],
 });
