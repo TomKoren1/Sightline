@@ -219,7 +219,11 @@ spec:
             allowPrivilegeEscalation: false
             capabilities: { drop: [ALL] }
             readOnlyRootFilesystem: true
-          command: ["node", "--enable-source-maps", "apps/api/dist/worker.js"]
+          # The heap cap is three quarters of the memory limit below, so V8
+          # collects before the kernel kills: uncapped, it lets garbage grow
+          # past the container's 2Gi (measured: 2.5 GiB used of 1.2 live).
+          command:
+            ["node", "--enable-source-maps", "--max-old-space-size=1536", "apps/api/dist/worker.js"]
           ports: [{ name: metrics, containerPort: 9464 }]
           envFrom:
             - configMapRef: { name: sightline-config }

@@ -18,6 +18,7 @@
  */
 
 import { randomUUID } from "node:crypto";
+import { getHeapStatistics } from "node:v8";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { eq } from "drizzle-orm";
 import { INTERNET_ARN, type ScanResult } from "@sightline/shared";
@@ -149,6 +150,10 @@ beforeAll(async () => {
       `${r.relationships.length.toLocaleString()} relationships (${copies} copies of ${per} + ${CROWD})`,
   ));
 
+  // Two phases, measured apart: which one sets the peak is what to fix.
+  const analysed = memory.stop();
+  const saving = memoryPeak();
+
   await system.insert(schema.tenants).values({ id: tenantId, name: "load.test" });
   await system.insert(schema.connections).values({
     id: connectionId,
@@ -167,9 +172,20 @@ beforeAll(async () => {
       apiCalls: 0,
     }),
   );
-  const peak = memory.stop();
+  const saved = saving.stop();
+  const peak = {
+    heap: Math.max(analysed.heap, saved.heap),
+    rss: Math.max(analysed.rss, saved.rss),
+  };
   peakHeap = peak.heap;
   const mib = (b: number) => `${Math.round(b / 1024 ** 2).toLocaleString()} MiB`;
+  timings.push({
+    step: "peak memory by phase",
+    ms: 0,
+    // Under the heap cap it ran with: uncapped, V8 keeps garbage it has room
+    // for, and the peak measures the machine rather than the scan.
+    detail: `collect and analyse ${mib(analysed.heap)}, save ${mib(saved.heap)}, heap cap ${mib(getHeapStatistics().heap_size_limit)}`,
+  });
   const perResource = Math.round(peak.heap / annotated.resources.length);
   timings.push({
     step: "peak memory",

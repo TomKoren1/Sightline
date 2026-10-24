@@ -244,12 +244,13 @@ const schema = z.object({
    * is a clear message instead of a graph too large to query or render, and
    * that is worth having on its own.
    *
-   * Measured, not guessed (load test, Oct 2026): peak heap 467 MiB at 50,000
-   * resources and 2,470 MiB at 150,000 - per-resource cost grows with size -
-   * so the worker's 2 GiB fits about 124,000. Raise this only together with
-   * the worker's memory limit in deploy/k8s/base/app.yaml.
+   * Measured (load test, Oct 2026): 150,000 resources peak at 1,205 MiB of
+   * heap with V8 capped at 1.5 GiB, as the worker runs, so it fits the 2 GiB
+   * worker. Uncapped, V8 let garbage grow to 2.5 GiB for the same scan - the
+   * reason for the cap. Raise this only with the worker's memory and its
+   * --max-old-space-size in deploy/k8s/base/app.yaml.
    */
-  MAX_RESOURCES_PER_SCAN: blankAsUnset(z.coerce.number().int().positive().default(100_000)),
+  MAX_RESOURCES_PER_SCAN: blankAsUnset(z.coerce.number().int().positive().default(150_000)),
 
   /**
    * Finished scans kept per account; older ones are deleted with their

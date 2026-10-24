@@ -169,7 +169,8 @@ services:
       target: api
     container_name: sightline-worker
     restart: unless-stopped
-    command: ["node", "--enable-source-maps", "apps/api/dist/worker.js"]
+    command:
+      ["node", "--enable-source-maps", "--max-old-space-size=1536", "apps/api/dist/worker.js"]
     env_file:
       - path: .env
         required: false
