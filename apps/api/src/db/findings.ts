@@ -83,7 +83,9 @@ export async function syncFindings(
 
       // `xmax = 0` is true for a row this statement inserted and false for one
       // it updated: the cheapest way to tell new findings from returning ones.
-      // `was` is read from the old row through the conflict's own target.
+      // `was` comes from `previous`, which sees the table as it was before the
+      // insert, joined once afterwards. A subquery per returned row walked the
+      // connection's findings each time: 21 s at 34,000 findings.
       const { rows } = await tx.execute<{
         inserted: boolean;
         was: FindingStatus | null;
@@ -92,11 +94,11 @@ export async function syncFindings(
         resource_kind: string;
       }>(sql`
         WITH current AS (${current}),
-        previous AS (
+        previous AS MATERIALIZED (
           SELECT f.category, f.resource_arn, f.status FROM findings f
-            JOIN current c ON c.category = f.category AND c.arn = f.resource_arn
            WHERE f.tenant_id = ${scope.tenantId} AND f.connection_id = ${scope.connectionId}
-        )
+        ),
+        upserted AS (
         INSERT INTO findings AS f (id, tenant_id, connection_id, category, resource_arn,
                                    resource_name, resource_kind, reason, last_scan_id)
         SELECT gen_random_uuid(), ${scope.tenantId}, ${scope.connectionId}, c.category, c.arn,
@@ -110,9 +112,12 @@ export async function syncFindings(
           last_scan_id = excluded.last_scan_id,
           status = CASE WHEN f.status = 'resolved' THEN 'open' ELSE f.status END,
           resolved_at = NULL
-        RETURNING (xmax = 0) AS inserted, f.category, f.resource_name, f.resource_kind,
-          (SELECT p.status FROM previous p
-            WHERE p.category = f.category AND p.resource_arn = f.resource_arn) AS was
+        RETURNING (xmax = 0) AS inserted, f.category, f.resource_arn, f.resource_name,
+                  f.resource_kind
+        )
+        SELECT u.inserted, u.category, u.resource_name, u.resource_kind, p.status AS was
+          FROM upserted u
+          LEFT JOIN previous p ON p.category = u.category AND p.resource_arn = u.resource_arn
       `);
 
       let resolved = 0;

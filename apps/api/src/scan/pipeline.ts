@@ -191,13 +191,18 @@ export function annotate(
   append(edges);
 
   // Fold reachability back onto the resources, so a node carries its own
-  // verdict and the UI does not have to re-derive it from edges.
+  // verdict and the UI does not have to re-derive it from edges. The direct
+  // edges are indexed once: a search per reachable resource was quadratic.
+  const directFromInternet = new Map<string, Relationship>();
+  for (const e of edges) {
+    if (e.from === INTERNET_ARN && !directFromInternet.has(e.to)) directFromInternet.set(e.to, e);
+  }
   for (const resource of resources) {
     // Their exposure is their policy's, decided above, not the network's.
     if (resource.kind === "S3Bucket" || resource.kind === "Internet") continue;
     if (POLICY_KINDS.has(resource.kind)) continue;
     if (!internetReachable.has(resource.arn)) continue;
-    const direct = edges.find((e) => e.from === INTERNET_ARN && e.to === resource.arn);
+    const direct = directFromInternet.get(resource.arn);
     resource.derived.isPublic = true;
     resource.derived.publicReason =
       (direct?.properties?.["reason"] as string | undefined) ??

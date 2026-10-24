@@ -53,11 +53,13 @@ const ACCOUNTS = Math.max(1, Number(process.env["LOAD_ACCOUNTS"] ?? 1));
 /**
  * Milliseconds, per step. The scale they assume is 50,000 resources; another
  * `LOAD_RESOURCES` scales them linearly, which is the growth being asserted.
+ * About four times a laptop at 50,000 (1.1 s, 15 s, 0.5 s): the earlier,
+ * looser budgets let analysis and findings sync go quadratic unnoticed.
  */
 const BUDGET_MS = {
-  annotate: 15_000,
-  save: 90_000,
-  syncFindings: 15_000,
+  annotate: 5_000,
+  save: 60_000,
+  syncFindings: 5_000,
   /** Each dashboard or agent query, singly. */
   query: 3_000,
 } as const;
@@ -203,6 +205,13 @@ beforeAll(async () => {
     () => syncFindings(scope, scanId, true),
     (r) => `${r.opened.toLocaleString()} opened`,
   );
+  // Again, as every later scan does: each finding now conflicts with its own
+  // row, the case a per-row lookup made quadratic.
+  await timed(
+    "syncFindings, rescanned",
+    () => syncFindings(scope, scanId, true),
+    (r) => `${r.opened.toLocaleString()} opened, ${r.resolved.toLocaleString()} resolved`,
+  );
   await markProjected(scope, scanId);
 
   // Further accounts, copied in Postgres rather than written again: the point
@@ -290,9 +299,14 @@ describe.runIf(ENABLED)("a large account", () => {
 
   it("analyses, saves and syncs within budget", () => {
     if (skipReason) return;
-    for (const step of ["annotate", "save", "syncFindings"] as const) {
+    for (const [step, budget] of [
+      ["annotate", BUDGET_MS.annotate],
+      ["save", BUDGET_MS.save],
+      ["syncFindings", BUDGET_MS.syncFindings],
+      ["syncFindings, rescanned", BUDGET_MS.syncFindings],
+    ] as const) {
       const t = timings.find((x) => x.step === step)!;
-      expect(t.ms, `${step} took ${t.ms} ms`).toBeLessThan(BUDGET_MS[step] * scale);
+      expect(t.ms, `${step} took ${t.ms} ms`).toBeLessThan(budget * scale);
     }
   });
 
