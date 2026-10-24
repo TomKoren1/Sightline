@@ -308,3 +308,188 @@ export const webhookView = z
   })
   .strict();
 export type WebhookView = z.infer<typeof webhookView>;
+
+// --- health, the self-hosted connection, onboarding and evals -----------------
+
+const lastScanRef = z.object({ id: z.string(), at: z.string(), status: z.string() }).strict();
+
+export const health = z
+  .object({
+    status: z.string(),
+    checks: z.object({ postgres: z.string(), agent: z.string() }).strict(),
+    awsMode: z.string(),
+    lastScan: lastScanRef.nullable(),
+  })
+  .strict();
+export type Health = z.infer<typeof health>;
+
+/** The self-hosted deployment's one connection, as the onboarding guide reads it. */
+export const connection = z
+  .object({
+    /** The raw session ARN GetCallerIdentity reports. Shown, but not pasteable. */
+    callerIdentity: z.string().nullable(),
+    /** True when that identity came from the mock rather than from AWS. */
+    callerIdentityIsMock: z.boolean(),
+    /** The identity as a principal a trust policy can name, or null with the reason below. */
+    scannerPrincipal: z.string().nullable(),
+    scannerPrincipalConverted: z.boolean(),
+    scannerPrincipalNote: z.string().nullable(),
+    /** Set when AWS_TARGET_ROLE_ARN cannot be assumed at all. */
+    roleArnProblem: z.string().nullable(),
+    /** True when the API runs in a container, so the guide shows the right restart. */
+    containerised: z.boolean(),
+    mode: z.enum(["mock", "real"]),
+    /** What .env says, so the UI can show when the toggle has diverged. */
+    configuredMode: z.enum(["mock", "real"]),
+    realAccountConfigured: z.boolean(),
+    roleArn: z.string(),
+    accountId: z.string().nullable(),
+    externalIdMasked: z.string(),
+    externalIdIsPlaceholder: z.boolean(),
+    homeRegion: z.string(),
+    /** Null when every enabled region is scanned. */
+    regions: z.array(z.string()).nullable(),
+    endpointOverride: z.string().nullable(),
+    lastScan: lastScanRef.nullable(),
+  })
+  .strict();
+export type Connection = z.infer<typeof connection>;
+
+export const connectionTest = z
+  .object({
+    ok: z.boolean(),
+    durationMs: z.number(),
+    mode: z.string(),
+    assumedRoleArn: z.string().optional(),
+    accountId: z.string().optional(),
+    callerArn: z.string().nullable().optional(),
+    callerIdentity: z.string().nullable().optional(),
+    expiresAt: z.string().optional(),
+    endpoint: z.string().optional(),
+    code: z.string().optional(),
+    problem: z.string().optional(),
+    fix: z.string().optional(),
+  })
+  .strict();
+export type ConnectionTest = z.infer<typeof connectionTest>;
+
+/** What connecting an account asks the customer to deploy. */
+export const onboardingPlan = z
+  .object({
+    connection: connectionSummary,
+    externalId: z.string(),
+    scannerPrincipalArn: z.string(),
+    templateUrl: z.string(),
+    templateVersion: z.string(),
+    launchUrl: z.string(),
+    cliCommand: z.string(),
+    terraform: z.string(),
+    roleArnPattern: z.string(),
+    /** For an organization: the StackSet that puts the role in every member. */
+    stackSet: z.string().optional(),
+  })
+  .strict();
+export type OnboardingPlan = z.infer<typeof onboardingPlan>;
+
+export const verifyResult = z
+  .object({
+    ok: z.boolean(),
+    accountId: z.string().optional(),
+    assumedRoleArn: z.string().optional(),
+    durationMs: z.number(),
+    /** The useful part of a failure: what is wrong and what to do about it. */
+    diagnosis: z.object({ code: z.string(), problem: z.string(), fix: z.string() }).optional(),
+    /** A refusal that is not a diagnosis - the account reached is not the one agreed. */
+    problem: z.string().optional(),
+    /** For an organization: the accounts it found, and how each one's check went. */
+    organization: z
+      .object({
+        found: z.number(),
+        added: z.number(),
+        departed: z.number(),
+        alreadyConnected: z.array(z.string()),
+        members: z.array(
+          z.object({
+            connectionId: z.string(),
+            label: z.string(),
+            ok: z.boolean(),
+            problem: z.string().optional(),
+          }),
+        ),
+        unchecked: z.number(),
+      })
+      .optional(),
+  })
+  .strict();
+export type VerifyResult = z.infer<typeof verifyResult>;
+
+export const checkResult = z.object({
+  id: z.string(),
+  description: z.string(),
+  rationale: z.string(),
+  passed: z.boolean(),
+  detail: z.string(),
+  /** Why drift accounts for this failure; set only on a failing check in a drifted account. */
+  expectedAfterDrift: z.string().nullable().optional(),
+});
+export type CheckResult = z.infer<typeof checkResult>;
+
+export const groundTruthRun = z.object({
+  scanId: z.string(),
+  scannedAt: z.string(),
+  durationMs: z.number(),
+  total: z.number(),
+  passed: z.number(),
+  /** True when the account has been changed since seeding, so failures are expected. */
+  drifted: z.boolean(),
+  driftNote: z.string().optional(),
+  /** Failing checks that drift does not account for. Non-zero means investigate. */
+  unexplainedFailures: z.number(),
+  results: z.array(checkResult),
+});
+export type GroundTruthRun = z.infer<typeof groundTruthRun>;
+
+export const checkList = z
+  .object({
+    checks: z.array(
+      z.object({ id: z.string(), description: z.string(), rationale: z.string() }).strict(),
+    ),
+  })
+  .strict();
+
+export const agentEvalCase = z.object({
+  id: z.string(),
+  question: z.string(),
+  passed: z.boolean(),
+  f1: z.number(),
+  toolsCalled: z.array(z.string()),
+  failures: z.array(z.string()),
+  unsupportedCitations: z.number(),
+  durationMs: z.number(),
+  /** Non-null when the request never reached the model, rather than the answer being wrong. */
+  errored: z.string().nullable(),
+});
+export type AgentEvalCase = z.infer<typeof agentEvalCase>;
+
+export const agentEvalRun = z.object({
+  id: z.string(),
+  startedAt: z.string(),
+  model: z.string(),
+  total: z.number(),
+  passed: z.number(),
+  /** Cases that actually ran; passed and meanF1 are out of this, not total. */
+  graded: z.number(),
+  errored: z.number(),
+  meanF1: z.number(),
+  unsupportedCitations: z.number(),
+  /** Present when some cases never ran, so the run is not a quality measurement. */
+  incompleteNote: z.string().optional(),
+  cases: z.array(agentEvalCase),
+});
+export type AgentEvalRun = z.infer<typeof agentEvalRun>;
+
+/** Two shapes, not one with an optional field: with no run there is a hint and no model. */
+export const latestEvalRun = z.union([
+  z.object({ run: z.null(), hint: z.string() }).strict(),
+  z.object({ run: agentEvalRun.nullable(), currentModel: z.string() }).strict(),
+]);

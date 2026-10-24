@@ -5,6 +5,15 @@ import type { AgentEvent, AgentMessage, ScanDiff, ScanEvent, ScanRun } from "@si
 // Graph and findings shapes come from the one contract the API is tested
 // against (packages/shared/src/api.ts), as types only.
 export type {
+  CheckResult,
+  GroundTruthRun,
+  AgentEvalCase,
+  AgentEvalRun,
+  Connection,
+  ConnectionTest,
+  Health,
+  OnboardingPlan,
+  VerifyResult,
   AcrossAccounts,
   ApiToken,
   AuditEntry,
@@ -25,6 +34,14 @@ export type {
   Summary,
 } from "@sightline/shared/api";
 import type {
+  CheckResult,
+  GroundTruthRun,
+  AgentEvalRun,
+  Connection,
+  ConnectionTest,
+  Health,
+  OnboardingPlan,
+  VerifyResult,
   AcrossAccounts,
   ApiToken,
   AuditEntry,
@@ -42,115 +59,6 @@ import type {
   Summary,
 } from "@sightline/shared/api";
 
-export interface CheckResult {
-  id: string;
-  description: string;
-  rationale: string;
-  passed: boolean;
-  detail: string;
-  /**
-   * Why drift accounts for this failure, or null when it does not.
-   *
-   * Only ever set on a failing check in a drifted account. A failing check with
-   * this null is a failure nothing explains, and must stay loud.
-   */
-  expectedAfterDrift?: string | null;
-}
-
-export interface GroundTruthRun {
-  scanId: string;
-  scannedAt: string;
-  durationMs: number;
-  total: number;
-  passed: number;
-  /** True when the account has been changed since seeding, so failures are expected. */
-  drifted: boolean;
-  driftNote?: string;
-  /** Failing checks that drift does not account for. Non-zero means investigate. */
-  unexplainedFailures: number;
-  results: CheckResult[];
-}
-
-export interface AgentEvalCase {
-  id: string;
-  question: string;
-  passed: boolean;
-  f1: number;
-  toolsCalled: string[];
-  failures: string[];
-  unsupportedCitations: number;
-  durationMs: number;
-  /** Non-null when the request never reached the model, rather than the answer being wrong. */
-  errored: string | null;
-}
-
-export interface AgentEvalRun {
-  id: string;
-  startedAt: string;
-  model: string;
-  total: number;
-  passed: number;
-  /** Cases that actually ran. `passed` and `meanF1` are out of this, not `total`. */
-  graded: number;
-  errored: number;
-  meanF1: number;
-  unsupportedCitations: number;
-  /** Present when some cases never ran, so the run is not a quality measurement. */
-  incompleteNote?: string;
-  cases: AgentEvalCase[];
-}
-
-export interface Connection {
-  /** The raw session ARN GetCallerIdentity reports. Shown, but not pasteable. */
-  callerIdentity: string | null;
-  /** True when that identity came from the mock rather than from AWS. */
-  callerIdentityIsMock: boolean;
-  /**
-   * The identity converted into a principal a trust policy can name, or null
-   * with the reason in `scannerPrincipalNote`. This is the value to paste.
-   */
-  scannerPrincipal: string | null;
-  scannerPrincipalConverted: boolean;
-  scannerPrincipalNote: string | null;
-  /** Set when AWS_TARGET_ROLE_ARN cannot be assumed at all. */
-  roleArnProblem: string | null;
-  mode: "mock" | "real";
-  /** True when the API runs in a container, so the guide shows the right restart. */
-  containerised: boolean;
-  /** What .env says, so the UI can show when the toggle has diverged. */
-  configuredMode: "mock" | "real";
-  realAccountConfigured: boolean;
-  roleArn: string;
-  accountId: string | null;
-  externalIdMasked: string;
-  externalIdIsPlaceholder: boolean;
-  homeRegion: string;
-  regions: string[] | null;
-  endpointOverride: string | null;
-  lastScan: { id: string; at: string; status: string } | null;
-}
-
-export interface ConnectionTest {
-  ok: boolean;
-  durationMs: number;
-  mode: string;
-  assumedRoleArn?: string;
-  accountId?: string;
-  callerArn?: string | null;
-  expiresAt?: string;
-  endpoint?: string;
-  code?: string;
-  problem?: string;
-  fix?: string;
-}
-
-export interface Health {
-  status: string;
-  checks: Record<string, string>;
-  awsMode: string;
-  lastScan: { id: string; at: string; status: string } | null;
-}
-
 const RANK: Record<TeamRole, number> = { viewer: 0, member: 1, admin: 2, owner: 3 };
 /** Whether `role` may do what needs `min`, as the server's guard decides it. */
 export const can = (role: TeamRole | null | undefined, min: TeamRole) =>
@@ -158,41 +66,6 @@ export const can = (role: TeamRole | null | undefined, min: TeamRole) =>
 
 /** A plain link rather than a fetch: the browser saves the file itself. */
 export const auditExportUrl = (format: "csv" | "json") => `/api/audit/export?format=${format}`;
-
-/** Everything the connect screen needs, in one request. */
-export interface OnboardingPlan {
-  connection: ConnectionSummary;
-  externalId: string;
-  scannerPrincipalArn: string;
-  templateUrl: string;
-  templateVersion: string;
-  launchUrl: string;
-  cliCommand: string;
-  terraform: string;
-  roleArnPattern: string;
-  /** For an organization: the StackSet that puts the role in every member. */
-  stackSet?: string;
-}
-
-export interface VerifyResult {
-  ok: boolean;
-  accountId?: string;
-  assumedRoleArn?: string;
-  durationMs: number;
-  /** The useful part of a failure: what is wrong and what to do about it. */
-  diagnosis?: { code: string; problem: string; fix: string };
-  /** A refusal that is not a diagnosis — the account reached is not the one agreed. */
-  problem?: string;
-  /** For an organization: the accounts it found, and how each one's check went. */
-  organization?: {
-    found: number;
-    added: number;
-    departed: number;
-    alreadyConnected: string[];
-    members: { connectionId: string; label: string; ok: boolean; problem?: string }[];
-    unchecked: number;
-  };
-}
 
 /**
  * Which of the tenant's AWS accounts the UI is looking at.

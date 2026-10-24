@@ -12,6 +12,7 @@
  * deliberate act by an operator with host access.
  */
 
+import type * as api from "@sightline/shared/api";
 import { randomBytes } from "node:crypto";
 import { BadRequestException, ConflictException, Injectable, Logger } from "@nestjs/common";
 import { STSClient, GetCallerIdentityCommand } from "@aws-sdk/client-sts";
@@ -52,7 +53,7 @@ export class ConnectionService {
    * switcher lands; until then this is the single-operator view, which is why
    * it takes the local scope rather than a request's.
    */
-  async state() {
+  async state(): Promise<api.Connection> {
     const latest = await getLatestScan(localScope()).catch(() => null);
     const connection = activeConnection();
     const accountId = accountIdFromArn(connection.roleArn);

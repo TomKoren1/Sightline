@@ -35,14 +35,6 @@ const HAS_INFRA = !process.env["SKIP_INTEGRATION"];
 const error = z.object({ error: z.string() }).strict();
 const errorWithCode = z.object({ error: z.string(), code: z.string() }).strict();
 
-/** A resource as every list endpoint renders it. Nested, so not strict. */
-const node = z.object({
-  arn: z.string(),
-  kind: z.string(),
-  name: z.string(),
-  region: z.string().nullable(),
-});
-
 const scan = z.object({
   id: z.string(),
   accountId: z.string(),
@@ -84,16 +76,7 @@ const CONTRACTS: Contract[] = [
     method: "GET",
     route: "/api/health",
     url: "/api/health",
-    responses: {
-      200: z
-        .object({
-          status: z.string(),
-          checks: z.object({ postgres: z.string(), agent: z.string() }).strict(),
-          awsMode: z.string(),
-          lastScan: z.object({ id: z.string(), at: z.string(), status: z.string() }).nullable(),
-        })
-        .strict(),
-    },
+    responses: { 200: api.health },
   },
   {
     method: "GET",
@@ -296,30 +279,7 @@ const CONTRACTS: Contract[] = [
     method: "GET",
     route: "/api/connection",
     url: "/api/connection",
-    responses: {
-      200: z
-        .object({
-          callerIdentity: z.string().nullable(),
-          callerIdentityIsMock: z.boolean(),
-          scannerPrincipal: z.string().nullable(),
-          scannerPrincipalConverted: z.boolean(),
-          scannerPrincipalNote: z.string().nullable(),
-          roleArnProblem: z.string().nullable(),
-          containerised: z.boolean(),
-          mode: z.string(),
-          configuredMode: z.string(),
-          realAccountConfigured: z.boolean(),
-          roleArn: z.string().nullable(),
-          accountId: z.string().nullable(),
-          externalIdMasked: z.string().nullable(),
-          externalIdIsPlaceholder: z.boolean(),
-          homeRegion: z.string(),
-          regions: z.array(z.string()),
-          endpointOverride: z.string().nullable(),
-          lastScan: z.object({ id: z.string(), at: z.string(), status: z.string() }).nullable(),
-        })
-        .strict(),
-    },
+    responses: { 200: api.connection },
   },
   {
     method: "POST",
@@ -349,19 +309,7 @@ const CONTRACTS: Contract[] = [
     route: "/api/connection/test",
     url: "/api/connection/test",
     payload: {},
-    responses: {
-      200: z
-        .object({
-          ok: z.boolean(),
-          durationMs: z.number(),
-          mode: z.string(),
-          callerIdentity: z.string().nullable(),
-          code: z.string().optional(),
-          problem: z.string().optional(),
-          fix: z.string().optional(),
-        })
-        .passthrough(),
-    },
+    responses: { 200: api.connectionTest },
   },
   {
     method: "POST",
@@ -382,48 +330,13 @@ const CONTRACTS: Contract[] = [
     method: "GET",
     route: "/api/evals/checks",
     url: "/api/evals/checks",
-    responses: {
-      200: z
-        .object({
-          checks: z.array(
-            z.object({ id: z.string(), description: z.string(), rationale: z.string() }),
-          ),
-        })
-        .strict(),
-    },
+    responses: { 200: api.checkList },
   },
   {
     method: "GET",
     route: "/api/evals/latest",
     url: "/api/evals/latest",
-    responses: {
-      // Two shapes, not one with an optional field: with no run recorded the
-      // response carries a `hint` and no `currentModel`. Captured from a
-      // populated database, this branch was missed until the volume was
-      // dropped for the rename.
-      200: z.union([
-        z.object({ run: z.null(), hint: z.string() }).strict(),
-        z
-          .object({
-            run: z
-              .object({
-                id: z.string(),
-                startedAt: z.string(),
-                model: z.string(),
-                total: z.number(),
-                passed: z.number(),
-                graded: z.number(),
-                errored: z.number(),
-                meanF1: z.number(),
-                unsupportedCitations: z.number(),
-                cases: z.array(z.unknown()),
-              })
-              .nullable(),
-            currentModel: z.string(),
-          })
-          .strict(),
-      ]),
-    },
+    responses: { 200: api.latestEvalRun },
   },
 ];
 
