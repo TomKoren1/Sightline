@@ -407,7 +407,8 @@ KUBECTL="ssh tom@server sudo k3s kubectl" BACKUP_PULL_DIR=~/sightline-backups BA
 
 It starts a throwaway pod that mounts the volume read-only. It copies only
 what is new, checks each copy against the cluster's SHA-256 before keeping it,
-and deletes local copies older than `KEEP_DAYS` (90). Where the machine holds
+and deletes local copies older than `KEEP_DAYS` (30, the age by which
+[PRIVACY.md](../../PRIVACY.md) promises a deleted account has left every backup). Where the machine holds
 the backup's private key, which belongs off the cluster anyway, it also
 decrypts the newest copy and checks it is a Postgres dump. It exits non-zero on
 any failure, so cron's mail or the scheduler's history is the alert.
@@ -448,6 +449,41 @@ tenants.
 
 Run it after any change to the backup command. It is verified to fail when
 encryption is accidentally a passthrough, and when the restore loses a policy.
+
+## Recovery objectives
+
+What a failure costs, with the backups above and nothing more:
+
+| Failure                          | Data lost (RPO)                      | Back in service (RTO)                          |
+| -------------------------------- | ------------------------------------ | ---------------------------------------------- |
+| A pod, or the API or worker      | none                                 | seconds: the Deployment replaces it            |
+| Postgres's data, the node intact | up to 24 hours: since the 03:15 dump | under an hour: restore above, then rescan      |
+| The node, or its disk            | up to 24 hours, from the pulled copy | a few hours: new node, k3s, manifests, restore |
+| The node, with no pulled copy    | everything not re-derivable (below)  | as above, and every customer reconnects        |
+
+Not all data is equal. **The inventory is re-derivable**: a scan rebuilds
+every resource, relationship and finding from AWS, so for it the effective RPO
+is zero once each account is rescanned. What a scan cannot rebuild, and the
+backups exist for, is the rest: tenants and members, connections and their
+encrypted ExternalIds (losing one means that customer redeploys their
+CloudFormation stack), accepted findings and their reasons, conversations, and
+the audit log.
+
+Three things a rebuild needs that live outside the database, and so outside
+these backups - keep each off the cluster:
+
+- **The backup private key** (`backup-key.pem`), without which every dump is
+  unreadable.
+- **The sealed-secrets controller key**, without which none of the sealed
+  secrets in `prod/` decrypt on a new cluster:
+  `kubectl -n kube-system get secret -l sealedsecrets.bitnami.com/sealed-secrets-key -o yaml > sealed-secrets-key.yaml`,
+  and `kubectl apply -f` it before installing the controller on the new one.
+- **The KMS key** in AWS, which holds every ExternalId's data key. It survives a
+  cluster loss by construction; do not schedule its deletion with a cluster.
+
+Rehearse a restore - `scripts/backup-restore-test.sh` locally, and once a
+quarter into staging - because an untested backup is a hope, and the RTO above
+assumes someone has done it before.
 
 ## Monitoring
 

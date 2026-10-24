@@ -8,7 +8,9 @@
 #   KUBECTL           how to reach the cluster (default: kubectl)
 #   NAMESPACE         default: sightline
 #   BACKUP_PULL_DIR   where copies go (default: ./sightline-backups)
-#   KEEP_DAYS         local copies older than this are deleted (default: 90)
+#   KEEP_DAYS         local copies older than this are deleted (default: 30,
+#                     the age PRIVACY.md promises a deleted account's data
+#                     leaves every backup by - raise it only with that page)
 #   BACKUP_KEY        the backup private key, if this machine holds it: the
 #                     newest copy is then decrypted to prove it is a dump
 #
@@ -21,7 +23,7 @@ export MSYS_NO_PATHCONV=1
 read -r -a K <<< "${KUBECTL:-kubectl}"
 NS="${NAMESPACE:-sightline}"
 DEST="${BACKUP_PULL_DIR:-./sightline-backups}"
-KEEP_DAYS="${KEEP_DAYS:-90}"
+KEEP_DAYS="${KEEP_DAYS:-30}"
 POD="backup-pull-$$"
 mkdir -p "$DEST"
 
