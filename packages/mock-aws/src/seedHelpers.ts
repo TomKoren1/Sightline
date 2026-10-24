@@ -39,3 +39,10 @@ export async function allowIngress(
     }),
   );
 }
+/** A minimal but valid zip containing an empty index.js, for Lambda code. */
+export const LAMBDA_ZIP = Buffer.from(
+  "UEsDBBQAAAAAAAAAAAAAAAAAAAAAAAAAAAAIAAAAaW5kZXguanNQSwECFAAUAAAAAAAAAAAAAAAAAAAAAAAAAAAACAAAAAAAAAAAAAAAAAAAAAAAaW5kZXguanNQSwUGAAAAAAEAAQA2AAAAJgAAAAAA",
+  "base64",
+);
+
+export const log = (msg: string) => console.log(`  ${msg}`);
