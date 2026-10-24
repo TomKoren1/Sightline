@@ -1,217 +1,203 @@
 {
- "accountId": "123456789012",
- "regions": [
-  "us-east-1",
-  "eu-west-1",
-  "ap-southeast-1"
- ],
- "resources": [
-  {
-   "arn": "arn:aws:elasticloadbalancing:us-east-1:123456789012:loadbalancer/app/prod-alb/527d102ea58761b3",
-   "kind": "LoadBalancer",
-   "name": "prod-alb",
-   "region": "us-east-1",
-   "accountId": "123456789012",
-   "tags": {},
-   "properties": {
-    "type": "application",
-    "scheme": "internet-facing",
-    "internetFacing": true,
-    "dnsName": "prod-alb-1.us-east-1.elb.amazonaws.com",
-    "vpcId": "vpc-d1e945fdcc93fb788",
-    "securityGroupIds": [
-     "sg-89973346a8873d61a"
-    ],
-    "subnetIds": [
-     "subnet-873b59617498b2ba9"
-    ],
-    "listeners": [
-     {
-      "port": 443,
-      "protocol": "HTTP",
-      "forwardsTo": [
-       "arn:aws:elasticloadbalancing:us-east-1:123456789012:targetgroup/prod-app-tg/b651b8c13a28ce7c"
-      ]
-     }
-    ]
-   },
-   "derived": {}
-  },
-  {
-   "arn": "arn:aws:elasticloadbalancing:us-east-1:123456789012:loadbalancer/app/prod-internal-alb/ead9a593f043a4da",
-   "kind": "LoadBalancer",
-   "name": "prod-internal-alb",
-   "region": "us-east-1",
-   "accountId": "123456789012",
-   "tags": {},
-   "properties": {
-    "type": "application",
-    "scheme": "internal",
-    "internetFacing": false,
-    "dnsName": "prod-internal-alb-1.us-east-1.elb.amazonaws.com",
-    "vpcId": "vpc-d1e945fdcc93fb788",
-    "securityGroupIds": [
-     "sg-6d8279fcbc49879cd"
-    ],
-    "subnetIds": [
-     "subnet-c828f0e20f4eb3c7c"
-    ],
-    "listeners": []
-   },
-   "derived": {}
-  },
-  {
-   "arn": "arn:aws:elasticloadbalancing:us-east-1:123456789012:loadbalancer/app/prod-orders-nlb/43703dc6bcd11389",
-   "kind": "LoadBalancer",
-   "name": "prod-orders-nlb",
-   "region": "us-east-1",
-   "accountId": "123456789012",
-   "tags": {},
-   "properties": {
-    "type": "network",
-    "scheme": "internal",
-    "internetFacing": false,
-    "dnsName": "prod-orders-nlb-1.us-east-1.elb.amazonaws.com",
-    "vpcId": "vpc-d1e945fdcc93fb788",
-    "securityGroupIds": [],
-    "subnetIds": [
-     "subnet-c828f0e20f4eb3c7c"
-    ],
-    "listeners": [
-     {
-      "port": 9000,
-      "protocol": "TCP",
-      "forwardsTo": [
-       "arn:aws:elasticloadbalancing:us-east-1:123456789012:targetgroup/prod-orders-tg/098d08de54119b8e"
-      ]
-     }
-    ]
-   },
-   "derived": {}
-  },
-  {
-   "arn": "arn:aws:elasticloadbalancing:us-east-1:123456789012:targetgroup/prod-app-tg/b651b8c13a28ce7c",
-   "kind": "TargetGroup",
-   "name": "prod-app-tg",
-   "region": "us-east-1",
-   "accountId": "123456789012",
-   "tags": {},
-   "properties": {
-    "port": 9000,
-    "protocol": "HTTP",
-    "targetType": "instance",
-    "vpcId": "vpc-d1e945fdcc93fb788",
-    "targets": [
-     {
-      "id": "i-adf8b744c9602d3af",
-      "port": 9000,
-      "state": "healthy"
-     }
-    ]
-   },
-   "derived": {}
-  },
-  {
-   "arn": "arn:aws:elasticloadbalancing:us-east-1:123456789012:targetgroup/prod-orders-tg/098d08de54119b8e",
-   "kind": "TargetGroup",
-   "name": "prod-orders-tg",
-   "region": "us-east-1",
-   "accountId": "123456789012",
-   "tags": {},
-   "properties": {
-    "port": 9000,
-    "protocol": "TCP",
-    "targetType": "instance",
-    "vpcId": "vpc-d1e945fdcc93fb788",
-    "targets": [
-     {
-      "id": "i-adf8b744c9602d3af",
-      "port": 9000,
-      "state": "healthy"
-     }
-    ]
-   },
-   "derived": {}
-  }
- ],
- "relationships": [
-  {
-   "from": "arn:aws:elasticloadbalancing:us-east-1:123456789012:loadbalancer/app/prod-alb/527d102ea58761b3",
-   "to": "arn:aws:elasticloadbalancing:us-east-1:123456789012:targetgroup/prod-app-tg/b651b8c13a28ce7c",
-   "type": "FORWARDS_TO"
-  },
-  {
-   "from": "arn:aws:elasticloadbalancing:us-east-1:123456789012:loadbalancer/app/prod-alb/527d102ea58761b3",
-   "to": "arn:aws:ec2:us-east-1:123456789012:security-group/sg-89973346a8873d61a",
-   "type": "HAS_SECURITY_GROUP"
-  },
-  {
-   "from": "arn:aws:elasticloadbalancing:us-east-1:123456789012:loadbalancer/app/prod-alb/527d102ea58761b3",
-   "to": "arn:aws:sightline:us-east-1:123456789012:region/us-east-1",
-   "type": "IN_REGION"
-  },
-  {
-   "from": "arn:aws:elasticloadbalancing:us-east-1:123456789012:loadbalancer/app/prod-alb/527d102ea58761b3",
-   "to": "arn:aws:ec2:us-east-1:123456789012:subnet/subnet-873b59617498b2ba9",
-   "type": "IN_SUBNET"
-  },
-  {
-   "from": "arn:aws:elasticloadbalancing:us-east-1:123456789012:loadbalancer/app/prod-internal-alb/ead9a593f043a4da",
-   "to": "arn:aws:ec2:us-east-1:123456789012:security-group/sg-6d8279fcbc49879cd",
-   "type": "HAS_SECURITY_GROUP"
-  },
-  {
-   "from": "arn:aws:elasticloadbalancing:us-east-1:123456789012:loadbalancer/app/prod-internal-alb/ead9a593f043a4da",
-   "to": "arn:aws:sightline:us-east-1:123456789012:region/us-east-1",
-   "type": "IN_REGION"
-  },
-  {
-   "from": "arn:aws:elasticloadbalancing:us-east-1:123456789012:loadbalancer/app/prod-internal-alb/ead9a593f043a4da",
-   "to": "arn:aws:ec2:us-east-1:123456789012:subnet/subnet-c828f0e20f4eb3c7c",
-   "type": "IN_SUBNET"
-  },
-  {
-   "from": "arn:aws:elasticloadbalancing:us-east-1:123456789012:loadbalancer/app/prod-orders-nlb/43703dc6bcd11389",
-   "to": "arn:aws:elasticloadbalancing:us-east-1:123456789012:targetgroup/prod-orders-tg/098d08de54119b8e",
-   "type": "FORWARDS_TO"
-  },
-  {
-   "from": "arn:aws:elasticloadbalancing:us-east-1:123456789012:loadbalancer/app/prod-orders-nlb/43703dc6bcd11389",
-   "to": "arn:aws:sightline:us-east-1:123456789012:region/us-east-1",
-   "type": "IN_REGION"
-  },
-  {
-   "from": "arn:aws:elasticloadbalancing:us-east-1:123456789012:loadbalancer/app/prod-orders-nlb/43703dc6bcd11389",
-   "to": "arn:aws:ec2:us-east-1:123456789012:subnet/subnet-c828f0e20f4eb3c7c",
-   "type": "IN_SUBNET"
-  },
-  {
-   "from": "arn:aws:elasticloadbalancing:us-east-1:123456789012:targetgroup/prod-app-tg/b651b8c13a28ce7c",
-   "to": "arn:aws:sightline:us-east-1:123456789012:region/us-east-1",
-   "type": "IN_REGION"
-  },
-  {
-   "from": "arn:aws:elasticloadbalancing:us-east-1:123456789012:targetgroup/prod-app-tg/b651b8c13a28ce7c",
-   "to": "arn:aws:ec2:us-east-1:123456789012:instance/i-adf8b744c9602d3af",
-   "type": "TARGETS",
-   "properties": {
-    "port": 9000,
-    "state": "healthy"
-   }
-  },
-  {
-   "from": "arn:aws:elasticloadbalancing:us-east-1:123456789012:targetgroup/prod-orders-tg/098d08de54119b8e",
-   "to": "arn:aws:sightline:us-east-1:123456789012:region/us-east-1",
-   "type": "IN_REGION"
-  },
-  {
-   "from": "arn:aws:elasticloadbalancing:us-east-1:123456789012:targetgroup/prod-orders-tg/098d08de54119b8e",
-   "to": "arn:aws:ec2:us-east-1:123456789012:instance/i-adf8b744c9602d3af",
-   "type": "TARGETS",
-   "properties": {
-    "port": 9000,
-    "state": "healthy"
-   }
-  }
- ]
+  "accountId": "123456789012",
+  "regions": ["us-east-1", "eu-west-1", "ap-southeast-1"],
+  "resources": [
+    {
+      "arn": "arn:aws:elasticloadbalancing:us-east-1:123456789012:loadbalancer/app/prod-alb/527d102ea58761b3",
+      "kind": "LoadBalancer",
+      "name": "prod-alb",
+      "region": "us-east-1",
+      "accountId": "123456789012",
+      "tags": {},
+      "properties": {
+        "type": "application",
+        "scheme": "internet-facing",
+        "internetFacing": true,
+        "dnsName": "prod-alb-1.us-east-1.elb.amazonaws.com",
+        "vpcId": "vpc-d1e945fdcc93fb788",
+        "securityGroupIds": ["sg-89973346a8873d61a"],
+        "subnetIds": ["subnet-873b59617498b2ba9"],
+        "listeners": [
+          {
+            "port": 443,
+            "protocol": "HTTP",
+            "forwardsTo": [
+              "arn:aws:elasticloadbalancing:us-east-1:123456789012:targetgroup/prod-app-tg/b651b8c13a28ce7c"
+            ]
+          }
+        ]
+      },
+      "derived": {}
+    },
+    {
+      "arn": "arn:aws:elasticloadbalancing:us-east-1:123456789012:loadbalancer/app/prod-internal-alb/ead9a593f043a4da",
+      "kind": "LoadBalancer",
+      "name": "prod-internal-alb",
+      "region": "us-east-1",
+      "accountId": "123456789012",
+      "tags": {},
+      "properties": {
+        "type": "application",
+        "scheme": "internal",
+        "internetFacing": false,
+        "dnsName": "prod-internal-alb-1.us-east-1.elb.amazonaws.com",
+        "vpcId": "vpc-d1e945fdcc93fb788",
+        "securityGroupIds": ["sg-6d8279fcbc49879cd"],
+        "subnetIds": ["subnet-c828f0e20f4eb3c7c"],
+        "listeners": []
+      },
+      "derived": {}
+    },
+    {
+      "arn": "arn:aws:elasticloadbalancing:us-east-1:123456789012:loadbalancer/app/prod-orders-nlb/43703dc6bcd11389",
+      "kind": "LoadBalancer",
+      "name": "prod-orders-nlb",
+      "region": "us-east-1",
+      "accountId": "123456789012",
+      "tags": {},
+      "properties": {
+        "type": "network",
+        "scheme": "internal",
+        "internetFacing": false,
+        "dnsName": "prod-orders-nlb-1.us-east-1.elb.amazonaws.com",
+        "vpcId": "vpc-d1e945fdcc93fb788",
+        "securityGroupIds": [],
+        "subnetIds": ["subnet-c828f0e20f4eb3c7c"],
+        "listeners": [
+          {
+            "port": 9000,
+            "protocol": "TCP",
+            "forwardsTo": [
+              "arn:aws:elasticloadbalancing:us-east-1:123456789012:targetgroup/prod-orders-tg/098d08de54119b8e"
+            ]
+          }
+        ]
+      },
+      "derived": {}
+    },
+    {
+      "arn": "arn:aws:elasticloadbalancing:us-east-1:123456789012:targetgroup/prod-app-tg/b651b8c13a28ce7c",
+      "kind": "TargetGroup",
+      "name": "prod-app-tg",
+      "region": "us-east-1",
+      "accountId": "123456789012",
+      "tags": {},
+      "properties": {
+        "port": 9000,
+        "protocol": "HTTP",
+        "targetType": "instance",
+        "vpcId": "vpc-d1e945fdcc93fb788",
+        "targets": [
+          {
+            "id": "i-adf8b744c9602d3af",
+            "port": 9000,
+            "state": "healthy"
+          }
+        ]
+      },
+      "derived": {}
+    },
+    {
+      "arn": "arn:aws:elasticloadbalancing:us-east-1:123456789012:targetgroup/prod-orders-tg/098d08de54119b8e",
+      "kind": "TargetGroup",
+      "name": "prod-orders-tg",
+      "region": "us-east-1",
+      "accountId": "123456789012",
+      "tags": {},
+      "properties": {
+        "port": 9000,
+        "protocol": "TCP",
+        "targetType": "instance",
+        "vpcId": "vpc-d1e945fdcc93fb788",
+        "targets": [
+          {
+            "id": "i-adf8b744c9602d3af",
+            "port": 9000,
+            "state": "healthy"
+          }
+        ]
+      },
+      "derived": {}
+    }
+  ],
+  "relationships": [
+    {
+      "from": "arn:aws:elasticloadbalancing:us-east-1:123456789012:loadbalancer/app/prod-alb/527d102ea58761b3",
+      "to": "arn:aws:elasticloadbalancing:us-east-1:123456789012:targetgroup/prod-app-tg/b651b8c13a28ce7c",
+      "type": "FORWARDS_TO"
+    },
+    {
+      "from": "arn:aws:elasticloadbalancing:us-east-1:123456789012:loadbalancer/app/prod-alb/527d102ea58761b3",
+      "to": "arn:aws:ec2:us-east-1:123456789012:security-group/sg-89973346a8873d61a",
+      "type": "HAS_SECURITY_GROUP"
+    },
+    {
+      "from": "arn:aws:elasticloadbalancing:us-east-1:123456789012:loadbalancer/app/prod-alb/527d102ea58761b3",
+      "to": "arn:aws:sightline:us-east-1:123456789012:region/us-east-1",
+      "type": "IN_REGION"
+    },
+    {
+      "from": "arn:aws:elasticloadbalancing:us-east-1:123456789012:loadbalancer/app/prod-alb/527d102ea58761b3",
+      "to": "arn:aws:ec2:us-east-1:123456789012:subnet/subnet-873b59617498b2ba9",
+      "type": "IN_SUBNET"
+    },
+    {
+      "from": "arn:aws:elasticloadbalancing:us-east-1:123456789012:loadbalancer/app/prod-internal-alb/ead9a593f043a4da",
+      "to": "arn:aws:ec2:us-east-1:123456789012:security-group/sg-6d8279fcbc49879cd",
+      "type": "HAS_SECURITY_GROUP"
+    },
+    {
+      "from": "arn:aws:elasticloadbalancing:us-east-1:123456789012:loadbalancer/app/prod-internal-alb/ead9a593f043a4da",
+      "to": "arn:aws:sightline:us-east-1:123456789012:region/us-east-1",
+      "type": "IN_REGION"
+    },
+    {
+      "from": "arn:aws:elasticloadbalancing:us-east-1:123456789012:loadbalancer/app/prod-internal-alb/ead9a593f043a4da",
+      "to": "arn:aws:ec2:us-east-1:123456789012:subnet/subnet-c828f0e20f4eb3c7c",
+      "type": "IN_SUBNET"
+    },
+    {
+      "from": "arn:aws:elasticloadbalancing:us-east-1:123456789012:loadbalancer/app/prod-orders-nlb/43703dc6bcd11389",
+      "to": "arn:aws:elasticloadbalancing:us-east-1:123456789012:targetgroup/prod-orders-tg/098d08de54119b8e",
+      "type": "FORWARDS_TO"
+    },
+    {
+      "from": "arn:aws:elasticloadbalancing:us-east-1:123456789012:loadbalancer/app/prod-orders-nlb/43703dc6bcd11389",
+      "to": "arn:aws:sightline:us-east-1:123456789012:region/us-east-1",
+      "type": "IN_REGION"
+    },
+    {
+      "from": "arn:aws:elasticloadbalancing:us-east-1:123456789012:loadbalancer/app/prod-orders-nlb/43703dc6bcd11389",
+      "to": "arn:aws:ec2:us-east-1:123456789012:subnet/subnet-c828f0e20f4eb3c7c",
+      "type": "IN_SUBNET"
+    },
+    {
+      "from": "arn:aws:elasticloadbalancing:us-east-1:123456789012:targetgroup/prod-app-tg/b651b8c13a28ce7c",
+      "to": "arn:aws:sightline:us-east-1:123456789012:region/us-east-1",
+      "type": "IN_REGION"
+    },
+    {
+      "from": "arn:aws:elasticloadbalancing:us-east-1:123456789012:targetgroup/prod-app-tg/b651b8c13a28ce7c",
+      "to": "arn:aws:ec2:us-east-1:123456789012:instance/i-adf8b744c9602d3af",
+      "type": "TARGETS",
+      "properties": {
+        "port": 9000,
+        "state": "healthy"
+      }
+    },
+    {
+      "from": "arn:aws:elasticloadbalancing:us-east-1:123456789012:targetgroup/prod-orders-tg/098d08de54119b8e",
+      "to": "arn:aws:sightline:us-east-1:123456789012:region/us-east-1",
+      "type": "IN_REGION"
+    },
+    {
+      "from": "arn:aws:elasticloadbalancing:us-east-1:123456789012:targetgroup/prod-orders-tg/098d08de54119b8e",
+      "to": "arn:aws:ec2:us-east-1:123456789012:instance/i-adf8b744c9602d3af",
+      "type": "TARGETS",
+      "properties": {
+        "port": 9000,
+        "state": "healthy"
+      }
+    }
+  ]
 }

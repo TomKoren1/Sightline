@@ -13,6 +13,7 @@
  * down a worker rather than the API; self-hosted runs it in the API process.
  */
 
+import { contextFrom, inSpan } from "../observability/tracing.js";
 import { randomUUID } from "node:crypto";
 import { hostname } from "node:os";
 import pg from "pg";
@@ -242,16 +243,22 @@ export class ScanWorker {
        * a single connection with `app.tenant_id` set rather than acquiring and
        * resetting one per statement, of which a scan makes thousands.
        */
-      const outcome = await withTenant(job.tenantId, () =>
-        runScanJob({
-          scope,
-          correlationId: job.id,
-          // A field read, not a query: the heartbeat timer below is what asks
-          // the database, and this is its cached answer.
-          stillMine: () => owned,
-          onScanRun: (scanId) => attachScanRun(job.id, asScanId(scanId)),
-          logError: (err) => this.log.error({ err, job: job.id }, "scan failed"),
-        }),
+      const outcome = await inSpan(
+        "scan.job",
+        { "sightline.job.id": job.id, "sightline.job.attempt": job.attempts },
+        () =>
+          withTenant(job.tenantId, () =>
+            runScanJob({
+              scope,
+              correlationId: job.id,
+              // A field read, not a query: the heartbeat timer below is what asks
+              // the database, and this is its cached answer.
+              stillMine: () => owned,
+              onScanRun: (scanId) => attachScanRun(job.id, asScanId(scanId)),
+              logError: (err) => this.log.error({ err, job: job.id }, "scan failed"),
+            }),
+          ),
+        contextFrom(job.traceParent),
       );
 
       const recorded = await finishJob(job.id, this.id, {

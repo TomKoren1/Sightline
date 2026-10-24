@@ -1,0 +1,1 @@
+ALTER TABLE "scan_jobs" ADD COLUMN "trace_parent" text;

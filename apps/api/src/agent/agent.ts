@@ -12,6 +12,7 @@
  * than show a spinner.
  */
 
+import { inSpan } from "../observability/tracing.js";
 import { randomUUID } from "node:crypto";
 import { createAnthropic } from "@ai-sdk/anthropic";
 import { jsonSchema, stepCountIs, streamText, tool, type LanguageModel, type ToolSet } from "ai";
@@ -175,7 +176,9 @@ function buildTools(ctx: {
 
           const startedAt = Date.now();
           try {
-            const result = await runTool(ctx.tools, definition.name, input);
+            const result = await inSpan("agent.tool", { "gen_ai.tool.name": definition.name }, () =>
+              runTool(ctx.tools, definition.name, input),
+            );
 
             /**
              * The ledger, recorded here rather than in a framework callback.
@@ -241,7 +244,11 @@ function buildTools(ctx: {
   );
 }
 
-export async function ask(options: AskOptions): Promise<AgentMessage> {
+/** One answer, as one span: the model's time is what its tool spans leave. */
+export const ask = (options: AskOptions): Promise<AgentMessage> =>
+  inSpan("agent.answer", { "gen_ai.system": "anthropic" }, () => answer(options));
+
+async function answer(options: AskOptions): Promise<AgentMessage> {
   const { question, history = [], onEvent, tools } = options;
   const emit = (event: AgentEvent) => onEvent?.(event);
   const messageId = randomUUID();

@@ -28,6 +28,7 @@ import type { ScanTarget } from "../tenancy/scanTarget.js";
 import { resolveRegions } from "../aws/regions.js";
 import { discoverActiveRegions, narrowRegions } from "../aws/resourceExplorer.js";
 import { runWithConcurrency } from "./limiter.js";
+import { inSpan } from "../observability/tracing.js";
 import { mergeOutputs, type CollectorOutput } from "./collectors/types.js";
 import { COLLECTORS } from "./collectors/registry.js";
 import { annotate } from "./pipeline.js";
@@ -214,12 +215,17 @@ export async function collectEstate(options: ScanOptions): Promise<CollectedEsta
         throw injected;
       }
 
-      const output = await COLLECTORS[unit.service].collect({
-        ...ctx,
-        unitKey: key,
-        region: unit.region,
-        accountId: session.accountId,
-      });
+      const output = await inSpan(
+        "scan.unit",
+        { "sightline.service": unit.service, "cloud.region": unit.region ?? "global" },
+        () =>
+          COLLECTORS[unit.service].collect({
+            ...ctx,
+            unitKey: key,
+            region: unit.region,
+            accountId: session.accountId,
+          }),
+      );
       outputs.push(output);
       unitOutputs.push({ unit, output });
       unit.status = "succeeded";

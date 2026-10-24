@@ -35,6 +35,7 @@ import { OrganizationsClient } from "@aws-sdk/client-organizations";
 
 import { credentialProvider } from "./credentials.js";
 import { accountOfRole, pace } from "./pace.js";
+import { inSpan, tracingEnabled } from "../observability/tracing.js";
 import type { ScanTarget } from "../tenancy/scanTarget.js";
 import { awsApiCalls, awsThrottles } from "../observability/metrics.js";
 
@@ -151,7 +152,12 @@ function instrument<T extends object>(client: T, ctx: AwsContext, key: string): 
       awsApiCalls.inc({ service, operation });
 
       try {
-        return await next(args);
+        if (!tracingEnabled()) return await next(args);
+        return await inSpan(
+          `aws ${service}.${operation}`,
+          { "rpc.system": "aws-api", "rpc.service": service, "rpc.method": operation },
+          () => next(args),
+        );
       } catch (err) {
         // Counted separately because throttling is not our error: it is the
         // signal that a scan is competing with the customer's own workloads.

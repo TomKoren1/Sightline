@@ -516,6 +516,8 @@ export const scanJobs = pgTable(
       .notNull()
       .default("queued"),
     requestedBy: uuid("requested_by").references(() => users.id, { onDelete: "set null" }),
+    /** The W3C traceparent of the request that queued it, when tracing is on. */
+    traceParent: text("trace_parent"),
     attempts: integer("attempts").notNull().default(0),
     maxAttempts: integer("max_attempts").notNull().default(3),
     lockedBy: text("locked_by"),

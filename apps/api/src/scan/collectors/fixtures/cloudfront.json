@@ -1,41 +1,37 @@
 {
- "accountId": "123456789012",
- "regions": [
-  "us-east-1",
-  "eu-west-1",
-  "ap-southeast-1"
- ],
- "resources": [
-  {
-   "arn": "arn:aws:cloudfront::123456789012:distribution/ZHJOS579W2M7A",
-   "kind": "CloudFrontDistribution",
-   "name": "northwind-cdn",
-   "region": null,
-   "accountId": "123456789012",
-   "tags": {},
-   "properties": {
-    "distributionId": "ZHJOS579W2M7A",
-    "domainName": "qdqwkd9e5x617.cloudfront.net",
-    "enabled": true,
-    "aliases": [],
-    "webAclId": null,
-    "origins": [
-     {
-      "id": "app",
-      "domainName": "prod-alb-1.us-east-1.elb.amazonaws.com",
-      "kind": "custom",
-      "protocolPolicy": "https-only"
-     },
-     {
-      "id": "assets",
-      "domainName": "northwind-public-assets.s3.amazonaws.com",
-      "kind": "custom",
-      "protocolPolicy": null
-     }
-    ]
-   },
-   "derived": {}
-  }
- ],
- "relationships": []
+  "accountId": "123456789012",
+  "regions": ["us-east-1", "eu-west-1", "ap-southeast-1"],
+  "resources": [
+    {
+      "arn": "arn:aws:cloudfront::123456789012:distribution/ZHJOS579W2M7A",
+      "kind": "CloudFrontDistribution",
+      "name": "northwind-cdn",
+      "region": null,
+      "accountId": "123456789012",
+      "tags": {},
+      "properties": {
+        "distributionId": "ZHJOS579W2M7A",
+        "domainName": "qdqwkd9e5x617.cloudfront.net",
+        "enabled": true,
+        "aliases": [],
+        "webAclId": null,
+        "origins": [
+          {
+            "id": "app",
+            "domainName": "prod-alb-1.us-east-1.elb.amazonaws.com",
+            "kind": "custom",
+            "protocolPolicy": "https-only"
+          },
+          {
+            "id": "assets",
+            "domainName": "northwind-public-assets.s3.amazonaws.com",
+            "kind": "custom",
+            "protocolPolicy": null
+          }
+        ]
+      },
+      "derived": {}
+    }
+  ],
+  "relationships": []
 }

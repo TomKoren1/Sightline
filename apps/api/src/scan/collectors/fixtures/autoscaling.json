@@ -1,10 +1,6 @@
 {
- "accountId": "123456789012",
- "regions": [
-  "us-east-1",
-  "eu-west-1",
-  "ap-southeast-1"
- ],
- "resources": [],
- "relationships": []
+  "accountId": "123456789012",
+  "regions": ["us-east-1", "eu-west-1", "ap-southeast-1"],
+  "resources": [],
+  "relationships": []
 }

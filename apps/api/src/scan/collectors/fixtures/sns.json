@@ -1,32 +1,28 @@
 {
- "accountId": "123456789012",
- "regions": [
-  "us-east-1",
-  "eu-west-1",
-  "ap-southeast-1"
- ],
- "resources": [
-  {
-   "arn": "arn:aws:sns:us-east-1:123456789012:alerts",
-   "kind": "SnsTopic",
-   "name": "alerts",
-   "region": "us-east-1",
-   "accountId": "123456789012",
-   "tags": {},
-   "properties": {
-    "policy": "{\"Version\":\"2008-10-17\",\"Id\":\"__default_policy_ID\",\"Statement\":[{\"Effect\":\"Allow\",\"Sid\":\"__default_statement_ID\",\"Principal\":{\"AWS\":\"*\"},\"Action\":[\"SNS:GetTopicAttributes\",\"SNS:SetTopicAttributes\",\"SNS:AddPermission\",\"SNS:RemovePermission\",\"SNS:DeleteTopic\",\"SNS:Subscribe\",\"SNS:ListSubscriptionsByTopic\",\"SNS:Publish\"],\"Resource\":\"arn:aws:sns:us-east-1:123456789012:alerts\",\"Condition\":{\"StringEquals\":{\"AWS:SourceOwner\":\"123456789012\"}}}]}",
-    "kmsKeyId": null,
-    "encrypted": false,
-    "subscriptionsConfirmed": 0
-   },
-   "derived": {}
-  }
- ],
- "relationships": [
-  {
-   "from": "arn:aws:sns:us-east-1:123456789012:alerts",
-   "to": "arn:aws:sightline:us-east-1:123456789012:region/us-east-1",
-   "type": "IN_REGION"
-  }
- ]
+  "accountId": "123456789012",
+  "regions": ["us-east-1", "eu-west-1", "ap-southeast-1"],
+  "resources": [
+    {
+      "arn": "arn:aws:sns:us-east-1:123456789012:alerts",
+      "kind": "SnsTopic",
+      "name": "alerts",
+      "region": "us-east-1",
+      "accountId": "123456789012",
+      "tags": {},
+      "properties": {
+        "policy": "{\"Version\":\"2008-10-17\",\"Id\":\"__default_policy_ID\",\"Statement\":[{\"Effect\":\"Allow\",\"Sid\":\"__default_statement_ID\",\"Principal\":{\"AWS\":\"*\"},\"Action\":[\"SNS:GetTopicAttributes\",\"SNS:SetTopicAttributes\",\"SNS:AddPermission\",\"SNS:RemovePermission\",\"SNS:DeleteTopic\",\"SNS:Subscribe\",\"SNS:ListSubscriptionsByTopic\",\"SNS:Publish\"],\"Resource\":\"arn:aws:sns:us-east-1:123456789012:alerts\",\"Condition\":{\"StringEquals\":{\"AWS:SourceOwner\":\"123456789012\"}}}]}",
+        "kmsKeyId": null,
+        "encrypted": false,
+        "subscriptionsConfirmed": 0
+      },
+      "derived": {}
+    }
+  ],
+  "relationships": [
+    {
+      "from": "arn:aws:sns:us-east-1:123456789012:alerts",
+      "to": "arn:aws:sightline:us-east-1:123456789012:region/us-east-1",
+      "type": "IN_REGION"
+    }
+  ]
 }

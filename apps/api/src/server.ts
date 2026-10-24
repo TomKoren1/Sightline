@@ -1,6 +1,7 @@
 /** HTTP server: builds the app, migrates, listens. */
 
 import { buildApp } from "./app.js";
+import { startTracing, stopTracing } from "./observability/tracing.js";
 import { cfg, migrateOnBoot, scanWorkerMode } from "./config.js";
 import { assertSchemaCurrent, connectedAsOwner, migrate, closePool } from "./db/postgres.js";
 import { apiPrivilegeWarnings, assertHostedInvariants } from "./hostedMode.js";
@@ -21,6 +22,7 @@ import { VERSION } from "./version.js";
  * ready, which is what a cluster should see.
  */
 assertHostedInvariants();
+await startTracing("sightline-api", VERSION);
 
 const app = await buildApp();
 // Fastify's logger, reached through the adapter: Nest's own logger is kept to
@@ -121,6 +123,7 @@ for (const signal of ["SIGINT", "SIGTERM"] as const) {
         // than the process having been asked to stop.
         await worker.stop();
         await app.close();
+        await stopTracing();
         await closePool();
         process.exit(0);
       } catch (err) {

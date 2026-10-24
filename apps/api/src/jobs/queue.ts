@@ -24,6 +24,7 @@ import { scanJobs } from "../db/schema.js";
 import type { ConnectionId, JobId, ScanId, TenantId } from "../tenancy/ids.js";
 import { asConnectionId, asJobId, asTenantId } from "../tenancy/ids.js";
 import type { Scope } from "../tenancy/scope.js";
+import { currentTraceparent } from "../observability/tracing.js";
 import {
   scanJobs as scanJobsTotal,
   scanJobsReclaimed,
@@ -75,6 +76,8 @@ export interface ScanJob {
   startedAt: Date | null;
   finishedAt: Date | null;
   error: string | null;
+  /** Continues the queuing request's trace in the worker. Claims only. */
+  traceParent?: string | null;
 }
 
 /**
@@ -138,6 +141,7 @@ export async function enqueueScan(
         connectionId: scope.connectionId,
         status: "queued",
         requestedBy,
+        traceParent: currentTraceparent(),
       });
     } catch (err) {
       if (isDuplicateActiveJob(err)) throw new ScanAlreadyQueued(await activeJobId(scope));
@@ -205,6 +209,7 @@ function rowToJob(row: Record<string, unknown>): ScanJob {
     startedAt: row["started_at"] ? new Date(row["started_at"] as string) : null,
     finishedAt: row["finished_at"] ? new Date(row["finished_at"] as string) : null,
     error: (row["error"] as string | null) ?? null,
+    traceParent: (row["trace_parent"] as string | null) ?? null,
   };
 }
 

@@ -1,146 +1,135 @@
 {
- "accountId": "123456789012",
- "regions": [
-  "us-east-1",
-  "eu-west-1",
-  "ap-southeast-1"
- ],
- "resources": [
-  {
-   "arn": "arn:aws:rds:us-east-1:123456789012:db:analytics-db",
-   "kind": "RdsInstance",
-   "name": "analytics-db",
-   "region": "us-east-1",
-   "accountId": "123456789012",
-   "tags": {
-    "Environment": "production",
-    "Owner": "platform",
-    "CostCenter": "eng-core"
-   },
-   "properties": {
-    "dbInstanceIdentifier": "analytics-db",
-    "engine": "postgres",
-    "engineVersion": "16.3",
-    "instanceClass": "db.t3.large",
-    "allocatedStorageGib": 200,
-    "publiclyAccessible": true,
-    "storageEncrypted": false,
-    "multiAz": false,
-    "status": "available",
-    "endpoint": "analytics-db.aaaaaaaaaa.us-east-1.rds.amazonaws.com",
-    "port": 5432,
-    "dbSubnetGroupName": "prod-db-subnets",
-    "vpcId": "vpc-d1e945fdcc93fb788",
-    "securityGroupIds": [
-     "sg-5761be2c8add61a7f"
-    ]
-   },
-   "derived": {}
-  },
-  {
-   "arn": "arn:aws:rds:us-east-1:123456789012:db:northwind-prod-db",
-   "kind": "RdsInstance",
-   "name": "northwind-prod-db",
-   "region": "us-east-1",
-   "accountId": "123456789012",
-   "tags": {
-    "Environment": "production",
-    "Owner": "platform",
-    "CostCenter": "eng-core"
-   },
-   "properties": {
-    "dbInstanceIdentifier": "northwind-prod-db",
-    "engine": "postgres",
-    "engineVersion": "16.3",
-    "instanceClass": "db.r6g.xlarge",
-    "allocatedStorageGib": 500,
-    "publiclyAccessible": false,
-    "storageEncrypted": true,
-    "multiAz": true,
-    "status": "available",
-    "endpoint": "northwind-prod-db.aaaaaaaaaa.us-east-1.rds.amazonaws.com",
-    "port": 5432,
-    "dbSubnetGroupName": "prod-db-subnets",
-    "vpcId": "vpc-d1e945fdcc93fb788",
-    "securityGroupIds": [
-     "sg-d7b63744adf5f5307"
-    ]
-   },
-   "derived": {}
-  },
-  {
-   "arn": "arn:aws:rds:us-east-1:123456789012:subgrp:prod-db-subnets",
-   "kind": "DbSubnetGroup",
-   "name": "prod-db-subnets",
-   "region": "us-east-1",
-   "accountId": "123456789012",
-   "tags": {},
-   "properties": {
-    "name": "prod-db-subnets",
-    "vpcId": "vpc-d1e945fdcc93fb788",
-    "subnetIds": [
-     "subnet-c828f0e20f4eb3c7c",
-     "subnet-fdf750986bc527082"
-    ]
-   },
-   "derived": {}
-  }
- ],
- "relationships": [
-  {
-   "from": "arn:aws:rds:us-east-1:123456789012:db:analytics-db",
-   "to": "arn:aws:ec2:us-east-1:123456789012:security-group/sg-5761be2c8add61a7f",
-   "type": "HAS_SECURITY_GROUP"
-  },
-  {
-   "from": "arn:aws:rds:us-east-1:123456789012:db:analytics-db",
-   "to": "arn:aws:sightline:us-east-1:123456789012:region/us-east-1",
-   "type": "IN_REGION"
-  },
-  {
-   "from": "arn:aws:rds:us-east-1:123456789012:db:analytics-db",
-   "to": "arn:aws:ec2:us-east-1:123456789012:subnet/subnet-c828f0e20f4eb3c7c",
-   "type": "IN_SUBNET"
-  },
-  {
-   "from": "arn:aws:rds:us-east-1:123456789012:db:analytics-db",
-   "to": "arn:aws:ec2:us-east-1:123456789012:subnet/subnet-fdf750986bc527082",
-   "type": "IN_SUBNET"
-  },
-  {
-   "from": "arn:aws:rds:us-east-1:123456789012:db:northwind-prod-db",
-   "to": "arn:aws:ec2:us-east-1:123456789012:security-group/sg-d7b63744adf5f5307",
-   "type": "HAS_SECURITY_GROUP"
-  },
-  {
-   "from": "arn:aws:rds:us-east-1:123456789012:db:northwind-prod-db",
-   "to": "arn:aws:sightline:us-east-1:123456789012:region/us-east-1",
-   "type": "IN_REGION"
-  },
-  {
-   "from": "arn:aws:rds:us-east-1:123456789012:db:northwind-prod-db",
-   "to": "arn:aws:ec2:us-east-1:123456789012:subnet/subnet-c828f0e20f4eb3c7c",
-   "type": "IN_SUBNET"
-  },
-  {
-   "from": "arn:aws:rds:us-east-1:123456789012:db:northwind-prod-db",
-   "to": "arn:aws:ec2:us-east-1:123456789012:subnet/subnet-fdf750986bc527082",
-   "type": "IN_SUBNET"
-  },
-  {
-   "from": "arn:aws:rds:us-east-1:123456789012:subgrp:prod-db-subnets",
-   "to": "arn:aws:sightline:us-east-1:123456789012:region/us-east-1",
-   "type": "IN_REGION"
-  },
-  {
-   "from": "arn:aws:rds:us-east-1:123456789012:subgrp:prod-db-subnets",
-   "to": "arn:aws:ec2:us-east-1:123456789012:subnet/subnet-c828f0e20f4eb3c7c",
-   "type": "USES_SUBNET_GROUP"
-  },
-  {
-   "from": "arn:aws:rds:us-east-1:123456789012:subgrp:prod-db-subnets",
-   "to": "arn:aws:ec2:us-east-1:123456789012:subnet/subnet-fdf750986bc527082",
-   "type": "USES_SUBNET_GROUP"
-  }
- ]
+  "accountId": "123456789012",
+  "regions": ["us-east-1", "eu-west-1", "ap-southeast-1"],
+  "resources": [
+    {
+      "arn": "arn:aws:rds:us-east-1:123456789012:db:analytics-db",
+      "kind": "RdsInstance",
+      "name": "analytics-db",
+      "region": "us-east-1",
+      "accountId": "123456789012",
+      "tags": {
+        "Environment": "production",
+        "Owner": "platform",
+        "CostCenter": "eng-core"
+      },
+      "properties": {
+        "dbInstanceIdentifier": "analytics-db",
+        "engine": "postgres",
+        "engineVersion": "16.3",
+        "instanceClass": "db.t3.large",
+        "allocatedStorageGib": 200,
+        "publiclyAccessible": true,
+        "storageEncrypted": false,
+        "multiAz": false,
+        "status": "available",
+        "endpoint": "analytics-db.aaaaaaaaaa.us-east-1.rds.amazonaws.com",
+        "port": 5432,
+        "dbSubnetGroupName": "prod-db-subnets",
+        "vpcId": "vpc-d1e945fdcc93fb788",
+        "securityGroupIds": ["sg-5761be2c8add61a7f"]
+      },
+      "derived": {}
+    },
+    {
+      "arn": "arn:aws:rds:us-east-1:123456789012:db:northwind-prod-db",
+      "kind": "RdsInstance",
+      "name": "northwind-prod-db",
+      "region": "us-east-1",
+      "accountId": "123456789012",
+      "tags": {
+        "Environment": "production",
+        "Owner": "platform",
+        "CostCenter": "eng-core"
+      },
+      "properties": {
+        "dbInstanceIdentifier": "northwind-prod-db",
+        "engine": "postgres",
+        "engineVersion": "16.3",
+        "instanceClass": "db.r6g.xlarge",
+        "allocatedStorageGib": 500,
+        "publiclyAccessible": false,
+        "storageEncrypted": true,
+        "multiAz": true,
+        "status": "available",
+        "endpoint": "northwind-prod-db.aaaaaaaaaa.us-east-1.rds.amazonaws.com",
+        "port": 5432,
+        "dbSubnetGroupName": "prod-db-subnets",
+        "vpcId": "vpc-d1e945fdcc93fb788",
+        "securityGroupIds": ["sg-d7b63744adf5f5307"]
+      },
+      "derived": {}
+    },
+    {
+      "arn": "arn:aws:rds:us-east-1:123456789012:subgrp:prod-db-subnets",
+      "kind": "DbSubnetGroup",
+      "name": "prod-db-subnets",
+      "region": "us-east-1",
+      "accountId": "123456789012",
+      "tags": {},
+      "properties": {
+        "name": "prod-db-subnets",
+        "vpcId": "vpc-d1e945fdcc93fb788",
+        "subnetIds": ["subnet-c828f0e20f4eb3c7c", "subnet-fdf750986bc527082"]
+      },
+      "derived": {}
+    }
+  ],
+  "relationships": [
+    {
+      "from": "arn:aws:rds:us-east-1:123456789012:db:analytics-db",
+      "to": "arn:aws:ec2:us-east-1:123456789012:security-group/sg-5761be2c8add61a7f",
+      "type": "HAS_SECURITY_GROUP"
+    },
+    {
+      "from": "arn:aws:rds:us-east-1:123456789012:db:analytics-db",
+      "to": "arn:aws:sightline:us-east-1:123456789012:region/us-east-1",
+      "type": "IN_REGION"
+    },
+    {
+      "from": "arn:aws:rds:us-east-1:123456789012:db:analytics-db",
+      "to": "arn:aws:ec2:us-east-1:123456789012:subnet/subnet-c828f0e20f4eb3c7c",
+      "type": "IN_SUBNET"
+    },
+    {
+      "from": "arn:aws:rds:us-east-1:123456789012:db:analytics-db",
+      "to": "arn:aws:ec2:us-east-1:123456789012:subnet/subnet-fdf750986bc527082",
+      "type": "IN_SUBNET"
+    },
+    {
+      "from": "arn:aws:rds:us-east-1:123456789012:db:northwind-prod-db",
+      "to": "arn:aws:ec2:us-east-1:123456789012:security-group/sg-d7b63744adf5f5307",
+      "type": "HAS_SECURITY_GROUP"
+    },
+    {
+      "from": "arn:aws:rds:us-east-1:123456789012:db:northwind-prod-db",
+      "to": "arn:aws:sightline:us-east-1:123456789012:region/us-east-1",
+      "type": "IN_REGION"
+    },
+    {
+      "from": "arn:aws:rds:us-east-1:123456789012:db:northwind-prod-db",
+      "to": "arn:aws:ec2:us-east-1:123456789012:subnet/subnet-c828f0e20f4eb3c7c",
+      "type": "IN_SUBNET"
+    },
+    {
+      "from": "arn:aws:rds:us-east-1:123456789012:db:northwind-prod-db",
+      "to": "arn:aws:ec2:us-east-1:123456789012:subnet/subnet-fdf750986bc527082",
+      "type": "IN_SUBNET"
+    },
+    {
+      "from": "arn:aws:rds:us-east-1:123456789012:subgrp:prod-db-subnets",
+      "to": "arn:aws:sightline:us-east-1:123456789012:region/us-east-1",
+      "type": "IN_REGION"
+    },
+    {
+      "from": "arn:aws:rds:us-east-1:123456789012:subgrp:prod-db-subnets",
+      "to": "arn:aws:ec2:us-east-1:123456789012:subnet/subnet-c828f0e20f4eb3c7c",
+      "type": "USES_SUBNET_GROUP"
+    },
+    {
+      "from": "arn:aws:rds:us-east-1:123456789012:subgrp:prod-db-subnets",
+      "to": "arn:aws:ec2:us-east-1:123456789012:subnet/subnet-fdf750986bc527082",
+      "type": "USES_SUBNET_GROUP"
+    }
+  ]
 }
