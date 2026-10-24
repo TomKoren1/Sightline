@@ -170,6 +170,24 @@ insert and read, and cannot update, delete or truncate it. Admins read it under
 Team, Activity, and download it as CSV or JSON from `GET /api/audit/export`.
 The CSV defuses cells a spreadsheet would run as formulas.
 
+### Alert webhooks
+
+An admin can give a workspace one webhook - Slack, Teams workflows or
+Mattermost - and each scan that opens new exposed or admin findings posts a
+short summary to it: counts, up to five names and kinds, and a link. Nothing
+else from the inventory is sent. The URL is a secret (a Slack webhook URL is its
+own credential), so it is encrypted at rest like an ExternalId and never
+returned: the UI shows only its host.
+
+Because the address is the tenant's, the request is one a tenant could aim at
+the cluster. So a webhook must be https, cannot name localhost or a cluster or
+private address, and every address its name resolves to is checked again inside
+the socket's own lookup at the moment of sending - a name that resolved public
+when saved and private when used (DNS rebinding) is still refused. Redirects
+are not followed; each delivery is one attempt with a five-second limit, and
+its outcome is shown beside the webhook. Changing it needs a signed-in admin,
+not an API token.
+
 ### API tokens
 
 For scripts and CI, an admin makes a token under Team, API tokens, and it is

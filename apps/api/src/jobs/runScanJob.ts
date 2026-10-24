@@ -37,6 +37,7 @@ import {
   STATISTICS_REFRESH_THRESHOLD,
 } from "../db/repository.js";
 import { syncFindings } from "../db/findings.js";
+import { notifyNewFindings } from "../integrations/notify.js";
 import { runScan } from "../scan/runner.js";
 import { markScanned, markVerified } from "../tenancy/connections.js";
 import { resolveScanTarget } from "../tenancy/scanTarget.js";
@@ -138,8 +139,9 @@ export async function runScanJob(options: RunScanJobOptions): Promise<ScanJobOut
 
     // The tenant's own accounts, so a trust naming one of them reads as that
     // connection rather than as a stranger.
+    const connections = await listConnections(scope.tenantId);
     const knownAccounts = new Map(
-      (await listConnections(scope.tenantId))
+      connections
         .filter((c) => c.accountId && c.id !== scope.connectionId)
         .map((c) => [c.accountId!, c.label] as const),
     );
@@ -269,8 +271,15 @@ export async function runScanJob(options: RunScanJobOptions): Promise<ScanJobOut
     // Before the flip, so the scan that becomes current already has its
     // findings' history behind it. Only a scan that read everything may
     // resolve what it did not see.
-    await syncFindings(scope, scanId, status === "succeeded");
+    const synced = await syncFindings(scope, scanId, status === "succeeded");
     await markProjected(scope, scanId);
+    // Told after the flip, so the link lands on the scan that found them.
+    const self = connections.find((c) => c.id === scope.connectionId);
+    await notifyNewFindings(
+      scope.tenantId,
+      { label: self?.label ?? "An account", accountId: result.accountId },
+      synced.fresh,
+    ).catch((err: unknown) => logError?.(err));
 
     // The scan reaching the account *is* a successful verification, and it pins
     // the account id if this was the first one.

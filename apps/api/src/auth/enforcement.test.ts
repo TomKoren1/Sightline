@@ -194,6 +194,9 @@ const ROLE_REQUIRED: Record<string, "viewer" | "member" | "admin"> = {
   "DELETE /api/team/members/:id": "admin",
   "POST /api/tokens": "admin",
   "DELETE /api/tokens/:id": "admin",
+  "PUT /api/webhook": "admin",
+  "DELETE /api/webhook": "admin",
+  "POST /api/webhook/test": "admin",
 };
 const RANK = { viewer: 0, member: 1, admin: 2 } as const;
 

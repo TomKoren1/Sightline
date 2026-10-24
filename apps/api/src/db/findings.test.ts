@@ -91,7 +91,7 @@ describe.runIf(HAS_INFRA)("finding lifecycle", () => {
   it("opens a finding the first time a scan sees it", async () => {
     if (!available) return;
     const result = await syncFindings(scope, await scanWith([publicBucket, adminRole]), true);
-    expect(result).toEqual({ opened: 2, reopened: 0, resolved: 0 });
+    expect(result).toMatchObject({ opened: 2, reopened: 0, resolved: 0 });
     expect(await byArn(BUCKET)).toMatchObject({ category: "exposed", status: "open" });
     expect(await byArn(ROLE)).toMatchObject({ category: "admin", status: "open" });
   });

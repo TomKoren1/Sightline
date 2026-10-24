@@ -162,6 +162,21 @@ const CONTRACTS: Contract[] = [
   },
   {
     method: "GET",
+    route: "/api/webhook",
+    url: "/api/webhook",
+    responses: {
+      200: z
+        .object({
+          configured: z.boolean(),
+          host: z.string().nullable(),
+          lastDeliveryAt: z.string().nullable(),
+          lastStatus: z.string().nullable(),
+        })
+        .strict(),
+    },
+  },
+  {
+    method: "GET",
     route: "/api/findings/accounts",
     url: "/api/findings/accounts",
     responses: {
@@ -644,6 +659,21 @@ CONTRACTS.push(
 );
 
 const EXCLUDED = new Map<string, string>([
+  [
+    "PUT /api/webhook",
+    "Sends to, or changes, an outside URL; a contract run would post to somebody's chat. " +
+      "Refusing unsafe URLs is integrations/webhook.test.ts, who may call it auth/enforcement.test.ts.",
+  ],
+  [
+    "DELETE /api/webhook",
+    "Sends to, or changes, an outside URL; a contract run would post to somebody's chat. " +
+      "Refusing unsafe URLs is integrations/webhook.test.ts, who may call it auth/enforcement.test.ts.",
+  ],
+  [
+    "POST /api/webhook/test",
+    "Sends to, or changes, an outside URL; a contract run would post to somebody's chat. " +
+      "Refusing unsafe URLs is integrations/webhook.test.ts, who may call it auth/enforcement.test.ts.",
+  ],
   [
     "GET /api/tokens",
     "Hosted only: this suite runs self-hosted, where there is no sign-in for a token to " +

@@ -52,6 +52,8 @@ export interface SyncResult {
   opened: number;
   reopened: number;
   resolved: number;
+  /** What is new to whoever reads the findings: opened, or back after being resolved. */
+  fresh: { category: FindingCategory; name: string; kind: string }[];
 }
 
 /**
@@ -82,7 +84,13 @@ export async function syncFindings(
       // `xmax = 0` is true for a row this statement inserted and false for one
       // it updated: the cheapest way to tell new findings from returning ones.
       // `was` is read from the old row through the conflict's own target.
-      const { rows } = await tx.execute<{ inserted: boolean; was: FindingStatus | null }>(sql`
+      const { rows } = await tx.execute<{
+        inserted: boolean;
+        was: FindingStatus | null;
+        category: FindingCategory;
+        resource_name: string;
+        resource_kind: string;
+      }>(sql`
         WITH current AS (${current}),
         previous AS (
           SELECT f.category, f.resource_arn, f.status FROM findings f
@@ -102,7 +110,7 @@ export async function syncFindings(
           last_scan_id = excluded.last_scan_id,
           status = CASE WHEN f.status = 'resolved' THEN 'open' ELSE f.status END,
           resolved_at = NULL
-        RETURNING (xmax = 0) AS inserted,
+        RETURNING (xmax = 0) AS inserted, f.category, f.resource_name, f.resource_kind,
           (SELECT p.status FROM previous p
             WHERE p.category = f.category AND p.resource_arn = f.resource_arn) AS was
       `);
@@ -124,6 +132,9 @@ export async function syncFindings(
         opened: rows.filter((r) => r.inserted).length,
         reopened: rows.filter((r) => !r.inserted && r.was === "resolved").length,
         resolved,
+        fresh: rows
+          .filter((r) => r.inserted || r.was === "resolved")
+          .map((r) => ({ category: r.category, name: r.resource_name, kind: r.resource_kind })),
       };
     }),
   );

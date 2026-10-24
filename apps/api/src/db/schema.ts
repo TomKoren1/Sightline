@@ -351,6 +351,23 @@ export const apiTokens = pgTable(
 );
 
 /**
+ * Where a tenant hears about new critical findings: one webhook, its URL
+ * encrypted like an ExternalId, since a Slack webhook URL is its own secret.
+ */
+export const webhooks = pgTable("webhooks", {
+  tenantId: uuid("tenant_id")
+    .primaryKey()
+    .references(() => tenants.id, { onDelete: "cascade" }),
+  urlCiphertext: bytea("url_ciphertext").notNull(),
+  /** The host alone, to show which webhook is set without showing the secret. */
+  host: text("host").notNull(),
+  createdBy: uuid("created_by").references(() => users.id, { onDelete: "set null" }),
+  createdAt: timestamp("created_at", tz).notNull().defaultNow(),
+  lastDeliveryAt: timestamp("last_delivery_at", tz),
+  lastStatus: text("last_status"),
+});
+
+/**
  * One row per external identity, so one user can hold both Google and GitHub.
  *
  * Keyed on the provider's **subject**, never on email: subjects are stable,

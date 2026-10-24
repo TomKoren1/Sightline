@@ -14,6 +14,7 @@ import { api, can, type TeamRole } from "../api.js";
 import { ApiTokens } from "./ApiTokens.js";
 import { AuditLog } from "./AuditLog.js";
 import { Sessions } from "./Sessions.js";
+import { WebhookSettings } from "./WebhookSettings.js";
 import { Copyable } from "./Copyable.js";
 
 const ROLE_HELP: Record<TeamRole, string> = {
@@ -172,6 +173,8 @@ export function Team() {
       )}
 
       <Sessions />
+
+      {manage && <WebhookSettings />}
 
       {manage && <ApiTokens yourRole={you.role} />}
 

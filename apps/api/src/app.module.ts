@@ -5,6 +5,7 @@ import { Module } from "@nestjs/common";
 import { AuthModule } from "./auth/auth.module.js";
 import { AuditModule } from "./audit/audit.module.js";
 import { OperatorModule } from "./operator/operator.module.js";
+import { IntegrationsModule } from "./integrations/integrations.module.js";
 import { ChatModule } from "./chat/chat.module.js";
 import { ConnectionModule } from "./connection/connection.module.js";
 import { EvalsModule } from "./evals/evals.module.js";
@@ -27,6 +28,7 @@ import { TenancyModule } from "./tenancy/tenancy.module.js";
     ConnectionModule,
     AuditModule,
     OperatorModule,
+    IntegrationsModule,
   ],
 })
 export class AppModule {}

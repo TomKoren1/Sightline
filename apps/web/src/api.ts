@@ -488,6 +488,16 @@ export const api = {
 
   // --- the team -------------------------------------------------------------
   team: () => get<Team>("/api/team"),
+  webhook: () =>
+    get<{
+      configured: boolean;
+      host: string | null;
+      lastDeliveryAt: string | null;
+      lastStatus: string | null;
+    }>("/api/webhook"),
+  setWebhook: (url: string) => send<unknown>("/api/webhook", { ...asJson({ url }), method: "PUT" }),
+  removeWebhook: () => send<void>("/api/webhook", { method: "DELETE" }),
+  testWebhook: () => send<{ ok: boolean; status: string }>("/api/webhook/test", { method: "POST" }),
   apiTokens: () => get<{ tokens: ApiToken[] }>("/api/tokens"),
   findingsAcrossAccounts: () => get<AcrossAccounts>("/api/findings/accounts"),
   operatorTenants: () => get<{ tenants: TenantHealth[] }>("/api/operator/tenants"),
