@@ -129,7 +129,7 @@ describe("the numbers the README quotes are true", () => {
   }
 
   it("states the real number of agent tools", () => {
-    const tools = read("apps/api/src/agent/tools.ts");
+    const tools = read("apps/api/src/agent/toolDefinitions.ts");
     // Tool definitions only: the dispatch switch repeats every name.
     const actual = (tools.match(/^ {4}name: "/gm) ?? []).length;
     // The README's wording, since this claim used to live in a file that is gone.

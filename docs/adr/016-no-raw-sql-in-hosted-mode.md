@@ -12,7 +12,7 @@ answers questions nobody anticipated. In hosted mode every tenant's model
 session can write SQL, and the SQL guard becomes the barrier against the
 cleverest prompt any customer - or anything planted in their account - can
 produce. So hosted mode does not offer the tool, and the dispatch refuses it
-independently (`agent/tools.ts`, `availableTools()` and the dispatch), because
+independently (`availableTools()` in `agent/toolDefinitions.ts`, and the dispatch in `agent/tools.ts`), because
 a model can call a tool it was never offered.
 
 Row-level security and the scan-pinned views still apply underneath, so this

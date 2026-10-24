@@ -24,7 +24,8 @@ import type { GraphScope } from "./graph.js";
 import { system } from "./postgres.js";
 import { createScanRun, markProjected, saveScanResult } from "./repository.js";
 import * as schema from "./schema.js";
-import { runTool, RAW_QUERY_TOOL } from "../agent/tools.js";
+import { runTool } from "../agent/tools.js";
+import { RAW_QUERY_TOOL } from "../agent/toolDefinitions.js";
 import { asConnectionId, asTenantId } from "../core/ids.js";
 
 const HAS_INFRA = !process.env["SKIP_INTEGRATION"];

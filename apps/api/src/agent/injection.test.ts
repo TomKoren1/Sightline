@@ -10,7 +10,7 @@
 import { describe, expect, it } from "vitest";
 
 import { buildSystemPrompt } from "./prompt.js";
-import { arnsIn } from "./tools.js";
+import { arnsIn } from "./citable.js";
 
 const REAL = "arn:aws:iam::123456789012:role/NorthwindAdminRole";
 const PLANTED = "arn:aws:iam::999999999999:role/attacker";
