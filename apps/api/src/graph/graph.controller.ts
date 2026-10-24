@@ -74,6 +74,11 @@ export class GraphController {
     return this.graph.resource(scope, arn);
   }
 
+  @Get("fix-plan")
+  fixPlan(@CurrentScope() scope: Scope) {
+    return this.graph.fixPlan(scope);
+  }
+
   @Get("resources/:arn/remediation")
   remediation(@CurrentScope() scope: Scope, @Param("arn") arn: string) {
     return this.graph.remediation(scope, arn);

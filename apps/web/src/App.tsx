@@ -25,6 +25,7 @@ import { DeleteAccount } from "./components/DeleteAccount.js";
 import { DisconnectAccount } from "./components/DisconnectAccount.js";
 import { Modal } from "./components/Modal.js";
 import { TrustPanel } from "./components/TrustPanel.js";
+import { FixPlan } from "./components/FixPlan.js";
 import { Findings } from "./components/Findings.js";
 import { GraphView } from "./components/GraphView.js";
 import { LegalPage, legalPathFor } from "./components/LegalPage.js";
@@ -47,7 +48,7 @@ export function App() {
   const [visibleKinds, setVisibleKinds] = useState<string[]>(DEFAULT_VISIBLE_KINDS);
   const [showFilters, setShowFilters] = useState(false);
   const [modal, setModal] = useState<
-    "trust" | "connection" | "delete" | "team" | "operator" | "accounts" | null
+    "trust" | "fixplan" | "connection" | "delete" | "team" | "operator" | "accounts" | null
   >(null);
   const [connectionId, setConnectionId] = useState<string | null>(null);
   /**
@@ -170,6 +171,7 @@ export function App() {
         error={scanError}
         onScan={() => void runScan()}
         onOpenTrust={() => setModal("trust")}
+        onOpenFixPlan={() => setModal("fixplan")}
         onOpenConnection={() => setModal("connection")}
         connections={connections}
         selectedConnectionId={conn}
@@ -282,13 +284,26 @@ export function App() {
         </Modal>
       )}
 
-      {modal === "trust" && (
+      {modal === "fixplan" && (
         <Modal
-          title="Can you trust this?"
-          subtitle="What is checked, how, and when it last ran"
+          title="Fix plan"
+          subtitle="Every computed fix for the open findings, to choose from and run yourself"
           onClose={() => setModal(null)}
         >
-          <TrustPanel />
+          <FixPlan />
+        </Modal>
+      )}
+
+      {modal === "trust" && (
+        <Modal
+          title="What the last scan could see"
+          subtitle="What was read, what could not be, and what Sightline never reads"
+          onClose={() => setModal(null)}
+        >
+          <TrustPanel
+            scan={latest.data?.scan ?? null}
+            demo={connections.find((c) => c.id === conn)?.kind === "demo"}
+          />
         </Modal>
       )}
 
@@ -337,7 +352,11 @@ export function App() {
             summary={summary.data}
             findings={findings.data}
             loading={hasScan && (summary.isLoading || findings.isLoading)}
-            onHighlight={setCitedArns}
+            onHighlight={(arns) => {
+              setCitedArns(arns);
+              // One resource is a finding chosen: open it, which is where its fixes are.
+              if (arns.length === 1) setSelectedArn(arns[0]!);
+            }}
           />
         </aside>
 

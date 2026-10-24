@@ -176,6 +176,7 @@ async function project(tag: string, account: string): Promise<Fixture> {
 const CALLS: Record<string, (f: Fixture) => Promise<unknown>> = {
   listResources: (f) => queries.listResources(f.scope, {}),
   getResource: (f) => queries.getResource(f.scope, f.names.bucket),
+  flaggedResources: (f) => queries.flaggedResources(f.scope, 100),
   findPublicResources: (f) => queries.findPublicResources(f.scope, {}),
   findAdminPrincipals: (f) => queries.findAdminPrincipals(f.scope, {}),
   findNetworkPaths: (f) => queries.findNetworkPaths(f.scope, { target: f.names.database }),

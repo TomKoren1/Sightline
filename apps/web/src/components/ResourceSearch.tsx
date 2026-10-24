@@ -7,6 +7,7 @@ import { useEffect, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 
 import { api } from "../api.js";
+import { kindLabel } from "../kinds.js";
 
 /** Typing pauses this long before a search is sent, so a word is one request. */
 const DEBOUNCE_MS = 250;
@@ -61,7 +62,7 @@ export function ResourceSearch({ onPick }: { onPick: (arn: string) => void }) {
                   >
                     <span className="truncate text-ink-100">{r.name}</span>
                     <span className="shrink-0 text-[10px] text-ink-400">
-                      {r.kind} · {r.region ?? "global"}
+                      {kindLabel(r.kind)} · {r.region ?? "global"}
                     </span>
                   </button>
                 </li>

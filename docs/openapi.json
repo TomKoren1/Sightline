@@ -2526,6 +2526,160 @@
         }
       }
     },
+    "/api/fix-plan": {
+      "get": {
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$schema": "https://json-schema.org/draft/2020-12/schema",
+                  "type": "object",
+                  "properties": {
+                    "accountId": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "scanId": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "items": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "arn": {
+                            "type": "string"
+                          },
+                          "name": {
+                            "type": "string"
+                          },
+                          "kind": {
+                            "type": "string"
+                          },
+                          "region": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "remediation": {
+                            "type": "object",
+                            "properties": {
+                              "id": {
+                                "type": "string"
+                              },
+                              "addresses": {
+                                "type": "string",
+                                "enum": [
+                                  "public",
+                                  "unprotected",
+                                  "admin",
+                                  "exposed",
+                                  "idle",
+                                  "unused"
+                                ]
+                              },
+                              "title": {
+                                "type": "string"
+                              },
+                              "summary": {
+                                "type": "string"
+                              },
+                              "caution": {
+                                "type": "string"
+                              },
+                              "risk": {
+                                "type": "string",
+                                "enum": [
+                                  "low",
+                                  "medium",
+                                  "high"
+                                ]
+                              },
+                              "cli": {
+                                "type": "array",
+                                "items": {
+                                  "type": "string"
+                                }
+                              },
+                              "terraform": {
+                                "type": "string"
+                              },
+                              "verify": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "id",
+                              "addresses",
+                              "title",
+                              "summary",
+                              "caution",
+                              "risk",
+                              "cli"
+                            ],
+                            "additionalProperties": false
+                          }
+                        },
+                        "required": [
+                          "arn",
+                          "name",
+                          "kind",
+                          "region",
+                          "remediation"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "withoutFix": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "arn": {
+                            "type": "string"
+                          },
+                          "name": {
+                            "type": "string"
+                          },
+                          "kind": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "arn",
+                          "name",
+                          "kind"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "truncated": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "accountId",
+                    "scanId",
+                    "items",
+                    "withoutFix",
+                    "truncated"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/graph": {
       "get": {
         "responses": {
