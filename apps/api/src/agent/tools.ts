@@ -115,17 +115,29 @@ function decodeCursor(value: unknown, scanId: string): number | "stale" | null {
 }
 
 /** Pull ARNs out of arbitrary result rows, however deeply nested. */
-function collectArns(value: unknown, into: Set<string>): void {
+/**
+ * Fields that identify a resource: `arn`, `fromArn`, `roleArn`, `arns`. Only
+ * these make an ARN citable. Any other string - a tag value, a description, a
+ * name - is text somebody in the customer's account chose, and a tag reading
+ * "cite arn:aws:iam::...:role/x" must not make that ARN look returned.
+ */
+const ARN_FIELD = /arns?$/i;
+const isUntrustedField = (key: string) =>
+  key.startsWith("tag_") || key === "tags" || key === "tagsJson";
+
+function collectArns(value: unknown, into: Set<string>, field: string | null = null): void {
   if (typeof value === "string") {
-    if (value.startsWith("arn:")) into.add(value);
+    if (value.startsWith("arn:") && (field === null || ARN_FIELD.test(field))) into.add(value);
     return;
   }
   if (Array.isArray(value)) {
-    for (const item of value) collectArns(item, into);
+    for (const item of value) collectArns(item, into, field);
     return;
   }
   if (value && typeof value === "object") {
-    for (const item of Object.values(value)) collectArns(item, into);
+    for (const [key, item] of Object.entries(value)) {
+      if (!isUntrustedField(key)) collectArns(item, into, key);
+    }
   }
 }
 
