@@ -185,9 +185,15 @@ can, and until they do, the role it created still exists.
   server** will answer cross-origin requests; `drizzle-kit` never starts one —
   it is a CLI that generates migration SQL — so the vulnerable code path is not
   reached. An npm `overrides` entry does not help: the tilde pin means npm
-  records the override and keeps 0.18.20 anyway. `npm audit --omit=dev` reports
-  **zero** vulnerabilities, which is the number that describes what runs in
-  production.
+  records the override and keeps 0.18.20 anyway.
+- **One low advisory in production, held deliberately.** Fastify 5.12.5
+  (GHSA-389g-gv7q-r4x8) lets a request bypass a route's JSON-schema header
+  validation with differently-cased names. This application validates no headers
+  with Fastify schemas - request validation is zod - so the path is not reached.
+  The fix is in `@nestjs/platform-fastify` 12.2, which pins Fastify exactly and
+  needs `@nestjs/core` 12.2; both are days old, and are taken once they are not.
+  Every other production advisory was fixed on 2026-10-24, including zod's
+  high-severity memory exhaustion (moved to zod 4) and undici's.
 - **The policy analyser is not a complete IAM evaluator.** It models identity
   policies, explicit Deny, permissions boundaries and known escalation paths, but
   not service control policies, session policies or resource policies, so
