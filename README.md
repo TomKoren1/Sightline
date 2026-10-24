@@ -167,6 +167,7 @@ same checks run inside the product, under **Trust**.
 ## Repository layout
 
 ```
+docs/adr/             architecture decisions the code cites by number
 apps/api              backend: scanner, analysers, graph, agent, HTTP API
   src/core/           what everything else builds on, importing nothing in src:
                       settings (config.ts), branded ids, scope, paths, version

@@ -119,6 +119,16 @@ describe("the API's layering", () => {
     expect(users).toEqual([]);
   });
 
+  it("keeps NestJS at the HTTP edge (ADR-018)", () => {
+    const edge = /\.(controller|module|guard|interceptor|decorator|filter|service)\.ts$/;
+    const reasoned = new Set(["app.ts", "core/access.ts", "tenancy/requestScope.ts"]);
+    const outside = files
+      .filter((f) => /from\s+"@nestjs\//.test(readFileSync(f, "utf8")))
+      .map((f) => relative(src, f).split(sep).join("/"))
+      .filter((f) => !edge.test(f) && !reasoned.has(f));
+    expect(outside, "domain code importing Nest; see docs/adr/018").toEqual([]);
+  });
+
   it("would catch a cycle", () => {
     const sample = new Map([
       ["a", new Set(["b"])],
