@@ -273,7 +273,17 @@ export async function recordScanUnit(scope: Scope, scanId: string, unit: ScanUni
   });
 }
 
-/** Persist a completed scan: units, resources and relationships, atomically. */
+/**
+ * Persist a completed scan: resources and relationships in short batches,
+ * then units and status together.
+ *
+ * Not one transaction. At 150,000 resources that held a transaction open for
+ * 85 seconds - WAL that cannot be recycled and a vacuum that cannot clean -
+ * on the path of every other tenant's writes. Batches commit as they go, and
+ * nothing reads them early: the graph reads projected scans and history reads
+ * finished ones, and until the last statement this scan is neither. A save
+ * that fails removes what it wrote, so a failed scan leaves no rows behind.
+ */
 export async function saveScanResult(
   scope: Scope,
   scanId: string,
@@ -286,42 +296,40 @@ export async function saveScanResult(
   },
 ): Promise<void> {
   return withTenant(scope.tenantId, async () => {
-    await db.transaction(async (tx) => {
-      for (const unit of params.units) {
-        await writeScanUnit(tx, scope, scanId, unit);
-      }
-
+    try {
       for (let i = 0; i < params.resources.length; i += BATCH_SIZE) {
         const batch = params.resources.slice(i, i + BATCH_SIZE);
-        // Documents first, so no snapshot ever refers to one not yet stored.
-        const extracted = batch.map((r) => extractDocuments(r));
-        const documents = new Map(extracted.flatMap((e) => [...e.documents]));
-        if (documents.size > 0) await tx.execute(upsertDocuments(scope.tenantId, documents));
-        await tx
-          .insert(resourceSnapshots)
-          .values(
-            batch.map((r, j) => ({
-              tenantId: scope.tenantId,
-              scanId,
-              arn: r.arn,
-              kind: r.kind,
-              name: r.name,
-              region: r.region,
-              accountId: r.accountId,
-              tags: r.tags,
-              properties: extracted[j]!.properties,
-              derived: r.derived,
-              // Of the resource as collected: a document's content, not where
-              // it is stored, is what makes two scans of a role differ.
-              fingerprint: fingerprint(r),
-            })),
-          )
-          .onConflictDoNothing({ target: [resourceSnapshots.scanId, resourceSnapshots.arn] });
+        await db.transaction(async (tx) => {
+          // Documents first, so no snapshot ever refers to one not yet stored.
+          const extracted = batch.map((r) => extractDocuments(r));
+          const documents = new Map(extracted.flatMap((e) => [...e.documents]));
+          if (documents.size > 0) await tx.execute(upsertDocuments(scope.tenantId, documents));
+          await tx
+            .insert(resourceSnapshots)
+            .values(
+              batch.map((r, j) => ({
+                tenantId: scope.tenantId,
+                scanId,
+                arn: r.arn,
+                kind: r.kind,
+                name: r.name,
+                region: r.region,
+                accountId: r.accountId,
+                tags: r.tags,
+                properties: extracted[j]!.properties,
+                derived: r.derived,
+                // Of the resource as collected: a document's content, not where
+                // it is stored, is what makes two scans of a role differ.
+                fingerprint: fingerprint(r),
+              })),
+            )
+            .onConflictDoNothing({ target: [resourceSnapshots.scanId, resourceSnapshots.arn] });
+        });
       }
 
       for (let i = 0; i < params.relationships.length; i += BATCH_SIZE) {
         const batch = params.relationships.slice(i, i + BATCH_SIZE);
-        await tx.insert(relationshipSnapshots).values(
+        await db.insert(relationshipSnapshots).values(
           batch.map((rel) => ({
             tenantId: scope.tenantId,
             scanId,
@@ -333,18 +341,44 @@ export async function saveScanResult(
         );
       }
 
-      await tx
-        .update(scanRuns)
-        .set({
-          status: params.status,
-          finishedAt: new Date(),
-          resourceCount: params.resources.length,
-          relationshipCount: params.relationships.length,
-          apiCalls: params.apiCalls,
-        })
-        .where(ownedScan(scope, scanId));
-    });
+      // The publish: until this commits the scan is still running, and unread.
+      await db.transaction(async (tx) => {
+        for (const unit of params.units) {
+          await writeScanUnit(tx, scope, scanId, unit);
+        }
+        await tx
+          .update(scanRuns)
+          .set({
+            status: params.status,
+            finishedAt: new Date(),
+            resourceCount: params.resources.length,
+            relationshipCount: params.relationships.length,
+            apiCalls: params.apiCalls,
+          })
+          .where(ownedScan(scope, scanId));
+      });
+    } catch (err) {
+      await discardSnapshots(scope, scanId).catch(() => undefined);
+      throw err;
+    }
   });
+}
+
+/** What a failed save wrote. Documents stay: they are shared, and pruned by reference. */
+async function discardSnapshots(scope: Scope, scanId: string): Promise<void> {
+  await db
+    .delete(relationshipSnapshots)
+    .where(
+      and(
+        eq(relationshipSnapshots.tenantId, scope.tenantId),
+        eq(relationshipSnapshots.scanId, scanId),
+      ),
+    );
+  await db
+    .delete(resourceSnapshots)
+    .where(
+      and(eq(resourceSnapshots.tenantId, scope.tenantId), eq(resourceSnapshots.scanId, scanId)),
+    );
 }
 
 type ScanRow = typeof scanRuns.$inferSelect;
