@@ -576,6 +576,21 @@ CONTRACTS.push(
 
 const EXCLUDED = new Map<string, string>([
   [
+    "GET /api/tokens",
+    "Hosted only: this suite runs self-hosted, where there is no sign-in for a token to " +
+      "stand for. What a token may and may not do is auth/enforcement.test.ts, against the real app.",
+  ],
+  [
+    "POST /api/tokens",
+    "Hosted only: this suite runs self-hosted, where there is no sign-in for a token to " +
+      "stand for. What a token may and may not do is auth/enforcement.test.ts, against the real app.",
+  ],
+  [
+    "DELETE /api/tokens/:id",
+    "Hosted only: this suite runs self-hosted, where there is no sign-in for a token to " +
+      "stand for. What a token may and may not do is auth/enforcement.test.ts, against the real app.",
+  ],
+  [
     "POST /api/team/invites",
     "Hosted only: this suite runs self-hosted, where every team route refuses. The " +
       "rules - invites used once, roles within what the actor may grant, an owner always kept - " +

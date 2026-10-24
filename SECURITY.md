@@ -170,6 +170,29 @@ insert and read, and cannot update, delete or truncate it. Admins read it under
 Team, Activity, and download it as CSV or JSON from `GET /api/audit/export`.
 The CSV defuses cells a spreadsheet would run as formulas.
 
+### API tokens
+
+For scripts and CI, an admin makes a token under Team, API tokens, and it is
+sent as `Authorization: Bearer slt_…`:
+
+```bash
+curl -H "Authorization: Bearer $SIGHTLINE_TOKEN" https://sightline.example/api/findings
+curl -X POST -H "Authorization: Bearer $SIGHTLINE_TOKEN" https://sightline.example/api/scans
+```
+
+A token is shown once and stored as a SHA-256 hash. It acts for the person who
+made it, at the lesser of its own role and theirs at the time of each request,
+so demoting someone demotes their tokens and removing them deletes them. It can
+be at most an admin, expires after 30, 90 or 365 days, and cannot manage
+tokens, the team, sessions or the account - a leaked one can read and scan, not
+entrench itself. A request carrying a token needs no `X-Sightline-Request`
+header, because a browser never attaches one to a request another site makes;
+and a bad token is refused outright, never retried as the cookie beside it.
+
+Rate limits key on a credential only once the guard has accepted it. Before
+that change, sending a made-up session cookie with each request earned a fresh
+allowance every time.
+
 A self-hosted clone has no sign-in, deliberately: it is one operator reading
 their own account, and the `api` service publishes no host port — it is reachable
 only through the `web` container. Publishing port 3000 yourself would expose the

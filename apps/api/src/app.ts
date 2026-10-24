@@ -15,7 +15,6 @@
 import "reflect-metadata";
 import { HttpException } from "@nestjs/common";
 
-import { createHash } from "node:crypto";
 import cookie from "@fastify/cookie";
 import rateLimit, { type RateLimitPluginOptions } from "@fastify/rate-limit";
 import cors from "@fastify/cors";
@@ -28,6 +27,7 @@ import { cfg, isHosted } from "./config.js";
 import { InvalidIdFilter, SchemaErrorFilter } from "./malformedRequest.filter.js";
 import { loggerOptions } from "./observability/logging.js";
 import { SESSION_COOKIE } from "./auth/session.js";
+import { credentialKey, isVerified } from "./auth/verifiedCredentials.js";
 
 /** One registered route, as Fastify sees it. */
 export interface RouteInfo {
@@ -156,10 +156,15 @@ export function rateLimitOptions(): RateLimitPluginOptions {
     max: (req) =>
       req.url.startsWith("/api/auth/") ? cfg.RATE_LIMIT_AUTH_PER_MINUTE : cfg.RATE_LIMIT_PER_MINUTE,
     keyGenerator: (req) => {
-      const session = (req.cookies as Record<string, string | undefined> | undefined)?.[
-        SESSION_COOKIE
-      ];
-      if (session) return `s:${createHash("sha256").update(session).digest("hex").slice(0, 32)}`;
+      const authorization = req.headers["authorization"];
+      const credential =
+        typeof authorization === "string"
+          ? authorization.replace(/^Bearer\s+/i, "")
+          : (req.cookies as Record<string, string | undefined> | undefined)?.[SESSION_COOKIE];
+      // Only one the guard has accepted: see verifiedCredentials.ts.
+      if (credential && isVerified(credentialKey(credential))) {
+        return `c:${credentialKey(credential)}`;
+      }
       const forwarded = req.headers["cf-connecting-ip"];
       return `ip:${typeof forwarded === "string" ? forwarded : req.ip}`;
     },

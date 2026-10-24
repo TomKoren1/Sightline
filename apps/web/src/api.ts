@@ -224,6 +224,16 @@ export interface AuditEntry {
 /** A plain link rather than a fetch: the browser saves the file itself. */
 export const auditExportUrl = (format: "csv" | "json") => `/api/audit/export?format=${format}`;
 
+export interface ApiToken {
+  id: string;
+  name: string;
+  role: TeamRole;
+  createdAt: string;
+  lastUsedAt: string | null;
+  expiresAt: string | null;
+  createdBy: string;
+}
+
 export interface Team {
   you: { id: string; role: TeamRole };
   members: {
@@ -442,6 +452,11 @@ export const api = {
 
   // --- the team -------------------------------------------------------------
   team: () => get<Team>("/api/team"),
+  apiTokens: () => get<{ tokens: ApiToken[] }>("/api/tokens"),
+  createApiToken: (input: { name: string; role: TeamRole; expiresInDays: number }) =>
+    send<{ id: string; token: string; expiresAt: string | null }>("/api/tokens", asJson(input)),
+  revokeApiToken: (id: string) =>
+    send<void>(`/api/tokens/${encodeURIComponent(id)}`, { method: "DELETE" }),
   audit: (before?: string) =>
     get<{ entries: AuditEntry[]; next: string | null }>(
       before ? `/api/audit?before=${encodeURIComponent(before)}` : "/api/audit",

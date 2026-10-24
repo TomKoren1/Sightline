@@ -44,7 +44,7 @@ import {
 } from "./session.js";
 import { findOrCreateUser, getUser, linkedProviders, SignInRefused } from "./users.js";
 import type { AuthedRequest } from "./auth.guard.js";
-import { MinRole } from "./roles.js";
+import { MinRole, HumanOnly } from "./roles.js";
 import { leaveOrLast, TeamRefused } from "./team.js";
 
 /** Where to send the browser once sign-in has resolved, one way or the other. */
@@ -79,6 +79,7 @@ export class AuthController {
     reply.clearCookie(SESSION_COOKIE, { path: "/" });
   }
 
+  @HumanOnly()
   @Get("sessions")
   async sessions(@Req() req: FastifyRequest) {
     const session = (req as unknown as AuthedRequest).session;
@@ -89,6 +90,7 @@ export class AuthController {
   }
 
   /** Sign out everywhere. The one control that makes a stolen cookie survivable. */
+  @HumanOnly()
   @MinRole("viewer")
   @Post("sessions/revoke-all")
   @HttpCode(200)
@@ -100,6 +102,7 @@ export class AuthController {
     return { revoked };
   }
 
+  @HumanOnly()
   @MinRole("viewer")
   @Delete("sessions/:id")
   @HttpCode(204)
@@ -255,6 +258,7 @@ export class MeController {
    * word "DELETE" becomes muscle memory. The `X-Sightline-Request` header the
    * guard demands on every mutating request is the other half.
    */
+  @HumanOnly()
   @MinRole("viewer")
   @Delete("me")
   @HttpCode(200)

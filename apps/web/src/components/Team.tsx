@@ -11,6 +11,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 
 import { api, can, type TeamRole } from "../api.js";
+import { ApiTokens } from "./ApiTokens.js";
 import { AuditLog } from "./AuditLog.js";
 import { Copyable } from "./Copyable.js";
 
@@ -168,6 +169,8 @@ export function Team() {
           )}
         </section>
       )}
+
+      {manage && <ApiTokens yourRole={you.role} />}
 
       {manage && <AuditLog />}
 

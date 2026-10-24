@@ -28,6 +28,15 @@ export const MIN_ROLE = "sightline:minRole";
 /** The least role a route needs. Mutating routes default to `member`. */
 export const MinRole = (role: TeamRole) => SetMetadata(MIN_ROLE, role);
 
+export const HUMAN_ONLY = "sightline:humanOnly";
+
+/**
+ * A route an API token may not call: managing tokens, the team, sessions or
+ * the account. A leaked token should be able to read and scan, not mint more
+ * tokens, invite its owner's attacker, or delete the workspace.
+ */
+export const HumanOnly = () => SetMetadata(HUMAN_ONLY, true);
+
 export function isTeamRole(value: unknown): value is TeamRole {
   return typeof value === "string" && (TEAM_ROLES as readonly string[]).includes(value);
 }

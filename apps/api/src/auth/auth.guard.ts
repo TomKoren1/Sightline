@@ -25,7 +25,9 @@ import type { Scope } from "../tenancy/scope.js";
 import { configuredProviders } from "./oauth.js";
 import { IS_PUBLIC } from "./public.decorator.js";
 import { readSession, SESSION_COOKIE, type Session } from "./session.js";
-import { atLeast, MIN_ROLE, type TeamRole } from "./roles.js";
+import { atLeast, HUMAN_ONLY, MIN_ROLE, type TeamRole } from "./roles.js";
+import { readApiToken } from "./apiTokens.js";
+import { markVerified } from "./verifiedCredentials.js";
 
 /** Methods that change something, and therefore need forgery protection. */
 const MUTATING = new Set(["POST", "PUT", "PATCH", "DELETE"]);
@@ -78,6 +80,14 @@ async function attachScope(req: AuthedRequest): Promise<void> {
   }
 }
 
+function bearerToken(header: unknown): string | null {
+  if (typeof header !== "string") return null;
+  // A malformed Authorization header is an empty token - refused - rather
+  // than no header, which would fall back to the cookie.
+  const match = /^Bearer\s+(\S+)$/i.exec(header.trim());
+  return match ? match[1]! : "";
+}
+
 @Injectable()
 export class AuthGuard implements CanActivate {
   // The token is named explicitly: `emitDecoratorMetadata` is deliberately off
@@ -104,10 +114,18 @@ export class AuthGuard implements CanActivate {
       return true;
     }
 
-    const token = req.cookies?.[SESSION_COOKIE];
-    const session = await readSession(token);
+    // A bearer token, when one is sent, is the whole identity: the cookie
+    // beside it is ignored rather than tried as a fallback.
+    const bearer = bearerToken(req.headers?.["authorization"]);
+    const session =
+      bearer !== null
+        ? await readApiToken(bearer)
+        : await readSession(req.cookies?.[SESSION_COOKIE]);
     req.session = session;
-    if (session) req.tenantId = session.tenantId;
+    if (session) {
+      req.tenantId = session.tenantId;
+      markVerified(bearer ?? req.cookies?.[SESSION_COOKIE] ?? "");
+    }
 
     if (isPublic) return true;
 
@@ -118,7 +136,26 @@ export class AuthGuard implements CanActivate {
       });
     }
 
-    if (MUTATING.has(req.method ?? "GET") && req.headers?.[REQUEST_HEADER] !== "1") {
+    if (
+      session.via === "token" &&
+      this.reflector.getAllAndOverride<boolean>(HUMAN_ONLY, [
+        context.getHandler(),
+        context.getClass(),
+      ])
+    ) {
+      throw new ForbiddenException({
+        error: "An API token cannot do this; sign in to manage tokens, the team or the account.",
+      });
+    }
+
+    // Forgery protection is for what a browser sends on its own - its cookie.
+    // A bearer token is never attached by a browser to a request another site
+    // makes, so a request carrying one was written by whoever holds it.
+    if (
+      session.via !== "token" &&
+      MUTATING.has(req.method ?? "GET") &&
+      req.headers?.[REQUEST_HEADER] !== "1"
+    ) {
       throw new ForbiddenException({
         error:
           "This request is missing the X-Sightline-Request header, which Sightline requires on " +

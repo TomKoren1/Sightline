@@ -192,6 +192,8 @@ const ROLE_REQUIRED: Record<string, "viewer" | "member" | "admin"> = {
   "DELETE /api/team/invites/:id": "admin",
   "PATCH /api/team/members/:id": "admin",
   "DELETE /api/team/members/:id": "admin",
+  "POST /api/tokens": "admin",
+  "DELETE /api/tokens/:id": "admin",
 };
 const RANK = { viewer: 0, member: 1, admin: 2 } as const;
 
@@ -251,6 +253,104 @@ describe.runIf(HAS_INFRA)("hosted mode enforces roles", () => {
       }
     }
     expect(wrong).toEqual([]);
+  });
+});
+
+describe.runIf(HAS_INFRA)("API tokens", () => {
+  const tenantId = randomUUID();
+  const adminId = randomUUID();
+  const tokens: Record<string, string> = {};
+  let adminCookie = "";
+
+  beforeAll(async () => {
+    if (!available) return;
+    const { system } = await import("../db/postgres.js");
+    const schema = await import("../db/schema.js");
+    const { issueSession, readSession, SESSION_COOKIE } = await import("./session.js");
+    const { createApiToken } = await import("./apiTokens.js");
+    await system.insert(schema.tenants).values({ id: tenantId, name: "tokens.test" });
+    await system.insert(schema.users).values({
+      id: adminId,
+      tenantId,
+      email: `admin-${adminId.slice(0, 8)}@tokens.test`,
+      role: "admin",
+    });
+    const raw = await issueSession(adminId);
+    adminCookie = `${SESSION_COOKIE}=${raw}`;
+    const session = (await readSession(raw))!;
+    for (const role of ["viewer", "member", "admin"] as const) {
+      tokens[role] = (await createApiToken(session, { name: role, role, expiresInDays: 1 })).token;
+    }
+    const expired = await createApiToken(session, {
+      name: "old",
+      role: "admin",
+      expiresInDays: 1,
+    });
+    await system.execute(
+      (await import("drizzle-orm"))
+        .sql`UPDATE api_tokens SET expires_at = now() - interval '1 minute' WHERE id = ${expired.id}`,
+    );
+    tokens["expired"] = expired.token;
+  });
+
+  afterAll(async () => {
+    if (!available) return;
+    const { system } = await import("../db/postgres.js");
+    const schema = await import("../db/schema.js");
+    const { eq } = await import("drizzle-orm");
+    await system.delete(schema.tenants).where(eq(schema.tenants.id, tenantId));
+  });
+
+  const call = (method: string, url: string, headers: Record<string, string>) =>
+    inject!({ method, url, headers }).then((r) => r.statusCode);
+  const bearer = (name: string) => ({ authorization: `Bearer ${tokens[name]}` });
+
+  it("reads with a viewer token, and is refused a change above its role", async () => {
+    if (!available || !inject) return;
+    // 409: past authentication, to the tenant having no account connected yet.
+    expect(await call("GET", "/api/findings", bearer("viewer"))).toBe(409);
+    expect(await call("POST", "/api/scans", bearer("viewer"))).toBe(403);
+  });
+
+  it("needs no forgery header, which a browser never adds to a token", async () => {
+    if (!available || !inject) return;
+    const status = await call("PATCH", `/api/findings/${randomUUID()}`, bearer("member"));
+    expect(status).not.toBe(403);
+    expect(status).not.toBe(401);
+  });
+
+  it("cannot manage tokens, the team, sessions or the account", async () => {
+    if (!available || !inject) return;
+    for (const [method, url] of [
+      ["GET", "/api/tokens"],
+      ["POST", "/api/tokens"],
+      ["GET", "/api/team"],
+      ["GET", "/api/auth/sessions"],
+      ["DELETE", "/api/me"],
+    ] as const) {
+      expect(await call(method, url, bearer("admin")), `${method} ${url}`).toBe(403);
+    }
+  });
+
+  it("is refused once expired, or when it is not a token at all", async () => {
+    if (!available || !inject) return;
+    expect(await call("GET", "/api/findings", bearer("expired"))).toBe(401);
+    expect(await call("GET", "/api/findings", { authorization: "Bearer slt_nope" })).toBe(401);
+  });
+
+  it("never falls back to a cookie sent beside a bad token", async () => {
+    if (!available || !inject) return;
+    const headers = { authorization: "Bearer slt_nope", cookie: adminCookie };
+    expect(await call("GET", "/api/findings", headers)).toBe(401);
+  });
+
+  it("acts at most at its creator's current role", async () => {
+    if (!available || !inject) return;
+    const { system } = await import("../db/postgres.js");
+    const { sql } = await import("drizzle-orm");
+    await system.execute(sql`UPDATE users SET role = 'viewer' WHERE id = ${adminId}`);
+    expect(await call("DELETE", `/api/connections/${randomUUID()}`, bearer("admin"))).toBe(403);
+    await system.execute(sql`UPDATE users SET role = 'admin' WHERE id = ${adminId}`);
   });
 });
 

@@ -18,7 +18,7 @@ import { z } from "zod";
 
 import { isHosted } from "../config.js";
 import type { AuthedRequest } from "./auth.guard.js";
-import { MinRole, TEAM_ROLES, type TeamRole } from "./roles.js";
+import { HumanOnly, MinRole, TEAM_ROLES, type TeamRole } from "./roles.js";
 import type { Session } from "./session.js";
 import {
   acceptInvite,
@@ -59,6 +59,7 @@ const parse = <T>(schema: z.ZodType<T>, value: unknown, what: string): T => {
   return result.data;
 };
 
+@HumanOnly()
 @Controller("api/team")
 export class TeamController {
   @Get()

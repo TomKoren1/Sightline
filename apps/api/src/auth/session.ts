@@ -45,6 +45,8 @@ export interface Session {
   /** Their role in this tenant: `auth/roles.ts`. */
   role: TeamRole;
   expiresAt: Date;
+  /** Set when the request carried an API token rather than a signed-in browser. */
+  via?: "token";
 }
 
 const hash = (token: string): Buffer => createHash("sha256").update(token).digest();

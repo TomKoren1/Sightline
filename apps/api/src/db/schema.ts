@@ -322,6 +322,35 @@ export const invites = pgTable(
 );
 
 /**
+ * Programmatic access: a bearer token acting for whoever created it, at most
+ * at their role. Deleted with its creator, so removing someone from the team
+ * removes their tokens too. Stored as a hash, like a session.
+ */
+export const apiTokens = pgTable(
+  "api_tokens",
+  {
+    id: uuid("id").primaryKey(),
+    tenantId: uuid("tenant_id")
+      .notNull()
+      .references(() => tenants.id, { onDelete: "cascade" }),
+    createdBy: uuid("created_by")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    name: text("name").notNull(),
+    tokenHash: bytea("token_hash").notNull().unique(),
+    role: text("role").$type<TeamRole>().notNull(),
+    createdAt: timestamp("created_at", tz).notNull().defaultNow(),
+    lastUsedAt: timestamp("last_used_at", tz),
+    expiresAt: timestamp("expires_at", tz),
+  },
+  (t) => [
+    index("api_tokens_tenant").on(t.tenantId, t.createdAt.desc()),
+    // Never an owner's power: deleting the workspace is a person's decision.
+    check("api_tokens_role", sql`${t.role} IN ('admin','member','viewer')`),
+  ],
+);
+
+/**
  * One row per external identity, so one user can hold both Google and GitHub.
  *
  * Keyed on the provider's **subject**, never on email: subjects are stable,

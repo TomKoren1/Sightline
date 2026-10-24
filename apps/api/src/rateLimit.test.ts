@@ -82,6 +82,25 @@ describe("rate limits", () => {
     expect(res.json()).toMatchObject({ error: expect.stringMatching(/at most 3 a minute/) });
   });
 
+  it("are not reset by sending a made-up credential each time", async () => {
+    if (!inject) return;
+    const codes: number[] = [];
+    for (let i = 0; i < 4; i++) {
+      const res = await inject({
+        method: "GET",
+        url: "/api/auth/providers",
+        headers: {
+          "cf-connecting-ip": "203.0.113.11",
+          ...(i % 2
+            ? { cookie: `sightline_session=forged-${i}` }
+            : { authorization: `Bearer slt_${i}` }),
+        },
+      });
+      codes.push(res.statusCode);
+    }
+    expect(codes[3]).toBe(429);
+  });
+
   it("never limit the health probes", async () => {
     if (!inject) return;
     const codes = await hit("/api/health", 12, { "cf-connecting-ip": "203.0.113.10" });
