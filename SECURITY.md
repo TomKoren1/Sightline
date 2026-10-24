@@ -139,6 +139,13 @@ when the provider says it is verified. Google's `id_token` gets an `aud` check,
 because a token minted for a different application is genuinely from Google and
 correctly signed.
 
+The OAuth `state` is signed over a random value held in a short-lived cookie
+on the browser that began the sign-in, so a callback URL completed with someone
+else's account and sent to a victim does not sign the victim in to it (login
+CSRF - in a product the victim then connects their AWS account to, that would
+hand the attacker a role into it). Both providers also get a PKCE challenge, so
+a code lifted from a callback URL cannot be redeemed.
+
 Sessions are rows, so they can be revoked. The cookie carries an opaque random
 token and only its SHA-256 is stored, so a database leak is not a session leak.
 

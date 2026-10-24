@@ -98,7 +98,10 @@ describe("why URL.pathname is wrong", () => {
   it("percent-encodes a space, which fs cannot open", () => {
     const base = new URL("file:///home/me/My%20Projects/app/src/config.ts");
     expect(new URL("../../.env", base).pathname).toBe("/home/me/My%20Projects/.env");
-    expect(fileURLToPath(new URL("../../.env", base))).toBe("/home/me/My Projects/.env");
+    // POSIX rules explicitly: on Windows a drive-less file URL is not a path at all.
+    expect(fileURLToPath(new URL("../../.env", base), { windows: false })).toBe(
+      "/home/me/My Projects/.env",
+    );
   });
 
   it("leaves a leading slash before a Windows drive letter", () => {

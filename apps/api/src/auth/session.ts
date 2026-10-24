@@ -73,6 +73,27 @@ export function cookieOptions(): {
   };
 }
 
+/**
+ * The sign-in flow's own cookie (`OAUTH_COOKIE`): scoped to the auth routes and
+ * gone after the ten minutes a round trip to the provider may take. Lax for the
+ * same reason as the session - the callback is a navigation from the provider.
+ */
+export function flowCookieOptions(): {
+  httpOnly: true;
+  sameSite: "lax";
+  secure: boolean;
+  path: string;
+  maxAge: number;
+} {
+  return {
+    httpOnly: true,
+    sameSite: "lax",
+    secure: useSecureCookies(),
+    path: "/api/auth",
+    maxAge: 600,
+  };
+}
+
 /** Issue a session and return the token the cookie should carry. */
 export async function issueSession(
   userId: string,

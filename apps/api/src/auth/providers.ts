@@ -14,6 +14,7 @@
 import { cfg } from "../core/config.js";
 import {
   clientCredentials,
+  pkceChallenge,
   redirectUri,
   type ExternalIdentity,
   type ProviderName,
@@ -57,6 +58,8 @@ export function authorizationUrl(provider: ProviderName, state: string): string 
        */
       scope: "openid email profile",
       state,
+      code_challenge: pkceChallenge(state),
+      code_challenge_method: "S256",
       prompt: "select_account",
     }).toString()}`;
   }
@@ -65,6 +68,8 @@ export function authorizationUrl(provider: ProviderName, state: string): string 
     redirect_uri: redirectUri("github"),
     scope: "read:user user:email",
     state,
+    code_challenge: pkceChallenge(state),
+    code_challenge_method: "S256",
   }).toString()}`;
 }
 
@@ -140,7 +145,11 @@ async function postForm(
   return (await res.json()) as Record<string, unknown>;
 }
 
-async function exchangeGoogle(code: string, fetchImpl: typeof fetch): Promise<ExternalIdentity> {
+async function exchangeGoogle(
+  code: string,
+  verifier: string,
+  fetchImpl: typeof fetch,
+): Promise<ExternalIdentity> {
   const { id, secret } = clientCredentials("google");
   const body = await postForm(
     GOOGLE_TOKEN,
@@ -150,6 +159,7 @@ async function exchangeGoogle(code: string, fetchImpl: typeof fetch): Promise<Ex
       client_secret: secret,
       redirect_uri: redirectUri("google"),
       grant_type: "authorization_code",
+      code_verifier: verifier,
     },
     fetchImpl,
   );
@@ -204,11 +214,21 @@ export function primaryGithubEmail(emails: unknown): { address: string; verified
   return address ? { address, verified: true } : null;
 }
 
-async function exchangeGithub(code: string, fetchImpl: typeof fetch): Promise<ExternalIdentity> {
+async function exchangeGithub(
+  code: string,
+  verifier: string,
+  fetchImpl: typeof fetch,
+): Promise<ExternalIdentity> {
   const { id, secret } = clientCredentials("github");
   const body = await postForm(
     github("token"),
-    { code, client_id: id, client_secret: secret, redirect_uri: redirectUri("github") },
+    {
+      code,
+      client_id: id,
+      client_secret: secret,
+      redirect_uri: redirectUri("github"),
+      code_verifier: verifier,
+    },
     fetchImpl,
   );
   const token = typeof body["access_token"] === "string" ? body["access_token"] : null;
@@ -235,10 +255,14 @@ async function exchangeGithub(code: string, fetchImpl: typeof fetch): Promise<Ex
   return identity;
 }
 
+/** `verifier` is the PKCE verifier for the state the flow began with - `pkceVerifier`. */
 export function exchangeCode(
   provider: ProviderName,
   code: string,
+  verifier: string,
   fetchImpl: typeof fetch = fetch,
 ): Promise<ExternalIdentity> {
-  return provider === "google" ? exchangeGoogle(code, fetchImpl) : exchangeGithub(code, fetchImpl);
+  return provider === "google"
+    ? exchangeGoogle(code, verifier, fetchImpl)
+    : exchangeGithub(code, verifier, fetchImpl);
 }
