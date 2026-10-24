@@ -208,14 +208,15 @@ const membership = (r: SQL, e: SQL) => sql`
    WHERE r.kind NOT IN ('Internet', 'Region', 'Account')
    ORDER BY r.arn`;
 
+/** `IN` lists, so the (scan_id, from_arn) index finds the edges; the view is at most 500 nodes. */
 async function edgesAmong(scope: GraphScope, arns: string[]) {
-  const list = JSON.stringify(arns);
+  if (arns.length === 0) return [];
   return read<{ from: string; to: string; type: string; ports: string | null }>(
     scope,
     (_r, e) => sql`
       SELECT from_arn AS "from", to_arn AS "to", rel_type AS type, properties->>'ports' AS ports
         FROM ${e} e
-       WHERE ${list}::jsonb ? from_arn AND ${list}::jsonb ? to_arn
+       WHERE from_arn IN ${arns} AND to_arn IN ${arns}
        LIMIT 4000`,
   );
 }
@@ -436,10 +437,12 @@ async function resolve(scope: GraphScope, arnOrName: string): Promise<string | n
 async function describeNodes(scope: GraphScope, arns: string[]) {
   if (arns.length === 0)
     return new Map<string, { arn: string; name: string; kind: string; region: string | null }>();
-  const list = JSON.stringify(arns);
+  // `IN` (drizzle spreads the array into a parameter list) rather than a JSON
+  // containment test: it can use the snapshot's (scan_id, arn) key, where
+  // `jsonb ? arn` read every row of the scan. Callers pass a page, not a scan.
   const rows = await read<{ arn: string; name: string; kind: string; region: string | null }>(
     scope,
-    (r) => sql`SELECT arn, name, kind, region FROM ${r} r WHERE ${list}::jsonb ? arn`,
+    (r) => sql`SELECT arn, name, kind, region FROM ${r} r WHERE r.arn IN ${arns}`,
   );
   return new Map(rows.map((row) => [row.arn, row]));
 }
@@ -508,21 +511,28 @@ export async function reachableFrom(
   if (!sourceArn) return { rows: [], total: 0 };
   const hops = hopsFrom(await reachIndex(scope), sourceArn, maxHops);
 
-  const nodes = await describeNodes(scope, [...hops.keys()]);
-  const rows = [...hops]
-    .map(([arn, h]) => {
-      const n = nodes.get(arn);
-      return {
-        arn,
-        kind: n?.kind ?? "Unknown",
-        name: n?.name ?? arn,
-        region: n?.region ?? null,
-        hops: h,
-      };
-    })
-    .sort((a, b) => a.hops - b.hops || a.name.localeCompare(b.name));
-  const [source, ...targets] = rows;
-  return { rows: [source!, ...targets.slice(0, clamp(params.limit))], total: targets.length };
+  // Nearest first, ties by ARN, cut before anything is looked up: a host on
+  // a flat network reaches tens of thousands of resources, and naming all of
+  // them to return 25 was most of this query's time.
+  const ordered = [...hops]
+    .filter(([arn]) => arn !== sourceArn)
+    .sort((a, b) => a[1] - b[1] || (a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0));
+  const shown: [string, number][] = [[sourceArn, 0], ...ordered.slice(0, clamp(params.limit))];
+  const nodes = await describeNodes(
+    scope,
+    shown.map(([arn]) => arn),
+  );
+  const rows = shown.map(([arn, h]) => {
+    const n = nodes.get(arn);
+    return {
+      arn,
+      kind: n?.kind ?? "Unknown",
+      name: n?.name ?? arn,
+      region: n?.region ?? null,
+      hops: h,
+    };
+  });
+  return { rows, total: ordered.length };
 }
 
 export const findReachableFrom = async (
