@@ -78,9 +78,15 @@ test("sign in, scan, read the findings, ask, and connect", async ({ page }) => {
 
   await test.step("invites a teammate with a link", async () => {
     await page.getByRole("button", { name: "Team" }).click();
-    await expect(page.getByText(E2E_USER.email)).toBeVisible();
+    // Exact: the activity list below names them too.
+    await expect(page.getByText(E2E_USER.email, { exact: true })).toBeVisible();
     await page.getByRole("button", { name: "Create link" }).click();
     await expect(page.getByText(/\?join=[\w-]{20,}/)).toBeVisible();
+    // The scan they ran is in the activity log.
+    await expect(page.getByText("POST /api/scans").first()).toBeVisible();
+    await page.getByLabel("Token name").fill("ci");
+    await page.getByRole("button", { name: "Create token" }).click();
+    await expect(page.getByText(/^slt_[\w-]{40,}$/)).toBeVisible();
     await page.keyboard.press("Escape");
   });
 
