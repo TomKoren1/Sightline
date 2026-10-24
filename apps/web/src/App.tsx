@@ -284,11 +284,14 @@ export function App() {
 
       {modal === "trust" && (
         <Modal
-          title="Can you trust this?"
-          subtitle="What is checked, how, and when it last ran"
+          title="What the last scan could see"
+          subtitle="What was read, what could not be, and what Sightline never reads"
           onClose={() => setModal(null)}
         >
-          <TrustPanel />
+          <TrustPanel
+            scan={latest.data?.scan ?? null}
+            demo={connections.find((c) => c.id === conn)?.kind === "demo"}
+          />
         </Modal>
       )}
 

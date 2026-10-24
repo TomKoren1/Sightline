@@ -200,7 +200,7 @@ export function ScanBanner({
             onClick={onOpenTrust}
             className="rounded border border-ink-700 bg-ink-800 px-2 py-1 text-[11px] text-ink-300 transition hover:border-ink-600 hover:text-ink-100"
           >
-            Trust
+            Coverage
           </button>
           <button
             onClick={onScan}

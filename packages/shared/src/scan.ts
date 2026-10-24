@@ -214,3 +214,25 @@ export function sortFieldsBySignificance<T extends { field: string }>(fields: T[
       Number(SIGNIFICANT_CHANGE_FIELDS.has(a.field)),
   );
 }
+
+/** How a person names each service, for the UI. */
+export const SERVICE_LABELS: Record<ScannableService, string> = {
+  ec2: "EC2",
+  vpc: "VPC",
+  s3: "S3",
+  iam: "IAM",
+  rds: "RDS",
+  lambda: "Lambda",
+  elbv2: "Load balancers",
+  cloudfront: "CloudFront",
+  apigateway: "API Gateway",
+  sqs: "SQS",
+  sns: "SNS",
+  kms: "KMS",
+  secretsmanager: "Secrets Manager",
+  dynamodb: "DynamoDB",
+  ecs: "ECS",
+  eks: "EKS",
+  route53: "Route 53",
+  autoscaling: "Auto Scaling",
+};
