@@ -6,16 +6,18 @@
  * not be readable from a database dump alone.
  *
  * `kms` is the hosted path - the key never leaves KMS and every decryption
- * lands in CloudTrail. `local` is AES-256-GCM with a key from the environment,
- * for a deployment that has no KMS; authenticated, so a tampered ciphertext
- * fails rather than decrypting to rubbish.
+ * lands in CloudTrail. `local` is AES-256-GCM under a key scrypt derives from
+ * a passphrase in the environment, for a deployment that has no KMS;
+ * authenticated, so a tampered ciphertext fails rather than decrypting to
+ * rubbish.
  *
  * Every ciphertext carries a version prefix and decryption dispatches on what
  * the ciphertext says it is, never on what is configured now - otherwise
  * changing backend is a flag day.
  */
 
-import { createCipheriv, createDecipheriv, createHash, randomBytes } from "node:crypto";
+import { createCipheriv, createDecipheriv, createHash, randomBytes, scrypt } from "node:crypto";
+import { promisify } from "node:util";
 
 import { SIGHTLINE_PREFIX } from "@sightline/shared";
 
@@ -23,11 +25,16 @@ import { cfg } from "../core/config.js";
 import { rolesAnywhere } from "../aws/settings.js";
 
 const KMS_PREFIX = "k1:";
-const LOCAL_PREFIX = "l1:";
+const LOCAL_PREFIX = "l2:";
+/** Read only, and rewritten as `l2:` on read: see `isLegacySecret`. */
+const LEGACY_LOCAL_PREFIX = "l1:";
 
 /** GCM standard: 96-bit nonce, 128-bit tag. */
 const IV_BYTES = 12;
 const TAG_BYTES = 16;
+const SALT_BYTES = 16;
+/** 2^15 rounds of 8 x 1 KiB blocks: 32 MiB and some tens of ms per derivation. */
+const SCRYPT = { N: 2 ** 15, r: 8, p: 1, maxmem: 64 * 1024 * 1024 };
 
 export type SecretBackend = "kms" | "local";
 
@@ -35,35 +42,70 @@ export function secretBackend(): SecretBackend {
   return cfg.AWS_KMS_KEY_ID ? "kms" : "local";
 }
 
-/**
- * Derived by hash from the configured passphrase, so any length works: the
- * operator's job stays "put a long random string here" rather than "produce
- * exactly 32 bytes of base64".
- */
-function localKey(): Buffer {
-  const passphrase = cfg.SECRETS_LOCAL_KEY;
-  if (!passphrase) {
+function passphrase(): string {
+  const value = cfg.SECRETS_LOCAL_KEY;
+  if (!value) {
     throw new Error(
       "No secret encryption is configured. Set AWS_KMS_KEY_ID (hosted) or " +
         "SECRETS_LOCAL_KEY (self-hosted) before storing a tenant secret.",
     );
   }
-  return createHash("sha256").update(passphrase).digest();
+  return value;
 }
 
-function encryptLocal(plaintext: string): string {
+/**
+ * scrypt with a salt per envelope, so a database dump costs an attacker a slow,
+ * memory-hard derivation per passphrase guess per secret, not one fast hash.
+ * Any passphrase length works. Derived keys are cached by salt: one per stored
+ * secret, and each derivation is deliberately slow.
+ */
+const derived = new Map<string, Promise<Buffer>>();
+const scryptAsync = promisify(scrypt) as (
+  password: string,
+  salt: Buffer,
+  length: number,
+  options: typeof SCRYPT,
+) => Promise<Buffer>;
+function localKey(salt: Buffer): Promise<Buffer> {
+  const id = salt.toString("hex");
+  let key = derived.get(id);
+  if (!key) {
+    key = scryptAsync(passphrase(), salt, 32, SCRYPT);
+    derived.set(id, key);
+    key.catch(() => derived.delete(id));
+  }
+  return key;
+}
+
+async function encryptLocal(plaintext: string): Promise<string> {
+  const salt = randomBytes(SALT_BYTES);
   const iv = randomBytes(IV_BYTES);
-  const cipher = createCipheriv("aes-256-gcm", localKey(), iv);
+  const cipher = createCipheriv("aes-256-gcm", await localKey(salt), iv);
   const body = Buffer.concat([cipher.update(plaintext, "utf8"), cipher.final()]);
-  return LOCAL_PREFIX + Buffer.concat([iv, cipher.getAuthTag(), body]).toString("base64");
+  return LOCAL_PREFIX + Buffer.concat([salt, iv, cipher.getAuthTag(), body]).toString("base64");
 }
 
-function decryptLocal(envelope: string): string {
-  const raw = Buffer.from(envelope.slice(LOCAL_PREFIX.length), "base64");
-  const decipher = createDecipheriv("aes-256-gcm", localKey(), raw.subarray(0, IV_BYTES));
+function openGcm(key: Buffer, raw: Buffer): string {
+  const decipher = createDecipheriv("aes-256-gcm", key, raw.subarray(0, IV_BYTES));
   decipher.setAuthTag(raw.subarray(IV_BYTES, IV_BYTES + TAG_BYTES));
   const body = raw.subarray(IV_BYTES + TAG_BYTES);
   return Buffer.concat([decipher.update(body), decipher.final()]).toString("utf8");
+}
+
+async function decryptLocal(envelope: string): Promise<string> {
+  const raw = Buffer.from(envelope.slice(LOCAL_PREFIX.length), "base64");
+  return openGcm(await localKey(raw.subarray(0, SALT_BYTES)), raw.subarray(SALT_BYTES));
+}
+
+/**
+ * The first envelope format keyed AES with one SHA-256 of the passphrase, which
+ * is fast to brute-force from a dump. Kept only to read rows written before
+ * `l2:`; every reader rewrites what it reads (`isLegacySecret`), and this
+ * goes once deployments have had a release to do that.
+ */
+function decryptLegacyLocal(envelope: string): string {
+  const raw = Buffer.from(envelope.slice(LEGACY_LOCAL_PREFIX.length), "base64");
+  return openGcm(createHash("sha256").update(passphrase()).digest(), raw);
 }
 
 /**
@@ -118,7 +160,7 @@ async function decryptKms(envelope: string): Promise<string> {
 export async function encryptSecret(plaintext: string): Promise<Buffer> {
   if (!plaintext) throw new Error("Refusing to encrypt an empty secret");
   const envelope =
-    secretBackend() === "kms" ? await encryptKms(plaintext) : encryptLocal(plaintext);
+    secretBackend() === "kms" ? await encryptKms(plaintext) : await encryptLocal(plaintext);
   return Buffer.from(envelope, "utf8");
 }
 
@@ -126,7 +168,14 @@ export async function decryptSecret(ciphertext: Buffer | string): Promise<string
   const envelope = typeof ciphertext === "string" ? ciphertext : ciphertext.toString("utf8");
   if (envelope.startsWith(KMS_PREFIX)) return decryptKms(envelope);
   if (envelope.startsWith(LOCAL_PREFIX)) return decryptLocal(envelope);
+  if (envelope.startsWith(LEGACY_LOCAL_PREFIX)) return decryptLegacyLocal(envelope);
   throw new Error("Unrecognised secret envelope - it was not written by this service");
+}
+
+/** True for an envelope in a superseded format, which its reader should re-encrypt. */
+export function isLegacySecret(ciphertext: Buffer | string): boolean {
+  const envelope = typeof ciphertext === "string" ? ciphertext : ciphertext.toString("utf8");
+  return envelope.startsWith(LEGACY_LOCAL_PREFIX);
 }
 
 /**

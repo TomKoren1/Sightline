@@ -66,6 +66,25 @@ describe.runIf(!process.env["SKIP_INTEGRATION"])("the stored webhook", () => {
       );
       await deleteWebhook(tenantId);
       expect((await getWebhook(tenantId)).configured).toBe(false);
+
+      // A row in the first envelope format is rewritten by the next read.
+      const { createCipheriv, createHash, randomBytes } = await import("node:crypto");
+      const key = createHash("sha256").update("a-long-random-string-for-tests").digest();
+      const iv = randomBytes(12);
+      const cipher = createCipheriv("aes-256-gcm", key, iv);
+      const body = Buffer.concat([cipher.update("https://localhost/hook", "utf8"), cipher.final()]);
+      const legacy = Buffer.from(
+        "l1:" + Buffer.concat([iv, cipher.getAuthTag(), body]).toString("base64"),
+      );
+      await system.execute(
+        sql`INSERT INTO webhooks (tenant_id, url_ciphertext, host) VALUES (${tenantId}, ${legacy}, 'localhost')`,
+      );
+      const { sendTest } = await import("./notify.js");
+      await sendTest(tenantId);
+      const after = await system.execute<{ c: Buffer }>(
+        sql`SELECT url_ciphertext AS c FROM webhooks WHERE tenant_id = ${tenantId}`,
+      );
+      expect(after.rows[0]!.c.toString("utf8")).toMatch(/^l2:/);
     } finally {
       await system.execute(sql`DELETE FROM tenants WHERE id = ${tenantId}`);
     }

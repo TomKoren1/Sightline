@@ -21,7 +21,7 @@ import { cfg, MOCK_EXTERNAL_ID } from "../core/config.js";
 import { db, withTenant } from "../db/postgres.js";
 import { connections } from "../db/schema.js";
 import { asConnectionId, type ConnectionId, type TenantId } from "../core/ids.js";
-import { encryptSecret, decryptSecret, generateExternalId } from "./secrets.js";
+import { encryptSecret, decryptSecret, generateExternalId, isLegacySecret } from "./secrets.js";
 import type { Scope } from "../core/scope.js";
 
 export type ConnectionKind = "real" | "demo" | "organization";
@@ -82,6 +82,18 @@ export async function getConnection(scope: Scope): Promise<ConnectionSummary | n
   });
 }
 
+/** Decrypts, and rewrites a superseded envelope so old rows upgrade as they are used. */
+async function reencryptIfLegacy(scope: Scope, blob: Buffer): Promise<string> {
+  const externalId = await decryptSecret(blob);
+  if (isLegacySecret(blob)) {
+    await db
+      .update(connections)
+      .set({ externalIdEncrypted: await encryptSecret(externalId) })
+      .where(owned(scope));
+  }
+  return externalId;
+}
+
 /**
  * The external id, decrypted.
  *
@@ -103,7 +115,7 @@ export async function externalIdFor(scope: Scope): Promise<string> {
     switch (row.source) {
       case "stored":
         if (!row.blob) throw new Error("Connection claims a stored external id but holds none");
-        return decryptSecret(row.blob);
+        return reencryptIfLegacy(scope, row.blob);
       case "config":
         return cfg.AWS_EXTERNAL_ID;
       case "demo":

@@ -12,7 +12,7 @@ import type { SyncResult } from "../db/findings.js";
 import { db, withTenant } from "../db/postgres.js";
 import { webhooks } from "../db/schema.js";
 import type { TenantId } from "../core/ids.js";
-import { decryptSecret, encryptSecret } from "../tenancy/secrets.js";
+import { decryptSecret, encryptSecret, isLegacySecret } from "../tenancy/secrets.js";
 import { deliver, refuseUrl, type Delivery } from "./webhook.js";
 
 /** The categories worth interrupting someone for. */
@@ -72,7 +72,15 @@ async function send(tenantId: TenantId, text: string): Promise<Delivery | null> 
       .select({ urlCiphertext: webhooks.urlCiphertext })
       .from(webhooks)
       .where(eq(webhooks.tenantId, tenantId));
-    return row ? decryptSecret(row.urlCiphertext) : null;
+    if (!row) return null;
+    const plain = await decryptSecret(row.urlCiphertext);
+    if (isLegacySecret(row.urlCiphertext)) {
+      await db
+        .update(webhooks)
+        .set({ urlCiphertext: await encryptSecret(plain) })
+        .where(eq(webhooks.tenantId, tenantId));
+    }
+    return plain;
   });
   if (!url) return null;
   // `text` is what Slack, Teams' workflows and Mattermost all read.
