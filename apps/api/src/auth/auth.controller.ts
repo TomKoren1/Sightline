@@ -26,6 +26,7 @@ import {
 } from "@nestjs/common";
 import type { FastifyReply, FastifyRequest } from "fastify";
 
+import { clientIp, recordAudit } from "../audit/audit.js";
 import { cfg, isHosted } from "../config.js";
 import { listConnections } from "../tenancy/connections.js";
 import { confirmationMatches, purgeTenant } from "../tenancy/purge.js";
@@ -151,8 +152,17 @@ export class AuthController {
       const user = await findOrCreateUser(identity);
       const token = await issueSession(user.id, {
         userAgent: req.headers["user-agent"],
-        ip: req.ip,
+        ip: clientIp(req),
       });
+      // A GET, so the audit interceptor does not see it; a sign-in is the
+      // entry an administrator looks for first.
+      await recordAudit({
+        tenantId: user.tenantId,
+        actorUserId: user.id,
+        action: "auth.signed_in",
+        detail: { provider: name, userAgent: req.headers["user-agent"] ?? null },
+        ip: clientIp(req),
+      }).catch((err: unknown) => req.log.error({ err }, "sign-in not audited"));
       reply.setCookie(SESSION_COOKIE, token, cookieOptions());
       return reply.redirect(appUrl(), 302);
     } catch (err) {

@@ -3,6 +3,7 @@
 import { Module } from "@nestjs/common";
 
 import { AuthModule } from "./auth/auth.module.js";
+import { AuditModule } from "./audit/audit.module.js";
 import { ChatModule } from "./chat/chat.module.js";
 import { ConnectionModule } from "./connection/connection.module.js";
 import { EvalsModule } from "./evals/evals.module.js";
@@ -23,6 +24,7 @@ import { TenancyModule } from "./tenancy/tenancy.module.js";
     ScansModule,
     ChatModule,
     ConnectionModule,
+    AuditModule,
   ],
 })
 export class AppModule {}

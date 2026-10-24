@@ -211,6 +211,19 @@ const RANK: Record<TeamRole, number> = { viewer: 0, member: 1, admin: 2, owner: 
 export const can = (role: TeamRole | null | undefined, min: TeamRole) =>
   role != null && RANK[role] >= RANK[min];
 
+export interface AuditEntry {
+  id: string;
+  at: string;
+  action: string;
+  subject: string | null;
+  detail: Record<string, unknown>;
+  ip: string | null;
+  actor: { id: string; email: string | null } | null;
+}
+
+/** A plain link rather than a fetch: the browser saves the file itself. */
+export const auditExportUrl = (format: "csv" | "json") => `/api/audit/export?format=${format}`;
+
 export interface Team {
   you: { id: string; role: TeamRole };
   members: {
@@ -429,6 +442,10 @@ export const api = {
 
   // --- the team -------------------------------------------------------------
   team: () => get<Team>("/api/team"),
+  audit: (before?: string) =>
+    get<{ entries: AuditEntry[]; next: string | null }>(
+      before ? `/api/audit?before=${encodeURIComponent(before)}` : "/api/audit",
+    ),
   createInvite: (role: TeamRole) =>
     send<{ id: string; role: TeamRole; url: string; expiresAt: string }>(
       "/api/team/invites",

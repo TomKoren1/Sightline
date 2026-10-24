@@ -11,6 +11,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 
 import { api, can, type TeamRole } from "../api.js";
+import { AuditLog } from "./AuditLog.js";
 import { Copyable } from "./Copyable.js";
 
 const ROLE_HELP: Record<TeamRole, string> = {
@@ -167,6 +168,8 @@ export function Team() {
           )}
         </section>
       )}
+
+      {manage && <AuditLog />}
 
       {failure && <p className="text-[11px] text-danger">{failure.message}</p>}
 

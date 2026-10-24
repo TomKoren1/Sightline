@@ -159,6 +159,17 @@ role. A workspace always keeps an owner. People join by a single-use invite link
 that lasts a week, whose token is stored only as a hash, and every invite, join,
 role change and removal is written to the audit log.
 
+### The audit log
+
+Every sign-in and every successful change - a scan, a connection, an accepted
+finding, a question, a sign-out - is recorded with who made it, from which
+address, the route and its parameters, and the status. Request bodies are not
+recorded. It is written by a global interceptor, so a new route cannot leave it
+out, and it is append-only for the database role requests run as: that role may
+insert and read, and cannot update, delete or truncate it. Admins read it under
+Team, Activity, and download it as CSV or JSON from `GET /api/audit/export`.
+The CSV defuses cells a spreadsheet would run as formulas.
+
 A self-hosted clone has no sign-in, deliberately: it is one operator reading
 their own account, and the `api` service publishes no host port — it is reachable
 only through the `web` container. Publishing port 3000 yourself would expose the

@@ -99,6 +99,13 @@
       "when": 1792818997068,
       "tag": "0013_unused_findings",
       "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "7",
+      "when": 1792820960653,
+      "tag": "0014_audit_append_only",
+      "breakpoints": true
     }
   ]
 }

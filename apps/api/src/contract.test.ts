@@ -162,6 +162,41 @@ const CONTRACTS: Contract[] = [
   },
   {
     method: "GET",
+    route: "/api/audit",
+    url: "/api/audit",
+    responses: {
+      200: z
+        .object({
+          entries: z.array(
+            z
+              .object({
+                id: z.string(),
+                at: z.string(),
+                action: z.string(),
+                subject: z.string().nullable(),
+                detail: z.record(z.string(), z.unknown()),
+                ip: z.string().nullable(),
+                actor: z.object({ id: z.string(), email: z.string().nullable() }).nullable(),
+              })
+              .strict(),
+          ),
+          next: z.string().nullable(),
+        })
+        .strict(),
+    },
+  },
+  {
+    method: "GET",
+    route: "/api/audit/export",
+    url: "/api/audit/export?format=json",
+    responses: {
+      200: z
+        .object({ entries: z.array(z.object({ id: z.string(), action: z.string() })) })
+        .strict(),
+    },
+  },
+  {
+    method: "GET",
     route: "/api/scans/diff",
     url: "/api/scans/diff",
     responses: {
