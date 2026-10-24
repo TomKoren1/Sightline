@@ -20,7 +20,7 @@
     "roleArn": "arn:aws:iam::123456789012:role/LegacyDeployRole",
     "memorySizeMb": 3008,
     "timeoutSeconds": 300,
-    "lastModified": "2026-10-24T00:09:19.192314000Z",
+    "lastModified": "2026-10-24T01:03:29.733597000Z",
     "codeSizeBytes": 114,
     "vpcId": null,
     "subnetIds": [],
@@ -42,14 +42,14 @@
     "roleArn": "arn:aws:iam::123456789012:role/LambdaExecRole",
     "memorySizeMb": 512,
     "timeoutSeconds": 30,
-    "lastModified": "2026-10-24T00:09:19.161554000Z",
+    "lastModified": "2026-10-24T01:03:29.704431000Z",
     "codeSizeBytes": 114,
     "vpcId": "vpc-123abc",
     "subnetIds": [
-     "subnet-c0ca0a37048a75d7e"
+     "subnet-86831fa490ec023ba"
     ],
     "securityGroupIds": [
-     "sg-2052a9d52e06ed583"
+     "sg-fefe38fba41de4daf"
     ]
    },
    "derived": {}
@@ -73,7 +73,7 @@
   },
   {
    "from": "arn:aws:lambda:us-east-1:123456789012:function:order-processor",
-   "to": "arn:aws:ec2:us-east-1:123456789012:security-group/sg-2052a9d52e06ed583",
+   "to": "arn:aws:ec2:us-east-1:123456789012:security-group/sg-fefe38fba41de4daf",
    "type": "HAS_SECURITY_GROUP"
   },
   {
@@ -83,7 +83,7 @@
   },
   {
    "from": "arn:aws:lambda:us-east-1:123456789012:function:order-processor",
-   "to": "arn:aws:ec2:us-east-1:123456789012:subnet/subnet-c0ca0a37048a75d7e",
+   "to": "arn:aws:ec2:us-east-1:123456789012:subnet/subnet-86831fa490ec023ba",
    "type": "IN_SUBNET"
   }
  ]

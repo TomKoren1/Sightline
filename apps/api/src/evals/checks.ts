@@ -593,6 +593,35 @@ export const CHECKS: CheckDefinition[] = [
     },
   },
   {
+    id: "cross-account-access",
+    description: "Access from other accounts is found, and an ExternalId is noticed",
+    rationale:
+      "A role trusting another account's root with no ExternalId can be assumed by anyone that account lets through - the confused-deputy door - and a resource policy naming another account is a grant the network never shows.",
+    run: ({ resources, relationships }) => {
+      const failures: string[] = [];
+      for (const [name, account, needsExternalId] of GROUND_TRUTH.crossAccountGrants) {
+        const target = resources.find((r) => r.name === name);
+        const edge = relationships.find(
+          (r) =>
+            r.to === target?.arn &&
+            (r.type === "CAN_ASSUME" || r.type === "CAN_ACCESS") &&
+            resources.find((x) => x.arn === r.from)?.properties["accountId"] === account,
+        );
+        if (!edge) failures.push(`${name} <- ${account} missed`);
+        else if (Boolean(edge.properties?.["externalIdRequired"]) !== needsExternalId) {
+          failures.push(`${name}: ExternalId ${needsExternalId ? "missed" : "imagined"}`);
+        }
+      }
+      return {
+        passed: failures.length === 0,
+        detail:
+          failures.length === 0
+            ? `${GROUND_TRUTH.crossAccountGrants.length} grants to other accounts found`
+            : failures.join("; "),
+      };
+    },
+  },
+  {
     id: "subnets-by-routing",
     description: "Subnets are classified public by routing, not by name or tag",
     rationale:

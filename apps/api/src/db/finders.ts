@@ -87,11 +87,11 @@ const FINDERS = {
           JOIN ${e} ex ON ex.rel_type = 'EXECUTES_AS' AND ex.to_arn = a.arn
           JOIN ${r} f ON f.arn = ex.from_arn
         UNION
-        -- A cluster whose pods can assume it through IRSA or Pod Identity.
+        -- A cluster whose pods can assume it, or another account its trust names.
         SELECT a.arn, c.arn, c.name, c.kind
           FROM admins a
           JOIN ${e} ca ON ca.rel_type = 'CAN_ASSUME' AND ca.to_arn = a.arn
-          JOIN ${r} c ON c.arn = ca.from_arn AND c.kind = 'EksCluster'
+          JOIN ${r} c ON c.arn = ca.from_arn AND c.kind IN ('EksCluster', 'Account')
       )
       SELECT a.arn, a.kind, a.name, NULL::text AS region,
              a.derived->>'adminReason' AS reason,
@@ -156,6 +156,28 @@ const FINDERS = {
        WHERE e.rel_type = 'CAN_REACH' AND e.from_arn = ${INTERNET_ARN}
        GROUP BY t.arn, t.kind, t.name, t.region`,
     order: sql`b.name, b.arn`,
+  },
+
+  /**
+   * What other accounts can reach: roles they may assume and resources their
+   * policies open to them. Unknown accounts first, and admins among roles.
+   */
+  findCrossAccountAccess: {
+    base: (_p, r, e) => sql`
+      SELECT t.arn, t.kind, t.name, t.region,
+             a.properties->>'accountId' AS "fromAccount",
+             a.name AS "fromName",
+             coalesce((a.properties->>'known')::boolean, false) AS known,
+             e.rel_type AS grant,
+             coalesce((e.properties->>'externalIdRequired')::boolean, false) AS "externalIdRequired",
+             coalesce((e.properties->>'organizationOnly')::boolean, false) AS "organizationOnly",
+             coalesce(${flag("t", "isAdmin")}, false) AS "isAdmin",
+             e.properties->>'reason' AS reason
+        FROM ${e} e
+        JOIN ${r} a ON a.arn = e.from_arn AND a.kind = 'Account'
+        JOIN ${r} t ON t.arn = e.to_arn
+       WHERE e.rel_type IN ('CAN_ASSUME', 'CAN_ACCESS')`,
+    order: sql`b.known, b."isAdmin" DESC, b."externalIdRequired", b.name, b.arn, b."fromAccount"`,
   },
 
   /** Free-text search across resource names, tags and ARNs. */
@@ -253,3 +275,5 @@ export const findOpenSecurityGroups = (scope: GraphScope, params: Params = {}) =
   rowsOf("findOpenSecurityGroups", scope, params);
 export const searchResources = (scope: GraphScope, params: Params & { text: string }) =>
   rowsOf("searchResources", scope, params);
+export const findCrossAccountAccess = (scope: GraphScope, params: Params = {}) =>
+  rowsOf("findCrossAccountAccess", scope, params);

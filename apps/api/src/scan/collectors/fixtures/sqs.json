@@ -37,6 +37,22 @@
     "fifo": false
    },
    "derived": {}
+  },
+  {
+   "arn": "arn:aws:sqs:us-east-1:123456789012:partner-intake",
+   "kind": "SqsQueue",
+   "name": "partner-intake",
+   "region": "us-east-1",
+   "accountId": "123456789012",
+   "tags": {},
+   "properties": {
+    "url": "http://100.68.161.48:15000/123456789012/partner-intake",
+    "policy": "{\"Version\": \"2012-10-17\", \"Statement\": [{\"Effect\": \"Allow\", \"Principal\": {\"AWS\": \"arn:aws:iam::777766665555:root\"}, \"Action\": \"sqs:SendMessage\", \"Resource\": \"arn:aws:sqs:us-east-1:123456789012:partner-intake\"}]}",
+    "kmsKeyId": null,
+    "encrypted": true,
+    "fifo": false
+   },
+   "derived": {}
   }
  ],
  "relationships": [
@@ -47,6 +63,11 @@
   },
   {
    "from": "arn:aws:sqs:us-east-1:123456789012:orders-queue",
+   "to": "arn:aws:sightline:us-east-1:123456789012:region/us-east-1",
+   "type": "IN_REGION"
+  },
+  {
+   "from": "arn:aws:sqs:us-east-1:123456789012:partner-intake",
    "to": "arn:aws:sightline:us-east-1:123456789012:region/us-east-1",
    "type": "IN_REGION"
   }

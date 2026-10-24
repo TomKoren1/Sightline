@@ -7,14 +7,14 @@
  ],
  "resources": [
   {
-   "arn": "arn:aws:kms:us-east-1:123456789012:key/d3b253e4-5252-4183-b118-22d1d710aee0",
+   "arn": "arn:aws:kms:us-east-1:123456789012:key/e6455f52-6e2a-4c56-9ed5-c9ddfcf9aba1",
    "kind": "KmsKey",
    "name": "northwind-data",
    "region": "us-east-1",
    "accountId": "123456789012",
    "tags": {},
    "properties": {
-    "keyId": "d3b253e4-5252-4183-b118-22d1d710aee0",
+    "keyId": "e6455f52-6e2a-4c56-9ed5-c9ddfcf9aba1",
     "keyState": "Enabled",
     "keySpec": "SYMMETRIC_DEFAULT",
     "policy": "{\"Version\": \"2012-10-17\", \"Id\": \"key-default-1\", \"Statement\": [{\"Sid\": \"Enable IAM User Permissions\", \"Effect\": \"Allow\", \"Principal\": {\"AWS\": \"arn:aws:iam::123456789012:root\"}, \"Action\": \"kms:*\", \"Resource\": \"*\"}]}",
@@ -25,7 +25,7 @@
  ],
  "relationships": [
   {
-   "from": "arn:aws:kms:us-east-1:123456789012:key/d3b253e4-5252-4183-b118-22d1d710aee0",
+   "from": "arn:aws:kms:us-east-1:123456789012:key/e6455f52-6e2a-4c56-9ed5-c9ddfcf9aba1",
    "to": "arn:aws:sightline:us-east-1:123456789012:region/us-east-1",
    "type": "IN_REGION"
   }

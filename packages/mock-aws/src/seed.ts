@@ -97,6 +97,7 @@ import { ACCOUNT_ID, LEGACY_REGION, PROD_REGION, STAGING_REGION, TAGS } from "./
 import { allowIngress, tagSpec, type Tags } from "./seedHelpers.js";
 import { seedConnectivity } from "./seedConnectivity.js";
 import { seedEks } from "./seedEks.js";
+import { seedCrossAccount } from "./seedCrossAccount.js";
 
 /** A minimal but valid zip containing an empty index.js, for Lambda code. */
 const LAMBDA_ZIP = Buffer.from(
@@ -1240,6 +1241,7 @@ export async function seed(): Promise<SeedSummary> {
   await seedProduction(appProfileName);
   await seedStaging();
   await seedLegacy();
+  await seedCrossAccount();
 
   return {
     accountId: ACCOUNT_ID,

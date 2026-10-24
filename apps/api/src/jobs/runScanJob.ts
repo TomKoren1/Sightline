@@ -49,6 +49,7 @@ import {
   scanUnitDuration,
   scanUnitFailures,
 } from "../observability/metrics.js";
+import { listConnections } from "../tenancy/connections.js";
 
 export interface ScanJobOutcome {
   /** The status to finish the queue row with. */
@@ -135,9 +136,17 @@ export async function runScanJob(options: RunScanJobOptions): Promise<ScanJobOut
       });
     };
 
+    // The tenant's own accounts, so a trust naming one of them reads as that
+    // connection rather than as a stranger.
+    const knownAccounts = new Map(
+      (await listConnections(scope.tenantId))
+        .filter((c) => c.accountId && c.id !== scope.connectionId)
+        .map((c) => [c.accountId!, c.label] as const),
+    );
     const result = await runScan({
       target,
       counter,
+      knownAccounts,
       // Correlated by job id until a run row exists, so a failure before that
       // point still arrives against something the client is watching.
       scanId: correlationId,

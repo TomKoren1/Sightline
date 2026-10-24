@@ -95,8 +95,13 @@ export const RELATIONSHIP_TYPES = [
   "IN_CLUSTER",
   /** Auto Scaling group -> an instance it launched. */
   "MANAGES",
-  /** Cluster -> a role its pods can assume, through IRSA or Pod Identity. */
+  /**
+   * Cluster -> a role its pods can assume, through IRSA or Pod Identity; or
+   * another account -> a role whose trust policy names it.
+   */
   "CAN_ASSUME",
+  /** Another account -> a resource whose policy grants it access. */
+  "CAN_ACCESS",
   "EXECUTES_AS",
   /**
    * Derived, not observed. Computed by the reachability analyser from security

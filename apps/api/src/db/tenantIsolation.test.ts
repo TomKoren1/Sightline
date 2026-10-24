@@ -99,6 +99,8 @@ function build(
       publicReason: `${tag} subnet routes to an internet gateway`,
     }),
     r("RdsInstance", `${tag}-db`, database),
+    // Another account that can assume the admin role, as cross-account trust records it.
+    r("Account", `${tag} vendor account`, `arn:aws:sightline:::account/${tag}-vendor`, {}),
   ];
 
   const relationships: Relationship[] = [
@@ -115,6 +117,12 @@ function build(
       properties: { ports: ["tcp/5432"], via: `${tag}-db-sg`, reason: `${tag} db sg` },
     },
     { from: instance, to: subnet, type: "IN_SUBNET", properties: {} },
+    {
+      from: `arn:aws:sightline:::account/${tag}-vendor`,
+      to: role,
+      type: "CAN_ASSUME",
+      properties: { via: "trust policy", reason: `${tag} vendor can assume the admin role` },
+    },
   ];
 
   return { resources, relationships };
@@ -173,6 +181,7 @@ const CALLS: Record<string, (f: Fixture) => Promise<unknown>> = {
   findIdleResources: (f) => queries.findIdleResources(f.scope, {}),
   findUnprotectedBuckets: (f) => queries.findUnprotectedBuckets(f.scope, {}),
   findOpenSecurityGroups: (f) => queries.findOpenSecurityGroups(f.scope, {}),
+  findCrossAccountAccess: (f) => queries.findCrossAccountAccess(f.scope, {}),
   // Matches a substring both tenants' names share, so a leak is *likely* rather
   // than merely possible: an unscoped version returns both tenants' rows.
   searchResources: (f) => queries.searchResources(f.scope, { text: "-db" }),
@@ -329,8 +338,8 @@ describe.runIf(HAS_INFRA)("tenant isolation in the graph", () => {
     if (!available) return;
     const summary = await queries.summariseAccount(a.scope);
     const total = summary.byKind.reduce((sum, k) => sum + k.count, 0);
-    // Six resources, less the Internet node which `summariseAccount` excludes.
-    expect(total).toBe(5);
+    // Seven resources, less the Internet node which `summariseAccount` excludes.
+    expect(total).toBe(6);
     expect(summary.publicCount).toBe(2); // the bucket and the subnet
     expect(summary.adminCount).toBe(1);
     expect(summary.idleCount).toBe(1);

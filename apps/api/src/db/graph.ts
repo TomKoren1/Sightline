@@ -27,6 +27,7 @@ import { hopsFrom, indexReach, type ReachIndex } from "../scan/analysers/reachIn
 export type { GraphScope, ResourceRow } from "./graphRead.js";
 export {
   findAdminPrincipals,
+  findCrossAccountAccess,
   findIdleResources,
   findInstancesInPublicSubnets,
   findOpenSecurityGroups,

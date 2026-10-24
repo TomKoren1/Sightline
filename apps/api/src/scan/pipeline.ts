@@ -16,6 +16,7 @@ import { evaluateBucketPublicAccess, type AclGrant } from "./analysers/publicAcc
 import { analyseIdleResources } from "./analysers/idle.js";
 import { linkEntryPoints } from "./analysers/entryPoints.js";
 import { linkIrsa } from "./analysers/irsa.js";
+import { linkCrossAccount } from "./analysers/crossAccount.js";
 import { POLICY_KINDS, resourcePolicyVerdict } from "./analysers/resourcePolicy.js";
 import { analyseReachability } from "./analysers/reachability.js";
 
@@ -65,6 +66,8 @@ export function annotate(
   accountId: string,
   regions: string[],
   collected: { resources: Resource[]; relationships: Relationship[] },
+  /** This tenant's other accounts, by id, so a foreign account can be named. */
+  knownAccounts: ReadonlyMap<string, string> = new Map(),
 ): ScanResult {
   const resources = [...scaffoldNodes(accountId, regions), ...collected.resources];
   const relationships = [...collected.relationships];
@@ -174,6 +177,10 @@ export function annotate(
   append(linkEntryPoints(resources));
   // --- Which roles can a cluster's pods assume? ----------------------------
   append(linkIrsa(resources));
+  // --- Who outside this account can get in? -------------------------------
+  const outside = linkCrossAccount(resources, accountId, knownAccounts);
+  for (const node of outside.accounts) resources.push(node);
+  append(outside.edges);
   const { edges, internetReachable } = analyseReachability(resources, relationships);
   append(edges);
 

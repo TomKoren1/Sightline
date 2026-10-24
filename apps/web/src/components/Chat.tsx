@@ -38,6 +38,7 @@ const TOOL_LABELS: Record<string, string> = {
   find_idle_resources: "Looking for idle resources",
   find_unprotected_buckets: "Checking bucket public-access guardrails",
   find_open_security_groups: "Checking security group exposure",
+  find_cross_account_access: "Checking access from other accounts",
   search_resources: "Searching",
   list_scans: "Checking scan history",
   diff_scans: "Comparing scans",

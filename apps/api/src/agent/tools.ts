@@ -78,6 +78,7 @@ const PAGED: Record<string, q.FinderName> = {
   find_idle_resources: "findIdleResources",
   find_unprotected_buckets: "findUnprotectedBuckets",
   find_open_security_groups: "findOpenSecurityGroups",
+  find_cross_account_access: "findCrossAccountAccess",
   search_resources: "searchResources",
 };
 
@@ -294,6 +295,17 @@ export const TOOL_DEFINITIONS: ToolDefinition[] = [
       "Resources directly exposed to 0.0.0.0/0, with the ports and the security group " +
       "responsible. Use for 'what is open to the internet?' and for spotting SSH or RDP " +
       "exposed to the world.",
+    input_schema: { type: "object", properties: { ...PAGE_PROPERTIES } },
+  },
+  {
+    name: "find_cross_account_access",
+    description:
+      "What other AWS accounts can reach in this one: roles whose trust policy lets another " +
+      "account assume them, and resources whose policy grants another account. Each row names " +
+      "the account, whether it is one of this customer's own connected accounts (known) or a " +
+      "stranger, whether an ExternalId or organization condition narrows it, and whether the " +
+      "role is an administrator. Use for 'who outside can get in?', 'which roles do vendors " +
+      "assume?', 'is anything shared with an account we do not recognise?'.",
     input_schema: { type: "object", properties: { ...PAGE_PROPERTIES } },
   },
   {

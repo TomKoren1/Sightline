@@ -113,8 +113,8 @@ is public, whether a role is effectively admin, what can reach what — all of i
 deterministic, and each verdict carries the evidence it was derived from. The model
 chooses which question to ask and explains the answer; it does not decide the answer.
 
-**The agent gets a curated tool library rather than free-form SQL.** Sixteen tools,
-fifteen of them queries written and reviewed in advance and one a guarded escape hatch
+**The agent gets a curated tool library rather than free-form SQL.** Seventeen tools,
+sixteen of them queries written and reviewed in advance and one a guarded escape hatch
 for questions nobody anticipated: a single parsed `SELECT` over two views pinned to one
 scan, run read-only, on a timeout, under the tenant's row-level security. After it answers, every identifier in its reply is
 checked against what the tools actually returned, and anything unsupported is flagged
@@ -154,7 +154,7 @@ fail for leaking. See [SECURITY.md](SECURITY.md).
 
 ### How the answers are checked
 
-Two eval tiers that fail for different reasons: **twenty-eight ground-truth checks**
+Two eval tiers that fail for different reasons: **twenty-nine ground-truth checks**
 against the hand-written answer key, needing no model and no API key, running in CI
 on every commit; and **twenty-one cases** against the live agent, scored on the
 resources each answer cites, with traps that a tool reading flags rather than

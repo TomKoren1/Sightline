@@ -43,6 +43,8 @@ export interface ScanOptions {
    * tenant's traffic is never reported as another's.
    */
   counter?: CallCounter;
+  /** The tenant's other accounts by id, to name them where this one trusts them. */
+  knownAccounts?: ReadonlyMap<string, string>;
 }
 
 /** Pull a usable error code out of whatever the SDK threw. */
@@ -104,7 +106,7 @@ export interface CollectedEstate {
 
 export async function runScan(options: ScanOptions): Promise<ScanResult & { units: ScanUnit[] }> {
   const { accountId, regions, units, collected } = await collectEstate(options);
-  return { ...annotate(accountId, regions, collected), units };
+  return { ...annotate(accountId, regions, collected, options.knownAccounts), units };
 }
 
 /**

@@ -7,7 +7,7 @@
  ],
  "resources": [
   {
-   "arn": "arn:aws:apigateway:us-east-1::/apis/xhhbtycx",
+   "arn": "arn:aws:apigateway:us-east-1::/apis/hiqrsoyy",
    "kind": "ApiGateway",
    "name": "northwind-orders-api",
    "region": "us-east-1",
@@ -16,7 +16,7 @@
    "properties": {
     "apiType": "HTTP",
     "endpointType": "REGIONAL",
-    "endpoint": "https://xhhbtycx.execute-api.us-east-1.amazonaws.com",
+    "endpoint": "https://hiqrsoyy.execute-api.us-east-1.amazonaws.com",
     "isPrivate": false,
     "integrations": [
      {
@@ -31,12 +31,12 @@
  ],
  "relationships": [
   {
-   "from": "arn:aws:apigateway:us-east-1::/apis/xhhbtycx",
+   "from": "arn:aws:apigateway:us-east-1::/apis/hiqrsoyy",
    "to": "arn:aws:sightline:us-east-1:123456789012:region/us-east-1",
    "type": "IN_REGION"
   },
   {
-   "from": "arn:aws:apigateway:us-east-1::/apis/xhhbtycx",
+   "from": "arn:aws:apigateway:us-east-1::/apis/hiqrsoyy",
    "to": "arn:aws:lambda:us-east-1:123456789012:function:order-processor",
    "type": "INTEGRATES_WITH",
    "properties": {
