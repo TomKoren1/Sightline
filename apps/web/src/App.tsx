@@ -479,7 +479,7 @@ export function App() {
         </main>
 
         {selectedArn && (
-          <aside className="w-80 shrink-0">
+          <aside aria-label="Resource" className="w-80 shrink-0">
             <ResourceDetail
               arn={selectedArn}
               onClose={() => setSelectedArn(null)}
