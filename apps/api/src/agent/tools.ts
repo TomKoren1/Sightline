@@ -447,26 +447,46 @@ export async function runTool(
     }
 
     case "find_network_paths": {
-      const rows = await q.findNetworkPaths(ctx.graph, {
+      const {
+        paths: rows,
+        found,
+        stopped,
+      } = await q.networkPaths(ctx.graph, {
         target: String(input["target"] ?? ""),
         source: input["source"] ? String(input["source"]) : undefined,
         maxHops: input["maxHops"] ? Number(input["maxHops"]) : undefined,
       });
+      const bound =
+        stopped === "time"
+          ? "The search hit its time limit"
+          : stopped === "paths"
+            ? `The search stopped after ${found} paths`
+            : null;
       return wrap(rows, {
         note:
-          rows.length === 0
+          rows.length === 0 && !stopped
             ? "No path found. Nothing can reach this resource through security group rules, which is a meaningful answer rather than a failure."
-            : undefined,
+            : bound
+              ? `${bound}, so these are the shortest of the paths it found, not all of them. Say the list is not exhaustive; a lower maxHops or a named source narrows it.`
+              : rows.length < found
+                ? `${found} paths in all; these are the ${rows.length} shortest.`
+                : undefined,
       });
     }
 
-    case "find_reachable_from":
-      return wrap(
-        await q.findReachableFrom(ctx.graph, {
-          source: String(input["source"] ?? ""),
-          maxHops: input["maxHops"] ? Number(input["maxHops"]) : undefined,
-        }),
-      );
+    case "find_reachable_from": {
+      const { rows, total } = await q.reachableFrom(ctx.graph, {
+        source: String(input["source"] ?? ""),
+        maxHops: input["maxHops"] ? Number(input["maxHops"]) : undefined,
+      });
+      const shown = Math.max(rows.length - 1, 0);
+      return wrap(rows, {
+        note:
+          total > shown
+            ? `It reaches ${total} resources in all; these are the ${shown} nearest. Quote the total, not the length of this list.`
+            : undefined,
+      });
+    }
 
     case "list_scans":
       return wrap(await listScans(ctx.scope, Number(input["limit"] ?? 10)));

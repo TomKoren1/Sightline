@@ -22,7 +22,13 @@ import { INTERNET_ARN, type Relationship, type Resource } from "@sightline/share
 import { clamp, flag, read, type GraphScope, type ResourceRow } from "./graphRead.js";
 import { withTenant } from "./postgres.js";
 import { withDocuments } from "./repository.js";
-import { hopsFrom, indexReach, type ReachIndex } from "../scan/analysers/reachIndex.js";
+import {
+  hopsFrom,
+  indexReach,
+  searchPaths,
+  type PathSearchStop,
+  type ReachIndex,
+} from "../scan/analysers/reachIndex.js";
 
 export type { GraphScope, ResourceRow } from "./graphRead.js";
 export {
@@ -440,13 +446,16 @@ async function describeNodes(scope: GraphScope, arns: string[]) {
 
 /** Paths enumerated before sorting; bounds the work on a dense graph. */
 const MAX_PATHS_EXPLORED = 2000;
+/** And the time it may take, which a dense graph can spend without finding many. */
+const PATH_SEARCH_MS = 2000;
 
 /**
  * Every path by which one resource can be reached from another, shortest
  * first. The default source is the internet, which is what "what can reach
- * X?" almost always means.
+ * X?" almost always means. `stopped` says when the bound was reached, so an
+ * answer built on it can say the list is not exhaustive.
  */
-export async function findNetworkPaths(
+export async function networkPaths(
   scope: GraphScope,
   params: { target: string; source?: string; maxHops?: number; limit?: number },
 ) {
@@ -456,50 +465,20 @@ export async function findNetworkPaths(
     resolve(scope, params.target),
     resolve(scope, params.source ?? INTERNET_ARN),
   ]);
-  if (!target || !source) return [];
+  if (!target || !source) return { paths: [], found: 0, stopped: null as PathSearchStop };
   const index = await reachIndex(scope);
 
-  // Hops from each node to the target, so the search never follows an edge
-  // that cannot arrive within the bound.
-  const toTarget = new Map<string, number>([[target, 0]]);
-  for (let frontier = [target], d = 1; frontier.length > 0 && d <= maxHops; d++) {
-    const next: string[] = [];
-    for (const node of frontier) {
-      for (const prev of index.prev(node)) {
-        if (!toTarget.has(prev)) {
-          toTarget.set(prev, d);
-          next.push(prev);
-        }
-      }
-    }
-    frontier = next;
-  }
-
-  const found: { path: string[]; hops: Hop[] }[] = [];
-  const walk = (path: string[], hops: Hop[]) => {
-    if (found.length >= MAX_PATHS_EXPLORED) return;
-    const here = path[path.length - 1]!;
-    if (here === target && path.length > 1) {
-      found.push({ path: [...path], hops: [...hops] });
-      return;
-    }
-    for (const { to, edges } of index.next(here)) {
-      const remaining = toTarget.get(to);
-      if (remaining === undefined || path.length + remaining > maxHops + 1) continue;
-      if (path.includes(to)) continue;
-      path.push(to);
-      hops.push(hopOf(edges));
-      walk(path, hops);
-      path.pop();
-      hops.pop();
-    }
-  };
-  if (toTarget.has(source)) walk([source], []);
+  const search = searchPaths(index, source, target, maxHops, {
+    maxPaths: MAX_PATHS_EXPLORED,
+    budgetMs: PATH_SEARCH_MS,
+  });
+  const found = search.found.map(({ path, edges }) => ({ path, hops: edges.map(hopOf) }));
+  const stopped = search.stopped;
 
   found.sort((a, b) => a.path.length - b.path.length);
   const chosen = found.slice(0, limit);
   const nodes = await describeNodes(scope, [...new Set(chosen.flatMap((c) => c.path))]);
-  return chosen.map(({ path, hops }) => ({
+  const paths = chosen.map(({ path, hops }) => ({
     hops: path.map((arn) => {
       const n = nodes.get(arn);
       return { arn, name: n?.name ?? arn, kind: n?.kind ?? "Unknown" };
@@ -507,19 +486,26 @@ export async function findNetworkPaths(
     edges: hops,
     length: path.length - 1,
   }));
+  return { paths, found: found.length, stopped };
 }
+
+export const findNetworkPaths = async (
+  scope: GraphScope,
+  params: Parameters<typeof networkPaths>[1],
+) => (await networkPaths(scope, params)).paths;
 
 /**
  * What a resource can reach, rather than what can reach it. The source comes
- * back too, at `hops: 0`, so an answer that names it can cite it.
+ * back too, at `hops: 0`, so an answer that names it can cite it. `total`
+ * counts every target, of which `rows` holds the nearest.
  */
-export async function findReachableFrom(
+export async function reachableFrom(
   scope: GraphScope,
   params: { source: string; maxHops?: number; limit?: number },
 ) {
   const maxHops = Math.min(Math.max(1, params.maxHops ?? 3), 8);
   const sourceArn = await resolve(scope, params.source);
-  if (!sourceArn) return [];
+  if (!sourceArn) return { rows: [], total: 0 };
   const hops = hopsFrom(await reachIndex(scope), sourceArn, maxHops);
 
   const nodes = await describeNodes(scope, [...hops.keys()]);
@@ -536,5 +522,10 @@ export async function findReachableFrom(
     })
     .sort((a, b) => a.hops - b.hops || a.name.localeCompare(b.name));
   const [source, ...targets] = rows;
-  return [source!, ...targets.slice(0, clamp(params.limit))];
+  return { rows: [source!, ...targets.slice(0, clamp(params.limit))], total: targets.length };
 }
+
+export const findReachableFrom = async (
+  scope: GraphScope,
+  params: Parameters<typeof reachableFrom>[1],
+) => (await reachableFrom(scope, params)).rows;

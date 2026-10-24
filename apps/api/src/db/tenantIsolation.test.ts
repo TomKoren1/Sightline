@@ -179,6 +179,8 @@ const CALLS: Record<string, (f: Fixture) => Promise<unknown>> = {
   findAdminPrincipals: (f) => queries.findAdminPrincipals(f.scope, {}),
   findNetworkPaths: (f) => queries.findNetworkPaths(f.scope, { target: f.names.database }),
   findReachableFrom: (f) => queries.findReachableFrom(f.scope, { source: INTERNET_ARN }),
+  networkPaths: (f) => queries.networkPaths(f.scope, { target: f.names.database }),
+  reachableFrom: (f) => queries.reachableFrom(f.scope, { source: INTERNET_ARN }),
   findInstancesInPublicSubnets: (f) => queries.findInstancesInPublicSubnets(f.scope, {}),
   findIdleResources: (f) => queries.findIdleResources(f.scope, {}),
   findUnprotectedBuckets: (f) => queries.findUnprotectedBuckets(f.scope, {}),

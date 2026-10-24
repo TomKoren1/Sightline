@@ -86,3 +86,63 @@ export function hopsFrom(
   }
   return hops;
 }
+
+/** Why a path search stopped before it had seen everything, if it did. */
+export type PathSearchStop = "paths" | "time" | null;
+
+/**
+ * Every simple path from `source` to `target` within `maxHops`, unsorted.
+ * Hops to the target are measured first, so the walk never follows an edge
+ * that cannot arrive in time. Stops at `maxPaths` or after `budgetMs`, and
+ * says which: a dense graph has more paths than anyone could read.
+ */
+export function searchPaths(
+  index: ReachIndex,
+  source: string,
+  target: string,
+  maxHops: number,
+  bounds: { maxPaths: number; budgetMs: number; now?: () => number },
+): { found: { path: string[]; edges: Relationship[][] }[]; stopped: PathSearchStop } {
+  const toTarget = new Map<string, number>([[target, 0]]);
+  for (let frontier = [target], d = 1; frontier.length > 0 && d <= maxHops; d++) {
+    const next: string[] = [];
+    for (const node of frontier) {
+      for (const prev of index.prev(node)) {
+        if (!toTarget.has(prev)) {
+          toTarget.set(prev, d);
+          next.push(prev);
+        }
+      }
+    }
+    frontier = next;
+  }
+
+  const now = bounds.now ?? Date.now;
+  const deadline = now() + bounds.budgetMs;
+  const found: { path: string[]; edges: Relationship[][] }[] = [];
+  let stopped: PathSearchStop = null;
+  let steps = 0;
+  const walk = (path: string[], edges: Relationship[][]) => {
+    if (stopped) return;
+    if (found.length >= bounds.maxPaths) stopped = "paths";
+    else if (++steps % 512 === 0 && now() > deadline) stopped = "time";
+    if (stopped) return;
+    const here = path[path.length - 1]!;
+    if (here === target && path.length > 1) {
+      found.push({ path: [...path], edges: [...edges] });
+      return;
+    }
+    for (const hop of index.next(here)) {
+      const remaining = toTarget.get(hop.to);
+      if (remaining === undefined || path.length + remaining > maxHops + 1) continue;
+      if (path.includes(hop.to)) continue;
+      path.push(hop.to);
+      edges.push(hop.edges);
+      walk(path, edges);
+      path.pop();
+      edges.pop();
+    }
+  };
+  if (toTarget.has(source)) walk([source], []);
+  return { found, stopped };
+}
