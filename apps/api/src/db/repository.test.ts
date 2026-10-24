@@ -29,13 +29,13 @@ import { system } from "./postgres.js";
 import { connections, tenants } from "./schema.js";
 import {
   createScanRun,
-  diffScans,
   failScanRun,
   getScan,
   loadRelationships,
   loadResources,
   saveScanResult,
 } from "./repository.js";
+import { diffScans } from "./scanDiff.js";
 import { asConnectionId, asScanId, asTenantId, type ScanId } from "../core/ids.js";
 import type { Scope } from "../core/scope.js";
 

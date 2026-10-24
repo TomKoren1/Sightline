@@ -81,10 +81,6 @@ export function selectConnection(id: string | null): void {
   connectionId = id;
 }
 
-export function selectedConnection(): string | null {
-  return connectionId;
-}
-
 /**
  * Headers every request carries.
  *

@@ -47,7 +47,3 @@ export const RECENT_SIGN_IN_MINUTES = 10;
  * enough to destroy a workspace. Implies `@HumanOnly()`.
  */
 export const RecentSignIn = () => SetMetadata(RECENT_SIGN_IN, true);
-
-export function isTeamRole(value: unknown): value is TeamRole {
-  return typeof value === "string" && (TEAM_ROLES as readonly string[]).includes(value);
-}

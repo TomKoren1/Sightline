@@ -17,7 +17,8 @@
 import { describe, expect, it } from "vitest";
 import { shellQuote } from "@sightline/shared";
 
-import { remediationsFor, type RemediationInput } from "./remediation.js";
+import { remediationsFor } from "./remediation.js";
+import { type RemediationInput } from "./input.js";
 
 const ADMIN_DOC = { Statement: [{ Effect: "Allow", Action: "*", Resource: "*" }] };
 

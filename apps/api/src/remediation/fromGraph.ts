@@ -10,7 +10,7 @@
  * out the whole detail panel.
  */
 
-import type { RemediationInput } from "./remediation.js";
+import type { RemediationInput } from "./input.js";
 
 /** Property keys the generators need as structured values rather than strings. */
 const STRUCTURED_KEYS = [

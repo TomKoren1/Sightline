@@ -72,10 +72,6 @@ export async function connectedAsOwner(): Promise<boolean> {
   return rows[0]?.owner ?? false;
 }
 
-/** Whether a role separate from the owner is actually configured. */
-export const rlsRoleConfigured = (): boolean =>
-  Boolean(cfg.DATABASE_URL_APP && cfg.DATABASE_URL_APP !== cfg.DATABASE_URL);
-
 const bound = new AsyncLocalStorage<{ client: pg.PoolClient; tenantId: string }>();
 
 /**

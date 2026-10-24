@@ -202,18 +202,3 @@ export function formatPortRange(p: PortRange): string {
   if (p.fromPort === p.toPort) return `${p.protocol}/${p.fromPort}`;
   return `${p.protocol}/${p.fromPort}-${p.toPort}`;
 }
-
-/** True for services whose resources are not scoped to a region. */
-export function isGlobalKind(kind: ResourceKind): boolean {
-  return (
-    kind === "Account" ||
-    kind === "IamRole" ||
-    kind === "IamUser" ||
-    kind === "IamGroup" ||
-    kind === "IamPolicy" ||
-    kind === "CloudFrontDistribution" ||
-    kind === "HostedZone" ||
-    kind === "InstanceProfile" ||
-    kind === "Internet"
-  );
-}

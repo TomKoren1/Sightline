@@ -11,7 +11,8 @@
 
 import { BadRequestException, Injectable, NotFoundException } from "@nestjs/common";
 
-import { diffScans, getLatestScan, getScan, listScans } from "../db/repository.js";
+import { getLatestScan, getScan, listScans } from "../db/repository.js";
+import { diffScans } from "../db/scanDiff.js";
 import { activeJobId, cancelQueuedJob, enqueueScan, getJob, type ScanJob } from "../jobs/queue.js";
 import { readProgress, streamScanEvents } from "../jobs/progress.js";
 import { getConnection } from "../tenancy/connections.js";
