@@ -27,6 +27,13 @@ updates:
       nest:
         patterns: ["@nestjs/*"]
         update-types: ["minor", "patch"]
+      # Released in lockstep: the 0.x exporters and the 2.x SDK each require
+      # their own version of the rest. Inside `production`, a bump that moved
+      # the SDK but not `resources` failed to load and held 21 unrelated
+      # updates back with it.
+      opentelemetry:
+        patterns: ["@opentelemetry/*"]
+        update-types: ["minor", "patch"]
       dev-tooling:
         patterns:
           ["eslint*", "@eslint/*", "typescript-eslint", "prettier", "vitest", "tsx", "typescript"]
@@ -48,8 +55,17 @@ updates:
     directories: ["/", "/deploy/k8s/base", "/deploy/k8s/prod"]
     schedule:
       interval: monthly
+    # A Postgres major cannot start on the previous major's data directory: it
+    # is a dump and restore, planned, not a merge. CI passes such a PR because
+    # it starts from an empty database, which is exactly what makes it unsafe.
+    ignore:
+      - dependency-name: postgres
+        update-types: ["version-update:semver-major"]
 
   - package-ecosystem: docker-compose
     directory: /
     schedule:
       interval: monthly
+    ignore:
+      - dependency-name: postgres
+        update-types: ["version-update:semver-major"]
