@@ -14,7 +14,8 @@ const count = async () => {
   return (
     metric?.values.find(
       (v) =>
-        v.metricName === "sightline_aws_api_call_duration_seconds_count" &&
+        (v as { metricName?: string }).metricName ===
+          "sightline_aws_api_call_duration_seconds_count" &&
         v.labels["service"] === "iam" &&
         v.labels["operation"] === "ListRoles",
     )?.value ?? 0
