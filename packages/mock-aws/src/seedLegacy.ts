@@ -3,7 +3,7 @@
 import { CreateTagsCommand, CreateVolumeCommand } from "@aws-sdk/client-ec2";
 import { ec2 } from "./clients.js";
 import { LEGACY_REGION, TAGS } from "./topology.js";
-import { tagSpec, type Tags } from "./seedHelpers.js";
+import { tagSpec } from "./seedHelpers.js";
 import { log } from "./seedHelpers.js";
 import { seedNetwork } from "./seedNetwork.js";
 

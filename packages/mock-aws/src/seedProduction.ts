@@ -11,9 +11,9 @@ import {
 } from "@aws-sdk/client-ec2";
 import { CreateDBInstanceCommand, CreateDBSubnetGroupCommand } from "@aws-sdk/client-rds";
 import { CreateFunctionCommand } from "@aws-sdk/client-lambda";
-import { ec2, iam, lambda, rds } from "./clients.js";
+import { ec2, lambda, rds } from "./clients.js";
 import { ACCOUNT_ID, PROD_REGION, TAGS } from "./topology.js";
-import { allowIngress, tagSpec, type Tags } from "./seedHelpers.js";
+import { allowIngress, tagSpec } from "./seedHelpers.js";
 import { seedConnectivity } from "./seedConnectivity.js";
 import { LAMBDA_ZIP, log } from "./seedHelpers.js";
 import { seedNetwork } from "./seedNetwork.js";

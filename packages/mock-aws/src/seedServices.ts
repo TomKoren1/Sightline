@@ -12,7 +12,7 @@ import {
 } from "@aws-sdk/client-ecs";
 import { CreateClusterCommand as CreateEksClusterCommand } from "@aws-sdk/client-eks";
 import { ChangeResourceRecordSetsCommand, CreateHostedZoneCommand } from "@aws-sdk/client-route-53";
-import { dynamodb, ecs, eks, kms, route53, secrets, sns, sqs, iam } from "./clients.js";
+import { dynamodb, ecs, eks, kms, route53, secrets, sns, sqs } from "./clients.js";
 import { ACCOUNT_ID, PROD_REGION } from "./topology.js";
 import { seedEks } from "./seedEks.js";
 
