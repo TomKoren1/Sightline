@@ -146,6 +146,19 @@ export const awsApiCalls = new Counter({
   registers: [registry],
 });
 
+/**
+ * How long each call took, retries counted apiece. A unit's duration says
+ * which service was slow; this says which call, and whether it was every
+ * call or one that hung.
+ */
+export const awsApiCallDuration = new Histogram({
+  name: "sightline_aws_api_call_duration_seconds",
+  help: "Time for one AWS API request attempt, by service and operation.",
+  labelNames: ["service", "operation"],
+  buckets: [0.05, 0.25, 1, 5, 15, 60, 120],
+  registers: [registry],
+});
+
 export const awsThrottles = new Counter({
   name: "sightline_aws_throttles_total",
   help: "Throttling responses from AWS, by service.",
