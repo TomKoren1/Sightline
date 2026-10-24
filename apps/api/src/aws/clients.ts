@@ -37,7 +37,7 @@ import { credentialProvider } from "./credentials.js";
 import { accountOfRole, pace } from "./pace.js";
 import { inSpan, tracingEnabled } from "../observability/tracing.js";
 import type { ScanTarget } from "../core/scanTarget.js";
-import { awsApiCalls, awsThrottles } from "../observability/metrics.js";
+import { awsApiCallDuration, awsApiCalls, awsThrottles } from "../observability/metrics.js";
 
 /**
  * Counts AWS API calls, so a scan can report what it cost.
@@ -112,6 +112,30 @@ interface MiddlewareStack {
   ) => void;
 }
 
+/** One call this slow is worth a log line of its own: a scan unit cannot say which call it was. */
+const SLOW_CALL_SECONDS = 10;
+
+function logSlowCall(
+  key: string,
+  operation: string,
+  seconds: number,
+  outcome: string,
+  response: unknown,
+) {
+  const res = response as { statusCode?: number; headers?: Record<string, string> } | undefined;
+  console.warn(
+    JSON.stringify({
+      msg: "slow AWS call",
+      unit: key,
+      operation,
+      seconds: Math.round(seconds * 10) / 10,
+      outcome,
+      status: res?.statusCode ?? null,
+      bytes: res?.headers?.["content-length"] ?? null,
+    }),
+  );
+}
+
 /** AWS says "slow down" under several names, and none of them is an error we caused. */
 const THROTTLE = /throttl|RequestLimitExceeded|TooManyRequests|SlowDown|ProvisionedThroughput/i;
 
@@ -151,19 +175,30 @@ function instrument<T extends object>(client: T, ctx: AwsContext, key: string): 
       const operation = (context.commandName ?? "unknown").replace(/Command$/, "");
       awsApiCalls.inc({ service, operation });
 
+      const started = performance.now();
+      let outcome = "ok";
+      let response: unknown;
       try {
-        if (!tracingEnabled()) return await next(args);
-        return await inSpan(
-          `aws ${service}.${operation}`,
-          { "rpc.system": "aws-api", "rpc.service": service, "rpc.method": operation },
-          () => next(args),
-        );
+        const result = !tracingEnabled()
+          ? await next(args)
+          : await inSpan(
+              `aws ${service}.${operation}`,
+              { "rpc.system": "aws-api", "rpc.service": service, "rpc.method": operation },
+              () => next(args),
+            );
+        response = (result as { response?: unknown }).response;
+        return result;
       } catch (err) {
         // Counted separately because throttling is not our error: it is the
         // signal that a scan is competing with the customer's own workloads.
         const name = err instanceof Error ? err.name : String(err);
+        outcome = name;
         if (THROTTLE.test(name)) awsThrottles.inc({ service });
         throw err;
+      } finally {
+        const seconds = (performance.now() - started) / 1000;
+        awsApiCallDuration.observe({ service, operation }, seconds);
+        if (seconds >= SLOW_CALL_SECONDS) logSlowCall(key, operation, seconds, outcome, response);
       }
     },
     { step: "deserialize", name: "sightlineCallCounter", override: true },
