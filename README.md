@@ -191,7 +191,7 @@ infra/                the read-only role template, and guards on things nothing 
 deploy/k8s/           kustomize manifests for a hosted deployment, and their README
 deploy/               nginx config, and the AWS profile mount for containers
 helm/monitoring/      Prometheus, Grafana and Loki, with this project's dashboards
-argocd/               the Application that deploys that chart
+argocd/               the Applications: the monitoring chart, and the prod and staging overlays
 scripts/              the dependency guard every npm script runs first
 e2e/                  the browser suite: the hosted product, signed in and driven
 Dockerfile            API and frontend images, used only by the `app` profile

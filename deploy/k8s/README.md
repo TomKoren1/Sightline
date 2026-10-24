@@ -52,6 +52,14 @@ migrate Job run `node apps/api/dist/<entry>.js`, and the image has no npm.
 **Rebuild both images before applying manifests from this version:** an older
 image has no `dist/` and the pods fail with "Cannot find module".
 
+### Through ArgoCD
+
+`argocd/sightline-prod.yaml` and `argocd/sightline-staging.yaml` reconcile the
+two overlays the way `argocd/monitoring-application.yaml` does the chart. Apply
+each once with `kubectl apply -f`; both sync by hand until you have watched a
+sync work, then automated sync can be turned on. ArgoCD applies manifests and
+builds nothing, so import a commit's images before syncing it.
+
 ### Rolling back
 
 Re-import the previous image tag and restart; do not roll the database back.
