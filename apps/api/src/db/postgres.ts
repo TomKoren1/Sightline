@@ -219,6 +219,37 @@ export async function migrate(): Promise<void> {
   await runMigrations(system, { migrationsFolder: MIGRATIONS_FOLDER });
 }
 
+/** Failures that mean "not reachable yet", not "wrong": DNS, refused, starting up. */
+const TRANSIENT = new Set(["ENOTFOUND", "EAI_AGAIN", "ECONNREFUSED", "ECONNRESET", "57P03"]);
+
+/**
+ * Wait until Postgres answers, for a process started alongside it.
+ *
+ * A migrate Job scheduled before the database's Service resolves failed on
+ * `getaddrinfo ENOTFOUND postgres` and relied on the Job's retry. Only the
+ * transient failures are waited out: a wrong password or database name throws
+ * at once, since waiting would only delay the same error.
+ */
+export async function waitForDatabase(
+  { timeoutMs = 60_000, log = console.log }: { timeoutMs?: number; log?: (m: string) => void } = {},
+  probe: () => Promise<unknown> = () => system.execute("SELECT 1"),
+): Promise<void> {
+  const deadline = Date.now() + timeoutMs;
+  for (let delay = 500; ; delay = Math.min(delay * 2, 5_000)) {
+    try {
+      await probe();
+      return;
+    } catch (err) {
+      // Drizzle wraps the driver's error, so the code is on its cause.
+      const e = err as { code?: string; cause?: { code?: string } };
+      const code = e.code ?? e.cause?.code ?? "";
+      if (!TRANSIENT.has(code) || Date.now() + delay > deadline) throw err;
+      log(`Postgres is not reachable yet (${code}); retrying in ${delay} ms.`);
+      await new Promise((r) => setTimeout(r, delay));
+    }
+  }
+}
+
 const MIGRATIONS_FOLDER = join(API_ROOT, "drizzle");
 
 /**
