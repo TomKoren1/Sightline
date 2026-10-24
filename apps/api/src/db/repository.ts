@@ -18,6 +18,7 @@ import {
   selectDocuments,
   upsertDocuments,
 } from "./policyDocuments.js";
+import { graphGroups } from "./graphGroup.js";
 
 /**
  * Anything that can run a write: the pool, or a transaction on it.
@@ -45,13 +46,36 @@ const ownedScan = (scope: Scope, scanId: string) =>
   and(eq(scanRuns.id, scanId), eq(scanRuns.tenantId, scope.tenantId));
 
 /**
- * Rows per INSERT.
+ * Rows per snapshot INSERT.
  *
- * Drizzle builds one multi-row `INSERT` from the array it is given, so the
- * parameter cap is still ours to respect: Postgres allows 65535 and a resource
- * contributes ten. This stays well under.
+ * Each batch travels as one JSON parameter that `json_to_recordset` unpacks,
+ * rather than Drizzle's ten parameters a row: no parameter cap to respect, and
+ * none of the per-value query building that was most of the save's CPU. A
+ * batch's JSON is a few MB at this size.
  */
-const BATCH_SIZE = 500;
+const BATCH_SIZE = 2000;
+
+function insertResourceSnapshots(tenantId: string, scanId: string, rows: object[]) {
+  return sql`
+    INSERT INTO resource_snapshots
+           (tenant_id, scan_id, arn, kind, name, region, account_id, tags, properties, derived,
+            fingerprint, graph_group)
+    SELECT ${tenantId}::uuid, ${scanId}::uuid,
+           r.arn, r.kind, r.name, r.region, r.account_id, r.tags, r.properties, r.derived,
+           r.fingerprint, r.graph_group
+      FROM json_to_recordset(${JSON.stringify(rows)}::json)
+        AS r(arn text, kind text, name text, region text, account_id text,
+             tags jsonb, properties jsonb, derived jsonb, fingerprint text, graph_group text)
+    ON CONFLICT (scan_id, arn) DO NOTHING`;
+}
+
+function insertRelationshipSnapshots(tenantId: string, scanId: string, rows: object[]) {
+  return sql`
+    INSERT INTO relationship_snapshots (tenant_id, scan_id, from_arn, to_arn, rel_type, properties)
+    SELECT ${tenantId}::uuid, ${scanId}::uuid, r.from_arn, r.to_arn, r.rel_type, r.properties
+      FROM json_to_recordset(${JSON.stringify(rows)}::json)
+        AS r(from_arn text, to_arn text, rel_type text, properties jsonb)`;
+}
 
 const GLOBAL = "global";
 
@@ -286,6 +310,7 @@ export async function saveScanResult(
     apiCalls: number;
   },
 ): Promise<void> {
+  const groups = graphGroups(params.resources, params.relationships);
   return withTenant(scope.tenantId, async () => {
     try {
       for (let i = 0; i < params.resources.length; i += BATCH_SIZE) {
@@ -295,40 +320,42 @@ export async function saveScanResult(
           const extracted = batch.map((r) => extractDocuments(r));
           const documents = new Map(extracted.flatMap((e) => [...e.documents]));
           if (documents.size > 0) await tx.execute(upsertDocuments(scope.tenantId, documents));
-          await tx
-            .insert(resourceSnapshots)
-            .values(
+          await tx.execute(
+            insertResourceSnapshots(
+              scope.tenantId,
+              scanId,
               batch.map((r, j) => ({
-                tenantId: scope.tenantId,
-                scanId,
                 arn: r.arn,
                 kind: r.kind,
                 name: r.name,
                 region: r.region,
-                accountId: r.accountId,
+                account_id: r.accountId,
                 tags: r.tags,
                 properties: extracted[j]!.properties,
                 derived: r.derived,
                 // Of the resource as collected: a document's content, not where
                 // it is stored, is what makes two scans of a role differ.
                 fingerprint: fingerprint(r),
+                graph_group: groups.get(r.arn) ?? null,
               })),
-            )
-            .onConflictDoNothing({ target: [resourceSnapshots.scanId, resourceSnapshots.arn] });
+            ),
+          );
         });
       }
 
       for (let i = 0; i < params.relationships.length; i += BATCH_SIZE) {
         const batch = params.relationships.slice(i, i + BATCH_SIZE);
-        await db.insert(relationshipSnapshots).values(
-          batch.map((rel) => ({
-            tenantId: scope.tenantId,
+        await db.execute(
+          insertRelationshipSnapshots(
+            scope.tenantId,
             scanId,
-            fromArn: rel.from,
-            toArn: rel.to,
-            relType: rel.type,
-            properties: rel.properties ?? {},
-          })),
+            batch.map((rel) => ({
+              from_arn: rel.from,
+              to_arn: rel.to,
+              rel_type: rel.type,
+              properties: rel.properties ?? {},
+            })),
+          ),
         );
       }
 

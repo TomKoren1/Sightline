@@ -14,7 +14,7 @@ import { system } from "../db/postgres.js";
 import * as schema from "../db/schema.js";
 import { asConnectionId, asTenantId } from "../core/ids.js";
 import type { Scope } from "../core/scope.js";
-import { askSchema } from "./chat.dto.js";
+import { askRequest as askSchema } from "@sightline/shared/api";
 import { ChatService } from "./chat.service.js";
 
 const HAS_INFRA = !process.env["SKIP_INTEGRATION"];

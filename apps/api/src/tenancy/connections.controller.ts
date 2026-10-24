@@ -30,7 +30,6 @@ import {
   Param,
   Post,
 } from "@nestjs/common";
-import { z } from "zod";
 
 import { cfg, isHosted } from "../core/config.js";
 import {
@@ -43,17 +42,10 @@ import { CurrentTenant, IsAdmin } from "./currentTenant.decorator.js";
 import { asConnectionId, type TenantId } from "../core/ids.js";
 import { onboardingPlan, verifyConnection, VerifyTooSoon } from "./onboarding.js";
 import { MinRole, RecentSignIn } from "../core/access.js";
-
-const createSchema = z.object({
-  kind: z.enum(["real", "demo", "organization"]).default("real"),
-  label: z.string().trim().min(1).max(60),
-});
-
-const targetSchema = z.object({
-  /** Twelve digits. The role ARN is derived, so this is the only field. */
-  accountId: z.string().regex(/^\d{12}$/, "An AWS account id is twelve digits"),
-  templateVersion: z.string().max(40).optional(),
-});
+import {
+  connectionCreateRequest as createSchema,
+  connectionTargetRequest as targetSchema,
+} from "@sightline/shared/api";
 
 @Controller("api/connections")
 export class ConnectionsController {

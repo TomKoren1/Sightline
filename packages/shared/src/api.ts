@@ -78,6 +78,7 @@ export const summary = z
 export type Summary = z.infer<typeof summary>;
 
 export const searchResults = z.object({ results: z.array(graphNode) }).strict();
+export type SearchResults = z.infer<typeof searchResults>;
 
 // --- findings ----------------------------------------------------------------
 
@@ -513,3 +514,43 @@ export const findingLists = [
   "unused",
 ] as const;
 export type FindingListName = (typeof findingLists)[number];
+
+// --- request bodies ------------------------------------------------------------
+// What each route accepts, validated by the server before anything else runs.
+
+export const askRequest = z.object({
+  question: z.string().min(1).max(2000),
+  /**
+   * The only way to continue a conversation. History is never accepted from
+   * the client: a client-supplied transcript lets a user put words in the
+   * assistant's mouth, which the agent then treats as its own earlier answers.
+   */
+  conversationId: z.string().uuid().optional(),
+});
+
+/** Accepting a risk needs a reason: "accepted" alone tells the next engineer nothing. */
+export const findingStatusRequest = z.discriminatedUnion("status", [
+  z.object({ status: z.literal("accepted"), reason: z.string().trim().min(3).max(500) }),
+  z.object({ status: z.literal("open") }),
+]);
+
+export const tokenCreateRequest = z.object({
+  name: z.string().trim().min(1).max(80),
+  role: z.enum(["viewer", "member", "admin"]),
+  /** Null for a token that does not expire, which the UI does not offer by default. */
+  expiresInDays: z.number().int().min(1).max(366).nullable().default(90),
+});
+
+export const connectionCreateRequest = z.object({
+  kind: z.enum(["real", "demo", "organization"]).default("real"),
+  label: z.string().trim().min(1).max(60),
+});
+
+export const connectionTargetRequest = z.object({
+  /** Twelve digits. The role ARN is derived, so this is the only field. */
+  accountId: z.string().regex(/^\d{12}$/, "An AWS account id is twelve digits"),
+  templateVersion: z.string().max(40).optional(),
+});
+
+export const teamRoleRequest = z.object({ role: teamRole });
+export const teamJoinRequest = z.object({ token: z.string().min(20).max(200) });

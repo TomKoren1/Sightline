@@ -77,7 +77,11 @@ export function ResourceDetail({
             {resource?.region ? ` · ${resource.region}` : ""}
           </div>
         </div>
-        <button onClick={onClose} className="shrink-0 text-ink-400 hover:text-ink-100">
+        <button
+          onClick={onClose}
+          aria-label="Close"
+          className="shrink-0 text-ink-400 hover:text-ink-100"
+        >
           ✕
         </button>
       </header>

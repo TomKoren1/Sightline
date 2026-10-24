@@ -458,6 +458,7 @@ the API and nginx containers are left running against databases that no longer e
 | `npm run evals:ground-truth -w @sightline/api` | Tier-1 evals — no API key needed                                               |
 | `npm run evals -w @sightline/api`              | Tier-2 agent evals — needs a key                                               |
 | `npm run gen:collectors -w @sightline/api`     | Regenerate the role template's grants and the collector list from the registry |
+| `npm run openapi -w @sightline/api`            | Rewrite `docs/openapi.json`, the API description, from the contract list       |
 | `npm run db:app-role -w @sightline/api`        | Set the restricted role's password, for row-level security                     |
 | `./scripts/backup-restore-test.sh`             | Back up, restore, and check an ExternalId still decrypts                       |
 | `helm template monitoring helm/monitoring`     | Render the monitoring stack without deploying it                               |

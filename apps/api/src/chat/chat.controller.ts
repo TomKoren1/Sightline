@@ -26,7 +26,7 @@ import { asConversationId } from "../core/ids.js";
 import { requestsRefused } from "../observability/metrics.js";
 import { mayChat, statusFor } from "../tenancy/limits.js";
 import type { Scope } from "../core/scope.js";
-import { askSchema } from "./chat.dto.js";
+import { askRequest as askSchema } from "@sightline/shared/api";
 import { ChatService } from "./chat.service.js";
 import { MinRole } from "../core/access.js";
 import { describeAgentFailure } from "../agent/failure.js";

@@ -70,6 +70,16 @@ test("sign in, scan, read the findings, ask, and connect", async ({ page }) => {
     await expect(findings.getByText("northwind-reports")).toHaveCount(0);
   });
 
+  await test.step("finds a resource by name, and opens it", async () => {
+    await page.getByLabel("Find a resource").fill("northwind-reports");
+    const findings = page.getByRole("complementary", { name: "Findings" });
+    await findings.getByRole("button", { name: /^northwind-reports/ }).click();
+    const detail = page.getByRole("complementary", { name: "Resource" });
+    await expect(detail.getByText("northwind-reports").first()).toBeVisible();
+    await detail.getByRole("button", { name: "Close" }).click();
+    await expect(detail).toHaveCount(0);
+  });
+
   await test.step("asks the agent, and gets an answer from the scanned inventory", async () => {
     const chat = page.getByRole("complementary", { name: "Ask" });
     await chat.getByPlaceholder("Ask about this account…").fill("Which buckets are public?");

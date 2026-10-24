@@ -60,6 +60,7 @@ import type {
   Findings,
   GraphData,
   GraphGroup,
+  SearchResults,
   Summary,
 } from "@sightline/shared/api";
 
@@ -168,6 +169,7 @@ export const api = {
     return get<GraphData>(`/api/graph?${search}`);
   },
   graphGroups: () => get<{ groups: GraphGroup[] }>("/api/graph/groups"),
+  search: (text: string) => get<SearchResults>(`/api/search?q=${encodeURIComponent(text)}`),
   graphNeighbours: (arn: string) =>
     get<GraphData>(`/api/graph/neighbours?arn=${encodeURIComponent(arn)}`),
   diff: () => get<{ diff: ScanDiff | null; reason?: string }>("/api/scans/diff"),
