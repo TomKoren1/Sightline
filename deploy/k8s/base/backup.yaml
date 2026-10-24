@@ -83,7 +83,7 @@ spec:
                 # their own timestamp instead of overwriting one shared series.
                 - name: POD_NAMESPACE
                   valueFrom: { fieldRef: { fieldPath: metadata.namespace } }
-              command: ["/bin/sh", "-eu", "-c"]
+              command: ["/bin/bash", "-eu", "-c"]
               args:
                 - |
                   # A new pod's address reaches the network policy a few seconds
@@ -146,20 +146,37 @@ spec:
                   # Failure to push is swallowed. A backup that was written is
                   # not a backup that failed because the metrics sink was down.
                   if [ -n "${PUSHGATEWAY_URL:-}" ]; then
-                    # A file, not `--post-data="$(...)"`. Command substitution
-                    # strips the trailing newline and the Pushgateway's text
-                    # parser requires one, so the string form is answered with
-                    # `400 Bad Request` - measured against the running
-                    # Pushgateway, not reasoned about. `--post-file` needs
-                    # busybox 1.33+; this image has 1.37.
                     printf '%s\n' \
                       "# TYPE sightline_backup_last_success_timestamp_seconds gauge" \
                       "sightline_backup_last_success_timestamp_seconds $(date -u +%s)" \
                       "# TYPE sightline_backup_size_bytes gauge" \
                       "sightline_backup_size_bytes $size" > /tmp/backup.prom
 
-                    wget -q -O- --post-file=/tmp/backup.prom \
-                      "${PUSHGATEWAY_URL}/metrics/job/sightline_backup/namespace/${POD_NAMESPACE}" \
+                    # This image has no HTTP client - no wget, curl, busybox or
+                    # python - so the POST is written by hand over bash's
+                    # /dev/tcp, which is why this script runs under bash and
+                    # not dash. An earlier version called wget and never pushed
+                    # once. Plain http only, which is what the in-cluster
+                    # Pushgateway serves; `timeout` bounds a host that never
+                    # answers. Success is a 2xx status line.
+                    push() {
+                      local rest="${PUSHGATEWAY_URL#http://}"
+                      local hostport="${rest%%/*}"
+                      local host="${hostport%%:*}" port="${hostport##*:}"
+                      [ "$port" = "$hostport" ] && port=80
+                      local path="/metrics/job/sightline_backup/namespace/${POD_NAMESPACE}"
+                      local status
+                      exec 3<>"/dev/tcp/${host}/${port}"
+                      printf 'POST %s HTTP/1.1\r\nHost: %s\r\nContent-Type: text/plain; version=0.0.4\r\nContent-Length: %s\r\nConnection: close\r\n\r\n' \
+                        "$path" "$hostport" "$(wc -c < /tmp/backup.prom)" >&3
+                      cat /tmp/backup.prom >&3
+                      IFS= read -r status <&3
+                      exec 3>&-
+                      echo "pushgateway: ${status%$'\r'}"
+                      [[ "$status" =~ ^HTTP/1\.[01]\ 2[0-9][0-9] ]]
+                    }
+                    export -f push
+                    timeout 15 bash -euc push \
                       || echo "backup written, but the pushgateway did not accept it" >&2
                   fi
               volumeMounts:
