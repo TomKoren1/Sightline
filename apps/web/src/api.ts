@@ -175,9 +175,36 @@ export interface Me {
   signedIn: boolean;
   user: { email: string; name: string | null; avatarUrl: string | null } | null;
   isAdmin: boolean;
+  /** Their role in this workspace; null when signed out. Always owner self-hosted. */
+  role: TeamRole | null;
   providers: string[];
   linked: string[];
   connections: ConnectionSummary[];
+}
+
+export type TeamRole = "owner" | "admin" | "member" | "viewer";
+const RANK: Record<TeamRole, number> = { viewer: 0, member: 1, admin: 2, owner: 3 };
+/** Whether `role` may do what needs `min`, as the server's guard decides it. */
+export const can = (role: TeamRole | null | undefined, min: TeamRole) =>
+  role != null && RANK[role] >= RANK[min];
+
+export interface Team {
+  you: { id: string; role: TeamRole };
+  members: {
+    id: string;
+    email: string;
+    name: string | null;
+    role: TeamRole;
+    joinedAt: string;
+    lastSeenAt: string | null;
+  }[];
+  invites: {
+    id: string;
+    role: TeamRole;
+    createdAt: string;
+    expiresAt: string;
+    createdBy: string | null;
+  }[];
 }
 
 export interface ConnectionSummary {
@@ -355,10 +382,29 @@ export const api = {
    * by a request that does not know it.
    */
   deleteAccount: (confirm: string) =>
-    send<{ deleted: Record<string, number>; note: string }>("/api/me", {
+    send<{ deleted?: Record<string, number>; left?: boolean; note: string }>("/api/me", {
       ...asJson({ confirm }),
       method: "DELETE",
     }),
+
+  // --- the team -------------------------------------------------------------
+  team: () => get<Team>("/api/team"),
+  createInvite: (role: TeamRole) =>
+    send<{ id: string; role: TeamRole; url: string; expiresAt: string }>(
+      "/api/team/invites",
+      asJson({ role }),
+    ),
+  revokeInvite: (id: string) =>
+    send<void>(`/api/team/invites/${encodeURIComponent(id)}`, { method: "DELETE" }),
+  setMemberRole: (id: string, role: TeamRole) =>
+    send<void>(`/api/team/members/${encodeURIComponent(id)}`, {
+      ...asJson({ role }),
+      method: "PATCH",
+    }),
+  removeMember: (id: string) =>
+    send<void>(`/api/team/members/${encodeURIComponent(id)}`, { method: "DELETE" }),
+  joinTeam: (token: string) =>
+    send<{ tenantId: string; role: TeamRole }>("/api/team/join", asJson({ token })),
 
   connections: () => get<{ connections: ConnectionSummary[] }>("/api/connections"),
 

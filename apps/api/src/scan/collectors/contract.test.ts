@@ -5,7 +5,7 @@
  *
  * The fixture check is by shape, because moto mints new ids on every seed. A
  * failure there means the collector or the seed changed: re-record with
- * `npm run gen:collectors -w @sightline/api -- --fixtures`.
+ * `npm run gen:fixtures`.
  */
 
 import { beforeAll, describe, expect, it } from "vitest";
@@ -33,11 +33,10 @@ beforeAll(async () => {
     regions: null,
   };
   try {
+    // Always from a fresh seed: the ground-truth suite's drift check leaves
+    // the account changed, and the fixtures record it as seeded.
+    await seed();
     estate = await collectEstate({ target, scanId: "contract" });
-    if (estate.collected.resources.length === 0) {
-      await seed();
-      estate = await collectEstate({ target, scanId: "contract" });
-    }
   } catch (err) {
     console.warn("contract.test skipped:", err);
   }

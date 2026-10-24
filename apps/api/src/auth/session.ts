@@ -31,7 +31,7 @@ import { cfg, useSecureCookies } from "../config.js";
  * `users.ts`, which is a small enough surface to hold in one's head.
  */
 import { system } from "../db/postgres.js";
-import { sessions, tenants, users } from "../db/schema.js";
+import { sessions, tenants, users, type TeamRole } from "../db/schema.js";
 import { asTenantId, type TenantId } from "../tenancy/ids.js";
 
 export const SESSION_COOKIE = "sightline_session";
@@ -42,6 +42,8 @@ export interface Session {
   tenantId: TenantId;
   email: string;
   isAdmin: boolean;
+  /** Their role in this tenant: `auth/roles.ts`. */
+  role: TeamRole;
   expiresAt: Date;
 }
 
@@ -122,6 +124,7 @@ export async function readSession(token: string | undefined): Promise<Session | 
       lastUsedAt: sessions.lastUsedAt,
       tenantId: users.tenantId,
       email: users.email,
+      role: users.role,
       isAdmin: tenants.isAdmin,
     })
     .from(sessions)
@@ -163,6 +166,7 @@ export async function readSession(token: string | undefined): Promise<Session | 
     tenantId: asTenantId(row.tenantId),
     email: row.email,
     isAdmin: row.isAdmin,
+    role: row.role,
     expiresAt: row.expiresAt,
   };
 }

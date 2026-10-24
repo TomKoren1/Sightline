@@ -42,6 +42,7 @@ import {
 import { CurrentTenant, IsAdmin } from "./currentTenant.decorator.js";
 import { asConnectionId, type TenantId } from "./ids.js";
 import { onboardingPlan, verifyConnection, VerifyTooSoon } from "./onboarding.js";
+import { MinRole } from "../auth/roles.js";
 
 const createSchema = z.object({
   kind: z.enum(["real", "demo"]).default("real"),
@@ -61,6 +62,7 @@ export class ConnectionsController {
     return { connections: await listConnections(tenantId) };
   }
 
+  @MinRole("admin")
   @Post()
   @HttpCode(201)
   async create(
@@ -132,6 +134,7 @@ export class ConnectionsController {
    * endpoint's job *is* the diagnosis, and a 5xx would make the UI render "the
    * request failed" over the top of an explanation of what to fix.
    */
+  @MinRole("admin")
   @Post(":id/verify")
   @HttpCode(200)
   async verify(@CurrentTenant() tenantId: TenantId, @Param("id") id: string) {
@@ -157,6 +160,7 @@ export class ConnectionsController {
    * by the template we publish. One field rather than a pasted ARN is the whole
    * difference between an onboarding flow people finish and one they abandon.
    */
+  @MinRole("admin")
   @Post(":id/target")
   @HttpCode(200)
   async target(
@@ -177,6 +181,7 @@ export class ConnectionsController {
    * delete the CloudFormation stack that trusts us, and saying otherwise would
    * leave standing access nobody believed was there.
    */
+  @MinRole("admin")
   @Delete(":id")
   @HttpCode(200)
   async disconnect(@CurrentTenant() tenantId: TenantId, @Param("id") id: string) {

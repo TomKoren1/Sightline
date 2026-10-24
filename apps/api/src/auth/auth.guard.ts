@@ -25,6 +25,7 @@ import type { Scope } from "../tenancy/scope.js";
 import { configuredProviders } from "./oauth.js";
 import { IS_PUBLIC } from "./public.decorator.js";
 import { readSession, SESSION_COOKIE, type Session } from "./session.js";
+import { atLeast, MIN_ROLE, type TeamRole } from "./roles.js";
 
 /** Methods that change something, and therefore need forgery protection. */
 const MUTATING = new Set(["POST", "PUT", "PATCH", "DELETE"]);
@@ -122,6 +123,19 @@ export class AuthGuard implements CanActivate {
         error:
           "This request is missing the X-Sightline-Request header, which Sightline requires on " +
           "anything that changes state so that another site cannot make it on your behalf.",
+      });
+    }
+
+    // What their role allows: what the route names, else `member` to change
+    // anything and `viewer` to read.
+    const min =
+      this.reflector.getAllAndOverride<TeamRole | undefined>(MIN_ROLE, [
+        context.getHandler(),
+        context.getClass(),
+      ]) ?? (MUTATING.has(req.method ?? "GET") ? "member" : "viewer");
+    if (!atLeast(session.role, min)) {
+      throw new ForbiddenException({
+        error: `This needs the ${min} role or above, and you are a ${session.role} in this workspace. An admin can change that.`,
       });
     }
 

@@ -16,6 +16,7 @@ import { Controller, Get, HttpCode, Inject, Post } from "@nestjs/common";
 import { CurrentScope } from "../tenancy/currentScope.decorator.js";
 import type { Scope } from "../tenancy/scope.js";
 import { EvalsService } from "./evals.service.js";
+import { MinRole } from "../auth/roles.js";
 
 @Controller("api/evals")
 export class EvalsController {
@@ -29,6 +30,7 @@ export class EvalsController {
 
   // 200, not Nest's default 201: nothing is created, and the frontend
   // and the contract tests both expect the status this returned before.
+  @MinRole("viewer")
   @Post("ground-truth")
   @HttpCode(200)
   groundTruth(@CurrentScope() scope: Scope) {

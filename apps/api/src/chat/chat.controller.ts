@@ -29,6 +29,7 @@ import type { Scope } from "../tenancy/scope.js";
 import { askSchema } from "./chat.dto.js";
 import { ChatService } from "./chat.service.js";
 import { errorMessage } from "@sightline/shared";
+import { MinRole } from "../auth/roles.js";
 
 @Controller("api")
 export class ChatController {
@@ -40,6 +41,7 @@ export class ChatController {
    * the frontend already parses this wire format, and the port was meant to
    * change the structure of the code and nothing a client can observe.
    */
+  @MinRole("viewer")
   @Post("chat")
   async ask(
     @CurrentScope() scope: Scope,

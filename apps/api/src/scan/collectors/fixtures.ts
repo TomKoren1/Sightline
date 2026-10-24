@@ -3,8 +3,8 @@
  * committed, so analysis and the tier-1 checks run with no databases and no
  * mock: in the fast CI job, and on a laptop with nothing started.
  *
- * Recorded by `npm run gen:collectors -w @sightline/api -- --fixtures` with the
- * mock seeded. moto mints new ids on every seed, so freshness is checked by
+ * Recorded by `npm run gen:fixtures`, which seeds the mock first. moto mints
+ * new ids on every seed, so freshness is checked by
  * shape - which resources, by kind and name, and how many of each relationship
  * - not byte for byte (`contract.test.ts`).
  */
@@ -55,7 +55,16 @@ export function shapeOf(output: CollectorOutput) {
   const counts: Record<string, number> = {};
   for (const r of output.relationships) counts[r.type] = (counts[r.type] ?? 0) + 1;
   return {
-    resources: output.resources.map((r) => `${r.kind}:${r.name}`).sort(),
+    // A resource with no Name tag is named by its id or address, which moto
+    // mints anew on every seed, so those are not part of the shape.
+    resources: output.resources
+      .map((r) => {
+        const name = r.name
+          .replace(/\d{1,3}(\.\d{1,3}){3}/g, "#") // an address: elastic IPs
+          .replace(/[0-9a-f]{8,}(-[0-9a-f]{4,})*/gi, "#");
+        return `${r.kind}:${name}`;
+      })
+      .sort(),
     relationships: counts,
   };
 }

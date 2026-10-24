@@ -274,8 +274,47 @@ export const users = pgTable(
     avatarUrl: text("avatar_url"),
     createdAt: timestamp("created_at", tz).notNull().defaultNow(),
     lastSeenAt: timestamp("last_seen_at", tz),
+    /**
+     * What this user may do in their tenant (`auth/roles.ts`). Owner by
+     * default, because every user who arrives without an invite is the only
+     * member of a tenant made for them.
+     */
+    role: text("role").$type<TeamRole>().notNull().default("owner"),
   },
-  (t) => [index("users_tenant").on(t.tenantId)],
+  (t) => [
+    index("users_tenant").on(t.tenantId),
+    check("users_role", sql`${t.role} IN ('owner','admin','member','viewer')`),
+  ],
+);
+
+export type TeamRole = "owner" | "admin" | "member" | "viewer";
+
+/**
+ * An invitation to join a tenant: a link copied by hand, so there is no email
+ * to send and nothing to pay for. Only the token's hash is kept - the link is
+ * shown once, to whoever made it - and it works once, within a week.
+ */
+export const invites = pgTable(
+  "invites",
+  {
+    id: uuid("id").primaryKey(),
+    tenantId: uuid("tenant_id")
+      .notNull()
+      .references(() => tenants.id, { onDelete: "cascade" }),
+    tokenHash: bytea("token_hash").notNull().unique(),
+    role: text("role").$type<TeamRole>().notNull(),
+    createdBy: uuid("created_by").references(() => users.id, { onDelete: "set null" }),
+    createdAt: timestamp("created_at", tz).notNull().defaultNow(),
+    expiresAt: timestamp("expires_at", tz).notNull(),
+    acceptedBy: uuid("accepted_by").references(() => users.id, { onDelete: "set null" }),
+    acceptedAt: timestamp("accepted_at", tz),
+    revokedAt: timestamp("revoked_at", tz),
+  },
+  (t) => [
+    index("invites_tenant").on(t.tenantId, t.createdAt.desc()),
+    // An invite can grant anything but ownership, which is given by an owner.
+    check("invites_role", sql`${t.role} IN ('admin','member','viewer')`),
+  ],
 );
 
 /**

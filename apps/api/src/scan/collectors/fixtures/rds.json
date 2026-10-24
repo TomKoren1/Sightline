@@ -30,9 +30,9 @@
     "endpoint": "analytics-db.aaaaaaaaaa.us-east-1.rds.amazonaws.com",
     "port": 5432,
     "dbSubnetGroupName": "prod-db-subnets",
-    "vpcId": "vpc-0115d7ae17d33947a",
+    "vpcId": "vpc-a87680cc82c03f8bb",
     "securityGroupIds": [
-     "sg-7f3a7b23e5278355e"
+     "sg-bef5f7b7549422b12"
     ]
    },
    "derived": {}
@@ -61,9 +61,9 @@
     "endpoint": "northwind-prod-db.aaaaaaaaaa.us-east-1.rds.amazonaws.com",
     "port": 5432,
     "dbSubnetGroupName": "prod-db-subnets",
-    "vpcId": "vpc-0115d7ae17d33947a",
+    "vpcId": "vpc-a87680cc82c03f8bb",
     "securityGroupIds": [
-     "sg-710f9b3e4c35418e0"
+     "sg-1cd67196b31331e11"
     ]
    },
    "derived": {}
@@ -77,10 +77,10 @@
    "tags": {},
    "properties": {
     "name": "prod-db-subnets",
-    "vpcId": "vpc-0115d7ae17d33947a",
+    "vpcId": "vpc-a87680cc82c03f8bb",
     "subnetIds": [
-     "subnet-060e08738e8662d9f",
-     "subnet-ea3e444c343d127ba"
+     "subnet-c0ca0a37048a75d7e",
+     "subnet-48849e27ad5674890"
     ]
    },
    "derived": {}
@@ -89,7 +89,7 @@
  "relationships": [
   {
    "from": "arn:aws:rds:us-east-1:123456789012:db:analytics-db",
-   "to": "arn:aws:ec2:us-east-1:123456789012:security-group/sg-7f3a7b23e5278355e",
+   "to": "arn:aws:ec2:us-east-1:123456789012:security-group/sg-bef5f7b7549422b12",
    "type": "HAS_SECURITY_GROUP"
   },
   {
@@ -99,17 +99,17 @@
   },
   {
    "from": "arn:aws:rds:us-east-1:123456789012:db:analytics-db",
-   "to": "arn:aws:ec2:us-east-1:123456789012:subnet/subnet-060e08738e8662d9f",
+   "to": "arn:aws:ec2:us-east-1:123456789012:subnet/subnet-48849e27ad5674890",
    "type": "IN_SUBNET"
   },
   {
    "from": "arn:aws:rds:us-east-1:123456789012:db:analytics-db",
-   "to": "arn:aws:ec2:us-east-1:123456789012:subnet/subnet-ea3e444c343d127ba",
+   "to": "arn:aws:ec2:us-east-1:123456789012:subnet/subnet-c0ca0a37048a75d7e",
    "type": "IN_SUBNET"
   },
   {
    "from": "arn:aws:rds:us-east-1:123456789012:db:northwind-prod-db",
-   "to": "arn:aws:ec2:us-east-1:123456789012:security-group/sg-710f9b3e4c35418e0",
+   "to": "arn:aws:ec2:us-east-1:123456789012:security-group/sg-1cd67196b31331e11",
    "type": "HAS_SECURITY_GROUP"
   },
   {
@@ -119,12 +119,12 @@
   },
   {
    "from": "arn:aws:rds:us-east-1:123456789012:db:northwind-prod-db",
-   "to": "arn:aws:ec2:us-east-1:123456789012:subnet/subnet-060e08738e8662d9f",
+   "to": "arn:aws:ec2:us-east-1:123456789012:subnet/subnet-48849e27ad5674890",
    "type": "IN_SUBNET"
   },
   {
    "from": "arn:aws:rds:us-east-1:123456789012:db:northwind-prod-db",
-   "to": "arn:aws:ec2:us-east-1:123456789012:subnet/subnet-ea3e444c343d127ba",
+   "to": "arn:aws:ec2:us-east-1:123456789012:subnet/subnet-c0ca0a37048a75d7e",
    "type": "IN_SUBNET"
   },
   {
@@ -134,12 +134,12 @@
   },
   {
    "from": "arn:aws:rds:us-east-1:123456789012:subgrp:prod-db-subnets",
-   "to": "arn:aws:ec2:us-east-1:123456789012:subnet/subnet-060e08738e8662d9f",
+   "to": "arn:aws:ec2:us-east-1:123456789012:subnet/subnet-48849e27ad5674890",
    "type": "USES_SUBNET_GROUP"
   },
   {
    "from": "arn:aws:rds:us-east-1:123456789012:subgrp:prod-db-subnets",
-   "to": "arn:aws:ec2:us-east-1:123456789012:subnet/subnet-ea3e444c343d127ba",
+   "to": "arn:aws:ec2:us-east-1:123456789012:subnet/subnet-c0ca0a37048a75d7e",
    "type": "USES_SUBNET_GROUP"
   }
  ]

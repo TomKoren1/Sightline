@@ -52,6 +52,10 @@ export interface ScanBannerProps {
   signedInAs: string | null;
   onSignOut: () => void;
   onDeleteAccount: () => void;
+  /** Viewers read; scanning needs the member role. */
+  canScan: boolean;
+  /** Hosted only: who is in the workspace, and inviting more. */
+  onOpenTeam?: () => void;
 }
 
 export function ScanBanner({
@@ -71,6 +75,8 @@ export function ScanBanner({
   signedInAs,
   onSignOut,
   onDeleteAccount,
+  canScan,
+  onOpenTeam,
 }: ScanBannerProps) {
   const units = scanning ? liveUnits : (scan?.units ?? []);
   const failed = units.filter((u) => u.status === "failed");
@@ -130,6 +136,14 @@ export function ScanBanner({
           {signedInAs && (
             <>
               <span className="mx-0.5 h-4 w-px bg-ink-700" aria-hidden />
+              {onOpenTeam && (
+                <button
+                  onClick={onOpenTeam}
+                  className="rounded border border-ink-700 bg-ink-800 px-2 py-1 text-[11px] text-ink-300 transition hover:border-ink-600 hover:text-ink-100"
+                >
+                  Team
+                </button>
+              )}
               <button
                 onClick={onSignOut}
                 title={`Signed in as ${signedInAs}`}
@@ -168,7 +182,8 @@ export function ScanBanner({
           </button>
           <button
             onClick={onScan}
-            disabled={scanning}
+            disabled={scanning || !canScan}
+            title={canScan ? undefined : "Scanning needs the member role"}
             className="rounded border border-ink-700 bg-ink-800 px-2.5 py-1 text-[11px] text-ink-100 transition hover:border-ink-600 disabled:cursor-not-allowed disabled:opacity-40"
           >
             {scanning

@@ -43,6 +43,8 @@ import {
 } from "./session.js";
 import { findOrCreateUser, getUser, linkedProviders, SignInRefused } from "./users.js";
 import type { AuthedRequest } from "./auth.guard.js";
+import { MinRole } from "./roles.js";
+import { leaveOrLast, TeamRefused } from "./team.js";
 
 /** Where to send the browser once sign-in has resolved, one way or the other. */
 function appUrl(query: Record<string, string> = {}): string {
@@ -68,6 +70,7 @@ export class AuthController {
 
   /** Revoke this session. Public, so an expired cookie can still be cleared. */
   @Public()
+  @MinRole("viewer")
   @Post("logout")
   @HttpCode(204)
   async logout(@Req() req: FastifyRequest, @Res({ passthrough: true }) reply: FastifyReply) {
@@ -85,6 +88,7 @@ export class AuthController {
   }
 
   /** Sign out everywhere. The one control that makes a stolen cookie survivable. */
+  @MinRole("viewer")
   @Post("sessions/revoke-all")
   @HttpCode(200)
   async revokeAll(@Req() req: FastifyRequest, @Res({ passthrough: true }) reply: FastifyReply) {
@@ -95,6 +99,7 @@ export class AuthController {
     return { revoked };
   }
 
+  @MinRole("viewer")
   @Delete("sessions/:id")
   @HttpCode(204)
   async revokeOne(@Req() req: FastifyRequest, @Param("id") id: string) {
@@ -186,6 +191,7 @@ export class MeController {
         signedIn: true,
         user: null,
         isAdmin: true,
+        role: "owner",
         providers: [],
         linked: [],
         connections: tenantId ? await listConnections(tenantId) : [],
@@ -198,6 +204,7 @@ export class MeController {
         signedIn: false,
         user: null,
         isAdmin: false,
+        role: null,
         providers: configuredProviders(),
         linked: [],
         connections: [],
@@ -217,6 +224,7 @@ export class MeController {
         ? { email: user.email, name: user.name, avatarUrl: user.avatarUrl }
         : { email: session.email, name: null, avatarUrl: null },
       isAdmin: session.isAdmin,
+      role: session.role,
       providers: configuredProviders(),
       linked,
       connections,
@@ -237,6 +245,7 @@ export class MeController {
    * word "DELETE" becomes muscle memory. The `X-Sightline-Request` header the
    * guard demands on every mutating request is the other half.
    */
+  @MinRole("viewer")
   @Delete("me")
   @HttpCode(200)
   async deleteAccount(@Req() req: FastifyRequest, @Body() body: unknown) {
@@ -267,6 +276,24 @@ export class MeController {
       throw new BadRequestException({
         error: `To confirm, send { "confirm": "<your email address>" }. Nothing has been deleted.`,
       });
+    }
+
+    // With others in the workspace, deleting your account is leaving it.
+    let outcome: "left" | "last";
+    try {
+      outcome = await leaveOrLast(session);
+    } catch (err) {
+      if (err instanceof TeamRefused) throw new BadRequestException({ error: err.message });
+      throw err;
+    }
+    if (outcome === "left") {
+      req.log.info({ tenantId: session.tenantId }, "member left");
+      return {
+        left: true,
+        note:
+          "Your account is deleted and you have left the workspace. Its accounts, scans and " +
+          "other members are untouched.",
+      };
     }
 
     const deleted = await purgeTenant(session.tenantId);

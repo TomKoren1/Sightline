@@ -12,7 +12,9 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { ReactFlowProvider } from "@xyflow/react";
 import type { ScanEvent, ScanUnit } from "@sightline/shared";
 
-import { api, selectConnection, startScan, watchScan } from "./api.js";
+import { api, can, selectConnection, startScan, watchScan } from "./api.js";
+import { captureJoinToken, clearJoin, pendingJoin } from "./join.js";
+import { Team } from "./components/Team.js";
 import type { ConnectionSummary } from "./api.js";
 import { DEFAULT_VISIBLE_KINDS, KIND_STYLES, styleFor } from "./kinds.js";
 import { Chat } from "./components/Chat.js";
@@ -44,7 +46,7 @@ export function App() {
   const [selectedArn, setSelectedArn] = useState<string | null>(null);
   const [visibleKinds, setVisibleKinds] = useState<string[]>(DEFAULT_VISIBLE_KINDS);
   const [showFilters, setShowFilters] = useState(false);
-  const [modal, setModal] = useState<"trust" | "connection" | "delete" | null>(null);
+  const [modal, setModal] = useState<"trust" | "connection" | "delete" | "team" | null>(null);
   const [connectionId, setConnectionId] = useState<string | null>(null);
   /**
    * The account a disconnect has been asked for, pending confirmation.
@@ -61,6 +63,23 @@ export function App() {
    */
   const me = useQuery({ queryKey: ["me"], queryFn: api.me });
   const connections = me.data?.connections ?? [];
+
+  // An invite link: kept across the sign-in round trip, accepted once signed in.
+  const [joinError, setJoinError] = useState<string | null>(null);
+  const [invited] = useState(() => {
+    captureJoinToken();
+    return pendingJoin() !== null;
+  });
+  const signedInHosted = Boolean(me.data?.hosted && me.data.signedIn);
+  useEffect(() => {
+    const token = signedInHosted ? pendingJoin() : null;
+    if (!token) return;
+    clearJoin();
+    const joining = api.joinTeam(token);
+    joining
+      .then(() => queryClient.invalidateQueries())
+      .catch((err: unknown) => setJoinError(errorMessage(err)));
+  }, [signedInHosted, queryClient]);
 
   /**
    * Every tenant-data query is keyed by the connection.
@@ -253,7 +272,7 @@ export function App() {
    * an empty application - and so a request is never made on behalf of nobody.
    */
   if (me.data?.hosted && !me.data.signedIn) {
-    return <SignIn providers={me.data.providers} />;
+    return <SignIn providers={me.data.providers} invited={invited} />;
   }
 
   const nodes = graph.data?.nodes ?? [];
@@ -281,7 +300,25 @@ export function App() {
           void api.logout().then(() => window.location.reload());
         }}
         onDeleteAccount={() => setModal("delete")}
+        canScan={can(me.data?.role, "member")}
+        {...(me.data?.hosted ? { onOpenTeam: () => setModal("team") } : {})}
       />
+
+      {joinError && (
+        <div className="border-b border-danger/30 bg-danger/10 px-3 py-1.5 text-[11px] text-danger">
+          The invite could not be accepted: {joinError}
+        </div>
+      )}
+
+      {modal === "team" && (
+        <Modal
+          title="Team"
+          subtitle="Who can see and change this workspace"
+          onClose={() => setModal(null)}
+        >
+          <Team />
+        </Modal>
+      )}
 
       {modal === "delete" && me.data?.user?.email && (
         <Modal

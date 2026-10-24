@@ -20,6 +20,7 @@ import { asJobId, asScanId, type JobId } from "../tenancy/ids.js";
 import { CurrentScope } from "../tenancy/currentScope.decorator.js";
 import type { Scope } from "../tenancy/scope.js";
 import { ScansService } from "./scans.service.js";
+import { MinRole } from "../auth/roles.js";
 
 /** Headers that stop a reverse proxy buffering an event stream. */
 const SSE_HEADERS = {
@@ -107,6 +108,7 @@ export class ScansController {
    * response no longer cancels anything - which is the point, and is why
    * `scan.queued` exists for the UI to show.
    */
+  @MinRole("member")
   @Post()
   async run(@CurrentScope() scope: Scope, @Req() req: FastifyRequest, @Res() reply: FastifyReply) {
     const userId = (req as AuthedRequest).session?.userId ?? null;
@@ -159,6 +161,7 @@ export class ScansController {
    * Only one that has not started. A running scan is left alone and says so,
    * rather than being marked cancelled while a worker carries on writing to it.
    */
+  @MinRole("member")
   @Delete("jobs/:jobId")
   @HttpCode(200)
   async cancel(@CurrentScope() scope: Scope, @Param("jobId") jobId: string) {

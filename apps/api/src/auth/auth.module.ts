@@ -5,9 +5,10 @@ import { APP_GUARD } from "@nestjs/core";
 
 import { AuthController, MeController } from "./auth.controller.js";
 import { AuthGuard } from "./auth.guard.js";
+import { TeamController } from "./team.controller.js";
 
 @Module({
-  controllers: [AuthController, MeController],
+  controllers: [AuthController, MeController, TeamController],
   /**
    * `APP_GUARD` rather than `@UseGuards` on each controller.
    *

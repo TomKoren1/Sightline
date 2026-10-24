@@ -7,15 +7,15 @@
  ],
  "resources": [
   {
-   "arn": "arn:aws:cloudfront::123456789012:distribution/Q0QLQFIXO2WQU",
+   "arn": "arn:aws:cloudfront::123456789012:distribution/UKK7LOD8WLDS9",
    "kind": "CloudFrontDistribution",
    "name": "northwind-cdn",
    "region": null,
    "accountId": "123456789012",
    "tags": {},
    "properties": {
-    "distributionId": "Q0QLQFIXO2WQU",
-    "domainName": "asgrl18l58thw.cloudfront.net",
+    "distributionId": "UKK7LOD8WLDS9",
+    "domainName": "th6si0fkcgxtu.cloudfront.net",
     "enabled": true,
     "aliases": [],
     "webAclId": null,

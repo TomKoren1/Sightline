@@ -474,12 +474,21 @@ CONTRACTS.push(
             })
             .nullable(),
           isAdmin: z.boolean(),
+          role: z.enum(["owner", "admin", "member", "viewer"]).nullable(),
           providers: z.array(z.string()),
           linked: z.array(z.string()),
           connections: z.array(CONNECTION_SUMMARY),
         })
         .strict(),
     },
+  },
+  {
+    // A team exists only in hosted mode; this suite runs self-hosted, where
+    // the answer is a refusal. The rules are auth/team.test.ts.
+    method: "GET",
+    route: "/api/team",
+    url: "/api/team",
+    responses: { 400: error },
   },
   {
     method: "GET",
@@ -490,6 +499,36 @@ CONTRACTS.push(
 );
 
 const EXCLUDED = new Map<string, string>([
+  [
+    "POST /api/team/invites",
+    "Hosted only: this suite runs self-hosted, where every team route refuses. The " +
+      "rules - invites used once, roles within what the actor may grant, an owner always kept - " +
+      "are auth/team.test.ts against Postgres, and who may call each is auth/enforcement.test.ts.",
+  ],
+  [
+    "DELETE /api/team/invites/:id",
+    "Hosted only: this suite runs self-hosted, where every team route refuses. The " +
+      "rules - invites used once, roles within what the actor may grant, an owner always kept - " +
+      "are auth/team.test.ts against Postgres, and who may call each is auth/enforcement.test.ts.",
+  ],
+  [
+    "PATCH /api/team/members/:id",
+    "Hosted only: this suite runs self-hosted, where every team route refuses. The " +
+      "rules - invites used once, roles within what the actor may grant, an owner always kept - " +
+      "are auth/team.test.ts against Postgres, and who may call each is auth/enforcement.test.ts.",
+  ],
+  [
+    "DELETE /api/team/members/:id",
+    "Hosted only: this suite runs self-hosted, where every team route refuses. The " +
+      "rules - invites used once, roles within what the actor may grant, an owner always kept - " +
+      "are auth/team.test.ts against Postgres, and who may call each is auth/enforcement.test.ts.",
+  ],
+  [
+    "POST /api/team/join",
+    "Hosted only: this suite runs self-hosted, where every team route refuses. The " +
+      "rules - invites used once, roles within what the actor may grant, an owner always kept - " +
+      "are auth/team.test.ts against Postgres, and who may call each is auth/enforcement.test.ts.",
+  ],
   [
     "POST /api/scans",
     "Queues a real scan, then streams it. There is no input that makes it decline - its " +

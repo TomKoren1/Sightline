@@ -147,6 +147,18 @@ One guard is registered globally and a route escapes it only by saying
 omit with nothing failing, whereas forgetting here makes the route refuse. Both
 directions are asserted against the **real** Fastify route table.
 
+### Roles inside a workspace
+
+Each member has one role: viewer, member, admin or owner. Viewers read and ask
+questions, members also run scans and accept findings, admins also connect
+accounts and manage the team, and owners also delete the workspace and make
+owners. The same global guard enforces them. A state-changing route that names
+no role needs `member`, so a new route is protected unless it says otherwise,
+and a test holds every mutating route in the real route table to a declared
+role. A workspace always keeps an owner. People join by a single-use invite link
+that lasts a week, whose token is stored only as a hash, and every invite, join,
+role change and removal is written to the audit log.
+
 A self-hosted clone has no sign-in, deliberately: it is one operator reading
 their own account, and the `api` service publishes no host port — it is reachable
 only through the `web` container. Publishing port 3000 yourself would expose the
@@ -154,8 +166,10 @@ graph to anyone who can reach it.
 
 ## Deleting an account
 
-`DELETE /api/me`, confirmed by typing the account's own email address. It
-deletes the tenant row, which cascades to every scan, snapshot (the graph is
+`DELETE /api/me`, confirmed by typing the account's own email address. When
+other people are in the workspace it deletes only the caller, who leaves; the
+last owner is refused until someone else is an owner. When the caller is alone
+it deletes the tenant row, which cascades to every scan, snapshot (the graph is
 those snapshots), conversation, connection and encrypted ExternalId — including
 the tenant's own audit trail, which is the right answer to a deletion request.
 

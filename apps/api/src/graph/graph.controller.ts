@@ -17,6 +17,7 @@ import type { AuthedRequest } from "../auth/auth.guard.js";
 import { CurrentScope } from "../tenancy/currentScope.decorator.js";
 import type { Scope } from "../tenancy/scope.js";
 import { GraphService } from "./graph.service.js";
+import { MinRole } from "../auth/roles.js";
 
 /**
  * Accepting a risk needs a reason, because the reason is the whole value of the
@@ -83,6 +84,7 @@ export class GraphController {
     return this.graph.findings(scope);
   }
 
+  @MinRole("member")
   @Patch("findings/:id")
   setFindingStatus(
     @CurrentScope() scope: Scope,

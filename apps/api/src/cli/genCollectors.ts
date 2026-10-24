@@ -3,6 +3,7 @@
  * and the collectors' reference page. See `scan/collectors/generated.ts`.
  *
  * With `--fixtures`, also record each collector's output from the seeded mock
+ * (`npm run gen:fixtures` seeds first, so nothing another test left is kept)
  * into `scan/collectors/fixtures/` (see `fixtures.ts`). Refuses unless pointed
  * at the mock, for the same reason the ground-truth suite does.
  */

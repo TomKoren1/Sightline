@@ -76,6 +76,14 @@ test("sign in, scan, read the findings, ask, and connect", async ({ page }) => {
     ).toBeVisible({ timeout: 30_000 });
   });
 
+  await test.step("invites a teammate with a link", async () => {
+    await page.getByRole("button", { name: "Team" }).click();
+    await expect(page.getByText(E2E_USER.email)).toBeVisible();
+    await page.getByRole("button", { name: "Create link" }).click();
+    await expect(page.getByText(/\?join=[\w-]{20,}/)).toBeVisible();
+    await page.keyboard.press("Escape");
+  });
+
   await test.step("starts connecting an account of their own", async () => {
     await page.getByRole("button", { name: "Connection" }).click();
     await page.getByPlaceholder("Production").fill("Production");
