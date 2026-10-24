@@ -20,3 +20,14 @@ resources:
   # values would deploy, start, and fail at the first sign-in with an error
   # about Google rather than about configuration.
   #- secrets.sealed.yaml
+
+# BEGIN pinned images - written by .github/workflows/deliver.yml, do not edit
+# commit: c23211100780306282f8540f4b30a6b4021a6a5d
+images:
+  - name: sightline-api
+    newName: ghcr.io/tomkoren1/sightline-api
+    digest: sha256:c8db2e3d2e06271f737e541a4d19677b915e65af053c00c2cdfdd6f5b7bc0ed0
+  - name: sightline-web
+    newName: ghcr.io/tomkoren1/sightline-web
+    digest: sha256:5a784c915100967318e31d301a4bdf2d9b4a1f8e23ec1ca61744672f5b4b2297
+# END pinned images
