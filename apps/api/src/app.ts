@@ -76,7 +76,7 @@ export async function buildApp(options: BuildOptions = {}): Promise<NestFastifyA
      * cannot drift; a breaking change gets `/api/v2` and its own handlers
      * rather than changing what v1 answers. The UI keeps the bare prefix.
      */
-    rewriteUrl: (req) => (req.url ?? "/").replace(/^\/api\/v1(?=[/?]|$)/, "/api"),
+    rewriteUrl: (req: { url?: string }) => (req.url ?? "/").replace(/^\/api\/v1(?=[/?]|$)/, "/api"),
   });
 
   if (options.onRoute) {

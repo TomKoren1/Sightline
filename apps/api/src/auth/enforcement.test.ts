@@ -338,6 +338,11 @@ describe.runIf(HAS_INFRA)("API tokens", () => {
     expect(await call("GET", "/api/findings", { authorization: "Bearer slt_nope" })).toBe(401);
   });
 
+  it("keeps the operator's cross-tenant view from a customer's admin", async () => {
+    if (!available || !inject) return;
+    expect(await call("GET", "/api/operator/tenants", { cookie: adminCookie })).toBe(403);
+  });
+
   it("never falls back to a cookie sent beside a bad token", async () => {
     if (!available || !inject) return;
     const headers = { authorization: "Bearer slt_nope", cookie: adminCookie };

@@ -162,6 +162,40 @@ const CONTRACTS: Contract[] = [
   },
   {
     method: "GET",
+    route: "/api/operator/tenants",
+    url: "/api/operator/tenants",
+    responses: {
+      200: z
+        .object({
+          tenants: z.array(
+            z
+              .object({
+                id: z.string(),
+                name: z.string(),
+                createdAt: z.string(),
+                members: z.number(),
+                connections: z.number(),
+                activeScans: z.number(),
+                scansFailed7d: z.number(),
+                scansSucceeded7d: z.number(),
+                lastScan: z
+                  .object({
+                    status: z.string(),
+                    at: z.string().nullable(),
+                    error: z.string().nullable(),
+                  })
+                  .nullable(),
+                questions24h: z.number(),
+                tokens24h: z.number(),
+              })
+              .strict(),
+          ),
+        })
+        .strict(),
+    },
+  },
+  {
+    method: "GET",
     route: "/api/audit",
     url: "/api/audit",
     responses: {

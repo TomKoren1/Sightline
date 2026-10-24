@@ -56,6 +56,8 @@ export interface ScanBannerProps {
   canScan: boolean;
   /** Hosted only: who is in the workspace, and inviting more. */
   onOpenTeam?: () => void;
+  /** The operator's cross-tenant view; only for the operator's own tenant. */
+  onOpenOperator?: () => void;
 }
 
 export function ScanBanner({
@@ -77,6 +79,7 @@ export function ScanBanner({
   onDeleteAccount,
   canScan,
   onOpenTeam,
+  onOpenOperator,
 }: ScanBannerProps) {
   const units = scanning ? liveUnits : (scan?.units ?? []);
   const failed = units.filter((u) => u.status === "failed");
@@ -142,6 +145,14 @@ export function ScanBanner({
                   className="rounded border border-ink-700 bg-ink-800 px-2 py-1 text-[11px] text-ink-300 transition hover:border-ink-600 hover:text-ink-100"
                 >
                   Team
+                </button>
+              )}
+              {onOpenOperator && (
+                <button
+                  onClick={onOpenOperator}
+                  className="rounded border border-ink-700 bg-ink-800 px-2 py-1 text-[11px] text-ink-300 transition hover:border-ink-600 hover:text-ink-100"
+                >
+                  Tenants
                 </button>
               )}
               <button

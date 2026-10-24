@@ -224,6 +224,20 @@ export interface AuditEntry {
 /** A plain link rather than a fetch: the browser saves the file itself. */
 export const auditExportUrl = (format: "csv" | "json") => `/api/audit/export?format=${format}`;
 
+export interface TenantHealth {
+  id: string;
+  name: string;
+  createdAt: string;
+  members: number;
+  connections: number;
+  activeScans: number;
+  scansFailed7d: number;
+  scansSucceeded7d: number;
+  lastScan: { status: string; at: string | null; error: string | null } | null;
+  questions24h: number;
+  tokens24h: number;
+}
+
 export interface ApiToken {
   id: string;
   name: string;
@@ -453,6 +467,7 @@ export const api = {
   // --- the team -------------------------------------------------------------
   team: () => get<Team>("/api/team"),
   apiTokens: () => get<{ tokens: ApiToken[] }>("/api/tokens"),
+  operatorTenants: () => get<{ tenants: TenantHealth[] }>("/api/operator/tenants"),
   createApiToken: (input: { name: string; role: TeamRole; expiresInDays: number }) =>
     send<{ id: string; token: string; expiresAt: string | null }>("/api/tokens", asJson(input)),
   revokeApiToken: (id: string) =>

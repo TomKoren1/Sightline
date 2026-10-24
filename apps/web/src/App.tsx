@@ -15,6 +15,7 @@ import type { ScanEvent, ScanUnit } from "@sightline/shared";
 import { api, can, selectConnection, startScan, watchScan } from "./api.js";
 import { captureJoinToken, clearJoin, pendingJoin } from "./join.js";
 import { Team } from "./components/Team.js";
+import { OperatorView } from "./components/OperatorView.js";
 import type { ConnectionSummary, GraphData } from "./api.js";
 import { GraphGroups } from "./components/GraphGroups.js";
 import { FOCUS, LARGE_ACCOUNT, mergeGraphs } from "./graphViews.js";
@@ -48,7 +49,9 @@ export function App() {
   const [selectedArn, setSelectedArn] = useState<string | null>(null);
   const [visibleKinds, setVisibleKinds] = useState<string[]>(DEFAULT_VISIBLE_KINDS);
   const [showFilters, setShowFilters] = useState(false);
-  const [modal, setModal] = useState<"trust" | "connection" | "delete" | "team" | null>(null);
+  const [modal, setModal] = useState<
+    "trust" | "connection" | "delete" | "team" | "operator" | null
+  >(null);
   const [connectionId, setConnectionId] = useState<string | null>(null);
   /**
    * The account a disconnect has been asked for, pending confirmation.
@@ -332,6 +335,9 @@ export function App() {
         onDeleteAccount={() => setModal("delete")}
         canScan={can(me.data?.role, "member")}
         {...(me.data?.hosted ? { onOpenTeam: () => setModal("team") } : {})}
+        {...(me.data?.hosted && me.data.isAdmin && can(me.data.role, "admin")
+          ? { onOpenOperator: () => setModal("operator") }
+          : {})}
       />
 
       {joinError && (
@@ -347,6 +353,16 @@ export function App() {
           onClose={() => setModal(null)}
         >
           <Team />
+        </Modal>
+      )}
+
+      {modal === "operator" && (
+        <Modal
+          title="Tenants"
+          subtitle="Every workspace's scans and usage, for support"
+          onClose={() => setModal(null)}
+        >
+          <OperatorView />
         </Modal>
       )}
 
