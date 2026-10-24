@@ -16,11 +16,12 @@
  * so a scan id from the wrong tenant returns nothing twice over.
  */
 
-import { sql, type SQL } from "drizzle-orm";
+import { sql } from "drizzle-orm";
 import { INTERNET_ARN, type Relationship, type Resource } from "@sightline/shared";
 
 import { clamp, flag, read, type GraphScope, type ResourceRow } from "./graphRead.js";
-import { withTenant } from "./postgres.js";
+import { db, withTenant } from "./postgres.js";
+import { backfillSql } from "./graphGroup.js";
 import { withDocuments } from "./repository.js";
 import {
   hopsFrom,
@@ -201,21 +202,27 @@ const nodeColumns = sql.raw(`r.arn, r.kind, r.name, r.region,
 const findingsFirst = sql.raw(`coalesce((r.derived->>'isPublic')::boolean, false) DESC,
            coalesce((r.derived->>'isAdmin')::boolean, false) DESC, r.kind, r.name`);
 
+/** Scans whose `graph_group` is known to be filled in. Snapshots never change. */
+const grouped = new Set<string>();
+
 /**
- * Which VPC each resource is in: directly (IN_VPC), through its subnet, or -
- * for a VPC - itself. Everything else is grouped by kind.
+ * A scan written before `graph_group` existed gets it on its first read, by
+ * the rule the write uses (`db/graphGroup.ts`). A migration could not do
+ * this: the snapshot tables force row-level security even on their owner.
  */
-const membership = (r: SQL, e: SQL) => sql`
-  SELECT DISTINCT ON (r.arn) r.arn,
-         CASE WHEN coalesce(v.to_arn, sv.to_arn, CASE WHEN r.kind = 'Vpc' THEN r.arn END) IS NOT NULL
-              THEN 'vpc:' || coalesce(v.to_arn, sv.to_arn, r.arn)
-              ELSE 'kind:' || r.kind END AS "group"
-    FROM ${r} r
-    LEFT JOIN ${e} v ON v.from_arn = r.arn AND v.rel_type = 'IN_VPC'
-    LEFT JOIN ${e} s ON s.from_arn = r.arn AND s.rel_type = 'IN_SUBNET'
-    LEFT JOIN ${e} sv ON sv.from_arn = s.to_arn AND sv.rel_type = 'IN_VPC'
-   WHERE r.kind NOT IN ('Internet', 'Region', 'Account')
-   ORDER BY r.arn`;
+async function ensureGroups(scope: GraphScope): Promise<void> {
+  if (grouped.has(scope.scanId)) return;
+  await withTenant(scope.tenantId, async () => {
+    const { rows } = await db.execute(sql`
+      SELECT 1 FROM resource_snapshots
+       WHERE tenant_id = ${scope.tenantId} AND scan_id = ${scope.scanId}
+         AND graph_group IS NULL AND kind NOT IN ('Internet', 'Region', 'Account')
+       LIMIT 1`);
+    if (rows.length > 0) await db.execute(backfillSql(scope.tenantId, scope.scanId));
+  });
+  if (grouped.size > 10_000) grouped.clear();
+  grouped.add(scope.scanId);
+}
 
 /** `IN` lists, so the (scan_id, from_arn) index finds the edges; the view is at most 500 nodes. */
 async function edgesAmong(scope: GraphScope, arns: string[]) {
@@ -250,19 +257,18 @@ export async function fetchGraph(
   const kinds = params.kinds ? JSON.stringify(params.kinds) : null;
   const group = params.group ?? null;
   const limit = clamp(params.limit, 500);
+  if (group !== null) await ensureGroups(scope);
   const nodes = await read<ResourceRow & { total: number }>(
     scope,
     (r, e) => sql`
-    WITH m AS (${membership(r, e)})
     SELECT ${nodeColumns}, count(*) OVER ()::int AS total
       FROM ${r} r
-      LEFT JOIN m ON m.arn = r.arn
      WHERE (${region}::text IS NULL OR r.region = ${region} OR r.region IS NULL)
        AND (${kinds}::jsonb IS NULL OR ${kinds}::jsonb ? r.kind)
-       AND (${group}::text IS NULL OR m."group" = ${group}
+       AND (${group}::text IS NULL OR r.graph_group = ${group}
             OR (r.kind = 'Internet' AND EXISTS (
-                  SELECT 1 FROM ${e} x JOIN m mm ON mm.arn = x.to_arn
-                   WHERE x.from_arn = r.arn AND mm."group" = ${group})))
+                  SELECT 1 FROM ${e} x JOIN ${r} mm ON mm.arn = x.to_arn
+                   WHERE x.from_arn = r.arn AND mm.graph_group = ${group})))
      ORDER BY ${group === null ? sql.raw("r.kind, r.name") : findingsFirst}
      LIMIT ${limit}`,
   );
@@ -281,6 +287,7 @@ export async function fetchGraph(
 
 /** The groups a large account is browsed by: each VPC, then each kind outside one. */
 export async function graphGroups(scope: GraphScope) {
+  await ensureGroups(scope);
   return read<{
     id: string;
     name: string;
@@ -291,14 +298,14 @@ export async function graphGroups(scope: GraphScope) {
     kinds: Record<string, number>;
   }>(
     scope,
-    (r, e) => sql`
-    WITH m AS (${membership(r, e)}),
-    per AS (
-      SELECT m."group", r.kind, count(*)::int AS n,
+    (r) => sql`
+    WITH per AS (
+      SELECT r.graph_group AS "group", r.kind, count(*)::int AS n,
              count(*) FILTER (WHERE (r.derived->>'isPublic')::boolean)::int AS pub,
              count(*) FILTER (WHERE (r.derived->>'isAdmin')::boolean)::int AS adm
-        FROM m JOIN ${r} r ON r.arn = m.arn
-       GROUP BY m."group", r.kind
+        FROM ${r} r
+       WHERE r.graph_group IS NOT NULL
+       GROUP BY r.graph_group, r.kind
     )
     SELECT per."group" AS id,
            coalesce(v.name, substr(per."group", 6)) AS name,

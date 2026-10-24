@@ -133,10 +133,18 @@ export const resourceSnapshots = pgTable(
     properties: jsonb("properties").$type<Resource["properties"]>().notNull().default({}),
     derived: jsonb("derived").$type<Resource["derived"]>().notNull().default({}),
     fingerprint: text("fingerprint").notNull(),
+    /**
+     * The group a large account is browsed by: `vpc:<arn>` or `kind:<Kind>`,
+     * null for the synthetic nodes. Decided once, when the scan is written,
+     * rather than by joining every edge on each read. Null on rows written
+     * before the column existed, until their first read fills them in.
+     */
+    graphGroup: text("graph_group"),
   },
   (t) => [
     primaryKey({ columns: [t.scanId, t.arn] }),
     index("resource_snapshots_kind").on(t.scanId, t.kind),
+    index("resource_snapshots_group").on(t.scanId, t.graphGroup),
     index("resource_snapshots_tenant_arn").on(t.tenantId, t.arn),
   ],
 );

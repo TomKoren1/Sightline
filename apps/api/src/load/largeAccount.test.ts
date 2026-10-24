@@ -235,8 +235,8 @@ beforeAll(async () => {
         );
         await system.execute(sql`
           INSERT INTO resource_snapshots
-                 (tenant_id, scan_id, arn, kind, name, region, account_id, tags, properties, derived, fingerprint)
-          SELECT tenant_id, ${copy}, arn, kind, name, region, account_id, tags, properties, derived, fingerprint
+                 (tenant_id, scan_id, arn, kind, name, region, account_id, tags, properties, derived, fingerprint, graph_group)
+          SELECT tenant_id, ${copy}, arn, kind, name, region, account_id, tags, properties, derived, fingerprint, graph_group
             FROM resource_snapshots WHERE scan_id = ${scanId}`);
         await system.execute(sql`
           INSERT INTO relationship_snapshots (tenant_id, scan_id, from_arn, to_arn, rel_type, properties)

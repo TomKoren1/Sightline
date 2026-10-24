@@ -18,6 +18,7 @@ import {
   selectDocuments,
   upsertDocuments,
 } from "./policyDocuments.js";
+import { graphGroups } from "./graphGroup.js";
 
 /**
  * Anything that can run a write: the pool, or a transaction on it.
@@ -57,12 +58,14 @@ const BATCH_SIZE = 2000;
 function insertResourceSnapshots(tenantId: string, scanId: string, rows: object[]) {
   return sql`
     INSERT INTO resource_snapshots
-           (tenant_id, scan_id, arn, kind, name, region, account_id, tags, properties, derived, fingerprint)
+           (tenant_id, scan_id, arn, kind, name, region, account_id, tags, properties, derived,
+            fingerprint, graph_group)
     SELECT ${tenantId}::uuid, ${scanId}::uuid,
-           r.arn, r.kind, r.name, r.region, r.account_id, r.tags, r.properties, r.derived, r.fingerprint
+           r.arn, r.kind, r.name, r.region, r.account_id, r.tags, r.properties, r.derived,
+           r.fingerprint, r.graph_group
       FROM json_to_recordset(${JSON.stringify(rows)}::json)
         AS r(arn text, kind text, name text, region text, account_id text,
-             tags jsonb, properties jsonb, derived jsonb, fingerprint text)
+             tags jsonb, properties jsonb, derived jsonb, fingerprint text, graph_group text)
     ON CONFLICT (scan_id, arn) DO NOTHING`;
 }
 
@@ -307,6 +310,7 @@ export async function saveScanResult(
     apiCalls: number;
   },
 ): Promise<void> {
+  const groups = graphGroups(params.resources, params.relationships);
   return withTenant(scope.tenantId, async () => {
     try {
       for (let i = 0; i < params.resources.length; i += BATCH_SIZE) {
@@ -332,6 +336,7 @@ export async function saveScanResult(
                 // Of the resource as collected: a document's content, not where
                 // it is stored, is what makes two scans of a role differ.
                 fingerprint: fingerprint(r),
+                graph_group: groups.get(r.arn) ?? null,
               })),
             ),
           );
