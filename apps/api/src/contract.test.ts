@@ -43,15 +43,6 @@ const node = z.object({
   region: z.string().nullable(),
 });
 
-const graphView = z
-  .object({
-    nodes: z.array(node),
-    edges: z.array(z.object({ from: z.string(), to: z.string(), type: z.string() })),
-    total: z.number(),
-    truncated: z.boolean(),
-  })
-  .strict();
-
 const scan = z.object({
   id: z.string(),
   accountId: z.string(),
@@ -165,16 +156,7 @@ const CONTRACTS: Contract[] = [
     method: "GET",
     route: "/api/webhook",
     url: "/api/webhook",
-    responses: {
-      200: z
-        .object({
-          configured: z.boolean(),
-          host: z.string().nullable(),
-          lastDeliveryAt: z.string().nullable(),
-          lastStatus: z.string().nullable(),
-        })
-        .strict(),
-    },
+    responses: { 200: api.webhookView },
   },
   {
     method: "GET",
@@ -186,70 +168,19 @@ const CONTRACTS: Contract[] = [
     method: "GET",
     route: "/api/operator/tenants",
     url: "/api/operator/tenants",
-    responses: {
-      200: z
-        .object({
-          tenants: z.array(
-            z
-              .object({
-                id: z.string(),
-                name: z.string(),
-                createdAt: z.string(),
-                members: z.number(),
-                connections: z.number(),
-                activeScans: z.number(),
-                scansFailed7d: z.number(),
-                scansSucceeded7d: z.number(),
-                lastScan: z
-                  .object({
-                    status: z.string(),
-                    at: z.string().nullable(),
-                    error: z.string().nullable(),
-                  })
-                  .nullable(),
-                questions24h: z.number(),
-                tokens24h: z.number(),
-              })
-              .strict(),
-          ),
-        })
-        .strict(),
-    },
+    responses: { 200: api.tenantHealthList },
   },
   {
     method: "GET",
     route: "/api/audit",
     url: "/api/audit",
-    responses: {
-      200: z
-        .object({
-          entries: z.array(
-            z
-              .object({
-                id: z.string(),
-                at: z.string(),
-                action: z.string(),
-                subject: z.string().nullable(),
-                detail: z.record(z.string(), z.unknown()),
-                ip: z.string().nullable(),
-                actor: z.object({ id: z.string(), email: z.string().nullable() }).nullable(),
-              })
-              .strict(),
-          ),
-          next: z.string().nullable(),
-        })
-        .strict(),
-    },
+    responses: { 200: api.auditPage },
   },
   {
     method: "GET",
     route: "/api/audit/export",
     url: "/api/audit/export?format=json",
-    responses: {
-      200: z
-        .object({ entries: z.array(z.object({ id: z.string(), action: z.string() })) })
-        .strict(),
-    },
+    responses: { 200: api.auditExport },
   },
   {
     method: "GET",
@@ -496,34 +427,6 @@ const CONTRACTS: Contract[] = [
   },
 ];
 
-/**
- * Routes that cannot be contract-tested without doing real work, and what
- * covers them instead.
- *
- * Kept as data rather than as an omission, because an endpoint quietly absent
- * from a list of "every endpoint" is the thing this file exists to prevent. The
- * completeness check below accepts an entry here, and a second check refuses an
- * entry whose reason is a placeholder.
- */
-const CONNECTION_SUMMARY = z
-  .object({
-    id: z.string(),
-    kind: z.enum(["real", "demo", "organization"]),
-    label: z.string(),
-    accountId: z.string().nullable(),
-    roleArn: z.string().nullable(),
-    status: z.enum(["pending", "verified", "failed", "disconnected"]),
-    lastError: z.string().nullable(),
-    scanRegions: z.array(z.string()),
-    templateVersion: z.string().nullable(),
-    lastVerifiedAt: z.string().nullable(),
-    lastScanAt: z.string().nullable(),
-    parentId: z.string().nullable(),
-  })
-  // No external id, encrypted or otherwise. The shape is asserted strictly so
-  // that adding one to the summary fails here rather than in production.
-  .strict();
-
 CONTRACTS.push(
   {
     method: "GET",
@@ -537,26 +440,7 @@ CONTRACTS.push(
     method: "GET",
     route: "/api/me",
     url: "/api/me",
-    responses: {
-      200: z
-        .object({
-          hosted: z.boolean(),
-          signedIn: z.boolean(),
-          user: z
-            .object({
-              email: z.string(),
-              name: z.string().nullable(),
-              avatarUrl: z.string().nullable(),
-            })
-            .nullable(),
-          isAdmin: z.boolean(),
-          role: z.enum(["owner", "admin", "member", "viewer"]).nullable(),
-          providers: z.array(z.string()),
-          linked: z.array(z.string()),
-          connections: z.array(CONNECTION_SUMMARY),
-        })
-        .strict(),
-    },
+    responses: { 200: api.me },
   },
   {
     // A team exists only in hosted mode; this suite runs self-hosted, where
@@ -570,7 +454,7 @@ CONTRACTS.push(
     method: "GET",
     route: "/api/connections",
     url: "/api/connections",
-    responses: { 200: z.object({ connections: z.array(CONNECTION_SUMMARY) }).strict() },
+    responses: { 200: api.connectionList },
   },
 );
 

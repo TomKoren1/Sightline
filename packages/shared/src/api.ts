@@ -159,3 +159,152 @@ export const acrossAccounts = z
   })
   .strict();
 export type AcrossAccounts = z.infer<typeof acrossAccounts>;
+
+// --- accounts, the team, and access -------------------------------------------
+
+export const teamRole = z.enum(["owner", "admin", "member", "viewer"]);
+export type TeamRole = z.infer<typeof teamRole>;
+
+export const connectionSummary = z
+  .object({
+    id: z.string(),
+    kind: z.enum(["real", "demo", "organization"]),
+    label: z.string(),
+    accountId: z.string().nullable(),
+    roleArn: z.string().nullable(),
+    status: z.enum(["pending", "verified", "failed", "disconnected"]),
+    lastError: z.string().nullable(),
+    scanRegions: z.array(z.string()),
+    templateVersion: z.string().nullable(),
+    lastVerifiedAt: z.string().nullable(),
+    lastScanAt: z.string().nullable(),
+    /** The organization connection that found this account, if one did. */
+    parentId: z.string().nullable(),
+  })
+  // No external id, encrypted or otherwise. Strict, so adding one to the
+  // summary fails the contract test rather than reaching a browser.
+  .strict();
+export type ConnectionSummary = z.infer<typeof connectionSummary>;
+export const connectionList = z.object({ connections: z.array(connectionSummary) }).strict();
+
+/** What `/api/me` answers: everything the UI's first frame needs. */
+export const me = z
+  .object({
+    hosted: z.boolean(),
+    signedIn: z.boolean(),
+    user: z
+      .object({ email: z.string(), name: z.string().nullable(), avatarUrl: z.string().nullable() })
+      .strict()
+      .nullable(),
+    isAdmin: z.boolean(),
+    /** Their role in this workspace; null when signed out. Always owner self-hosted. */
+    role: teamRole.nullable(),
+    providers: z.array(z.string()),
+    linked: z.array(z.string()),
+    connections: z.array(connectionSummary),
+  })
+  .strict();
+export type Me = z.infer<typeof me>;
+
+export const team = z
+  .object({
+    you: z.object({ id: z.string(), role: teamRole }).strict(),
+    members: z.array(
+      z
+        .object({
+          id: z.string(),
+          email: z.string(),
+          name: z.string().nullable(),
+          role: teamRole,
+          joinedAt: z.string(),
+          lastSeenAt: z.string().nullable(),
+        })
+        .strict(),
+    ),
+    invites: z.array(
+      z
+        .object({
+          id: z.string(),
+          role: teamRole,
+          createdAt: z.string(),
+          expiresAt: z.string(),
+          createdBy: z.string().nullable(),
+        })
+        .strict(),
+    ),
+  })
+  .strict();
+export type Team = z.infer<typeof team>;
+
+export const sessionRow = z
+  .object({
+    id: z.string(),
+    createdAt: z.string(),
+    lastUsedAt: z.string().nullable(),
+    userAgent: z.string().nullable(),
+    current: z.boolean(),
+  })
+  .strict();
+export type SessionRow = z.infer<typeof sessionRow>;
+
+export const apiToken = z
+  .object({
+    id: z.string(),
+    name: z.string(),
+    role: teamRole,
+    createdAt: z.string(),
+    lastUsedAt: z.string().nullable(),
+    expiresAt: z.string().nullable(),
+    createdBy: z.string(),
+  })
+  .strict();
+export type ApiToken = z.infer<typeof apiToken>;
+
+export const auditEntry = z
+  .object({
+    id: z.string(),
+    at: z.string(),
+    action: z.string(),
+    subject: z.string().nullable(),
+    detail: z.record(z.string(), z.unknown()),
+    ip: z.string().nullable(),
+    actor: z.object({ id: z.string(), email: z.string().nullable() }).strict().nullable(),
+  })
+  .strict();
+export type AuditEntry = z.infer<typeof auditEntry>;
+export const auditPage = z
+  .object({ entries: z.array(auditEntry), next: z.string().nullable() })
+  .strict();
+export const auditExport = z.object({ entries: z.array(auditEntry) }).strict();
+
+export const tenantHealth = z
+  .object({
+    id: z.string(),
+    name: z.string(),
+    createdAt: z.string(),
+    members: z.number(),
+    connections: z.number(),
+    activeScans: z.number(),
+    scansFailed7d: z.number(),
+    scansSucceeded7d: z.number(),
+    lastScan: z
+      .object({ status: z.string(), at: z.string().nullable(), error: z.string().nullable() })
+      .strict()
+      .nullable(),
+    questions24h: z.number(),
+    tokens24h: z.number(),
+  })
+  .strict();
+export type TenantHealth = z.infer<typeof tenantHealth>;
+export const tenantHealthList = z.object({ tenants: z.array(tenantHealth) }).strict();
+
+/** The workspace's webhook, as far as anyone may see it: its host, never its URL. */
+export const webhookView = z
+  .object({
+    configured: z.boolean(),
+    host: z.string().nullable(),
+    lastDeliveryAt: z.string().nullable(),
+    lastStatus: z.string().nullable(),
+  })
+  .strict();
+export type WebhookView = z.infer<typeof webhookView>;

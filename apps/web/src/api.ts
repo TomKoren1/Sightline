@@ -6,6 +6,15 @@ import type { AgentEvent, AgentMessage, ScanDiff, ScanEvent, ScanRun } from "@si
 // against (packages/shared/src/api.ts), as types only.
 export type {
   AcrossAccounts,
+  ApiToken,
+  AuditEntry,
+  ConnectionSummary,
+  Me,
+  SessionRow,
+  Team,
+  TeamRole,
+  TenantHealth,
+  WebhookView,
   FindingCategory,
   FindingState,
   Findings,
@@ -17,12 +26,19 @@ export type {
 } from "@sightline/shared/api";
 import type {
   AcrossAccounts,
-  FindingCategory,
+  ApiToken,
+  AuditEntry,
+  ConnectionSummary,
+  Me,
+  SessionRow,
+  Team,
+  TeamRole,
+  TenantHealth,
+  WebhookView,
   FindingState,
   Findings,
   GraphData,
   GraphGroup,
-  GraphNode,
   Summary,
 } from "@sightline/shared/api";
 
@@ -135,96 +151,13 @@ export interface Health {
   lastScan: { id: string; at: string; status: string } | null;
 }
 
-/** What `/api/me` answers, which is everything the first frame needs. */
-export interface Me {
-  hosted: boolean;
-  signedIn: boolean;
-  user: { email: string; name: string | null; avatarUrl: string | null } | null;
-  isAdmin: boolean;
-  /** Their role in this workspace; null when signed out. Always owner self-hosted. */
-  role: TeamRole | null;
-  providers: string[];
-  linked: string[];
-  connections: ConnectionSummary[];
-}
-
-export type TeamRole = "owner" | "admin" | "member" | "viewer";
 const RANK: Record<TeamRole, number> = { viewer: 0, member: 1, admin: 2, owner: 3 };
 /** Whether `role` may do what needs `min`, as the server's guard decides it. */
 export const can = (role: TeamRole | null | undefined, min: TeamRole) =>
   role != null && RANK[role] >= RANK[min];
 
-export interface AuditEntry {
-  id: string;
-  at: string;
-  action: string;
-  subject: string | null;
-  detail: Record<string, unknown>;
-  ip: string | null;
-  actor: { id: string; email: string | null } | null;
-}
-
 /** A plain link rather than a fetch: the browser saves the file itself. */
 export const auditExportUrl = (format: "csv" | "json") => `/api/audit/export?format=${format}`;
-
-export interface TenantHealth {
-  id: string;
-  name: string;
-  createdAt: string;
-  members: number;
-  connections: number;
-  activeScans: number;
-  scansFailed7d: number;
-  scansSucceeded7d: number;
-  lastScan: { status: string; at: string | null; error: string | null } | null;
-  questions24h: number;
-  tokens24h: number;
-}
-
-export interface ApiToken {
-  id: string;
-  name: string;
-  role: TeamRole;
-  createdAt: string;
-  lastUsedAt: string | null;
-  expiresAt: string | null;
-  createdBy: string;
-}
-
-export interface Team {
-  you: { id: string; role: TeamRole };
-  members: {
-    id: string;
-    email: string;
-    name: string | null;
-    role: TeamRole;
-    joinedAt: string;
-    lastSeenAt: string | null;
-  }[];
-  invites: {
-    id: string;
-    role: TeamRole;
-    createdAt: string;
-    expiresAt: string;
-    createdBy: string | null;
-  }[];
-}
-
-export interface ConnectionSummary {
-  id: string;
-  kind: "real" | "demo" | "organization";
-  label: string;
-  accountId: string | null;
-  roleArn: string | null;
-  status: "pending" | "verified" | "failed" | "disconnected";
-  lastError: string | null;
-  scanRegions: string[];
-  templateVersion: string | null;
-  lastVerifiedAt: string | null;
-  lastScanAt: string | null;
-  /** The organization connection that found this account, if one did. */
-  parentId: string | null;
-}
 
 /** Everything the connect screen needs, in one request. */
 export interface OnboardingPlan {
@@ -259,14 +192,6 @@ export interface VerifyResult {
     members: { connectionId: string; label: string; ok: boolean; problem?: string }[];
     unchecked: number;
   };
-}
-
-export interface SessionRow {
-  id: string;
-  createdAt: string;
-  lastUsedAt: string | null;
-  userAgent: string | null;
-  current: boolean;
 }
 
 /**
@@ -412,13 +337,7 @@ export const api = {
 
   // --- the team -------------------------------------------------------------
   team: () => get<Team>("/api/team"),
-  webhook: () =>
-    get<{
-      configured: boolean;
-      host: string | null;
-      lastDeliveryAt: string | null;
-      lastStatus: string | null;
-    }>("/api/webhook"),
+  webhook: () => get<WebhookView>("/api/webhook"),
   setWebhook: (url: string) => send<unknown>("/api/webhook", { ...asJson({ url }), method: "PUT" }),
   removeWebhook: () => send<void>("/api/webhook", { method: "DELETE" }),
   testWebhook: () => send<{ ok: boolean; status: string }>("/api/webhook/test", { method: "POST" }),

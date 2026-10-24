@@ -9,6 +9,7 @@
  * requests run as, so nothing a request can reach rewrites history.
  */
 
+import type * as api from "@sightline/shared/api";
 import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
 import type { FastifyRequest } from "fastify";
@@ -39,15 +40,7 @@ export async function recordAudit(entry: AuditEntry): Promise<void> {
             ${entry.ip ?? null})`);
 }
 
-export interface AuditRow {
-  id: string;
-  at: string;
-  action: string;
-  subject: string | null;
-  detail: Record<string, unknown>;
-  ip: string | null;
-  actor: { id: string; email: string | null } | null;
-}
+export type AuditRow = api.AuditEntry;
 
 /** Newest first. `before` is the `id` of the last row of the previous page. */
 export async function listAudit(

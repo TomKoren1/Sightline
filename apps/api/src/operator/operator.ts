@@ -9,23 +9,12 @@
  * start, not a way to read a customer's estate.
  */
 
+import type * as api from "@sightline/shared/api";
 import { sql } from "drizzle-orm";
 
 import { system } from "../db/postgres.js";
 
-export interface TenantHealth {
-  id: string;
-  name: string;
-  createdAt: string;
-  members: number;
-  connections: number;
-  activeScans: number;
-  scansFailed7d: number;
-  scansSucceeded7d: number;
-  lastScan: { status: string; at: string | null; error: string | null } | null;
-  questions24h: number;
-  tokens24h: number;
-}
+export type TenantHealth = api.TenantHealth;
 
 export async function tenantHealth(): Promise<TenantHealth[]> {
   const { rows } = await system.execute<{

@@ -9,6 +9,7 @@
  * `auth/`: an invite is found by token before the joiner's tenant is known.
  */
 
+import type * as api from "@sightline/shared/api";
 import { createHash, randomBytes, randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
 
@@ -40,23 +41,8 @@ async function audit(
             ${JSON.stringify(detail)}::jsonb)`);
 }
 
-export interface TeamView {
-  members: {
-    id: string;
-    email: string;
-    name: string | null;
-    role: TeamRole;
-    joinedAt: string;
-    lastSeenAt: string | null;
-  }[];
-  invites: {
-    id: string;
-    role: TeamRole;
-    createdAt: string;
-    expiresAt: string;
-    createdBy: string | null;
-  }[];
-}
+/** The team as the API returns it, less `you`, which the controller adds. */
+export type TeamView = Omit<api.Team, "you">;
 
 export async function listTeam(tenantId: TenantId): Promise<TeamView> {
   const members = await system.execute<{

@@ -4,6 +4,7 @@
  * standing admin access. Idle spend and posture wait for the dashboard.
  */
 
+import type * as api from "@sightline/shared/api";
 import { eq, sql } from "drizzle-orm";
 
 import { cfg } from "../core/config.js";
@@ -20,12 +21,7 @@ const LISTED = 5;
 
 export class WebhookRefused extends Error {}
 
-export interface WebhookView {
-  configured: boolean;
-  host: string | null;
-  lastDeliveryAt: string | null;
-  lastStatus: string | null;
-}
+export type WebhookView = api.WebhookView;
 
 export async function getWebhook(tenantId: TenantId): Promise<WebhookView> {
   return withTenant(tenantId, async () => {
