@@ -176,11 +176,11 @@ For scripts and CI, an admin makes a token under Team, API tokens, and it is
 sent as `Authorization: Bearer slt_…`:
 
 ```bash
-curl -H "Authorization: Bearer $SIGHTLINE_TOKEN" https://sightline.example/api/findings
-curl -X POST -H "Authorization: Bearer $SIGHTLINE_TOKEN" https://sightline.example/api/scans
+curl -H "Authorization: Bearer $SIGHTLINE_TOKEN" https://sightline.example/api/v1/findings
+curl -X POST -H "Authorization: Bearer $SIGHTLINE_TOKEN" https://sightline.example/api/v1/scans
 ```
 
-A token is shown once and stored as a SHA-256 hash. It acts for the person who
+Scripts use `/api/v1/...`, the versioned prefix: the same routes as the `/api/...` the UI calls, and the one a breaking change will not touch - that gets `/api/v2`. A token is shown once and stored as a SHA-256 hash. It acts for the person who
 made it, at the lesser of its own role and theirs at the time of each request,
 so demoting someone demotes their tokens and removing them deletes them. It can
 be at most an admin, expires after 30, 90 or 365 days, and cannot manage

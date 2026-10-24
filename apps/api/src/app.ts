@@ -69,6 +69,14 @@ export async function buildApp(options: BuildOptions = {}): Promise<NestFastifyA
      * anything beyond that is not an ARN this system produced.
      */
     maxParamLength: 2048,
+
+    /**
+     * `/api/v1/...` is the same API as `/api/...`: the published, versioned
+     * prefix for scripts holding an API token. One route table, so the two
+     * cannot drift; a breaking change gets `/api/v2` and its own handlers
+     * rather than changing what v1 answers. The UI keeps the bare prefix.
+     */
+    rewriteUrl: (req) => (req.url ?? "/").replace(/^\/api\/v1(?=[/?]|$)/, "/api"),
   });
 
   if (options.onRoute) {
