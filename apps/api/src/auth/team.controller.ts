@@ -16,10 +16,10 @@ import {
 import type { FastifyRequest } from "fastify";
 import { z } from "zod";
 
-import { isHosted } from "../config.js";
-import type { AuthedRequest } from "./auth.guard.js";
-import { HumanOnly, MinRole, TEAM_ROLES, type TeamRole } from "./roles.js";
-import type { Session } from "./session.js";
+import { isHosted } from "../core/config.js";
+import type { AuthedRequest } from "../core/request.js";
+import { HumanOnly, MinRole, TEAM_ROLES, type TeamRole } from "../core/access.js";
+import type { Session } from "../core/request.js";
 import {
   acceptInvite,
   createInvite,

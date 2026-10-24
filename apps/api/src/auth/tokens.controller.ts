@@ -15,11 +15,11 @@ import {
 import type { FastifyRequest } from "fastify";
 import { z } from "zod";
 
-import { isHosted } from "../config.js";
+import { isHosted } from "../core/config.js";
 import { createApiToken, listApiTokens, revokeApiToken, TokenRefused } from "./apiTokens.js";
-import type { AuthedRequest } from "./auth.guard.js";
-import { HumanOnly, MinRole } from "./roles.js";
-import type { Session } from "./session.js";
+import type { AuthedRequest } from "../core/request.js";
+import { HumanOnly, MinRole } from "../core/access.js";
+import type { Session } from "../core/request.js";
 
 const createSchema = z.object({
   name: z.string().trim().min(1).max(80),

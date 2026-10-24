@@ -12,8 +12,8 @@ import { sql } from "drizzle-orm";
 
 import { db, system, withTenant } from "../db/postgres.js";
 import { performVerification, type VerifyResult } from "../tenancy/onboarding.js";
-import type { ConnectionId, TenantId } from "../tenancy/ids.js";
-import type { Scope } from "../tenancy/scope.js";
+import type { ConnectionId, TenantId } from "../core/ids.js";
+import type { Scope } from "../core/scope.js";
 
 export const CHECK_QUEUE_CHANNEL = "sightline_check_queued";
 

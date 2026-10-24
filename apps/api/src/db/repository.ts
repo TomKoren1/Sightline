@@ -38,8 +38,8 @@ import {
  */
 type Writer = Database | Parameters<Parameters<Database["transaction"]>[0]>[0];
 import { relationshipSnapshots, resourceSnapshots, scanRuns, scanUnits } from "./schema.js";
-import type { ScanId } from "../tenancy/ids.js";
-import type { Scope } from "../tenancy/scope.js";
+import type { ScanId } from "../core/ids.js";
+import type { Scope } from "../core/scope.js";
 
 /**
  * Reads are filtered on the tenant as well as on the scan id.

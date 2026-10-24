@@ -13,7 +13,8 @@
 
 import { and, eq, ne } from "drizzle-orm";
 
-import { cfg, configuredMode, isHosted, targetRoleProblem } from "../config.js";
+import { cfg, isHosted } from "../core/config.js";
+import { configuredMode, targetRoleProblem } from "../aws/settings.js";
 /**
  * `system`, not `db`: this creates the tenant everything else is scoped to.
  *
@@ -24,8 +25,8 @@ import { cfg, configuredMode, isHosted, targetRoleProblem } from "../config.js";
  */
 import { system } from "../db/postgres.js";
 import { connections, tenants } from "../db/schema.js";
-import { asConnectionId, asTenantId, type ConnectionId } from "./ids.js";
-import type { Scope } from "./scope.js";
+import { asConnectionId, asTenantId, type ConnectionId } from "../core/ids.js";
+import type { Scope } from "../core/scope.js";
 
 export const LOCAL_TENANT_ID = asTenantId("00000000-0000-0000-0000-000000000001");
 export const LOCAL_DEMO_CONNECTION_ID = asConnectionId("00000000-0000-0000-0000-000000000002");

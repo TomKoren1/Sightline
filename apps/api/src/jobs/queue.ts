@@ -21,9 +21,9 @@ import { and, eq, sql } from "drizzle-orm";
 
 import { db, system, withTenant } from "../db/postgres.js";
 import { scanJobs } from "../db/schema.js";
-import type { ConnectionId, JobId, ScanId, TenantId } from "../tenancy/ids.js";
-import { asConnectionId, asJobId, asTenantId } from "../tenancy/ids.js";
-import type { Scope } from "../tenancy/scope.js";
+import type { ConnectionId, JobId, ScanId, TenantId } from "../core/ids.js";
+import { asConnectionId, asJobId, asTenantId } from "../core/ids.js";
+import type { Scope } from "../core/scope.js";
 import { currentTraceparent } from "../observability/tracing.js";
 import {
   scanJobs as scanJobsTotal,

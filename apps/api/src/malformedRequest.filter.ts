@@ -17,7 +17,7 @@ import { ArgumentsHost, Catch, ExceptionFilter, HttpStatus } from "@nestjs/commo
 import type { FastifyReply } from "fastify";
 import { ZodError } from "zod";
 
-import { InvalidId } from "./tenancy/ids.js";
+import { InvalidId } from "./core/ids.js";
 
 /** 400 with a body shaped like every other error this API returns. */
 function badRequest(host: ArgumentsHost, body: Record<string, unknown>): void {

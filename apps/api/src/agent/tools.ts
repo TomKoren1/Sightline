@@ -16,14 +16,14 @@ import type { JSONSchema7 } from "ai";
 
 import { RELATIONSHIP_TYPES } from "@sightline/shared";
 import * as q from "../db/graph.js";
-import { isHosted } from "../config.js";
+import { isHosted } from "../core/config.js";
 import { remediationInputFromGraph } from "../remediation/fromGraph.js";
 import { remediationsFor } from "../remediation/remediation.js";
 import type { GraphScope } from "../db/graph.js";
 import { readOnlyAsTenant } from "../db/postgres.js";
 import { diffScans, getLatestScan, listScans } from "../db/repository.js";
-import { asScanId } from "../tenancy/ids.js";
-import type { Scope } from "../tenancy/scope.js";
+import { asScanId } from "../core/ids.js";
+import type { Scope } from "../core/scope.js";
 import { agentRawQueryRefused } from "../observability/metrics.js";
 import { assertSafeInventorySql } from "./sqlGuard.js";
 

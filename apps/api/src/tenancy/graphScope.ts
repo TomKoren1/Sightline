@@ -13,7 +13,7 @@
 
 import { currentScanId } from "../db/repository.js";
 import type { GraphScope } from "../db/graph.js";
-import type { Scope } from "./scope.js";
+import type { Scope } from "../core/scope.js";
 
 export async function graphScopeFor(scope: Scope): Promise<GraphScope | null> {
   const scanId = await currentScanId(scope);

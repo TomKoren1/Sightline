@@ -15,7 +15,7 @@
 
 import pg from "pg";
 
-import { cfg } from "../config.js";
+import { cfg } from "../core/config.js";
 
 /** Nothing to release: the database was unreachable, so no lock was taken. */
 const releaseNothing = (): Promise<void> => Promise.resolve();

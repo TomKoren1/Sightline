@@ -21,7 +21,7 @@ import * as q from "../db/graph.js";
 import type { GraphScope } from "../db/graph.js";
 import type { FindingCategory } from "../db/schema.js";
 import { graphScopeFor } from "../tenancy/graphScope.js";
-import type { Scope } from "../tenancy/scope.js";
+import type { Scope } from "../core/scope.js";
 import { remediationInputFromGraph } from "../remediation/fromGraph.js";
 import { remediationsFor } from "../remediation/remediation.js";
 

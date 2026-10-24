@@ -12,12 +12,13 @@ import { readFileSync, writeFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { SCANNABLE_SERVICES } from "@sightline/shared";
 
-import { cfg, isMock, MOCK_EXTERNAL_ID } from "../config.js";
+import { cfg, MOCK_EXTERNAL_ID } from "../core/config.js";
+import { isMock } from "../aws/settings.js";
 import { toFixture, writeFixture } from "../scan/collectors/fixtures.js";
 import { renderCollectorDocs, withTemplateBlock } from "../scan/collectors/generated.js";
 import { COLLECTORS } from "../scan/collectors/registry.js";
 import { collectEstate } from "../scan/runner.js";
-import { asConnectionId } from "../tenancy/ids.js";
+import { asConnectionId } from "../core/ids.js";
 
 const root = fileURLToPath(new URL("../../../../", import.meta.url));
 const template = `${root}infra/readonly-role.yaml`;

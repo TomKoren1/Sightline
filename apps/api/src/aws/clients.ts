@@ -36,7 +36,7 @@ import { OrganizationsClient } from "@aws-sdk/client-organizations";
 import { credentialProvider } from "./credentials.js";
 import { accountOfRole, pace } from "./pace.js";
 import { inSpan, tracingEnabled } from "../observability/tracing.js";
-import type { ScanTarget } from "../tenancy/scanTarget.js";
+import type { ScanTarget } from "../core/scanTarget.js";
 import { awsApiCalls, awsThrottles } from "../observability/metrics.js";
 
 /**

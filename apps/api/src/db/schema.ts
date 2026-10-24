@@ -12,6 +12,7 @@
  */
 
 import type { Relationship, Resource, ScanStatus, ScanUnit } from "@sightline/shared";
+import type { TeamRole } from "../core/access.js";
 import { sql } from "drizzle-orm";
 import {
   boolean,
@@ -290,8 +291,6 @@ export const users = pgTable(
     check("users_role", sql`${t.role} IN ('owner','admin','member','viewer')`),
   ],
 );
-
-export type TeamRole = "owner" | "admin" | "member" | "viewer";
 
 /**
  * An invitation to join a tenant: a link copied by hand, so there is no email

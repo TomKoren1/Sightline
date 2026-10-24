@@ -11,7 +11,7 @@
  * the response, not the POST.
  */
 
-import { cfg } from "../config.js";
+import { cfg } from "../core/config.js";
 import {
   clientCredentials,
   redirectUri,

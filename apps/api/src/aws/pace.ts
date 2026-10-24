@@ -11,7 +11,7 @@
  * replicas each pace their own scans.
  */
 
-import { cfg } from "../config.js";
+import { cfg } from "../core/config.js";
 
 interface Bucket {
   tokens: number;

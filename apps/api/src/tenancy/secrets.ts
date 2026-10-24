@@ -19,7 +19,8 @@ import { createCipheriv, createDecipheriv, createHash, randomBytes } from "node:
 
 import { SIGHTLINE_PREFIX } from "@sightline/shared";
 
-import { cfg, rolesAnywhere } from "../config.js";
+import { cfg } from "../core/config.js";
+import { rolesAnywhere } from "../aws/settings.js";
 
 const KMS_PREFIX = "k1:";
 const LOCAL_PREFIX = "l1:";

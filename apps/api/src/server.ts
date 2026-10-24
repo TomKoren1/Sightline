@@ -2,7 +2,7 @@
 
 import { buildApp } from "./app.js";
 import { startTracing, stopTracing } from "./observability/tracing.js";
-import { cfg, migrateOnBoot, scanWorkerMode } from "./config.js";
+import { cfg, migrateOnBoot, scanWorkerMode } from "./core/config.js";
 import { assertSchemaCurrent, connectedAsOwner, migrate, closePool } from "./db/postgres.js";
 import { apiPrivilegeWarnings, assertHostedInvariants } from "./hostedMode.js";
 import { watchCertificate } from "./aws/certificateWatch.js";
@@ -10,8 +10,8 @@ import { ScanWorker } from "./jobs/worker.js";
 import { ensureLocalTenant } from "./tenancy/local.js";
 import { pruneExpiredSessions } from "./auth/session.js";
 import { recordBuild, startMetricsServer } from "./observability/metrics.js";
-import { startSnapshotLoop } from "./observability/snapshot.js";
-import { VERSION } from "./version.js";
+import { startSnapshotLoop } from "./jobs/snapshot.js";
+import { VERSION } from "./core/version.js";
 
 /**
  * Before anything else, and before the app is even built.

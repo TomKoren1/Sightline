@@ -14,7 +14,7 @@
 import { sql } from "drizzle-orm";
 
 import { system } from "../db/postgres.js";
-import { connections, scanQueueDepth } from "./metrics.js";
+import { connections, scanQueueDepth } from "../observability/metrics.js";
 
 /**
  * The one method this needs, structurally.

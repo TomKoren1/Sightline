@@ -14,7 +14,7 @@ import { describe, expect, it } from "vitest";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 
-import { SOURCE_IDENTITY_PREFIX, sourceIdentity, toSourceIdentity } from "../config.js";
+import { SOURCE_IDENTITY_PREFIX, sourceIdentity, toSourceIdentity } from "./settings.js";
 
 const root = fileURLToPath(new URL("../../../../", import.meta.url));
 const template = readFileSync(`${root}infra/readonly-role.yaml`, "utf8");

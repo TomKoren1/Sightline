@@ -6,11 +6,11 @@
 
 import { eq, sql } from "drizzle-orm";
 
-import { cfg } from "../config.js";
+import { cfg } from "../core/config.js";
 import type { SyncResult } from "../db/findings.js";
 import { db, withTenant } from "../db/postgres.js";
 import { webhooks } from "../db/schema.js";
-import type { TenantId } from "../tenancy/ids.js";
+import type { TenantId } from "../core/ids.js";
 import { decryptSecret, encryptSecret } from "../tenancy/secrets.js";
 import { deliver, refuseUrl, type Delivery } from "./webhook.js";
 

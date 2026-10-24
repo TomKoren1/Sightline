@@ -25,8 +25,8 @@ import { migrate as runMigrations } from "drizzle-orm/node-postgres/migrator";
 import pg from "pg";
 import type { Resource } from "@sightline/shared";
 
-import { cfg } from "../config.js";
-import { API_ROOT } from "../paths.js";
+import { cfg } from "../core/config.js";
+import { API_ROOT } from "../core/paths.js";
 import * as schema from "./schema.js";
 
 /** The setting the policies read. Also in the migration; they must agree. */

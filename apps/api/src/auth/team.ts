@@ -12,11 +12,11 @@
 import { createHash, randomBytes, randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
 
-import { cfg } from "../config.js";
+import { cfg } from "../core/config.js";
 import { system } from "../db/postgres.js";
-import type { TenantId } from "../tenancy/ids.js";
-import { atLeast, type TeamRole } from "./roles.js";
-import type { Session } from "./session.js";
+import type { TenantId } from "../core/ids.js";
+import { atLeast, type TeamRole } from "../core/access.js";
+import type { Session } from "../core/request.js";
 
 /** A request the rules refuse; its message is for the person who made it. */
 export class TeamRefused extends Error {}

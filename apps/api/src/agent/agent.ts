@@ -18,7 +18,7 @@ import { createAnthropic } from "@ai-sdk/anthropic";
 import { jsonSchema, stepCountIs, streamText, tool, type LanguageModel, type ToolSet } from "ai";
 import type { AgentEvent, AgentMessage, ToolCallTrace } from "@sightline/shared";
 
-import { cfg } from "../config.js";
+import { cfg } from "../core/config.js";
 import { getLatestScan } from "../db/repository.js";
 import { summariseAccount } from "../db/graph.js";
 import { CitationTracker, validateCitations } from "./citations.js";
@@ -65,7 +65,7 @@ function configuredModel(): LanguageModel {
 }
 
 export interface AskOptions {
-  /** Whose account the question is about. No default: see `tenancy/scope.ts`. */
+  /** Whose account the question is about. No default: see `core/scope.ts`. */
   tools: ToolContext;
   question: string;
   /** Prior turns, so follow-up questions work. */

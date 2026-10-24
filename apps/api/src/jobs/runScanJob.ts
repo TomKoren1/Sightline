@@ -23,7 +23,7 @@ import {
 } from "@sightline/shared";
 
 import { CallCounter } from "../aws/clients.js";
-import { cfg } from "../config.js";
+import { cfg } from "../core/config.js";
 import {
   createScanRun,
   failScanRun,
@@ -41,9 +41,9 @@ import { notifyNewFindings } from "../integrations/notify.js";
 import { runScan } from "../scan/runner.js";
 import { markScanned, markVerified } from "../tenancy/connections.js";
 import { resolveScanTarget } from "../tenancy/scanTarget.js";
-import type { ScanId } from "../tenancy/ids.js";
+import type { ScanId } from "../core/ids.js";
 import { tooManyResources } from "../tenancy/limits.js";
-import type { Scope } from "../tenancy/scope.js";
+import type { Scope } from "../core/scope.js";
 import {
   scanDuration,
   scanResources,

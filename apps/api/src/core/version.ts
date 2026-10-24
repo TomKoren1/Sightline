@@ -6,6 +6,6 @@
  * the standard ESM import attribute, supported by both tsx and the bundler.
  */
 
-import pkg from "../package.json" with { type: "json" };
+import pkg from "../../package.json" with { type: "json" };
 
 export const VERSION: string = pkg.version;

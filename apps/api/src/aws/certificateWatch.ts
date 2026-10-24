@@ -4,7 +4,7 @@
  * log, at startup and twice a day, from thirty days out.
  */
 
-import { cfg } from "../config.js";
+import { cfg } from "../core/config.js";
 import { certificateDaysLeft } from "./rolesAnywhere.js";
 
 const WARN_DAYS = 30;

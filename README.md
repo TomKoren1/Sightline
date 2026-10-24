@@ -168,7 +168,8 @@ same checks run inside the product, under **Trust**.
 
 ```
 apps/api              backend: scanner, analysers, graph, agent, HTTP API
-  src/config.ts       every setting, with the reason for each default
+  src/core/           what everything else builds on, importing nothing in src:
+                      settings (config.ts), branded ids, scope, paths, version
   src/hostedMode.ts   configuration the public service refuses to start with
   src/aws/            credentials, instrumented clients, region discovery
   src/scan/           collectors, analysers, orchestration; collectors/README.md lists each

@@ -16,8 +16,8 @@ import { db, withTenant } from "../db/postgres.js";
 import { conversations, messages } from "../db/schema.js";
 import { getLatestScan } from "../db/repository.js";
 import { requireGraphScope } from "../tenancy/graphScope.js";
-import type { ConversationId } from "../tenancy/ids.js";
-import type { Scope } from "../tenancy/scope.js";
+import type { ConversationId } from "../core/ids.js";
+import type { Scope } from "../core/scope.js";
 
 /** Earlier messages sent back to the model: enough for follow-ups, bounded for cost. */
 const HISTORY_LIMIT = 20;

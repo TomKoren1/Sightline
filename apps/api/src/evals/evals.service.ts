@@ -14,12 +14,12 @@
 import { ConflictException, Injectable } from "@nestjs/common";
 import { desc } from "drizzle-orm";
 
-import { cfg } from "../config.js";
+import { cfg } from "../core/config.js";
 import { system } from "../db/postgres.js";
 import { evalRuns } from "../db/schema.js";
 import { getLatestScan, loadRelationships, loadResources } from "../db/repository.js";
 import { getConnection } from "../tenancy/connections.js";
-import type { Scope } from "../tenancy/scope.js";
+import type { Scope } from "../core/scope.js";
 import {
   DRIFT_EXPECTED_CHECK_FAILURES,
   DRIFT_MARKER_RESOURCES,

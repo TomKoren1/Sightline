@@ -23,7 +23,7 @@ import { FastifyAdapter, type NestFastifyApplication } from "@nestjs/platform-fa
 import { httpDuration, httpInFlight, httpRequests } from "./observability/metrics.js";
 
 import { AppModule } from "./app.module.js";
-import { cfg, isHosted } from "./config.js";
+import { cfg, isHosted } from "./core/config.js";
 import { InvalidIdFilter, SchemaErrorFilter } from "./malformedRequest.filter.js";
 import { loggerOptions } from "./observability/logging.js";
 import { SESSION_COOKIE } from "./auth/session.js";

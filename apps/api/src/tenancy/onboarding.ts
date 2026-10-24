@@ -25,21 +25,23 @@ import {
   terraformSnippet,
 } from "@sightline/shared";
 
-import { cfg, sourceCredentials } from "../config.js";
+import { cfg } from "../core/config.js";
+import { sourceCredentials } from "../aws/settings.js";
 import { assumablePrincipalArn } from "../aws/principal.js";
 import { getSession, resetSession } from "../aws/credentials.js";
-import { diagnose, type Diagnosis } from "../connection/diagnose.js";
+import { diagnose, type Diagnosis } from "../aws/diagnose.js";
 import {
-  accountMismatch,
   externalIdFor,
   getConnection,
   markFailed,
   markVerified,
   type ConnectionSummary,
 } from "./connections.js";
+import { accountMismatch } from "../core/scanTarget.js";
 import { listMemberAccounts, syncMembers } from "./organization.js";
-import { resolveScanTarget, type ScanTarget } from "./scanTarget.js";
-import type { Scope } from "./scope.js";
+import { resolveScanTarget } from "./scanTarget.js";
+import { type ScanTarget } from "../core/scanTarget.js";
+import type { Scope } from "../core/scope.js";
 import { assumeRoleFailures, verifyDuration } from "../observability/metrics.js";
 
 export interface OnboardingPlan {

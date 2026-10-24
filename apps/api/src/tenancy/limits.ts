@@ -16,10 +16,15 @@
 
 import { and, count, eq, gte, sql } from "drizzle-orm";
 
-import { cfg, chatQuestionsPerHour, chatTokensPerDay, scanCooldownSeconds } from "../config.js";
+import {
+  cfg,
+  chatQuestionsPerHour,
+  chatTokensPerDay,
+  scanCooldownSeconds,
+} from "../core/config.js";
 import { db, withTenant } from "../db/postgres.js";
 import { messages, scanJobs, scanRuns } from "../db/schema.js";
-import type { Scope } from "./scope.js";
+import type { Scope } from "../core/scope.js";
 
 /**
  * Why a refusal happened, so the caller can say it in the right status.

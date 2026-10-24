@@ -8,9 +8,9 @@
 
 import { Body, Controller, ConflictException, Get, HttpCode, Inject, Post } from "@nestjs/common";
 
-import { isHosted } from "../config.js";
+import { isHosted } from "../core/config.js";
 import { ConnectionService } from "./connection.service.js";
-import { MinRole } from "../auth/roles.js";
+import { MinRole } from "../core/access.js";
 
 /**
  * Refuse the whole surface in hosted mode.

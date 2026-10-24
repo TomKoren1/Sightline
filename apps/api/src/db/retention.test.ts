@@ -10,7 +10,7 @@ import { eq, inArray } from "drizzle-orm";
 import { system } from "./postgres.js";
 import * as schema from "./schema.js";
 import { pruneScanHistory } from "./repository.js";
-import { asConnectionId, asTenantId } from "../tenancy/ids.js";
+import { asConnectionId, asTenantId } from "../core/ids.js";
 
 const HAS_INFRA = !process.env["SKIP_INTEGRATION"];
 

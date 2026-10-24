@@ -12,8 +12,9 @@ import { beforeAll, describe, expect, it } from "vitest";
 import { seed } from "@sightline/mock-aws";
 import { SCANNABLE_SERVICES } from "@sightline/shared";
 
-import { cfg, isMock, MOCK_EXTERNAL_ID } from "../../config.js";
-import { asConnectionId } from "../../tenancy/ids.js";
+import { cfg, MOCK_EXTERNAL_ID } from "../../core/config.js";
+import { isMock } from "../../aws/settings.js";
+import { asConnectionId } from "../../core/ids.js";
 import { collectEstate, type CollectedEstate } from "../runner.js";
 import { readFixture, shapeOf, toFixture } from "./fixtures.js";
 import { COLLECTORS } from "./registry.js";

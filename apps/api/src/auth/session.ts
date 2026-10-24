@@ -15,7 +15,7 @@
 import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
 import { and, eq, lt, sql } from "drizzle-orm";
 
-import { cfg, useSecureCookies } from "../config.js";
+import { cfg, useSecureCookies } from "../core/config.js";
 /**
  * `system`, not `db`, throughout this file.
  *
@@ -31,25 +31,11 @@ import { cfg, useSecureCookies } from "../config.js";
  * `users.ts`, which is a small enough surface to hold in one's head.
  */
 import { system } from "../db/postgres.js";
-import { sessions, tenants, users, type TeamRole } from "../db/schema.js";
-import { asTenantId, type TenantId } from "../tenancy/ids.js";
+import { sessions, tenants, users } from "../db/schema.js";
+import { asTenantId } from "../core/ids.js";
+import type { Session } from "../core/request.js";
 
 export const SESSION_COOKIE = "sightline_session";
-
-export interface Session {
-  id: string;
-  userId: string;
-  tenantId: TenantId;
-  email: string;
-  isAdmin: boolean;
-  /** Their role in this tenant: `auth/roles.ts`. */
-  role: TeamRole;
-  expiresAt: Date;
-  /** Set when the request carried an API token rather than a signed-in browser. */
-  via?: "token";
-  /** When this sign-in happened, for routes that want a recent one. */
-  signedInAt?: Date;
-}
 
 const hash = (token: string): Buffer => createHash("sha256").update(token).digest();
 

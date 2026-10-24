@@ -22,13 +22,13 @@ import type { FastifyReply, FastifyRequest } from "fastify";
 import type { AgentEvent } from "@sightline/shared";
 
 import { CurrentScope } from "../tenancy/currentScope.decorator.js";
-import { asConversationId } from "../tenancy/ids.js";
+import { asConversationId } from "../core/ids.js";
 import { requestsRefused } from "../observability/metrics.js";
 import { mayChat, statusFor } from "../tenancy/limits.js";
-import type { Scope } from "../tenancy/scope.js";
+import type { Scope } from "../core/scope.js";
 import { askSchema } from "./chat.dto.js";
 import { ChatService } from "./chat.service.js";
-import { MinRole } from "../auth/roles.js";
+import { MinRole } from "../core/access.js";
 import { describeAgentFailure } from "../agent/failure.js";
 
 @Controller("api")

@@ -36,8 +36,8 @@ import {
   loadResources,
   saveScanResult,
 } from "./repository.js";
-import { asConnectionId, asScanId, asTenantId, type ScanId } from "../tenancy/ids.js";
-import type { Scope } from "../tenancy/scope.js";
+import { asConnectionId, asScanId, asTenantId, type ScanId } from "../core/ids.js";
+import type { Scope } from "../core/scope.js";
 
 const HAS_INFRA = !process.env["SKIP_INTEGRATION"];
 

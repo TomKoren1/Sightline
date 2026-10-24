@@ -70,7 +70,7 @@ services:
   # Optional `app` profile: the API and the built frontend.
   # ---------------------------------------------------------------------------
   #
-  # Every connection default in apps/api/src/config.ts is `localhost`, which is
+  # Every connection default in apps/api/src/core/config.ts is `localhost`, which is
   # correct on a laptop and wrong inside a container. The overrides below are set
   # in `environment:`, which takes precedence over `env_file`, so the container
   # gets container hostnames while `.env` stays the single source of truth for

@@ -22,8 +22,8 @@ import { sql } from "drizzle-orm";
 
 import { db, withTenant } from "./postgres.js";
 import type { FindingCategory, FindingStatus } from "./schema.js";
-import type { TenantId } from "../tenancy/ids.js";
-import type { Scope } from "../tenancy/scope.js";
+import type { TenantId } from "../core/ids.js";
+import type { Scope } from "../core/scope.js";
 
 /**
  * What makes a snapshot row a finding of each category. The same predicates the

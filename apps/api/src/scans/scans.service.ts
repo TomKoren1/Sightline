@@ -17,8 +17,8 @@ import { readProgress, streamScanEvents } from "../jobs/progress.js";
 import { getConnection } from "../tenancy/connections.js";
 import { mayScan } from "../tenancy/limits.js";
 import { ScanRefused } from "./scanRefused.js";
-import { asScanId, type JobId, type ScanId } from "../tenancy/ids.js";
-import type { Scope } from "../tenancy/scope.js";
+import { asScanId, type JobId, type ScanId } from "../core/ids.js";
+import type { Scope } from "../core/scope.js";
 
 @Injectable()
 export class ScansService {

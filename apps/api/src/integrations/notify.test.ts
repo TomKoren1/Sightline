@@ -42,7 +42,7 @@ describe.runIf(!process.env["SKIP_INTEGRATION"])("the stored webhook", () => {
     const { randomUUID } = await import("node:crypto");
     const { sql } = await import("drizzle-orm");
     const { system } = await import("../db/postgres.js");
-    const { asTenantId } = await import("../tenancy/ids.js");
+    const { asTenantId } = await import("../core/ids.js");
     const { deleteWebhook, getWebhook, setWebhook, WebhookRefused } = await import("./notify.js");
     const tenantId = asTenantId(randomUUID());
     try {

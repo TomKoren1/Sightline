@@ -12,14 +12,14 @@ import {
 import type { FastifyRequest } from "fastify";
 import { z } from "zod";
 
-import type { AuthedRequest } from "../auth/auth.guard.js";
+import type { AuthedRequest } from "../core/request.js";
 
 import { CurrentScope } from "../tenancy/currentScope.decorator.js";
-import type { Scope } from "../tenancy/scope.js";
+import type { Scope } from "../core/scope.js";
 import { GraphService } from "./graph.service.js";
 import { FINDING_CATEGORIES, findingsAcrossAccounts } from "../db/findings.js";
 import type { FindingCategory } from "../db/schema.js";
-import { MinRole } from "../auth/roles.js";
+import { MinRole } from "../core/access.js";
 
 /**
  * Accepting a risk needs a reason, because the reason is the whole value of the

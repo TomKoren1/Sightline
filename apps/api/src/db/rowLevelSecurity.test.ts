@@ -15,7 +15,7 @@ import { randomUUID } from "node:crypto";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import pg from "pg";
 
-import { cfg } from "../config.js";
+import { cfg } from "../core/config.js";
 import { system } from "./postgres.js";
 
 const HAS_INFRA = !process.env["SKIP_INTEGRATION"];

@@ -30,12 +30,8 @@ import { describe, expect, it } from "vitest";
 
 import { fileURLToPath } from "node:url";
 
-import {
-  awsProfileDir,
-  credentialSources,
-  looksLikeRealAccessKey,
-  MOCK_ACCESS_KEY_PLACEHOLDER,
-} from "../config.js";
+import { looksLikeRealAccessKey, MOCK_ACCESS_KEY_PLACEHOLDER } from "../core/config.js";
+import { awsProfileDir, credentialSources } from "./settings.js";
 
 const root = fileURLToPath(new URL("../../../../", import.meta.url));
 

@@ -11,7 +11,7 @@ import { CallHandler, ExecutionContext, Injectable, NestInterceptor } from "@nes
 import type { FastifyReply, FastifyRequest } from "fastify";
 import { defaultIfEmpty, from, mergeMap, type Observable } from "rxjs";
 
-import type { AuthedRequest } from "../auth/auth.guard.js";
+import type { AuthedRequest } from "../core/request.js";
 import { clientIp, recordAudit } from "./audit.js";
 
 const MUTATING = new Set(["POST", "PUT", "PATCH", "DELETE"]);

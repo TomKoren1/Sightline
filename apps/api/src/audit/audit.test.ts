@@ -4,7 +4,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import { system } from "../db/postgres.js";
 import { tenants } from "../db/schema.js";
-import { asTenantId } from "../tenancy/ids.js";
+import { asTenantId } from "../core/ids.js";
 import { auditCsv, listAudit, recordAudit, type AuditRow } from "./audit.js";
 
 const HAS_INFRA = !process.env["SKIP_INTEGRATION"];

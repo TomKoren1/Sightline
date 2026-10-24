@@ -13,14 +13,14 @@ import {
 import type { FastifyReply, FastifyRequest } from "fastify";
 import type { ScanEvent } from "@sightline/shared";
 
-import type { AuthedRequest } from "../auth/auth.guard.js";
+import type { AuthedRequest } from "../core/request.js";
 import { ScanAlreadyQueued } from "../jobs/queue.js";
 import { ScanRefused } from "./scanRefused.js";
-import { asJobId, asScanId, type JobId } from "../tenancy/ids.js";
+import { asJobId, asScanId, type JobId } from "../core/ids.js";
 import { CurrentScope } from "../tenancy/currentScope.decorator.js";
-import type { Scope } from "../tenancy/scope.js";
+import type { Scope } from "../core/scope.js";
 import { ScansService } from "./scans.service.js";
-import { MinRole } from "../auth/roles.js";
+import { MinRole } from "../core/access.js";
 
 /** Headers that stop a reverse proxy buffering an event stream. */
 const SSE_HEADERS = {

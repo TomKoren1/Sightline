@@ -203,10 +203,10 @@ describe("hosted invariants", () => {
     delete process.env["AWS_ENDPOINT_URL"];
     vi.resetModules();
 
-    const hosted = await import("./config.js");
+    const hosted = await import("./core/config.js");
     expect(hosted.isHosted()).toBe(true);
     expect(hosted.cfg.AWS_MODE).toBe("mock");
-    expect(hosted.isMock()).toBe(false);
+    expect((await import("./aws/settings.js")).isMock()).toBe(false);
   });
 
   it("still means what it says in a self-hosted deployment", async () => {
@@ -217,9 +217,9 @@ describe("hosted invariants", () => {
     delete process.env["DEPLOYMENT_MODE"];
     vi.resetModules();
 
-    const selfHosted = await import("./config.js");
+    const selfHosted = await import("./core/config.js");
     expect(selfHosted.isHosted()).toBe(false);
-    expect(selfHosted.isMock()).toBe(true);
+    expect((await import("./aws/settings.js")).isMock()).toBe(true);
   });
 
   it("throws with every reason numbered", () => {

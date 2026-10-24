@@ -13,9 +13,8 @@
 
 import { SetMetadata } from "@nestjs/common";
 
-import type { TeamRole } from "../db/schema.js";
-
-export type { TeamRole } from "../db/schema.js";
+/** A member's standing in a workspace, lowest first in TEAM_ROLES. */
+export type TeamRole = "owner" | "admin" | "member" | "viewer";
 
 export const TEAM_ROLES: readonly TeamRole[] = ["viewer", "member", "admin", "owner"];
 

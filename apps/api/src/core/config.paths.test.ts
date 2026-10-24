@@ -51,7 +51,7 @@ describe("the .env path this module computes", () => {
  * ban is therefore both correct and the cheapest thing to enforce.
  */
 describe("no source file addresses the filesystem with URL.pathname", () => {
-  const root = fileURLToPath(new URL("../../../", import.meta.url));
+  const root = fileURLToPath(new URL("../../../../", import.meta.url));
 
   function sourceFiles(dir: string, out: string[] = []): string[] {
     for (const entry of readdirSync(dir, { withFileTypes: true })) {

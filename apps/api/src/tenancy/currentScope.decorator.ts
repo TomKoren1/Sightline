@@ -17,8 +17,8 @@ import {
   type ExecutionContext,
 } from "@nestjs/common";
 
-import type { AuthedRequest } from "../auth/auth.guard.js";
-import type { Scope } from "./scope.js";
+import type { AuthedRequest } from "../core/request.js";
+import type { Scope } from "../core/scope.js";
 
 export const CurrentScope = createParamDecorator((_data: unknown, ctx: ExecutionContext): Scope => {
   const outcome = ctx.switchToHttp().getRequest<AuthedRequest>().scopeOutcome;

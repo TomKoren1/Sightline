@@ -24,7 +24,8 @@ import { eq } from "drizzle-orm";
 import { INTERNET_ARN, type ScanResult } from "@sightline/shared";
 import { seed } from "@sightline/mock-aws";
 
-import { cfg, isMock, MOCK_EXTERNAL_ID } from "../config.js";
+import { cfg, MOCK_EXTERNAL_ID } from "../core/config.js";
+import { isMock } from "../aws/settings.js";
 import * as q from "../db/graph.js";
 import { syncFindings } from "../db/findings.js";
 import { GraphService } from "../graph/graph.service.js";
@@ -39,7 +40,7 @@ import {
 import * as schema from "../db/schema.js";
 import { annotate } from "../scan/pipeline.js";
 import { collectEstate } from "../scan/runner.js";
-import { asConnectionId, asTenantId, type ScanId } from "../tenancy/ids.js";
+import { asConnectionId, asTenantId, type ScanId } from "../core/ids.js";
 import { replicateEstate } from "./replicate.js";
 
 const ENABLED = process.env["LOAD_TEST"] === "1";

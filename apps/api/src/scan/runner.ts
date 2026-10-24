@@ -20,11 +20,12 @@ import {
   errorMessage,
 } from "@sightline/shared";
 
-import { cfg, faultInjections } from "../config.js";
+import { cfg } from "../core/config.js";
+import { faultInjections } from "../aws/settings.js";
 import { CallCounter, type AwsContext } from "../aws/clients.js";
 import { getSession } from "../aws/credentials.js";
-import { accountMismatch } from "../tenancy/connections.js";
-import type { ScanTarget } from "../tenancy/scanTarget.js";
+import { accountMismatch } from "../core/scanTarget.js";
+import type { ScanTarget } from "../core/scanTarget.js";
 import { resolveRegions } from "../aws/regions.js";
 import { discoverActiveRegions, narrowRegions } from "../aws/resourceExplorer.js";
 import { runWithConcurrency } from "./limiter.js";

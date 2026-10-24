@@ -17,12 +17,12 @@ import { randomUUID } from "node:crypto";
 import { and, asc, eq } from "drizzle-orm";
 import { readOnlyRoleArn } from "@sightline/shared";
 
-import { cfg, MOCK_EXTERNAL_ID } from "../config.js";
+import { cfg, MOCK_EXTERNAL_ID } from "../core/config.js";
 import { db, withTenant } from "../db/postgres.js";
 import { connections } from "../db/schema.js";
-import { asConnectionId, type ConnectionId, type TenantId } from "./ids.js";
+import { asConnectionId, type ConnectionId, type TenantId } from "../core/ids.js";
 import { encryptSecret, decryptSecret, generateExternalId } from "./secrets.js";
-import type { Scope } from "./scope.js";
+import type { Scope } from "../core/scope.js";
 
 export type ConnectionKind = "real" | "demo" | "organization";
 export type ConnectionStatus = "pending" | "verified" | "failed" | "disconnected";
@@ -228,23 +228,6 @@ export async function markScanned(scope: Scope): Promise<void> {
   return withTenant(scope.tenantId, async () => {
     await db.update(connections).set({ lastScanAt: new Date() }).where(owned(scope));
   });
-}
-
-/**
- * Does the account we reached match the one we agreed?
- *
- * Pure, so the rule is testable without a database or an AWS call - the
- * comparison is the whole point and it is one line that is easy to get
- * backwards.
- */
-export function accountMismatch(pinned: string | null, reached: string): string | null {
-  if (!pinned) return null; // First verification: nothing to contradict yet.
-  if (pinned === reached) return null;
-  return (
-    `This connection was verified against account ${pinned}, but the role now assumes into ` +
-    `account ${reached}. Refusing to scan: an inventory recorded under the wrong account is ` +
-    "worse than no inventory. Reconnect if the change was intended."
-  );
 }
 
 /**

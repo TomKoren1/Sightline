@@ -33,7 +33,7 @@ function docs(file: string): Doc[] {
 
 /** The application's own default, which is the number everything else copies. */
 function configuredPort(): number {
-  const config = read("apps/api/src/config.ts");
+  const config = read("apps/api/src/core/config.ts");
   // Non-greedy across `)`, because the declaration is a chain of calls:
   // `blankAsUnset(z.coerce.number().int().min(0).default(9464))`.
   const match = /METRICS_PORT:[\s\S]{0,160}?default\((\d+)\)/.exec(config);

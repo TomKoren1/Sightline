@@ -14,9 +14,9 @@
 import { Controller, Get, HttpCode, Inject, Post } from "@nestjs/common";
 
 import { CurrentScope } from "../tenancy/currentScope.decorator.js";
-import type { Scope } from "../tenancy/scope.js";
+import type { Scope } from "../core/scope.js";
 import { EvalsService } from "./evals.service.js";
-import { MinRole } from "../auth/roles.js";
+import { MinRole } from "../core/access.js";
 
 @Controller("api/evals")
 export class EvalsController {

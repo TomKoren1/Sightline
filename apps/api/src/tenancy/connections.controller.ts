@@ -32,7 +32,7 @@ import {
 } from "@nestjs/common";
 import { z } from "zod";
 
-import { cfg, isHosted } from "../config.js";
+import { cfg, isHosted } from "../core/config.js";
 import {
   createConnection,
   deleteConnection,
@@ -40,9 +40,9 @@ import {
   setTargetAccount,
 } from "./connections.js";
 import { CurrentTenant, IsAdmin } from "./currentTenant.decorator.js";
-import { asConnectionId, type TenantId } from "./ids.js";
+import { asConnectionId, type TenantId } from "../core/ids.js";
 import { onboardingPlan, verifyConnection, VerifyTooSoon } from "./onboarding.js";
-import { MinRole, RecentSignIn } from "../auth/roles.js";
+import { MinRole, RecentSignIn } from "../core/access.js";
 
 const createSchema = z.object({
   kind: z.enum(["real", "demo", "organization"]).default("real"),

@@ -25,7 +25,7 @@ import { system } from "./postgres.js";
 import { createScanRun, markProjected, saveScanResult } from "./repository.js";
 import * as schema from "./schema.js";
 import { runTool, RAW_QUERY_TOOL } from "../agent/tools.js";
-import { asConnectionId, asTenantId } from "../tenancy/ids.js";
+import { asConnectionId, asTenantId } from "../core/ids.js";
 
 const HAS_INFRA = !process.env["SKIP_INTEGRATION"];
 

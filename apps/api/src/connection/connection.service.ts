@@ -16,10 +16,9 @@ import { randomBytes } from "node:crypto";
 import { BadRequestException, ConflictException, Injectable, Logger } from "@nestjs/common";
 import { STSClient, GetCallerIdentityCommand } from "@aws-sdk/client-sts";
 
+import { isHosted, cfg } from "../core/config.js";
 import {
-  isHosted,
   activeConnection,
-  cfg,
   configuredMode,
   configuredRegions,
   currentMode,
@@ -27,13 +26,13 @@ import {
   isMock,
   setMode,
   targetRoleProblem,
-} from "../config.js";
+} from "../aws/settings.js";
 import { assumablePrincipalArn } from "../aws/principal.js";
 import { accountIdFromArn, getSession, resetSession } from "../aws/credentials.js";
 import { getLatestScan } from "../db/repository.js";
 import { localScope } from "../tenancy/local.js";
 import { resolveScanTarget } from "../tenancy/scanTarget.js";
-import { diagnose } from "./diagnose.js";
+import { diagnose } from "../aws/diagnose.js";
 
 /** Show enough of a secret to confirm which one is configured, and no more. */
 function mask(value: string): string {

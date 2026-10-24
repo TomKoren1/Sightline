@@ -82,12 +82,12 @@ describe("the real-AWS override for the containerised app", () => {
   });
 
   it("agrees with the path the API actually reads", () => {
-    // The other half: config.ts resolves the profile directory from HOME and
-    // falls back to this constant. If the two drift, the mount lands somewhere
-    // nothing reads - which is exactly what shipped.
-    const config = read("apps/api/src/config.ts");
+    // The other half: aws/settings.ts resolves the profile directory from HOME
+    // and falls back to this constant. If the two drift, the mount lands
+    // somewhere nothing reads - which is exactly what shipped.
+    const config = read("apps/api/src/aws/settings.ts");
     const declared = /export const CONTAINER_HOME = "([^"]+)"/.exec(config);
-    expect(declared, "config.ts no longer declares CONTAINER_HOME").toBeTruthy();
+    expect(declared, "aws/settings.ts no longer declares CONTAINER_HOME").toBeTruthy();
     expect(declared![1]).toBe(containerHome());
   });
 

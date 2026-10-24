@@ -16,7 +16,7 @@
  * and hosted mode could never have started.
  */
 
-import { looksLikeRealAccessKey } from "./config.js";
+import { looksLikeRealAccessKey } from "./core/config.js";
 
 export type Env = Record<string, string | undefined>;
 

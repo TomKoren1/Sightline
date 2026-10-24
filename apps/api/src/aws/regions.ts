@@ -9,7 +9,8 @@
 
 import { DescribeRegionsCommand } from "@aws-sdk/client-ec2";
 import { ec2Client, type AwsContext } from "./clients.js";
-import { cfg, configuredRegions } from "../config.js";
+import { cfg } from "../core/config.js";
+import { configuredRegions } from "./settings.js";
 import { errorMessage } from "@sightline/shared";
 
 /**

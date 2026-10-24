@@ -18,9 +18,9 @@ import { readOnlyRoleArn } from "@sightline/shared";
 import { CallCounter, organizationsClient } from "../aws/clients.js";
 import { db, withTenant } from "../db/postgres.js";
 import { connections } from "../db/schema.js";
-import { asConnectionId, type ConnectionId } from "./ids.js";
-import type { ScanTarget } from "./scanTarget.js";
-import type { Scope } from "./scope.js";
+import { asConnectionId, type ConnectionId } from "../core/ids.js";
+import type { ScanTarget } from "../core/scanTarget.js";
+import type { Scope } from "../core/scope.js";
 
 export interface MemberAccount {
   id: string;

@@ -9,10 +9,10 @@
 
 import { createParamDecorator, UnauthorizedException, type ExecutionContext } from "@nestjs/common";
 
-import { isHosted } from "../config.js";
-import type { AuthedRequest } from "../auth/auth.guard.js";
+import { isHosted } from "../core/config.js";
+import type { AuthedRequest } from "../core/request.js";
 import { LOCAL_TENANT_ID } from "./local.js";
-import type { TenantId } from "./ids.js";
+import type { TenantId } from "../core/ids.js";
 
 export const CurrentTenant = createParamDecorator(
   (_data: unknown, ctx: ExecutionContext): TenantId => {

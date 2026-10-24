@@ -4,8 +4,8 @@ import { Controller, ForbiddenException, Get, Req } from "@nestjs/common";
 import type { FastifyRequest } from "fastify";
 
 import { clientIp, recordAudit } from "../audit/audit.js";
-import type { AuthedRequest } from "../auth/auth.guard.js";
-import { HumanOnly, MinRole } from "../auth/roles.js";
+import type { AuthedRequest } from "../core/request.js";
+import { HumanOnly, MinRole } from "../core/access.js";
 import { IsAdmin } from "../tenancy/currentTenant.decorator.js";
 import { tenantHealth } from "./operator.js";
 

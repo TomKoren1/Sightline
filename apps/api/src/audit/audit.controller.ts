@@ -3,9 +3,9 @@
 import { BadRequestException, Controller, Get, Query, Res } from "@nestjs/common";
 import type { FastifyReply } from "fastify";
 
-import { MinRole } from "../auth/roles.js";
+import { MinRole } from "../core/access.js";
 import { CurrentScope } from "../tenancy/currentScope.decorator.js";
-import type { Scope } from "../tenancy/scope.js";
+import type { Scope } from "../core/scope.js";
 import { auditCsv, listAudit, type AuditRow } from "./audit.js";
 
 const PAGE = 100;

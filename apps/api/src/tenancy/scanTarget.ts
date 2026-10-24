@@ -11,32 +11,11 @@
  * fallback to configuration. A fallback is indistinguishable from working.
  */
 
-import { configuredRegions, cfg, isHosted, MOCK_EXTERNAL_ID } from "../config.js";
+import { cfg, isHosted, MOCK_EXTERNAL_ID } from "../core/config.js";
+import { configuredRegions } from "../aws/settings.js";
 import { getConnection, externalIdFor } from "./connections.js";
-import type { ConnectionId } from "./ids.js";
-import type { Scope } from "./scope.js";
-
-export interface ScanTarget {
-  connectionId: ConnectionId;
-  kind: "real" | "demo";
-  roleArn: string;
-  externalId: string;
-  /**
-   * An endpoint override, or null for real AWS.
-   *
-   * Carried here rather than read from configuration when a client is built,
-   * so one process can serve a tenant on the demo fixture and a tenant on real
-   * AWS at the same moment. Client factories take it explicitly for the same
-   * reason they take a target: an endpoint that arrives later cannot express
-   * "no override", because the SDK stops resolving regional endpoints itself
-   * the moment the option is set.
-   */
-  endpoint: string | null;
-  /** The account this connection was verified against, or null before that. */
-  pinnedAccountId: string | null;
-  /** Regions to scan, or null to discover every region enabled for the account. */
-  regions: string[] | null;
-}
+import type { Scope } from "../core/scope.js";
+import type { ScanTarget } from "../core/scanTarget.js";
 
 /** The account id the demo fixture namespaces its resources under. */
 function demoAccountId(): string {

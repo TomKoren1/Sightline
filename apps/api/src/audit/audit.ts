@@ -14,7 +14,7 @@ import { sql } from "drizzle-orm";
 import type { FastifyRequest } from "fastify";
 
 import { db, system, withTenant } from "../db/postgres.js";
-import type { TenantId } from "../tenancy/ids.js";
+import type { TenantId } from "../core/ids.js";
 
 export interface AuditEntry {
   tenantId: TenantId | string;

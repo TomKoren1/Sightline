@@ -102,7 +102,7 @@ describe("the comment budget", () => {
   it("found the source tree", () => {
     // Without this every budget below passes on an empty list.
     expect(measured.length).toBeGreaterThan(150);
-    expect(measured.some((m) => m.file === "apps/api/src/config.ts")).toBe(true);
+    expect(measured.some((m) => m.file === "apps/api/src/core/config.ts")).toBe(true);
   });
 
   it("has no block longer than the ceiling", () => {

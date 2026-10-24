@@ -5,7 +5,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { findingsAcrossAccounts } from "./findings.js";
 import { system } from "./postgres.js";
 import * as schema from "./schema.js";
-import { asTenantId } from "../tenancy/ids.js";
+import { asTenantId } from "../core/ids.js";
 
 const HAS_INFRA = !process.env["SKIP_INTEGRATION"];
 const tenantId = asTenantId(randomUUID());

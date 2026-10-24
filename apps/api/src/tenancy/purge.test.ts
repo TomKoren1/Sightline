@@ -25,7 +25,7 @@ import { INTERNET_ARN } from "@sightline/shared";
 
 import { system } from "../db/postgres.js";
 import * as schema from "../db/schema.js";
-import { asTenantId, type TenantId } from "./ids.js";
+import { asTenantId, type TenantId } from "../core/ids.js";
 import { confirmationMatches, purgeTenant } from "./purge.js";
 
 const HAS_INFRA = !process.env["SKIP_INTEGRATION"];

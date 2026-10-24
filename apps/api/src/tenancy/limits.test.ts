@@ -29,9 +29,9 @@ import { eq, sql } from "drizzle-orm";
  */
 import { system } from "../db/postgres.js";
 import { connections, conversations, messages, scanJobs, scanRuns, tenants } from "../db/schema.js";
-import { asConnectionId, asTenantId } from "./ids.js";
+import { asConnectionId, asTenantId } from "../core/ids.js";
 import { lockQueueForTest } from "../jobs/queueTestLock.js";
-import type { Scope } from "./scope.js";
+import type { Scope } from "../core/scope.js";
 
 const HAS_INFRA = !process.env["SKIP_INTEGRATION"];
 const ORIGINAL = { ...process.env };

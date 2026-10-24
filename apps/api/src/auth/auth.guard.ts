@@ -19,12 +19,11 @@ import {
 } from "@nestjs/common";
 import { Reflector } from "@nestjs/core";
 
-import { isHosted } from "../config.js";
-import { resolveScope, type ScopedRequest } from "../tenancy/requestScope.js";
-import type { Scope } from "../tenancy/scope.js";
+import { isHosted } from "../core/config.js";
+import { resolveScope } from "../tenancy/requestScope.js";
 import { configuredProviders } from "./oauth.js";
 import { IS_PUBLIC } from "./public.decorator.js";
-import { readSession, SESSION_COOKIE, type Session } from "./session.js";
+import { readSession, SESSION_COOKIE } from "./session.js";
 import {
   atLeast,
   HUMAN_ONLY,
@@ -32,9 +31,10 @@ import {
   RECENT_SIGN_IN,
   RECENT_SIGN_IN_MINUTES,
   type TeamRole,
-} from "./roles.js";
+} from "../core/access.js";
 import { readApiToken } from "./apiTokens.js";
 import { markVerified } from "./verifiedCredentials.js";
+import type { AuthedRequest } from "../core/request.js";
 
 /** Methods that change something, and therefore need forgery protection. */
 const MUTATING = new Set(["POST", "PUT", "PATCH", "DELETE"]);
@@ -49,24 +49,6 @@ const MUTATING = new Set(["POST", "PUT", "PATCH", "DELETE"]);
  * CORS configuration does not answer.
  */
 const REQUEST_HEADER = "x-sightline-request";
-
-/**
- * The scope, or the reason there isn't one, decided here and raised later.
- *
- * Resolving a connection can legitimately fail - a tenant who has just signed
- * up has none yet - and that must not refuse the very routes they need to
- * create one. So the guard records the outcome and `@CurrentScope()` raises it,
- * which means the error surfaces exactly on the routes that actually wanted a
- * connection and nowhere else.
- */
-export type ScopeOutcome = { ok: true; scope: Scope } | { ok: false; error: unknown };
-
-export interface AuthedRequest extends ScopedRequest {
-  method?: string;
-  session?: Session | null;
-  cookies?: Record<string, string | undefined>;
-  scopeOutcome?: ScopeOutcome;
-}
 
 async function attachScope(req: AuthedRequest): Promise<void> {
   try {

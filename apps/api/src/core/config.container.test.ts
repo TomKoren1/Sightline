@@ -15,9 +15,9 @@ import { existsSync, readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 
-import { inContainer } from "./config.js";
+import { inContainer } from "../aws/settings.js";
 
-const root = fileURLToPath(new URL("../../../", import.meta.url));
+const root = fileURLToPath(new URL("../../../../", import.meta.url));
 const source = readFileSync(`${root}apps/web/src/components/ConnectionGuide.tsx`, "utf8");
 
 /**

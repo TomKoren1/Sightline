@@ -15,7 +15,7 @@
 
 import { describe, expect, it } from "vitest";
 
-import { accountOfArn, honoursConfiguredArnInMock } from "./config.js";
+import { accountOfArn, honoursConfiguredArnInMock } from "../aws/settings.js";
 
 const MOCK_ACCOUNT = "123456789012";
 const REAL_ACCOUNT = "672299759593";

@@ -15,13 +15,13 @@ import {
 } from "@aws-sdk/client-organizations";
 import { readOnlyRoleArn } from "@sightline/shared";
 
-import { asConnectionId, asTenantId } from "./ids.js";
+import { asConnectionId, asTenantId } from "../core/ids.js";
 
 // ExternalIds are encrypted at rest, and config is read once at import: a local
 // key first, then the modules that read it.
 process.env["SECRETS_LOCAL_KEY"] ??= "organization-test-local-key";
 delete process.env["AWS_KMS_KEY_ID"];
-const { cfg, MOCK_EXTERNAL_ID } = await import("../config.js");
+const { cfg, MOCK_EXTERNAL_ID } = await import("../core/config.js");
 const { system } = await import("../db/postgres.js");
 const schema = await import("../db/schema.js");
 const { createConnection, externalIdFor, listConnections } = await import("./connections.js");

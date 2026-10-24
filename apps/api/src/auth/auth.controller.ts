@@ -27,7 +27,7 @@ import {
 import type { FastifyReply, FastifyRequest } from "fastify";
 
 import { clientIp, recordAudit } from "../audit/audit.js";
-import { cfg, isHosted } from "../config.js";
+import { cfg, isHosted } from "../core/config.js";
 import { listConnections } from "../tenancy/connections.js";
 import { confirmationMatches, purgeTenant } from "../tenancy/purge.js";
 import { Public } from "./public.decorator.js";
@@ -43,8 +43,8 @@ import {
   SESSION_COOKIE,
 } from "./session.js";
 import { findOrCreateUser, getUser, linkedProviders, SignInRefused } from "./users.js";
-import type { AuthedRequest } from "./auth.guard.js";
-import { MinRole, HumanOnly, RecentSignIn } from "./roles.js";
+import type { AuthedRequest } from "../core/request.js";
+import { MinRole, HumanOnly, RecentSignIn } from "../core/access.js";
 import { leaveOrLast, TeamRefused } from "./team.js";
 
 /** Where to send the browser once sign-in has resolved, one way or the other. */

@@ -20,14 +20,14 @@
 
 import pino from "pino";
 
-import { cfg, scanWorkerMode } from "./config.js";
+import { cfg, scanWorkerMode } from "./core/config.js";
 import { assertSchemaCurrent, closePool } from "./db/postgres.js";
 import { assertHostedInvariants } from "./hostedMode.js";
 import { ScanWorker } from "./jobs/worker.js";
 import { loggerOptions } from "./observability/logging.js";
 import { recordBuild, startMetricsServer } from "./observability/metrics.js";
-import { startSnapshotLoop } from "./observability/snapshot.js";
-import { VERSION } from "./version.js";
+import { startSnapshotLoop } from "./jobs/snapshot.js";
+import { VERSION } from "./core/version.js";
 import { startTracing, stopTracing } from "./observability/tracing.js";
 import { watchCertificate } from "./aws/certificateWatch.js";
 

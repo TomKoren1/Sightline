@@ -11,7 +11,7 @@ import type { Resource } from "@sightline/shared";
 import { system } from "./postgres.js";
 import * as schema from "./schema.js";
 import { listFindingStates, setFindingStatus, syncFindings } from "./findings.js";
-import { asConnectionId, asTenantId } from "../tenancy/ids.js";
+import { asConnectionId, asTenantId } from "../core/ids.js";
 
 const HAS_INFRA = !process.env["SKIP_INTEGRATION"];
 

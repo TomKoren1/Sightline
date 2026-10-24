@@ -14,9 +14,9 @@ import { and, desc, eq } from "drizzle-orm";
 
 import { system } from "../db/postgres.js";
 import { apiTokens, tenants, users } from "../db/schema.js";
-import { asTenantId, type TenantId } from "../tenancy/ids.js";
-import { atLeast, TEAM_ROLES, type TeamRole } from "./roles.js";
-import type { Session } from "./session.js";
+import { asTenantId, type TenantId } from "../core/ids.js";
+import { atLeast, TEAM_ROLES, type TeamRole } from "../core/access.js";
+import type { Session } from "../core/request.js";
 
 export const TOKEN_PREFIX = "slt_";
 const MAX_TOKENS_PER_TENANT = 50;

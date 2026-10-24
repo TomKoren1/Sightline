@@ -8,7 +8,7 @@
  * "the trust policy does not name this principal" is actionable.
  */
 
-import { credentialSources, sourceIdentity } from "../config.js";
+import { credentialSources, sourceIdentity } from "./settings.js";
 import { errorMessage } from "@sightline/shared";
 
 export interface Diagnosis {

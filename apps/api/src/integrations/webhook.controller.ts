@@ -14,10 +14,10 @@ import {
 import type { FastifyRequest } from "fastify";
 import { z } from "zod";
 
-import type { AuthedRequest } from "../auth/auth.guard.js";
-import { HumanOnly, MinRole } from "../auth/roles.js";
+import type { AuthedRequest } from "../core/request.js";
+import { HumanOnly, MinRole } from "../core/access.js";
 import { CurrentScope } from "../tenancy/currentScope.decorator.js";
-import type { Scope } from "../tenancy/scope.js";
+import type { Scope } from "../core/scope.js";
 import { deleteWebhook, getWebhook, sendTest, setWebhook, WebhookRefused } from "./notify.js";
 
 const body = z.object({ url: z.string().trim().max(2048) });

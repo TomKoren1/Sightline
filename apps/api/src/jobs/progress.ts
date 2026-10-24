@@ -19,8 +19,8 @@ import type { ScanEvent, ScanRun, ScanUnit } from "@sightline/shared";
 
 import { withTenant } from "../db/postgres.js";
 import { getScan } from "../db/repository.js";
-import type { JobId } from "../tenancy/ids.js";
-import type { Scope } from "../tenancy/scope.js";
+import type { JobId } from "../core/ids.js";
+import type { Scope } from "../core/scope.js";
 import { getJob, TERMINAL, type JobStatus } from "./queue.js";
 
 /**

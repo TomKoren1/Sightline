@@ -10,8 +10,9 @@ import { eq, inArray, sql } from "drizzle-orm";
 
 import { system } from "../db/postgres.js";
 import * as schema from "../db/schema.js";
-import { asTenantId } from "../tenancy/ids.js";
-import type { Session } from "./session.js";
+import { asTenantId } from "../core/ids.js";
+import type { TeamRole } from "../core/access.js";
+import type { Session } from "../core/request.js";
 import {
   acceptInvite,
   createInvite,
@@ -27,7 +28,7 @@ const tenants: string[] = [];
 let available = false;
 
 /** A user alone in a tenant of their own, as signing in makes one. */
-async function newUser(name: string, role: schema.TeamRole = "owner"): Promise<Session> {
+async function newUser(name: string, role: TeamRole = "owner"): Promise<Session> {
   const tenantId = randomUUID();
   const userId = randomUUID();
   tenants.push(tenantId);

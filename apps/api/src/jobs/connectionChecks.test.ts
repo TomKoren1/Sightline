@@ -11,7 +11,7 @@ import { eq } from "drizzle-orm";
 
 import { system } from "../db/postgres.js";
 import * as schema from "../db/schema.js";
-import { asConnectionId, asTenantId } from "../tenancy/ids.js";
+import { asConnectionId, asTenantId } from "../core/ids.js";
 
 const performVerification = vi.fn();
 vi.mock("../tenancy/onboarding.js", () => ({
