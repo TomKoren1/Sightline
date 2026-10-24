@@ -34,6 +34,7 @@ import { AutoScalingClient } from "@aws-sdk/client-auto-scaling";
 import { OrganizationsClient } from "@aws-sdk/client-organizations";
 
 import { credentialProvider } from "./credentials.js";
+import { accountOfRole, pace } from "./pace.js";
 import type { ScanTarget } from "../tenancy/scanTarget.js";
 import { awsApiCalls, awsThrottles } from "../observability/metrics.js";
 
@@ -104,7 +105,7 @@ interface MiddlewareStack {
   add: (
     middleware: (
       next: (args: unknown) => Promise<unknown>,
-      context: { commandName?: string },
+      context: { commandName?: string; clientName?: string },
     ) => (args: unknown) => Promise<unknown>,
     options: { step: "deserialize"; name: string; override: boolean },
   ) => void;
@@ -120,14 +121,25 @@ const THROTTLE = /throttl|RequestLimitExceeded|TooManyRequests|SlowDown|Provisio
  * including retries - which is what we want, since retries are exactly what
  * costs us when throttled.
  */
-function instrument<T extends object>(client: T, counter: CallCounter, key: string): T {
-  const { middlewareStack } = client as unknown as { middlewareStack: MiddlewareStack };
+function instrument<T extends object>(client: T, ctx: AwsContext, key: string): T {
+  const { counter } = ctx;
+  const { middlewareStack, config } = client as unknown as {
+    middlewareStack: MiddlewareStack;
+    config: { region: () => Promise<string> };
+  };
+  // Paced per account, SDK client and region: see pace.ts. Resolved once.
+  let paceKey: Promise<string> | null = null;
+  const keyFor = (clientName: string) =>
+    (paceKey ??= config
+      .region()
+      .then((region) => `${accountOfRole(ctx.target.roleArn)}:${clientName}:${region}`));
   // `ec2:us-east-1` - the service half is the metric label, because a region
   // label here would duplicate what the scan unit already reports.
   const service = key.split(":")[0] ?? key;
 
   middlewareStack.add(
     (next, context) => async (args) => {
+      await pace(await keyFor(context.clientName ?? service));
       counter.record(key);
       /**
        * The operation, from the SDK's own context: `DescribeInstancesCommand`.
@@ -154,22 +166,18 @@ function instrument<T extends object>(client: T, counter: CallCounter, key: stri
 }
 
 export const ec2Client = (ctx: AwsContext, region: string) =>
-  instrument(new EC2Client(baseConfig(ctx, region)), ctx.counter, ctx.unitKey ?? `ec2:${region}`);
+  instrument(new EC2Client(baseConfig(ctx, region)), ctx, ctx.unitKey ?? `ec2:${region}`);
 
 export const rdsClient = (ctx: AwsContext, region: string) =>
-  instrument(new RDSClient(baseConfig(ctx, region)), ctx.counter, ctx.unitKey ?? `rds:${region}`);
+  instrument(new RDSClient(baseConfig(ctx, region)), ctx, ctx.unitKey ?? `rds:${region}`);
 
 export const lambdaClient = (ctx: AwsContext, region: string) =>
-  instrument(
-    new LambdaClient(baseConfig(ctx, region)),
-    ctx.counter,
-    ctx.unitKey ?? `lambda:${region}`,
-  );
+  instrument(new LambdaClient(baseConfig(ctx, region)), ctx, ctx.unitKey ?? `lambda:${region}`);
 
 export const elbv2Client = (ctx: AwsContext, region: string) =>
   instrument(
     new ElasticLoadBalancingV2Client(baseConfig(ctx, region)),
-    ctx.counter,
+    ctx,
     ctx.unitKey ?? `elbv2:${region}`,
   );
 
@@ -177,21 +185,21 @@ export const elbv2Client = (ctx: AwsContext, region: string) =>
 export const cloudfrontClient = (ctx: AwsContext) =>
   instrument(
     new CloudFrontClient(baseConfig(ctx, "us-east-1")),
-    ctx.counter,
+    ctx,
     ctx.unitKey ?? "cloudfront:global",
   );
 
 export const apigatewayClient = (ctx: AwsContext, region: string) =>
   instrument(
     new APIGatewayClient(baseConfig(ctx, region)),
-    ctx.counter,
+    ctx,
     ctx.unitKey ?? `apigateway:${region}`,
   );
 
 export const apigatewayV2Client = (ctx: AwsContext, region: string) =>
   instrument(
     new ApiGatewayV2Client(baseConfig(ctx, region)),
-    ctx.counter,
+    ctx,
     ctx.unitKey ?? `apigateway:${region}`,
   );
 
@@ -199,11 +207,7 @@ export const apigatewayV2Client = (ctx: AwsContext, region: string) =>
 const regional =
   <T extends object>(Client: new (config: ReturnType<typeof baseConfig>) => T, service: string) =>
   (ctx: AwsContext, region: string) =>
-    instrument(
-      new Client(baseConfig(ctx, region)),
-      ctx.counter,
-      ctx.unitKey ?? `${service}:${region}`,
-    );
+    instrument(new Client(baseConfig(ctx, region)), ctx, ctx.unitKey ?? `${service}:${region}`);
 
 export const sqsClient = regional(SQSClient, "sqs");
 export const snsClient = regional(SNSClient, "sns");
@@ -216,16 +220,12 @@ export const autoScalingClient = regional(AutoScalingClient, "autoscaling");
 
 /** Route 53 is global and answers in us-east-1. */
 export const route53Client = (ctx: AwsContext) =>
-  instrument(
-    new Route53Client(baseConfig(ctx, "us-east-1")),
-    ctx.counter,
-    ctx.unitKey ?? "route53:global",
-  );
+  instrument(new Route53Client(baseConfig(ctx, "us-east-1")), ctx, ctx.unitKey ?? "route53:global");
 
 export const resourceExplorerClient = (ctx: AwsContext, region: string) =>
   instrument(
     new ResourceExplorer2Client(baseConfig(ctx, region)),
-    ctx.counter,
+    ctx,
     ctx.unitKey ?? `resource-explorer:${region}`,
   );
 
@@ -236,7 +236,7 @@ export const s3Client = (ctx: AwsContext, region: string) =>
       ...baseConfig(ctx, region),
       ...(ctx.target.kind === "demo" ? { forcePathStyle: true } : {}),
     }),
-    ctx.counter,
+    ctx,
     // Counted under the global unit the runner reports, whichever region a
     // bucket lives in.
     "s3:global",
@@ -247,9 +247,9 @@ export const s3Client = (ctx: AwsContext, region: string) =>
 export const organizationsClient = (ctx: AwsContext) =>
   instrument(
     new OrganizationsClient(baseConfig(ctx, "us-east-1")),
-    ctx.counter,
+    ctx,
     ctx.unitKey ?? "organizations:global",
   );
 
 export const iamClient = (ctx: AwsContext) =>
-  instrument(new IAMClient(baseConfig(ctx, "us-east-1")), ctx.counter, ctx.unitKey ?? "iam:global");
+  instrument(new IAMClient(baseConfig(ctx, "us-east-1")), ctx, ctx.unitKey ?? "iam:global");

@@ -173,6 +173,13 @@ const schema = z.object({
   SCAN_CONCURRENCY: blankAsUnset(z.coerce.number().int().positive().default(6)),
 
   /**
+   * AWS requests a second per account, service and region (aws/pace.ts).
+   * Below what AWS allows for describe and list calls on most services, so a
+   * scan stays out of the customer's own throttling budget.
+   */
+  SCAN_AWS_REQUESTS_PER_SECOND: blankAsUnset(z.coerce.number().positive().default(20)),
+
+  /**
    * Where scans run.
    *
    * `embedded` runs the queue worker inside the API process, which is what a
