@@ -125,6 +125,7 @@ function stubPromptContext() {
     adminCount: 0,
     idleCount: 0,
     unprotectedCount: 0,
+    unusedCount: 0,
     idleCost: 0,
   });
   return () => {

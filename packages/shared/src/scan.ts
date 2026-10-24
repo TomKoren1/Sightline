@@ -174,6 +174,7 @@ export const SIGNIFICANT_CHANGE_FIELDS: ReadonlySet<string> = new Set([
   "derived.isPublic",
   "derived.isAdmin",
   "derived.isIdle",
+  "derived.isUnused",
   // Exposure
   "publiclyAccessible",
   "publicIpAddress",

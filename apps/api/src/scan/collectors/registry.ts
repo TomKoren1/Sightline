@@ -124,9 +124,11 @@ export const COLLECTORS: Record<ScannableService, CollectorPlugin> = {
   iam: {
     scope: "global",
     relationships: ["HAS_POLICY", "MEMBER_OF", "PROVIDES_ROLE"],
-    calls: { perUnit: 5, perResource: 0.01 },
+    calls: { perUnit: 7, perResource: 0.01 },
     kinds: ["IamRole", "IamUser", "IamGroup", "IamPolicy", "InstanceProfile"],
     permissions: [
+      "iam:GenerateCredentialReport",
+      "iam:GetCredentialReport",
       "iam:GetAccountAuthorizationDetails",
       "iam:ListRoles",
       "iam:ListUsers",

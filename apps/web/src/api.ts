@@ -11,6 +11,7 @@ export interface GraphNode {
   isAdmin?: boolean | null;
   isIdle?: boolean | null;
   isUnprotected?: boolean | null;
+  isUnused?: boolean | null;
   estimatedMonthlyCostUsd?: number | null;
   reason?: string | null;
 }
@@ -49,9 +50,10 @@ export interface Summary {
   idleCount: number;
   idleCost: number;
   unprotectedCount: number;
+  unusedCount: number;
 }
 
-export type FindingCategory = "exposed" | "admin" | "idle" | "unguarded";
+export type FindingCategory = "exposed" | "admin" | "idle" | "unguarded" | "unused";
 
 /** A finding's tracked state. Null on a finding no scan has recorded yet. */
 export interface FindingState {
@@ -70,6 +72,8 @@ export interface Findings {
   unprotected: Tracked<GraphNode & { isPublic?: boolean }>[];
   adminPrincipals: Tracked<GraphNode & { usedBy?: GraphNode[]; useCount?: number }>[];
   idle: Tracked<GraphNode>[];
+  /** Roles and users nobody has used in 90 days. */
+  unused: Tracked<GraphNode & { lastUsedAt?: string | null }>[];
   exposed: Tracked<GraphNode & { ports?: string[]; securityGroup?: string }>[];
   /** Findings somebody accepted the risk of, still present in the current scan. */
   accepted: (GraphNode & {

@@ -22,6 +22,7 @@ const summary: Summary = {
   idleCount: 0,
   idleCost: 0,
   unprotectedCount: 0,
+  unusedCount: 0,
 };
 
 const findings: FindingsData = {
@@ -39,6 +40,7 @@ const findings: FindingsData = {
   idle: [],
   exposed: [],
   unprotected: [],
+  unused: [],
   accepted: [
     {
       arn: "arn:aws:s3:::website",

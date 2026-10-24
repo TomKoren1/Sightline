@@ -50,7 +50,7 @@
   },
   {
    "from": "arn:aws:ecs:us-east-1:123456789012:service/prod-ecs/checkout",
-   "to": "arn:aws:ec2:us-east-1:123456789012:security-group/sg-fefe38fba41de4daf",
+   "to": "arn:aws:ec2:us-east-1:123456789012:security-group/sg-bd01aaccd2ea691db",
    "type": "HAS_SECURITY_GROUP"
   },
   {
@@ -60,7 +60,7 @@
   },
   {
    "from": "arn:aws:ecs:us-east-1:123456789012:service/prod-ecs/checkout",
-   "to": "arn:aws:ec2:us-east-1:123456789012:subnet/subnet-86831fa490ec023ba",
+   "to": "arn:aws:ec2:us-east-1:123456789012:subnet/subnet-c828f0e20f4eb3c7c",
    "type": "IN_SUBNET"
   }
  ]

@@ -21,6 +21,7 @@ const STRUCTURED_KEYS = [
   "groupPolicies",
   "permissionsBoundary",
   "aclGrants",
+  "credentials",
 ] as const;
 
 /** Derived-fact keys, promoted to top level in the property bag. */
@@ -34,6 +35,8 @@ const DERIVED_KEYS = [
   "adminReason",
   "isIdle",
   "idleReason",
+  "isUnused",
+  "unusedReason",
   "estimatedMonthlyCostUsd",
 ] as const;
 

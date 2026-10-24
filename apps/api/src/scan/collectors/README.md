@@ -16,7 +16,7 @@ same registry, so a collector cannot gain a call the template does not grant.
 | `ecs` | regional | EcsCluster, EcsService | EXECUTES_AS, HAS_SECURITY_GROUP, IN_CLUSTER, IN_REGION, IN_SUBNET, TARGETS | 1 + 2/resource | `ecs:ListClusters`, `ecs:ListServices`, `ecs:DescribeServices`, `ecs:DescribeTaskDefinition` |
 | `eks` | regional | EksCluster, EksNodeGroup | CAN_ASSUME, EXECUTES_AS, IN_CLUSTER, IN_REGION, IN_SUBNET | 1 + 3/resource | `eks:ListClusters`, `eks:DescribeCluster`, `eks:ListNodegroups`, `eks:DescribeNodegroup`, `eks:ListPodIdentityAssociations`, `eks:DescribePodIdentityAssociation` |
 | `elbv2` | regional | LoadBalancer, TargetGroup | FORWARDS_TO, HAS_SECURITY_GROUP, IN_REGION, IN_SUBNET, TARGETS | 2 + 1/resource | `elasticloadbalancing:DescribeLoadBalancers`, `elasticloadbalancing:DescribeListeners`, `elasticloadbalancing:DescribeTargetGroups`, `elasticloadbalancing:DescribeTargetHealth` |
-| `iam` | global | IamRole, IamUser, IamGroup, IamPolicy, InstanceProfile | HAS_POLICY, MEMBER_OF, PROVIDES_ROLE | 5 + 0.01/resource | `iam:GetAccountAuthorizationDetails`, `iam:ListRoles`, `iam:ListUsers`, `iam:GetPolicy`, `iam:GetPolicyVersion` |
+| `iam` | global | IamRole, IamUser, IamGroup, IamPolicy, InstanceProfile | HAS_POLICY, MEMBER_OF, PROVIDES_ROLE | 7 + 0.01/resource | `iam:GenerateCredentialReport`, `iam:GetCredentialReport`, `iam:GetAccountAuthorizationDetails`, `iam:ListRoles`, `iam:ListUsers`, `iam:GetPolicy`, `iam:GetPolicyVersion` |
 | `kms` | regional | KmsKey | IN_REGION | 1 + 3/resource | `kms:ListKeys`, `kms:DescribeKey`, `kms:GetKeyPolicy`, `kms:GetKeyRotationStatus` |
 | `lambda` | regional | LambdaFunction | EXECUTES_AS, HAS_SECURITY_GROUP, IN_REGION, IN_SUBNET | 1 + 0.02/resource | `lambda:ListFunctions` |
 | `rds` | regional | RdsInstance, DbSubnetGroup | HAS_SECURITY_GROUP, IN_REGION, IN_SUBNET, USES_SUBNET_GROUP | 2 + 0.01/resource | `rds:DescribeDBInstances`, `rds:DescribeDBSubnetGroups` |
@@ -27,7 +27,7 @@ same registry, so a collector cannot gain a call the template does not grant.
 | `sqs` | regional | SqsQueue | IN_REGION | 1 + 1/resource | `sqs:ListQueues`, `sqs:GetQueueAttributes` |
 | `vpc` | regional | Vpc, Subnet, SecurityGroup, InternetGateway, NatGateway, RouteTable, NetworkAcl, VpcPeeringConnection, TransitGateway, VpcEndpoint, VpcEndpointService | ATTACHED_TO, CONNECTS_TO, HAS_NACL, HAS_SECURITY_GROUP, IN_REGION, IN_SUBNET, IN_VPC, PEERS_WITH, ROUTES_TO, SERVED_BY, USES_ROUTE_TABLE | 14 + 0.05/resource | `ec2:DescribeVpcs`, `ec2:DescribeSubnets`, `ec2:DescribeSecurityGroups`, `ec2:DescribeInternetGateways`, `ec2:DescribeNatGateways`, `ec2:DescribeRouteTables`, `ec2:DescribeNetworkAcls`, `ec2:DescribeVpcPeeringConnections`, `ec2:DescribeTransitGateways`, `ec2:DescribeTransitGatewayAttachments`, `ec2:DescribeTransitGatewayRouteTables`, `ec2:SearchTransitGatewayRoutes`, `ec2:DescribeVpcEndpoints`, `ec2:DescribeVpcEndpointServiceConfigurations` |
 
-64 actions across 18 services.
+66 actions across 18 services.
 
 ## Adding a service
 

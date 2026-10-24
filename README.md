@@ -113,8 +113,8 @@ is public, whether a role is effectively admin, what can reach what — all of i
 deterministic, and each verdict carries the evidence it was derived from. The model
 chooses which question to ask and explains the answer; it does not decide the answer.
 
-**The agent gets a curated tool library rather than free-form SQL.** Seventeen tools,
-sixteen of them queries written and reviewed in advance and one a guarded escape hatch
+**The agent gets a curated tool library rather than free-form SQL.** Eighteen tools,
+seventeen of them queries written and reviewed in advance and one a guarded escape hatch
 for questions nobody anticipated: a single parsed `SELECT` over two views pinned to one
 scan, run read-only, on a timeout, under the tenant's row-level security. After it answers, every identifier in its reply is
 checked against what the tools actually returned, and anything unsupported is flagged

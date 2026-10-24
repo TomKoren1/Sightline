@@ -77,6 +77,7 @@ const PAGED: Record<string, q.FinderName> = {
   find_instances_in_public_subnets: "findInstancesInPublicSubnets",
   find_idle_resources: "findIdleResources",
   find_unprotected_buckets: "findUnprotectedBuckets",
+  find_unused_access: "findUnusedAccess",
   find_open_security_groups: "findOpenSecurityGroups",
   find_cross_account_access: "findCrossAccountAccess",
   search_resources: "searchResources",
@@ -299,6 +300,16 @@ export const TOOL_DEFINITIONS: ToolDefinition[] = [
       "Public Access enabled?', and when a user expects a bucket to be public because they " +
       "disabled the block. Never describe these as public: that is a different question, " +
       "answered by find_public_resources.",
+    input_schema: { type: "object", properties: { ...PAGE_PROPERTIES } },
+  },
+  {
+    name: "find_unused_access",
+    description:
+      "IAM roles nobody has assumed, and users whose console password or active access keys " +
+      "nobody has used, in 90 days or more - administrators first. From IAM's own last-used " +
+      "tracking; anything newer than 90 days is never listed. Use for 'what access can we " +
+      "remove?', 'which roles are unused?', 'are there stale access keys?'. A user whose " +
+      "activity could not be read is absent, not cleared: say so if the list looks short.",
     input_schema: { type: "object", properties: { ...PAGE_PROPERTIES } },
   },
   {

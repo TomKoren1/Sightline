@@ -34,6 +34,7 @@ const EMPTY_SUMMARY = {
   idleCount: 0,
   idleCost: 0,
   unprotectedCount: 0,
+  unusedCount: 0,
 };
 
 const EMPTY_FINDINGS = {
@@ -42,6 +43,7 @@ const EMPTY_FINDINGS = {
   idle: [],
   exposed: [],
   unprotected: [],
+  unused: [],
   accepted: [],
 };
 
@@ -123,17 +125,19 @@ export class GraphService {
     const acceptedCount = (await listFindingStates(scope, { acceptedOr: [] })).length;
     const limit = 50 + acceptedCount;
 
-    const [publicResources, adminPrincipals, idle, exposed, unprotected] = await Promise.all([
-      q.findPublicResources(graph, { limit }),
-      q.findAdminPrincipals(graph, { limit }),
-      q.findIdleResources(graph, { limit }),
-      q.findOpenSecurityGroups(graph, { limit }),
-      q.findUnprotectedBuckets(graph, { limit }),
-    ]);
+    const [publicResources, adminPrincipals, idle, exposed, unprotected, unused] =
+      await Promise.all([
+        q.findPublicResources(graph, { limit }),
+        q.findAdminPrincipals(graph, { limit }),
+        q.findIdleResources(graph, { limit }),
+        q.findOpenSecurityGroups(graph, { limit }),
+        q.findUnprotectedBuckets(graph, { limit }),
+        q.findUnusedAccess(graph, { limit }),
+      ]);
 
     // Only the states of what is about to be shown, plus every acceptance.
-    const shown = [publicResources, adminPrincipals, idle, exposed, unprotected].flatMap((rows) =>
-      rows.map((row) => row.arn),
+    const shown = [publicResources, adminPrincipals, idle, exposed, unprotected, unused].flatMap(
+      (rows) => rows.map((row) => row.arn),
     );
     const states = await listFindingStates(scope, { acceptedOr: shown });
     const tracked = new Map(states.map((s) => [`${s.category} ${s.resourceArn}`, s]));
@@ -179,6 +183,7 @@ export class GraphService {
       // Internet-reachable through a rule: the same exposure, named differently.
       exposed: annotate("exposed", exposed),
       unprotected: annotate("unguarded", unprotected),
+      unused: annotate("unused", unused),
       accepted,
     };
   }

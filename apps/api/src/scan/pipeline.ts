@@ -14,6 +14,7 @@ import { evaluateAdmin, type PolicyRef } from "./analysers/policy.js";
 import type { AttachedPolicy, GroupPolicy } from "./collectors/iam.js";
 import { evaluateBucketPublicAccess, type AclGrant } from "./analysers/publicAccess.js";
 import { analyseIdleResources } from "./analysers/idle.js";
+import { analyseUnusedAccess } from "./analysers/unused.js";
 import { linkEntryPoints } from "./analysers/entryPoints.js";
 import { linkIrsa } from "./analysers/irsa.js";
 import { linkCrossAccount } from "./analysers/crossAccount.js";
@@ -68,6 +69,8 @@ export function annotate(
   collected: { resources: Resource[]; relationships: Relationship[] },
   /** This tenant's other accounts, by id, so a foreign account can be named. */
   knownAccounts: ReadonlyMap<string, string> = new Map(),
+  /** When "unused" is measured from; fixed by tests whose dates are frozen. */
+  now: Date = new Date(),
 ): ScanResult {
   const resources = [...scaffoldNodes(accountId, regions), ...collected.resources];
   const relationships = [...collected.relationships];
@@ -167,6 +170,9 @@ export function annotate(
 
   // --- What is billable and doing nothing? --------------------------------
   analyseIdleResources(resources, relationships);
+
+  // --- What access is nobody using? After isAdmin, which its reason cites.
+  analyseUnusedAccess(resources, now);
 
   // --- What can reach what? -----------------------------------------------
   // Appended one at a time: spreading an analyser's output into `push` puts

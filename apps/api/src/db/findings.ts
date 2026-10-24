@@ -39,6 +39,10 @@ const PREDICATES: Record<FindingCategory, { where: string; reason: string }> = {
     where: "kind = 'S3Bucket' AND (derived->>'isUnprotected')::boolean",
     reason: "unprotectedReason",
   },
+  unused: {
+    where: "kind IN ('IamRole', 'IamUser') AND (derived->>'isUnused')::boolean",
+    reason: "unusedReason",
+  },
 };
 
 export const FINDING_CATEGORIES = Object.keys(PREDICATES) as FindingCategory[];

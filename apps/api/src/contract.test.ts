@@ -205,6 +205,7 @@ const CONTRACTS: Contract[] = [
           adminCount: z.number(),
           idleCount: z.number(),
           unprotectedCount: z.number(),
+          unusedCount: z.number(),
           idleCost: z.number(),
         })
         .strict(),
@@ -278,6 +279,13 @@ const CONTRACTS: Contract[] = [
           ),
           exposed: z.array(node.extend({ reason: z.string() })),
           unprotected: z.array(node.extend({ reason: z.string(), isPublic: z.boolean() })),
+          unused: z.array(
+            node.extend({
+              reason: z.string(),
+              isAdmin: z.boolean(),
+              lastUsedAt: z.string().nullable(),
+            }),
+          ),
           accepted: z.array(
             node.extend({
               category: z.string(),

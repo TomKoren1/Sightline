@@ -581,11 +581,14 @@ export const findings = pgTable(
     uniqueIndex("findings_identity").on(t.connectionId, t.category, t.resourceArn),
     index("findings_connection_status").on(t.connectionId, t.status),
     check("findings_status", sql`${t.status} IN ('open','accepted','resolved')`),
-    check("findings_category", sql`${t.category} IN ('exposed','admin','idle','unguarded')`),
+    check(
+      "findings_category",
+      sql`${t.category} IN ('exposed','admin','idle','unguarded','unused')`,
+    ),
   ],
 );
 
-export type FindingCategory = "exposed" | "admin" | "idle" | "unguarded";
+export type FindingCategory = "exposed" | "admin" | "idle" | "unguarded" | "unused";
 export type FindingStatus = "open" | "accepted" | "resolved";
 
 /**

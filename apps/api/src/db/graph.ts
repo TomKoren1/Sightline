@@ -33,6 +33,7 @@ export {
   findOpenSecurityGroups,
   findPublicResources,
   findUnprotectedBuckets,
+  findUnusedAccess,
   listResources,
   pageOf,
   searchResources,
@@ -151,6 +152,7 @@ export async function summariseAccount(scope: GraphScope) {
       idleCount: number;
       idleCost: number;
       unprotectedCount: number;
+      unusedCount: number;
     }>(
       scope,
       (r) => sql`
@@ -158,6 +160,7 @@ export async function summariseAccount(scope: GraphScope) {
              count(*) FILTER (WHERE ${flag("r", "isAdmin")})::int AS "adminCount",
              count(*) FILTER (WHERE ${flag("r", "isIdle")})::int AS "idleCount",
              count(*) FILTER (WHERE ${flag("r", "isUnprotected")})::int AS "unprotectedCount",
+             count(*) FILTER (WHERE ${flag("r", "isUnused")})::int AS "unusedCount",
              coalesce(sum((derived->>'estimatedMonthlyCostUsd')::float8)
                       FILTER (WHERE ${flag("r", "isIdle")}), 0)::float8 AS "idleCost"
         FROM ${r} r`,
@@ -173,9 +176,11 @@ const nodeColumns = sql.raw(`r.arn, r.kind, r.name, r.region,
            (r.derived->>'isAdmin')::boolean AS "isAdmin",
            (r.derived->>'isIdle')::boolean AS "isIdle",
            (r.derived->>'isUnprotected')::boolean AS "isUnprotected",
+           (r.derived->>'isUnused')::boolean AS "isUnused",
            (r.derived->>'estimatedMonthlyCostUsd')::float8 AS "estimatedMonthlyCostUsd",
            coalesce(r.derived->>'publicReason', r.derived->>'adminReason',
-                    r.derived->>'idleReason', r.derived->>'unprotectedReason') AS reason`);
+                    r.derived->>'idleReason', r.derived->>'unprotectedReason',
+                    r.derived->>'unusedReason') AS reason`);
 
 /** Findings first, so a capped view of a large group shows what matters. */
 const findingsFirst = sql.raw(`coalesce((r.derived->>'isPublic')::boolean, false) DESC,

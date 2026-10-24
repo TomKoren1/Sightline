@@ -37,6 +37,7 @@ const TOOL_LABELS: Record<string, string> = {
   find_instances_in_public_subnets: "Checking subnet placement",
   find_idle_resources: "Looking for idle resources",
   find_unprotected_buckets: "Checking bucket public-access guardrails",
+  find_unused_access: "Looking for access nobody uses",
   find_open_security_groups: "Checking security group exposure",
   find_cross_account_access: "Checking access from other accounts",
   search_resources: "Searching",

@@ -29,7 +29,7 @@
    "derived": {}
   },
   {
-   "arn": "arn:aws:eks:us-east-1:123456789012:nodegroup/prod-eks/prod-nodes/2b72d2b1-55d8-48a2-bda5-c77d7c81acd9",
+   "arn": "arn:aws:eks:us-east-1:123456789012:nodegroup/prod-eks/prod-nodes/e0239869-2530-4a59-9ab0-4e0ce01331e4",
    "kind": "EksNodeGroup",
    "name": "prod-nodes",
    "region": "us-east-1",
@@ -52,7 +52,7 @@
     "sshSourceSecurityGroups": [],
     "sshOpenToWorld": true,
     "autoScalingGroups": [
-     "eks-2b72d2b1-55d8-48a2-bda5-c77d7c81acd9"
+     "eks-e0239869-2530-4a59-9ab0-4e0ce01331e4"
     ]
    },
    "derived": {}
@@ -71,27 +71,27 @@
   },
   {
    "from": "arn:aws:eks:us-east-1:123456789012:cluster/prod-eks",
-   "to": "arn:aws:ec2:us-east-1:123456789012:subnet/subnet-dc195a2aa1e6e2e12",
+   "to": "arn:aws:ec2:us-east-1:123456789012:subnet/subnet-873b59617498b2ba9",
    "type": "IN_SUBNET"
   },
   {
-   "from": "arn:aws:eks:us-east-1:123456789012:nodegroup/prod-eks/prod-nodes/2b72d2b1-55d8-48a2-bda5-c77d7c81acd9",
+   "from": "arn:aws:eks:us-east-1:123456789012:nodegroup/prod-eks/prod-nodes/e0239869-2530-4a59-9ab0-4e0ce01331e4",
    "to": "arn:aws:iam::123456789012:role/EksNodeRole",
    "type": "EXECUTES_AS"
   },
   {
-   "from": "arn:aws:eks:us-east-1:123456789012:nodegroup/prod-eks/prod-nodes/2b72d2b1-55d8-48a2-bda5-c77d7c81acd9",
+   "from": "arn:aws:eks:us-east-1:123456789012:nodegroup/prod-eks/prod-nodes/e0239869-2530-4a59-9ab0-4e0ce01331e4",
    "to": "arn:aws:eks:us-east-1:123456789012:cluster/prod-eks",
    "type": "IN_CLUSTER"
   },
   {
-   "from": "arn:aws:eks:us-east-1:123456789012:nodegroup/prod-eks/prod-nodes/2b72d2b1-55d8-48a2-bda5-c77d7c81acd9",
+   "from": "arn:aws:eks:us-east-1:123456789012:nodegroup/prod-eks/prod-nodes/e0239869-2530-4a59-9ab0-4e0ce01331e4",
    "to": "arn:aws:sightline:us-east-1:123456789012:region/us-east-1",
    "type": "IN_REGION"
   },
   {
-   "from": "arn:aws:eks:us-east-1:123456789012:nodegroup/prod-eks/prod-nodes/2b72d2b1-55d8-48a2-bda5-c77d7c81acd9",
-   "to": "arn:aws:ec2:us-east-1:123456789012:subnet/subnet-dc195a2aa1e6e2e12",
+   "from": "arn:aws:eks:us-east-1:123456789012:nodegroup/prod-eks/prod-nodes/e0239869-2530-4a59-9ab0-4e0ce01331e4",
+   "to": "arn:aws:ec2:us-east-1:123456789012:subnet/subnet-873b59617498b2ba9",
    "type": "IN_SUBNET"
   }
  ]

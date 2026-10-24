@@ -137,6 +137,10 @@ export interface DerivedFacts {
   isIdle?: boolean;
   idleReason?: string;
 
+  /** A role or user whose access nobody has exercised in months. */
+  isUnused?: boolean;
+  unusedReason?: string;
+
   /**
    * Nothing prevents this resource from being made public.
    *

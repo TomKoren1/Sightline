@@ -132,6 +132,17 @@ const FINDERS = {
     order: sql`b."estimatedMonthlyCostUsd" DESC, b.name, b.arn`,
   },
 
+  /** Roles and users whose access nobody has used in months, administrators first. */
+  findUnusedAccess: {
+    base: (_p, r) => sql`
+      SELECT arn, kind, name, NULL::text AS region, derived->>'unusedReason' AS reason,
+             coalesce(${flag("r", "isAdmin")}, false) AS "isAdmin",
+             properties->>'lastUsedAt' AS "lastUsedAt"
+        FROM ${r} r
+       WHERE kind IN ('IamRole', 'IamUser') AND ${flag("r", "isUnused")}`,
+    order: sql`b."isAdmin" DESC, b.name, b.arn`,
+  },
+
   /**
    * Buckets nothing would stop from being made public. Not public: Block Public
    * Access being off grants nobody anything. A posture finding, not exposure.
@@ -271,6 +282,8 @@ export const findIdleResources = (scope: GraphScope, params: Params = {}) =>
   rowsOf("findIdleResources", scope, params);
 export const findUnprotectedBuckets = (scope: GraphScope, params: Params = {}) =>
   rowsOf("findUnprotectedBuckets", scope, params);
+export const findUnusedAccess = (scope: GraphScope, params: Params = {}) =>
+  rowsOf("findUnusedAccess", scope, params);
 export const findOpenSecurityGroups = (scope: GraphScope, params: Params = {}) =>
   rowsOf("findOpenSecurityGroups", scope, params);
 export const searchResources = (scope: GraphScope, params: Params & { text: string }) =>

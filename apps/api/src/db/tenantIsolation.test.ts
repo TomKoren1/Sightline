@@ -88,6 +88,8 @@ function build(
     r("IamRole", `${tag}-admin`, role, {
       isAdmin: true,
       adminReason: `${tag} carries AdministratorAccess`,
+      isUnused: true,
+      unusedReason: `${tag} role never used`,
     }),
     r("Ec2Instance", `${tag}-host`, instance, {
       isIdle: true,
@@ -180,6 +182,7 @@ const CALLS: Record<string, (f: Fixture) => Promise<unknown>> = {
   findInstancesInPublicSubnets: (f) => queries.findInstancesInPublicSubnets(f.scope, {}),
   findIdleResources: (f) => queries.findIdleResources(f.scope, {}),
   findUnprotectedBuckets: (f) => queries.findUnprotectedBuckets(f.scope, {}),
+  findUnusedAccess: (f) => queries.findUnusedAccess(f.scope, {}),
   findOpenSecurityGroups: (f) => queries.findOpenSecurityGroups(f.scope, {}),
   findCrossAccountAccess: (f) => queries.findCrossAccountAccess(f.scope, {}),
   // Matches a substring both tenants' names share, so a leak is *likely* rather

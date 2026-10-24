@@ -30,7 +30,7 @@ export interface FindingsProps {
   onHighlight: (arns: string[]) => void;
 }
 
-type Tab = "overview" | "exposed" | "admin" | "idle" | "changes" | "unprotected";
+type Tab = "overview" | "exposed" | "admin" | "idle" | "unused" | "changes" | "unprotected";
 
 export function Findings({ summary, findings, loading, onHighlight }: FindingsProps) {
   const [tab, setTab] = useState<Tab>("overview");
@@ -70,6 +70,7 @@ export function Findings({ summary, findings, loading, onHighlight }: FindingsPr
     },
     { id: "admin", label: "Admin", count: open(summary.adminCount, "admin"), tone: "text-warn" },
     { id: "idle", label: "Idle", count: open(summary.idleCount, "idle") },
+    { id: "unused", label: "Unused", count: open(summary.unusedCount ?? 0, "unused") },
     {
       id: "unprotected",
       label: "Unguarded",
@@ -84,9 +85,9 @@ export function Findings({ summary, findings, loading, onHighlight }: FindingsPr
       {/* Wraps rather than overflowing. Six labels do not fit across a 288px
           sidebar, and flex items default to `min-width: auto`, so they refused
           to shrink and spilled across the graph pane instead - where the
-          floating Filter button then covered two of them. Two rows of three is
-          the only arrangement that keeps every label readable and inside the
-          column. Found by screenshotting the running UI. */}
+          floating Filter button then covered two of them. Rows of three is the
+          only arrangement that keeps every label readable and inside the
+          column; the seventh tab takes a row of its own. Found by screenshotting the running UI. */}
       <div className="flex flex-wrap border-b border-ink-800">
         {tabs.map((t) => (
           <button
@@ -121,6 +122,7 @@ export function Findings({ summary, findings, loading, onHighlight }: FindingsPr
                 tone="text-warn"
               />
               <Stat label="Idle" value={open(summary.idleCount, "idle")} />
+              <Stat label="Unused access" value={open(summary.unusedCount ?? 0, "unused")} />
               <Stat
                 label="Unguarded"
                 value={open(summary.unprotectedCount, "unguarded")}
@@ -206,6 +208,18 @@ export function Findings({ summary, findings, loading, onHighlight }: FindingsPr
         )}
 
         {tab === "changes" && <ChangesPanel onHighlight={onHighlight} />}
+
+        {tab === "unused" && (
+          <FindingList
+            items={findings.unused ?? []}
+            accepted={acceptedIn("unused")}
+            empty="Every role and user has been used in the last 90 days, or is newer than that."
+            onHighlight={onHighlight}
+            extra={(item) =>
+              item.isAdmin ? "Administrator — the most valuable thing to remove" : undefined
+            }
+          />
+        )}
 
         {tab === "idle" && (
           <FindingList

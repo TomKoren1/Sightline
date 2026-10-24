@@ -16,7 +16,7 @@
    "properties": {
     "groupName": "northwind-ops",
     "path": "/",
-    "createdAt": "2026-10-24T01:03:28.021Z",
+    "createdAt": "2026-10-24T05:19:33.688Z",
     "attachedPolicies": [
      {
       "policyArn": "arn:aws:iam::aws:policy/AdministratorAccess",
@@ -97,7 +97,7 @@
     "roleName": "AWSServiceRoleForElasticLoadBalancing",
     "path": "/aws-service-role/elasticloadbalancing.amazonaws.com/",
     "description": null,
-    "createdAt": "2026-10-24T01:03:27.888Z",
+    "createdAt": "2026-10-24T05:19:33.504Z",
     "maxSessionDuration": 3600,
     "lastUsedAt": null,
     "permissionsBoundary": null,
@@ -134,7 +134,7 @@
     "roleName": "BackupVendorRole",
     "path": "/",
     "description": null,
-    "createdAt": "2026-10-24T01:03:33.775Z",
+    "createdAt": "2026-10-24T05:19:39.600Z",
     "maxSessionDuration": 3600,
     "lastUsedAt": null,
     "permissionsBoundary": null,
@@ -174,7 +174,7 @@
     "roleName": "EksNodeRole",
     "path": "/",
     "description": null,
-    "createdAt": "2026-10-24T01:03:32.354Z",
+    "createdAt": "2026-10-24T05:19:38.148Z",
     "maxSessionDuration": 3600,
     "lastUsedAt": null,
     "permissionsBoundary": null,
@@ -211,7 +211,7 @@
     "roleName": "LambdaExecRole",
     "path": "/",
     "description": null,
-    "createdAt": "2026-10-24T01:03:27.746Z",
+    "createdAt": "2026-10-24T05:19:33.333Z",
     "maxSessionDuration": 3600,
     "lastUsedAt": null,
     "permissionsBoundary": null,
@@ -274,7 +274,7 @@
     "roleName": "LegacyDeployRole",
     "path": "/",
     "description": null,
-    "createdAt": "2026-10-24T01:03:27.467Z",
+    "createdAt": "2026-10-24T05:19:33.067Z",
     "maxSessionDuration": 3600,
     "lastUsedAt": null,
     "permissionsBoundary": null,
@@ -326,7 +326,7 @@
     "roleName": "NorthwindAdminRole",
     "path": "/",
     "description": null,
-    "createdAt": "2026-10-24T01:03:27.321Z",
+    "createdAt": "2026-10-24T05:19:32.945Z",
     "maxSessionDuration": 3600,
     "lastUsedAt": null,
     "permissionsBoundary": null,
@@ -378,7 +378,7 @@
     "roleName": "NorthwindBuildRole",
     "path": "/",
     "description": null,
-    "createdAt": "2026-10-24T01:03:27.585Z",
+    "createdAt": "2026-10-24T05:19:33.181Z",
     "maxSessionDuration": 3600,
     "lastUsedAt": null,
     "permissionsBoundary": null,
@@ -437,7 +437,7 @@
     "roleName": "NorthwindPlatformRole",
     "path": "/",
     "description": null,
-    "createdAt": "2026-10-24T01:03:27.634Z",
+    "createdAt": "2026-10-24T05:19:33.231Z",
     "maxSessionDuration": 3600,
     "lastUsedAt": null,
     "permissionsBoundary": null,
@@ -488,7 +488,7 @@
     "roleName": "NorthwindPowerUserRole",
     "path": "/",
     "description": null,
-    "createdAt": "2026-10-24T01:03:27.687Z",
+    "createdAt": "2026-10-24T05:19:33.284Z",
     "maxSessionDuration": 3600,
     "lastUsedAt": null,
     "permissionsBoundary": null,
@@ -543,7 +543,7 @@
     "roleName": "OrdersPodRole",
     "path": "/",
     "description": null,
-    "createdAt": "2026-10-24T01:03:32.274Z",
+    "createdAt": "2026-10-24T05:19:38.069Z",
     "maxSessionDuration": 3600,
     "lastUsedAt": null,
     "permissionsBoundary": null,
@@ -584,7 +584,7 @@
     "roleName": "PlatformPodAdminRole",
     "path": "/",
     "description": null,
-    "createdAt": "2026-10-24T01:03:32.300Z",
+    "createdAt": "2026-10-24T05:19:38.098Z",
     "maxSessionDuration": 3600,
     "lastUsedAt": null,
     "permissionsBoundary": null,
@@ -639,7 +639,7 @@
     "roleName": "ReadOnlyAuditRole",
     "path": "/",
     "description": null,
-    "createdAt": "2026-10-24T01:03:27.833Z",
+    "createdAt": "2026-10-24T05:19:33.450Z",
     "maxSessionDuration": 3600,
     "lastUsedAt": null,
     "permissionsBoundary": null,
@@ -3626,7 +3626,7 @@
     "roleName": "UnusedAdminRole",
     "path": "/",
     "description": null,
-    "createdAt": "2026-10-24T01:03:27.527Z",
+    "createdAt": "2026-10-24T05:19:33.128Z",
     "maxSessionDuration": 3600,
     "lastUsedAt": null,
     "permissionsBoundary": null,
@@ -3678,7 +3678,7 @@
     "roleName": "VendorAuditRole",
     "path": "/",
     "description": null,
-    "createdAt": "2026-10-24T01:03:33.716Z",
+    "createdAt": "2026-10-24T05:19:39.545Z",
     "maxSessionDuration": 3600,
     "lastUsedAt": null,
     "permissionsBoundary": null,
@@ -4764,8 +4764,29 @@
    "properties": {
     "userName": "northwind-backup-agent",
     "path": "/",
-    "createdAt": "2026-10-24T01:03:27.963Z",
+    "createdAt": "2026-10-24T05:19:33.611Z",
     "passwordLastUsed": null,
+    "credentials": {
+     "passwordEnabled": false,
+     "passwordLastUsedAt": null,
+     "mfaActive": false,
+     "accessKeys": [
+      {
+       "slot": 1,
+       "active": false,
+       "lastRotatedAt": null,
+       "lastUsedAt": null,
+       "lastUsedService": null
+      },
+      {
+       "slot": 2,
+       "active": false,
+       "lastRotatedAt": null,
+       "lastUsedAt": null,
+       "lastUsedService": null
+      }
+     ]
+    },
     "permissionsBoundary": null,
     "groups": [],
     "attachedPolicies": [],
@@ -4800,8 +4821,29 @@
    "properties": {
     "userName": "northwind-ci-deploy",
     "path": "/",
-    "createdAt": "2026-10-24T01:03:27.912Z",
+    "createdAt": "2026-10-24T05:19:33.541Z",
     "passwordLastUsed": null,
+    "credentials": {
+     "passwordEnabled": false,
+     "passwordLastUsedAt": null,
+     "mfaActive": false,
+     "accessKeys": [
+      {
+       "slot": 1,
+       "active": false,
+       "lastRotatedAt": null,
+       "lastUsedAt": null,
+       "lastUsedService": null
+      },
+      {
+       "slot": 2,
+       "active": false,
+       "lastRotatedAt": null,
+       "lastUsedAt": null,
+       "lastUsedService": null
+      }
+     ]
+    },
     "permissionsBoundary": null,
     "groups": [],
     "attachedPolicies": [
@@ -4837,8 +4879,29 @@
    "properties": {
     "userName": "northwind-metrics-reader",
     "path": "/",
-    "createdAt": "2026-10-24T01:03:28.121Z",
+    "createdAt": "2026-10-24T05:19:33.792Z",
     "passwordLastUsed": null,
+    "credentials": {
+     "passwordEnabled": false,
+     "passwordLastUsedAt": null,
+     "mfaActive": false,
+     "accessKeys": [
+      {
+       "slot": 1,
+       "active": false,
+       "lastRotatedAt": null,
+       "lastUsedAt": null,
+       "lastUsedService": null
+      },
+      {
+       "slot": 2,
+       "active": false,
+       "lastRotatedAt": null,
+       "lastUsedAt": null,
+       "lastUsedService": null
+      }
+     ]
+    },
     "permissionsBoundary": null,
     "groups": [],
     "attachedPolicies": [
@@ -7809,8 +7872,29 @@
    "properties": {
     "userName": "northwind-oncall",
     "path": "/",
-    "createdAt": "2026-10-24T01:03:28.072Z",
+    "createdAt": "2026-10-24T05:19:33.737Z",
     "passwordLastUsed": null,
+    "credentials": {
+     "passwordEnabled": false,
+     "passwordLastUsedAt": null,
+     "mfaActive": false,
+     "accessKeys": [
+      {
+       "slot": 1,
+       "active": false,
+       "lastRotatedAt": null,
+       "lastUsedAt": null,
+       "lastUsedService": null
+      },
+      {
+       "slot": 2,
+       "active": false,
+       "lastRotatedAt": null,
+       "lastUsedAt": null,
+       "lastUsedService": null
+      }
+     ]
+    },
     "permissionsBoundary": null,
     "groups": [
      "northwind-ops"

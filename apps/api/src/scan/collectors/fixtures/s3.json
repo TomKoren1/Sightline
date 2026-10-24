@@ -18,7 +18,7 @@
    },
    "properties": {
     "bucketName": "northwind-logs-archive",
-    "createdAt": "2026-10-24T01:03:28.000Z",
+    "createdAt": "2026-10-24T05:19:34.000Z",
     "policy": null,
     "policyIsPublic": null,
     "publicAccessBlock": null,
@@ -45,7 +45,7 @@
    },
    "properties": {
     "bucketName": "northwind-public-assets",
-    "createdAt": "2026-10-24T01:03:28.000Z",
+    "createdAt": "2026-10-24T05:19:33.000Z",
     "policy": "{\"Version\":\"2012-10-17\",\"Statement\":[{\"Sid\":\"PublicRead\",\"Effect\":\"Allow\",\"Principal\":\"*\",\"Action\":\"s3:GetObject\",\"Resource\":\"arn:aws:s3:::northwind-public-assets/*\"}]}",
     "policyIsPublic": null,
     "publicAccessBlock": {
@@ -73,7 +73,7 @@
    "tags": {},
    "properties": {
     "bucketName": "northwind-reports",
-    "createdAt": "2026-10-24T01:03:28.000Z",
+    "createdAt": "2026-10-24T05:19:33.000Z",
     "policy": "{\"Version\":\"2012-10-17\",\"Statement\":[{\"Sid\":\"PublicRead\",\"Effect\":\"Allow\",\"Principal\":\"*\",\"Action\":\"s3:GetObject\",\"Resource\":\"arn:aws:s3:::northwind-reports/*\"}]}",
     "policyIsPublic": null,
     "publicAccessBlock": {
@@ -101,7 +101,7 @@
    "tags": {},
    "properties": {
     "bucketName": "northwind-staging-uploads",
-    "createdAt": "2026-10-24T01:03:28.000Z",
+    "createdAt": "2026-10-24T05:19:34.000Z",
     "policy": null,
     "policyIsPublic": null,
     "publicAccessBlock": null,
@@ -124,7 +124,7 @@
    "tags": {},
    "properties": {
     "bucketName": "northwind-terraform-state",
-    "createdAt": "2026-10-24T01:03:28.000Z",
+    "createdAt": "2026-10-24T05:19:34.000Z",
     "policy": null,
     "policyIsPublic": null,
     "publicAccessBlock": {
