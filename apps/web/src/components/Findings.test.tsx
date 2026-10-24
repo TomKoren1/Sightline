@@ -48,6 +48,7 @@ const findings: FindingsData = {
       name: "website",
       region: null,
       category: "exposed",
+      reason: "Its policy allows s3:GetObject to *",
       finding: {
         id: "f-2",
         status: "accepted",

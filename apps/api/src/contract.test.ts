@@ -20,6 +20,7 @@ import type { NestFastifyApplication } from "@nestjs/platform-fastify";
 import { randomUUID } from "node:crypto";
 import { readFileSync, readdirSync } from "node:fs";
 import { fileURLToPath } from "node:url";
+import * as api from "@sightline/shared/api";
 import { z } from "zod";
 
 import { buildApp } from "./app.js";
@@ -179,36 +180,7 @@ const CONTRACTS: Contract[] = [
     method: "GET",
     route: "/api/findings/accounts",
     url: "/api/findings/accounts",
-    responses: {
-      200: z
-        .object({
-          accounts: z.array(
-            z
-              .object({
-                connectionId: z.string(),
-                label: z.string(),
-                accountId: z.string().nullable(),
-                open: z.record(z.string(), z.number()),
-              })
-              .strict(),
-          ),
-          findings: z.array(
-            z
-              .object({
-                id: z.string(),
-                connectionId: z.string(),
-                category: z.string(),
-                arn: z.string(),
-                name: z.string(),
-                kind: z.string(),
-                reason: z.string().nullable(),
-                firstSeenAt: z.string(),
-              })
-              .strict(),
-          ),
-        })
-        .strict(),
-    },
+    responses: { 200: api.acrossAccounts },
   },
   {
     method: "GET",
@@ -315,62 +287,31 @@ const CONTRACTS: Contract[] = [
     method: "GET",
     route: "/api/summary",
     url: "/api/summary",
-    responses: {
-      200: z
-        .object({
-          byKind: z.array(z.object({ kind: z.string(), count: z.number() })),
-          byRegion: z.array(z.object({ region: z.string(), count: z.number() })),
-          publicCount: z.number(),
-          adminCount: z.number(),
-          idleCount: z.number(),
-          unprotectedCount: z.number(),
-          unusedCount: z.number(),
-          idleCost: z.number(),
-        })
-        .strict(),
-    },
+    responses: { 200: api.summary },
   },
   {
     method: "GET",
     route: "/api/search",
     url: "/api/search?q=prod",
-    responses: { 200: z.object({ results: z.array(node) }).strict() },
+    responses: { 200: api.searchResults },
   },
   {
     method: "GET",
     route: "/api/graph",
     url: "/api/graph?limit=5",
-    responses: { 200: graphView },
+    responses: { 200: api.graphData },
   },
   {
     method: "GET",
     route: "/api/graph/groups",
     url: "/api/graph/groups",
-    responses: {
-      200: z
-        .object({
-          groups: z.array(
-            z
-              .object({
-                id: z.string().regex(/^(vpc|kind):/),
-                name: z.string(),
-                region: z.string().nullable(),
-                count: z.number(),
-                publicCount: z.number(),
-                adminCount: z.number(),
-                kinds: z.record(z.string(), z.number()),
-              })
-              .strict(),
-          ),
-        })
-        .strict(),
-    },
+    responses: { 200: api.graphGroups },
   },
   {
     method: "GET",
     route: "/api/graph/neighbours",
     url: `/api/graph/neighbours?arn=${encodeURIComponent(UNKNOWN_ARN)}`,
-    responses: { 200: graphView },
+    responses: { 200: api.graphData },
   },
   {
     method: "GET",
@@ -388,32 +329,7 @@ const CONTRACTS: Contract[] = [
     method: "GET",
     route: "/api/findings",
     url: "/api/findings",
-    responses: {
-      200: z
-        .object({
-          publicResources: z.array(node.extend({ reason: z.string() })),
-          adminPrincipals: z.array(node.extend({ reason: z.string() })),
-          idle: z.array(
-            node.extend({ reason: z.string(), estimatedMonthlyCostUsd: z.number().nullable() }),
-          ),
-          exposed: z.array(node.extend({ reason: z.string() })),
-          unprotected: z.array(node.extend({ reason: z.string(), isPublic: z.boolean() })),
-          unused: z.array(
-            node.extend({
-              reason: z.string(),
-              isAdmin: z.boolean(),
-              lastUsedAt: z.string().nullable(),
-            }),
-          ),
-          accepted: z.array(
-            node.extend({
-              category: z.string(),
-              finding: z.object({ id: z.string(), status: z.literal("accepted") }),
-            }),
-          ),
-        })
-        .strict(),
-    },
+    responses: { 200: api.findings },
   },
   {
     method: "PATCH",

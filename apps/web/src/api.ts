@@ -2,86 +2,29 @@
 
 import type { AgentEvent, AgentMessage, ScanDiff, ScanEvent, ScanRun } from "@sightline/shared";
 
-export interface GraphNode {
-  arn: string;
-  kind: string;
-  name: string;
-  region: string | null;
-  isPublic?: boolean | null;
-  isAdmin?: boolean | null;
-  isIdle?: boolean | null;
-  isUnprotected?: boolean | null;
-  isUnused?: boolean | null;
-  estimatedMonthlyCostUsd?: number | null;
-  reason?: string | null;
-}
-
-export interface GraphEdge {
-  from: string;
-  to: string;
-  type: string;
-  ports?: string | null;
-}
-
-export interface GraphData {
-  nodes: GraphNode[];
-  edges: GraphEdge[];
-  /** Every node that matched; `nodes` is capped. */
-  total: number;
-  truncated: boolean;
-}
-
-/** A VPC, or a kind of resource that lives outside one, with what is in it. */
-export interface GraphGroup {
-  id: string;
-  name: string;
-  region: string | null;
-  count: number;
-  publicCount: number;
-  adminCount: number;
-  kinds: Record<string, number>;
-}
-
-export interface Summary {
-  byKind: { kind: string; count: number }[];
-  byRegion: { region: string; count: number }[];
-  publicCount: number;
-  adminCount: number;
-  idleCount: number;
-  idleCost: number;
-  unprotectedCount: number;
-  unusedCount: number;
-}
-
-export type FindingCategory = "exposed" | "admin" | "idle" | "unguarded" | "unused";
-
-/** A finding's tracked state. Null on a finding no scan has recorded yet. */
-export interface FindingState {
-  id: string;
-  status: "open" | "accepted";
-  firstSeenAt: string;
-  statusReason?: string | null;
-  statusAt?: string | null;
-}
-
-type Tracked<T> = T & { reason?: string | null; finding: FindingState | null };
-
-export interface Findings {
-  publicResources: Tracked<GraphNode>[];
-  /** Not public, but nothing would stop them becoming public. */
-  unprotected: Tracked<GraphNode & { isPublic?: boolean }>[];
-  adminPrincipals: Tracked<GraphNode & { usedBy?: GraphNode[]; useCount?: number }>[];
-  idle: Tracked<GraphNode>[];
-  /** Roles and users nobody has used in 90 days. */
-  unused: Tracked<GraphNode & { lastUsedAt?: string | null }>[];
-  exposed: Tracked<GraphNode & { ports?: string[]; securityGroup?: string }>[];
-  /** Findings somebody accepted the risk of, still present in the current scan. */
-  accepted: (GraphNode & {
-    category: FindingCategory;
-    reason?: string | null;
-    finding: FindingState;
-  })[];
-}
+// Graph and findings shapes come from the one contract the API is tested
+// against (packages/shared/src/api.ts), as types only.
+export type {
+  AcrossAccounts,
+  FindingCategory,
+  FindingState,
+  Findings,
+  GraphData,
+  GraphEdge,
+  GraphGroup,
+  GraphNode,
+  Summary,
+} from "@sightline/shared/api";
+import type {
+  AcrossAccounts,
+  FindingCategory,
+  FindingState,
+  Findings,
+  GraphData,
+  GraphGroup,
+  GraphNode,
+  Summary,
+} from "@sightline/shared/api";
 
 export interface CheckResult {
   id: string;
@@ -223,25 +166,6 @@ export interface AuditEntry {
 
 /** A plain link rather than a fetch: the browser saves the file itself. */
 export const auditExportUrl = (format: "csv" | "json") => `/api/audit/export?format=${format}`;
-
-export interface AcrossAccounts {
-  accounts: {
-    connectionId: string;
-    label: string;
-    accountId: string | null;
-    open: Record<FindingCategory, number>;
-  }[];
-  findings: {
-    id: string;
-    connectionId: string;
-    category: FindingCategory;
-    arn: string;
-    name: string;
-    kind: string;
-    reason: string | null;
-    firstSeenAt: string;
-  }[];
-}
 
 export interface TenantHealth {
   id: string;

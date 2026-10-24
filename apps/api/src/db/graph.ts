@@ -172,7 +172,16 @@ export async function summariseAccount(scope: GraphScope) {
         FROM ${r} r`,
     ),
   ]);
-  return { byKind, byRegion, ...(flags[0] ?? {}) };
+  // An aggregate always answers one row; the zeros say so to the type checker.
+  const counts = flags[0] ?? {
+    publicCount: 0,
+    adminCount: 0,
+    idleCount: 0,
+    idleCost: 0,
+    unprotectedCount: 0,
+    unusedCount: 0,
+  };
+  return { byKind, byRegion, ...counts };
 }
 
 /** The graph, for the frontend to lay out. */

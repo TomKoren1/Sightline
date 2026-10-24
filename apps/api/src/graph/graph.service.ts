@@ -15,6 +15,7 @@
  */
 
 import { Injectable, NotFoundException } from "@nestjs/common";
+import type * as api from "@sightline/shared/api";
 
 import { listFindingStates, setFindingStatus } from "../db/findings.js";
 import * as q from "../db/graph.js";
@@ -49,7 +50,7 @@ const EMPTY_FINDINGS = {
 
 @Injectable()
 export class GraphService {
-  async summary(scope: Scope) {
+  async summary(scope: Scope): Promise<api.Summary> {
     const graph = await graphScopeFor(scope);
     return graph ? q.summariseAccount(graph) : EMPTY_SUMMARY;
   }
@@ -57,7 +58,7 @@ export class GraphService {
   async graph(
     scope: Scope,
     params: { region?: string; kinds?: string; limit?: string; group?: string },
-  ) {
+  ): Promise<api.GraphData> {
     const graph = await graphScopeFor(scope);
     if (!graph) return { nodes: [], edges: [], total: 0, truncated: false };
     const kinds = params.kinds?.split(",").filter(Boolean);
@@ -69,12 +70,12 @@ export class GraphService {
     });
   }
 
-  async groups(scope: Scope) {
+  async groups(scope: Scope): Promise<{ groups: api.GraphGroup[] }> {
     const graph = await graphScopeFor(scope);
     return { groups: graph ? await q.graphGroups(graph) : [] };
   }
 
-  async neighbours(scope: Scope, arn: string) {
+  async neighbours(scope: Scope, arn: string): Promise<api.GraphData> {
     const graph = await graphScopeFor(scope);
     if (!graph) return { nodes: [], edges: [], total: 0, truncated: false };
     return q.neighbourhood(graph, arn);
