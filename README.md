@@ -300,7 +300,16 @@ ExternalId already in use rather than rotating a working secret.
 | `npm run setup -- --mock`         | stay on the demo account                        |
 | `npm run setup -- --disconnect`   | delete the role and go back to the demo account |
 | `npm run setup -- --profile work` | use a named AWS CLI profile                     |
-| `npm run setup -- --yes`          | no confirmations, for scripting                 |
+
+**A whole AWS Organization** connects once, in the hosted product: choose
+_An AWS Organization_ when connecting, deploy the stack in the management account
+(or a delegated administrator for Organizations), and run the StackSet the screen
+gives you to put the same role in every member account, including ones added later.
+Checking the organization lists its accounts with `organizations:ListAccounts` and
+makes each active one an account of its own under it: scanned, pinned and isolated
+like one connected by hand. Accounts that leave are marked disconnected. Paths
+_between_ accounts are not modelled yet.
+| `npm run setup -- --yes` | no confirmations, for scripting |
 
 It needs the AWS CLI, which is also what creates the role. The demo account needs
 neither it nor Node.

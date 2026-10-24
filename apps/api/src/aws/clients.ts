@@ -31,6 +31,7 @@ import { ECSClient } from "@aws-sdk/client-ecs";
 import { EKSClient } from "@aws-sdk/client-eks";
 import { Route53Client } from "@aws-sdk/client-route-53";
 import { AutoScalingClient } from "@aws-sdk/client-auto-scaling";
+import { OrganizationsClient } from "@aws-sdk/client-organizations";
 
 import { credentialProvider } from "./credentials.js";
 import type { ScanTarget } from "../tenancy/scanTarget.js";
@@ -242,5 +243,13 @@ export const s3Client = (ctx: AwsContext, region: string) =>
   );
 
 /** IAM is global. Its endpoint lives in us-east-1 regardless of where we scan. */
+/** Organizations is global; its endpoint is us-east-1 wherever the scan runs. */
+export const organizationsClient = (ctx: AwsContext) =>
+  instrument(
+    new OrganizationsClient(baseConfig(ctx, "us-east-1")),
+    ctx.counter,
+    ctx.unitKey ?? "organizations:global",
+  );
+
 export const iamClient = (ctx: AwsContext) =>
   instrument(new IAMClient(baseConfig(ctx, "us-east-1")), ctx.counter, ctx.unitKey ?? "iam:global");

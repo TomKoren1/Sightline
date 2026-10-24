@@ -24,7 +24,7 @@ import { asConnectionId, type ConnectionId, type TenantId } from "./ids.js";
 import { encryptSecret, decryptSecret, generateExternalId } from "./secrets.js";
 import type { Scope } from "./scope.js";
 
-export type ConnectionKind = "real" | "demo";
+export type ConnectionKind = "real" | "demo" | "organization";
 export type ConnectionStatus = "pending" | "verified" | "failed" | "disconnected";
 
 /** What the UI is allowed to see. Deliberately carries no secret. */
@@ -40,6 +40,8 @@ export interface ConnectionSummary {
   templateVersion: string | null;
   lastVerifiedAt: string | null;
   lastScanAt: string | null;
+  /** The organization connection that found this account, if one did. */
+  parentId: ConnectionId | null;
 }
 
 type Row = typeof connections.$inferSelect;
@@ -56,6 +58,7 @@ const summarise = (row: Row): ConnectionSummary => ({
   templateVersion: row.templateVersion,
   lastVerifiedAt: row.lastVerifiedAt?.toISOString() ?? null,
   lastScanAt: row.lastScanAt?.toISOString() ?? null,
+  parentId: (row.parentId as ConnectionId | null) ?? null,
 });
 
 const owned = (scope: Scope) =>
@@ -145,7 +148,9 @@ export async function createConnection(
     await db.insert(connections).values({
       id,
       tenantId,
-      kind: "real",
+      // An organization holds an ExternalId like an account does: its StackSet
+      // deploys that one value to every member.
+      kind: params.kind,
       label: params.label,
       externalIdSource: "stored",
       externalIdEncrypted: await encryptSecret(externalId),

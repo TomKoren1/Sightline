@@ -9,11 +9,12 @@
  * one and why several tabs can watch the same scan.
  */
 
-import { Injectable, NotFoundException } from "@nestjs/common";
+import { BadRequestException, Injectable, NotFoundException } from "@nestjs/common";
 
 import { diffScans, getLatestScan, getScan, listScans } from "../db/repository.js";
 import { activeJobId, cancelQueuedJob, enqueueScan, getJob, type ScanJob } from "../jobs/queue.js";
 import { readProgress, streamScanEvents } from "../jobs/progress.js";
+import { getConnection } from "../tenancy/connections.js";
 import { mayScan } from "../tenancy/limits.js";
 import { ScanRefused } from "./scanRefused.js";
 import { asScanId, type JobId, type ScanId } from "../tenancy/ids.js";
@@ -79,6 +80,11 @@ export class ScansService {
    * the tenant's accounts.
    */
   async enqueue(scope: Scope, requestedBy: string | null): Promise<ScanJob> {
+    if ((await getConnection(scope))?.kind === "organization") {
+      throw new BadRequestException({
+        error: "An organization is not scanned itself. Scan its accounts, which it lists for you.",
+      });
+    }
     const decision = await mayScan(scope);
     if (!decision.allowed) throw new ScanRefused(decision);
     return enqueueScan(scope, requestedBy);

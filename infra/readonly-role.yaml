@@ -265,6 +265,9 @@ Resources:
                 Effect: Allow
                 Action:
                   - "s3:GetAccountPublicAccessBlock"
+                  # In a management account (or a delegated administrator),
+                  # how an organization connection finds its member accounts.
+                  - "organizations:ListAccounts"
                   - "resource-explorer-2:ListIndexes"
                   - "resource-explorer-2:Search"
                   - "resource-explorer-2:GetIndex"

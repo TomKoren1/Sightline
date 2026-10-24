@@ -45,7 +45,7 @@ import { onboardingPlan, verifyConnection, VerifyTooSoon } from "./onboarding.js
 import { MinRole } from "../auth/roles.js";
 
 const createSchema = z.object({
-  kind: z.enum(["real", "demo"]).default("real"),
+  kind: z.enum(["real", "demo", "organization"]).default("real"),
   label: z.string().trim().min(1).max(60),
 });
 

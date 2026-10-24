@@ -15,6 +15,7 @@ import type { Relationship, Resource, ScanStatus, ScanUnit } from "@sightline/sh
 import { sql } from "drizzle-orm";
 import {
   boolean,
+  type AnyPgColumn,
   check,
   customType,
   index,
@@ -381,9 +382,16 @@ export const connections = pgTable(
       .notNull()
       .references(() => tenants.id, { onDelete: "cascade" }),
     /** `demo` is the moto fixture and is admin-only; `real` is a customer account. */
-    kind: text("kind").$type<"real" | "demo">().notNull(),
+    kind: text("kind").$type<"real" | "demo" | "organization">().notNull(),
     /** The tenant's own name for it - "prod", "staging". */
     label: text("label").notNull(),
+    /**
+     * The organization connection that found this account, for a member of
+     * an AWS Organization. Deleting the organization deletes its accounts.
+     */
+    parentId: uuid("parent_id").references((): AnyPgColumn => connections.id, {
+      onDelete: "cascade",
+    }),
     roleArn: text("role_arn"),
     /** Null until the first successful assume-role says what it really is. */
     accountId: text("account_id"),
@@ -433,8 +441,13 @@ export const connections = pgTable(
      * verified and Postgres permits many nulls in a unique index, so several
      * pending connections coexist while only one verified one can.
      */
-    uniqueIndex("connections_tenant_account").on(t.tenantId, t.accountId),
-    check("connections_kind", sql`${t.kind} IN ('real','demo')`),
+    // An organization's account is its management account, which is also one
+    // of its members: the member is the connection that owns the account id.
+    uniqueIndex("connections_tenant_account")
+      .on(t.tenantId, t.accountId)
+      .where(sql`${t.kind} <> 'organization'`),
+    check("connections_kind", sql`${t.kind} IN ('real','demo','organization')`),
+    index("connections_parent").on(t.parentId),
     check(
       "connections_external_id_source",
       sql`${t.externalIdSource} IN ('stored','config','demo')`,

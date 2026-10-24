@@ -209,7 +209,7 @@ export interface Team {
 
 export interface ConnectionSummary {
   id: string;
-  kind: "real" | "demo";
+  kind: "real" | "demo" | "organization";
   label: string;
   accountId: string | null;
   roleArn: string | null;
@@ -219,6 +219,8 @@ export interface ConnectionSummary {
   templateVersion: string | null;
   lastVerifiedAt: string | null;
   lastScanAt: string | null;
+  /** The organization connection that found this account, if one did. */
+  parentId: string | null;
 }
 
 /** Everything the connect screen needs, in one request. */
@@ -232,6 +234,8 @@ export interface OnboardingPlan {
   cliCommand: string;
   terraform: string;
   roleArnPattern: string;
+  /** For an organization: the StackSet that puts the role in every member. */
+  stackSet?: string;
 }
 
 export interface VerifyResult {
@@ -243,6 +247,15 @@ export interface VerifyResult {
   diagnosis?: { code: string; problem: string; fix: string };
   /** A refusal that is not a diagnosis — the account reached is not the one agreed. */
   problem?: string;
+  /** For an organization: the accounts it found, and how each one's check went. */
+  organization?: {
+    found: number;
+    added: number;
+    departed: number;
+    alreadyConnected: string[];
+    members: { connectionId: string; label: string; ok: boolean; problem?: string }[];
+    unchecked: number;
+  };
 }
 
 export interface SessionRow {
@@ -422,7 +435,7 @@ export const api = {
    */
   resource: <T>(arn: string) => get<T>(`/api/resources/${encodeURIComponent(arn)}`),
   remediation: <T>(arn: string) => get<T>(`/api/resources/${encodeURIComponent(arn)}/remediation`),
-  createConnection: (input: { label: string; kind?: "real" | "demo" }) =>
+  createConnection: (input: { label: string; kind?: "real" | "demo" | "organization" }) =>
     send<{ id: string; externalId: string; note: string }>("/api/connections", asJson(input)),
   setConnectionTarget: (id: string, accountId: string) =>
     send<{ ok: true }>(`/api/connections/${encodeURIComponent(id)}/target`, asJson({ accountId })),

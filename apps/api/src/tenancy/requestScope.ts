@@ -16,7 +16,7 @@
  */
 
 import { BadRequestException, ConflictException } from "@nestjs/common";
-import { and, asc, eq } from "drizzle-orm";
+import { and, asc, eq, ne } from "drizzle-orm";
 
 import { isHosted } from "../config.js";
 import { db, withTenant } from "../db/postgres.js";
@@ -94,7 +94,8 @@ async function connectionFor(req: ScopedRequest, tenantId: TenantId, fallback?: 
   const [first] = await db
     .select({ id: connections.id })
     .from(connections)
-    .where(eq(connections.tenantId, tenantId))
+    // An organization holds no inventory of its own; its accounts do.
+    .where(and(eq(connections.tenantId, tenantId), ne(connections.kind, "organization")))
     .orderBy(asc(connections.createdAt))
     .limit(1);
 

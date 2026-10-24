@@ -433,7 +433,7 @@ const CONTRACTS: Contract[] = [
 const CONNECTION_SUMMARY = z
   .object({
     id: z.string(),
-    kind: z.enum(["real", "demo"]),
+    kind: z.enum(["real", "demo", "organization"]),
     label: z.string(),
     accountId: z.string().nullable(),
     roleArn: z.string().nullable(),
@@ -443,6 +443,7 @@ const CONNECTION_SUMMARY = z
     templateVersion: z.string().nullable(),
     lastVerifiedAt: z.string().nullable(),
     lastScanAt: z.string().nullable(),
+    parentId: z.string().nullable(),
   })
   // No external id, encrypted or otherwise. The shape is asserted strictly so
   // that adding one to the summary fails here rather than in production.
