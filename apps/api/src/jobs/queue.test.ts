@@ -262,6 +262,24 @@ describe.runIf(HAS_INFRA)("the scan queue", () => {
     expect(second.status).toBe("queued");
   });
 
+  it("serves a tenant with nothing running before one already being served", async () => {
+    if (!available) return;
+    await drain();
+    await enqueueScan(scopes[0]!);
+    await enqueueScan(scopes[1]!);
+    const theirs = await enqueueScan(otherScope);
+    await system.execute(
+      sql`UPDATE scan_jobs SET queued_at = now() + interval '1 minute' WHERE id = ${theirs.id}`,
+    );
+
+    // The first tenant's oldest job goes first, then the other tenant - queued
+    // last - is served before the first tenant's second job.
+    const first = await claimNextJob("worker-a");
+    expect(first?.tenantId).toBe(tenantId);
+    const second = await claimNextJob("worker-b");
+    expect(second?.id).toBe(theirs.id);
+  });
+
   it("claims the oldest job first", async () => {
     if (!available) return;
     await drain();

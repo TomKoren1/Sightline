@@ -209,7 +209,12 @@ function rowToJob(row: Record<string, unknown>): ScanJob {
 }
 
 /**
- * Take the oldest queued job, or return null if there is none.
+ * Take the next queued job, or return null if there is none.
+ *
+ * Fair across tenants: the next job belongs to whichever waiting tenant has
+ * the fewest scans already running, oldest first among equals. Plain FIFO let
+ * whoever queued first hold every worker - one tenant's three scans, queued a
+ * second before somebody else's one, all ran before it.
  *
  * Raw SQL: the correctness rests on the `FOR UPDATE SKIP LOCKED` subquery being
  * inside the UPDATE, so selecting a row and claiming it are one statement. A
@@ -231,11 +236,13 @@ export async function claimNextJob(workerId: string): Promise<ScanJob | null> {
            started_at = COALESCE(started_at, now()),
            attempts = attempts + 1
      WHERE id = (
-             SELECT id
-               FROM scan_jobs
-              WHERE status = 'queued'
-              ORDER BY queued_at
-                FOR UPDATE SKIP LOCKED
+             SELECT q.id
+               FROM scan_jobs q
+              WHERE q.status = 'queued'
+              ORDER BY (SELECT count(*) FROM scan_jobs r
+                         WHERE r.tenant_id = q.tenant_id AND r.status = 'running'),
+                       q.queued_at
+                FOR UPDATE OF q SKIP LOCKED
               LIMIT 1
            )
     RETURNING *
