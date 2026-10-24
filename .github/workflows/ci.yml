@@ -216,6 +216,33 @@ jobs:
           path: test-results/
           retention-days: 7
 
+  # The manifests and the chart against Kubernetes' own schemas. The infra/
+  # tests check what only this project knows - that two files agree; whether a
+  # field exists at all is kubeconform's question, and it knows every one.
+  manifests:
+    name: Manifests and chart validate
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+
+      - name: Render every overlay and the monitoring chart
+        # kubectl and helm come with the runner image.
+        run: |
+          mkdir -p rendered
+          for overlay in prod staging; do
+            kubectl kustomize "deploy/k8s/$overlay" > "rendered/$overlay.yaml"
+          done
+          helm dependency build helm/monitoring
+          helm lint helm/monitoring
+          helm template monitoring helm/monitoring > rendered/monitoring.yaml
+
+      - name: kubeconform
+        # -strict refuses unknown fields, the typo that applies cleanly and is
+        # then ignored. Custom resources with no published schema are skipped.
+        run: |
+          docker run --rm -v "$PWD/rendered:/m"             ghcr.io/yannh/kubeconform:v0.8.0@sha256:faffaf43f95aa6425306e1ab8d6fcad72acb9049158f38e574c085ea1ec0f64e             -strict -summary -ignore-missing-schemas -kubernetes-version 1.33.0             /m/prod.yaml /m/staging.yaml /m/monitoring.yaml
+
   # The README offers a second way to run the project. A documented path that CI
   # does not exercise is worse than no path at all, because it is a claim nobody
   # has checked - so this runs the exact command the README gives and drives the
