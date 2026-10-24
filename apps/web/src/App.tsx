@@ -352,7 +352,11 @@ export function App() {
             summary={summary.data}
             findings={findings.data}
             loading={hasScan && (summary.isLoading || findings.isLoading)}
-            onHighlight={setCitedArns}
+            onHighlight={(arns) => {
+              setCitedArns(arns);
+              // One resource is a finding chosen: open it, which is where its fixes are.
+              if (arns.length === 1) setSelectedArn(arns[0]!);
+            }}
           />
         </aside>
 

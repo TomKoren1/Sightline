@@ -13,6 +13,7 @@ import { fixPlanScript, fixPlanTerraform } from "@sightline/shared";
 
 import { api } from "../api.js";
 import type { FixPlanItem } from "@sightline/shared/api";
+import { kindLabel } from "../kinds.js";
 
 const RISKS = ["low", "medium", "high"] as const;
 type Risk = (typeof RISKS)[number];
@@ -116,7 +117,7 @@ export function FixPlan() {
                         >
                           <p className="text-ink-100">{item.remediation.title}</p>
                           <p className="truncate text-[11px] text-ink-400">
-                            {item.kind} {item.name}
+                            {kindLabel(item.kind)} {item.name}
                             {item.region ? ` · ${item.region}` : ""}
                           </p>
                         </button>

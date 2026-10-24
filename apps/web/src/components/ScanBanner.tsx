@@ -10,6 +10,7 @@ import type { ScanRun, ScanUnit } from "@sightline/shared";
 
 import { AccountSwitcher } from "./AccountSwitcher.js";
 import type { ConnectionSummary } from "../api.js";
+import { AccountMenu } from "./AccountMenu.js";
 
 /** Beyond this, the inventory is old enough that the user should be told. */
 const STALE_AFTER_MS = 60 * 60 * 1000;
@@ -142,55 +143,13 @@ export function ScanBanner({
             onConnect={onOpenConnection}
             onDisconnect={onDisconnectConnection}
           />
-          {signedInAs && (
-            <>
-              <span className="mx-0.5 h-4 w-px bg-ink-700" aria-hidden />
-              {onOpenTeam && (
-                <button
-                  onClick={onOpenTeam}
-                  className="rounded border border-ink-700 bg-ink-800 px-2 py-1 text-[11px] text-ink-300 transition hover:border-ink-600 hover:text-ink-100"
-                >
-                  Team
-                </button>
-              )}
-              {onOpenAllAccounts && (
-                <button
-                  onClick={onOpenAllAccounts}
-                  className="rounded border border-ink-700 bg-ink-800 px-2 py-1 text-[11px] text-ink-300 transition hover:border-ink-600 hover:text-ink-100"
-                >
-                  All accounts
-                </button>
-              )}
-              {onOpenOperator && (
-                <button
-                  onClick={onOpenOperator}
-                  className="rounded border border-ink-700 bg-ink-800 px-2 py-1 text-[11px] text-ink-300 transition hover:border-ink-600 hover:text-ink-100"
-                >
-                  Tenants
-                </button>
-              )}
-              <button
-                onClick={onSignOut}
-                title={`Signed in as ${signedInAs}`}
-                className="rounded border border-ink-700 bg-ink-800 px-2 py-1 text-[11px] text-ink-300 transition hover:border-ink-600 hover:text-ink-100"
-              >
-                Sign out
-              </button>
-              {/*
-                Next to Sign out, not hidden in a settings page nobody opens.
-                A service holding somebody's production inventory should make
-                leaving as findable as arriving - and the destructive step is
-                behind a dialog that asks them to type their own address, so
-                proximity costs nothing.
-              */}
-              <button
-                onClick={onDeleteAccount}
-                title="Delete this account and everything Sightline holds about it"
-                className="rounded border border-ink-700 bg-ink-800 px-2 py-1 text-[11px] text-ink-400 transition hover:border-danger/60 hover:text-danger"
-              >
-                Delete account
-              </button>
-            </>
+          {onOpenAllAccounts && (
+            <button
+              onClick={onOpenAllAccounts}
+              className="rounded border border-ink-700 bg-ink-800 px-2 py-1 text-[11px] text-ink-300 transition hover:border-ink-600 hover:text-ink-100"
+            >
+              All accounts
+            </button>
           )}
           <span className="mx-0.5 h-4 w-px bg-ink-700" aria-hidden />
           <button
@@ -227,6 +186,18 @@ export function ScanBanner({
                 ? "Rescan"
                 : "Run scan"}
           </button>
+          {signedInAs && (
+            <>
+              <span className="mx-0.5 h-4 w-px bg-ink-700" aria-hidden />
+              <AccountMenu
+                signedInAs={signedInAs}
+                {...(onOpenTeam ? { onOpenTeam } : {})}
+                {...(onOpenOperator ? { onOpenOperator } : {})}
+                onSignOut={onSignOut}
+                onDeleteAccount={onDeleteAccount}
+              />
+            </>
+          )}
         </div>
       </div>
 

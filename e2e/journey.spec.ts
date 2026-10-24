@@ -34,7 +34,7 @@ test("sign in, scan, read the findings, ask, and connect", async ({ page }) => {
     await expect(page.getByText("What Sightline can see, and what it cannot")).toBeVisible();
     await expectAccessible(page, "the sign-in page");
     await page.getByRole("link", { name: "Continue with GitHub" }).click();
-    await expect(page.getByRole("button", { name: "Sign out" })).toBeVisible();
+    await expect(page.getByRole("button", { name: E2E_USER.email })).toBeVisible();
     await expect(page.getByText("No inventory yet")).toBeVisible();
   });
 
@@ -90,9 +90,10 @@ test("sign in, scan, read the findings, ask, and connect", async ({ page }) => {
   });
 
   await test.step("invites a teammate with a link", async () => {
-    await page.getByRole("button", { name: "Team" }).click();
+    await page.getByRole("button", { name: E2E_USER.email }).click();
+    await page.getByRole("menuitem", { name: "Team" }).click();
     // Exact: the activity list below names them too.
-    await expect(page.getByText(E2E_USER.email, { exact: true })).toBeVisible();
+    await expect(page.getByRole("dialog").getByText(E2E_USER.email, { exact: true })).toBeVisible();
     await expectAccessible(page, "the team panel");
     await page.getByRole("button", { name: "Create link" }).click();
     await expect(page.getByText(/\?join=[\w-]{20,}/)).toBeVisible();

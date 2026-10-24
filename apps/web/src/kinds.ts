@@ -68,3 +68,6 @@ export const styleFor = (kind: string): KindStyle =>
 export const DEFAULT_VISIBLE_KINDS = Object.keys(KIND_STYLES).filter(
   (k) => k !== "RouteTable" && k !== "DbSubnetGroup" && k !== "IamPolicy",
 );
+
+/** How a person names a kind: "EC2 instance", not "Ec2Instance". */
+export const kindLabel = (kind: string): string => KIND_STYLES[kind]?.label ?? kind;

@@ -26,6 +26,7 @@ import { controlsFor } from "@sightline/shared";
 
 import { ChangesPanel } from "./ChangesPanel.js";
 import { useLoadMore } from "../hooks/useLoadMore.js";
+import { kindLabel } from "../kinds.js";
 
 export interface FindingsProps {
   summary: Summary | undefined;
@@ -140,7 +141,7 @@ export function Findings({ summary, findings, loading, onHighlight }: FindingsPr
             </div>
             <Section title="By type">
               {summary.byKind.slice(0, 12).map((k) => (
-                <Row key={k.kind} left={k.kind} right={String(k.count)} />
+                <Row key={k.kind} left={kindLabel(k.kind)} right={String(k.count)} />
               ))}
             </Section>
             <Section title="By region">
