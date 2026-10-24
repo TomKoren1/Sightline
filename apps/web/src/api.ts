@@ -366,11 +366,14 @@ function request(path: string, init: RequestInit = {}): Promise<Response> {
 }
 
 /** The server's `{ error }` body if there is one, else the status line. */
+/** Refused for want of a recent sign-in: the fix is to sign in again, so the UI offers it. */
+export class ReauthRequired extends Error {}
+
 async function failure(res: Response): Promise<Error> {
   const text = await res.text().catch(() => "");
   try {
-    const body = JSON.parse(text) as { error?: string };
-    if (body.error) return new Error(body.error);
+    const body = JSON.parse(text) as { error?: string; reauth?: boolean };
+    if (body.error) return body.reauth ? new ReauthRequired(body.error) : new Error(body.error);
   } catch {
     /* not JSON; fall through to the raw body */
   }

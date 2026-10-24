@@ -189,6 +189,8 @@ entrench itself. A request carrying a token needs no `X-Sightline-Request`
 header, because a browser never attaches one to a request another site makes;
 and a bad token is refused outright, never retried as the cookie beside it.
 
+Deleting the account and disconnecting an AWS account also need a sign-in from the last 10 minutes, not only a live session: a laptop left open, or a session stolen last week, cannot destroy a workspace, and no token can do either. Everyone can see their own sessions under Team and sign any of them out.
+
 Rate limits key on a credential only once the guard has accepted it. Before
 that change, sending a made-up session cookie with each request earned a fresh
 allowance every time.

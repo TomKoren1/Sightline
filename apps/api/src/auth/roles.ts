@@ -37,6 +37,18 @@ export const HUMAN_ONLY = "sightline:humanOnly";
  */
 export const HumanOnly = () => SetMetadata(HUMAN_ONLY, true);
 
+export const RECENT_SIGN_IN = "sightline:recentSignIn";
+/** How recent a sign-in `@RecentSignIn()` routes require. */
+export const RECENT_SIGN_IN_MINUTES = 10;
+
+/**
+ * A route that undoes something - deleting the account, disconnecting an AWS
+ * account - needs a sign-in from the last few minutes, not just a live
+ * session: a laptop left open, or a session stolen last week, should not be
+ * enough to destroy a workspace. Implies `@HumanOnly()`.
+ */
+export const RecentSignIn = () => SetMetadata(RECENT_SIGN_IN, true);
+
 export function isTeamRole(value: unknown): value is TeamRole {
   return typeof value === "string" && (TEAM_ROLES as readonly string[]).includes(value);
 }

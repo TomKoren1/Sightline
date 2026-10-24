@@ -338,6 +338,23 @@ describe.runIf(HAS_INFRA)("API tokens", () => {
     expect(await call("GET", "/api/findings", { authorization: "Bearer slt_nope" })).toBe(401);
   });
 
+  it("lets a fresh sign-in disconnect an account, and asks a stale one to sign in again", async () => {
+    if (!available || !inject) return;
+    const url = `/api/connections/${randomUUID()}`;
+    const headers = { cookie: adminCookie, "x-sightline-request": "1" };
+    // Past the guard: disconnecting what is not there is a no-op, not a refusal.
+    expect(await call("DELETE", url, headers)).not.toBe(403);
+    const { system } = await import("../db/postgres.js");
+    const { sql } = await import("drizzle-orm");
+    await system.execute(
+      sql`UPDATE sessions SET created_at = now() - interval '1 hour' WHERE user_id = ${adminId}`,
+    );
+    const res = await inject({ method: "DELETE", url, headers });
+    expect(res.statusCode).toBe(403);
+    expect((res as unknown as { json: () => unknown }).json()).toMatchObject({ reauth: true });
+    expect(await call("DELETE", url, bearer("admin"))).toBe(403);
+  });
+
   it("keeps the operator's cross-tenant view from a customer's admin", async () => {
     if (!available || !inject) return;
     expect(await call("GET", "/api/operator/tenants", { cookie: adminCookie })).toBe(403);

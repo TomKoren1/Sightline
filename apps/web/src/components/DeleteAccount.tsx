@@ -21,6 +21,7 @@ import { useState } from "react";
 import { useMutation } from "@tanstack/react-query";
 
 import { api } from "../api.js";
+import { ActionError } from "./ActionError.js";
 
 export function DeleteAccount({ email, onDeleted }: { email: string; onDeleted: () => void }) {
   const [typed, setTyped] = useState("");
@@ -79,7 +80,7 @@ export function DeleteAccount({ email, onDeleted }: { email: string; onDeleted: 
           {remove.isPending ? "Deleting…" : "Delete everything"}
         </button>
 
-        {remove.isError && <p className="text-[11px] text-danger">{remove.error.message}</p>}
+        {remove.isError && <ActionError error={remove.error} />}
       </form>
 
       <p className="text-[11px] leading-relaxed text-ink-400">

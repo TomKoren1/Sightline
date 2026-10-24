@@ -44,7 +44,7 @@ import {
 } from "./session.js";
 import { findOrCreateUser, getUser, linkedProviders, SignInRefused } from "./users.js";
 import type { AuthedRequest } from "./auth.guard.js";
-import { MinRole, HumanOnly } from "./roles.js";
+import { MinRole, HumanOnly, RecentSignIn } from "./roles.js";
 import { leaveOrLast, TeamRefused } from "./team.js";
 
 /** Where to send the browser once sign-in has resolved, one way or the other. */
@@ -258,7 +258,7 @@ export class MeController {
    * word "DELETE" becomes muscle memory. The `X-Sightline-Request` header the
    * guard demands on every mutating request is the other half.
    */
-  @HumanOnly()
+  @RecentSignIn()
   @MinRole("viewer")
   @Delete("me")
   @HttpCode(200)

@@ -25,7 +25,14 @@ import type { Scope } from "../tenancy/scope.js";
 import { configuredProviders } from "./oauth.js";
 import { IS_PUBLIC } from "./public.decorator.js";
 import { readSession, SESSION_COOKIE, type Session } from "./session.js";
-import { atLeast, HUMAN_ONLY, MIN_ROLE, type TeamRole } from "./roles.js";
+import {
+  atLeast,
+  HUMAN_ONLY,
+  MIN_ROLE,
+  RECENT_SIGN_IN,
+  RECENT_SIGN_IN_MINUTES,
+  type TeamRole,
+} from "./roles.js";
 import { readApiToken } from "./apiTokens.js";
 import { markVerified } from "./verifiedCredentials.js";
 
@@ -136,15 +143,24 @@ export class AuthGuard implements CanActivate {
       });
     }
 
-    if (
-      session.via === "token" &&
-      this.reflector.getAllAndOverride<boolean>(HUMAN_ONLY, [
-        context.getHandler(),
-        context.getClass(),
-      ])
-    ) {
+    const marked = (key: string) =>
+      this.reflector.getAllAndOverride<boolean>(key, [context.getHandler(), context.getClass()]);
+    const needsRecent = marked(RECENT_SIGN_IN);
+
+    if (session.via === "token" && (needsRecent || marked(HUMAN_ONLY))) {
       throw new ForbiddenException({
         error: "An API token cannot do this; sign in to manage tokens, the team or the account.",
+      });
+    }
+
+    if (
+      needsRecent &&
+      (!session.signedInAt ||
+        Date.now() - session.signedInAt.getTime() > RECENT_SIGN_IN_MINUTES * 60 * 1000)
+    ) {
+      throw new ForbiddenException({
+        error: `For safety this needs a sign-in from the last ${RECENT_SIGN_IN_MINUTES} minutes. Sign out, sign back in, and try again.`,
+        reauth: true,
       });
     }
 

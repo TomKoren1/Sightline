@@ -47,6 +47,8 @@ export interface Session {
   expiresAt: Date;
   /** Set when the request carried an API token rather than a signed-in browser. */
   via?: "token";
+  /** When this sign-in happened, for routes that want a recent one. */
+  signedInAt?: Date;
 }
 
 const hash = (token: string): Buffer => createHash("sha256").update(token).digest();
@@ -124,6 +126,7 @@ export async function readSession(token: string | undefined): Promise<Session | 
       userId: sessions.userId,
       expiresAt: sessions.expiresAt,
       lastUsedAt: sessions.lastUsedAt,
+      createdAt: sessions.createdAt,
       tenantId: users.tenantId,
       email: users.email,
       role: users.role,
@@ -170,6 +173,7 @@ export async function readSession(token: string | undefined): Promise<Session | 
     isAdmin: row.isAdmin,
     role: row.role,
     expiresAt: row.expiresAt,
+    signedInAt: row.createdAt,
   };
 }
 

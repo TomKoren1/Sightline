@@ -42,7 +42,7 @@ import {
 import { CurrentTenant, IsAdmin } from "./currentTenant.decorator.js";
 import { asConnectionId, type TenantId } from "./ids.js";
 import { onboardingPlan, verifyConnection, VerifyTooSoon } from "./onboarding.js";
-import { MinRole } from "../auth/roles.js";
+import { MinRole, RecentSignIn } from "../auth/roles.js";
 
 const createSchema = z.object({
   kind: z.enum(["real", "demo", "organization"]).default("real"),
@@ -181,6 +181,7 @@ export class ConnectionsController {
    * delete the CloudFormation stack that trusts us, and saying otherwise would
    * leave standing access nobody believed was there.
    */
+  @RecentSignIn()
   @MinRole("admin")
   @Delete(":id")
   @HttpCode(200)

@@ -20,6 +20,7 @@ import { useState } from "react";
 import { useMutation } from "@tanstack/react-query";
 
 import { api, type ConnectionSummary } from "../api.js";
+import { ActionError } from "./ActionError.js";
 
 export function DisconnectAccount({
   connection,
@@ -85,7 +86,7 @@ export function DisconnectAccount({
           {remove.isPending ? "Disconnecting…" : "Disconnect this account"}
         </button>
 
-        {remove.isError && <p className="text-[11px] text-danger">{remove.error.message}</p>}
+        {remove.isError && <ActionError error={remove.error} />}
       </form>
     </div>
   );
