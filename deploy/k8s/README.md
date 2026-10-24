@@ -47,6 +47,22 @@ Re-importing an image with the same tag does **not** restart the pods. Either
 bump the tag in `base/kustomization.yaml` (`images:`) or
 `kubectl -n sightline rollout restart deploy/api deploy/worker deploy/web`.
 
+Since the image is compiled (`apps/api/build.mjs`), the API, worker and
+migrate Job run `node apps/api/dist/<entry>.js`, and the image has no npm.
+**Rebuild both images before applying manifests from this version:** an older
+image has no `dist/` and the pods fail with "Cannot find module".
+
+### Rolling back
+
+Re-import the previous image tag and restart; do not roll the database back.
+Migrations only expand the schema - add tables, add nullable or defaulted
+columns - so the previous release runs on the new schema unchanged.
+`infra/migrationsExpand.test.ts` refuses a migration that drops, renames,
+retypes or tightens a column unless the file states, on a `-- contract:`
+line, why it is safe: the second half of expand-then-contract, shipped a
+release after nothing reads the old shape. Restoring a backup is for lost
+data, not for a bad release.
+
 ## Staging
 
 `staging/` deploys the same base into `sightline-staging` on the same node, so a
