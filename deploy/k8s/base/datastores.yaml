@@ -28,6 +28,10 @@ kind: StatefulSet
 metadata:
   name: postgres
   labels: { app.kubernetes.io/name: postgres }
+  # Never pruned or deleted by ArgoCD. Its claim, data-postgres-0, is generated
+  # and carries no tracking label, so prune cannot reach it either;
+  # infra/argocdTracking.test.ts keeps it that way.
+  annotations: { argocd.argoproj.io/sync-options: "Prune=false,Delete=false" }
 spec:
   serviceName: postgres
   replicas: 1

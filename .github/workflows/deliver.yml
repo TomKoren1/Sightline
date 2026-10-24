@@ -1,0 +1,108 @@
+name: Deliver
+
+# Every commit on main that passes CI becomes two published images, and the
+# prod overlay is pinned to them by digest. ArgoCD watches main, sees the pin
+# change, and rolls it out - migrations first, as the PreSync hook.
+#
+#   merge -> CI green -> images built, scanned, signed, pushed -> pin commit -> ArgoCD
+#
+# The pin commit carries [skip ci], so it does not start CI again and loop
+# back here. A run for an older commit never pins over a newer one.
+on:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+    branches: [main]
+
+permissions:
+  contents: read
+
+# One at a time, in order: two pins racing would leave whichever came last.
+concurrency:
+  group: deliver
+  cancel-in-progress: false
+
+jobs:
+  images:
+    name: Images
+    # A push to main that passed, not a PR's run that happens to target main.
+    if: github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push'
+    uses: ./.github/workflows/images.yml
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
+    with:
+      ref: ${{ github.event.workflow_run.head_sha }}
+      tags: type=raw,value=${{ github.event.workflow_run.head_sha }}
+
+  pin:
+    name: Pin the prod overlay
+    needs: images
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+      packages: read
+    env:
+      COMMIT: ${{ github.event.workflow_run.head_sha }}
+      FILE: deploy/k8s/prod/kustomization.yaml
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          ref: main
+          fetch-depth: 0
+
+      # A new package starts private on GitHub even in a public repository;
+      # logging in reads it either way.
+      - uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Resolve the digests just pushed
+        id: digests
+        run: |
+          owner="${GITHUB_REPOSITORY_OWNER,,}"
+          for target in api web; do
+            image="ghcr.io/${owner}/sightline-${target}"
+            digest="$(docker buildx imagetools inspect "${image}:${COMMIT}" --format '{{.Manifest.Digest}}')"
+            echo "${target}=${image}@${digest}" >> "$GITHUB_OUTPUT"
+          done
+
+      - name: Skip if main is already pinned to something newer
+        id: newer
+        run: |
+          pinned="$(sed -n 's/^# commit: \([0-9a-f]*\)$/\1/p' "$FILE")"
+          if [ -n "$pinned" ] && [ "$pinned" != "$COMMIT" ] \
+             && git merge-base --is-ancestor "$COMMIT" "$pinned" 2>/dev/null; then
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+            echo "Already pinned to $pinned, which is newer than $COMMIT." >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: Pin and push
+        if: steps.newer.outputs.skip != 'true'
+        run: |
+          node scripts/pin-images.mjs "$FILE" "$COMMIT" \
+            "api=${{ steps.digests.outputs.api }}" "web=${{ steps.digests.outputs.web }}"
+          if git diff --quiet; then exit 0; fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -am "deploy: ${COMMIT::7} [skip ci]"
+          # main may have moved while the images built; the pin applies on top.
+          pushed=false
+          for attempt in 1 2 3; do
+            if git push origin HEAD:main; then pushed=true; break; fi
+            git pull --rebase origin main
+          done
+          if [ "$pushed" != true ]; then
+            echo "Could not push the pin after 3 attempts." >&2
+            exit 1
+          fi
+          {
+            echo "### Pinned prod to ${COMMIT::7}"
+            echo
+            echo "- ${{ steps.digests.outputs.api }}"
+            echo "- ${{ steps.digests.outputs.web }}"
+          } >> "$GITHUB_STEP_SUMMARY"

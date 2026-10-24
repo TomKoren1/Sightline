@@ -21,7 +21,11 @@ metadata:
   name: cloudflared
   labels: { app.kubernetes.io/name: cloudflared }
 spec:
-  replicas: 2
+  # 0 until the named tunnel's token is sealed into sightline-tunnel. Today a
+  # hand-run quick tunnel (pod quicktunnel) serves the public URL; at 2 without
+  # the secret, both pods would sit in CreateContainerConfigError. Raise this in
+  # the same commit that adds the sealed token.
+  replicas: 0
   selector:
     matchLabels: { app.kubernetes.io/name: cloudflared }
   template:

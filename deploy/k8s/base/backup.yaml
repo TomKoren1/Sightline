@@ -30,7 +30,11 @@
 ---
 apiVersion: v1
 kind: PersistentVolumeClaim
-metadata: { name: backups }
+metadata:
+  name: backups
+  # local-path volumes are reclaim=Delete: removing this claim destroys every
+  # dump at once. ArgoCD may create it, never prune or delete it.
+  annotations: { argocd.argoproj.io/sync-options: "Prune=false,Delete=false" }
 spec:
   accessModes: [ReadWriteOnce]
   resources: { requests: { storage: 20Gi } }
