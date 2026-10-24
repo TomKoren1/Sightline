@@ -296,6 +296,9 @@ export async function ask(options: AskOptions): Promise<AgentMessage> {
     ],
     tools: buildTools({ tools, tracker, traces: toolCalls, emit }),
     stopWhen: stepCountIs(MAX_STEPS),
+    // 429 and 5xx, with exponential backoff: an overloaded provider usually
+    // recovers within the few seconds this spends. The SDK's default is 2.
+    maxRetries: 4,
 
     onStepEnd({ text, toolCalls: calls }) {
       steps += 1;

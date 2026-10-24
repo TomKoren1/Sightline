@@ -28,8 +28,8 @@ import { mayChat, statusFor } from "../tenancy/limits.js";
 import type { Scope } from "../tenancy/scope.js";
 import { askSchema } from "./chat.dto.js";
 import { ChatService } from "./chat.service.js";
-import { errorMessage } from "@sightline/shared";
 import { MinRole } from "../auth/roles.js";
+import { describeAgentFailure } from "../agent/failure.js";
 
 @Controller("api")
 export class ChatController {
@@ -119,7 +119,7 @@ export class ChatController {
         req.log.error({ err }, "failed to persist conversation");
       }
     } catch (err) {
-      const text = errorMessage(err);
+      const text = describeAgentFailure(err);
       req.log.error({ err }, "agent failed");
       send({ type: "agent.failed", error: text });
     } finally {
