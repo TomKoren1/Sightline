@@ -21,6 +21,8 @@ import {
   type GraphNode,
   type Summary,
 } from "../api.js";
+import { controlsFor } from "@sightline/shared";
+
 import { ChangesPanel } from "./ChangesPanel.js";
 
 export interface FindingsProps {
@@ -151,6 +153,7 @@ export function Findings({ summary, findings, loading, onHighlight }: FindingsPr
           <FindingList
             items={findings.publicResources}
             accepted={acceptedIn("exposed")}
+            category="exposed"
             empty="Nothing in this account is reachable from the internet."
             onHighlight={onHighlight}
           />
@@ -160,6 +163,7 @@ export function Findings({ summary, findings, loading, onHighlight }: FindingsPr
           <FindingList
             items={findings.adminPrincipals}
             accepted={acceptedIn("admin")}
+            category="admin"
             empty="No role or user grants unrestricted access."
             onHighlight={onHighlight}
             extra={(item) => {
@@ -196,6 +200,7 @@ export function Findings({ summary, findings, loading, onHighlight }: FindingsPr
             <FindingList
               items={findings.unprotected}
               accepted={acceptedIn("unguarded")}
+              category="unguarded"
               empty="Every bucket has Block Public Access fully enabled."
               onHighlight={onHighlight}
               extra={(item) =>
@@ -213,6 +218,7 @@ export function Findings({ summary, findings, loading, onHighlight }: FindingsPr
           <FindingList
             items={findings.unused ?? []}
             accepted={acceptedIn("unused")}
+            category="unused"
             empty="Every role and user has been used in the last 90 days, or is newer than that."
             onHighlight={onHighlight}
             extra={(item) =>
@@ -225,6 +231,7 @@ export function Findings({ summary, findings, loading, onHighlight }: FindingsPr
           <FindingList
             items={findings.idle}
             accepted={acceptedIn("idle")}
+            category="idle"
             empty="Nothing obviously idle."
             onHighlight={onHighlight}
             extra={(item) =>
@@ -271,11 +278,13 @@ type Item = GraphNode & { reason?: string | null; finding?: FindingState | null 
 function FindingList({
   items,
   accepted,
+  category,
   empty,
   onHighlight,
   extra,
 }: {
   items: Item[];
+  category: FindingCategory;
   accepted: Item[];
   empty: string;
   onHighlight: (arns: string[]) => void;
@@ -288,7 +297,13 @@ function FindingList({
         <p className="py-3 text-center text-[12px] text-good">{empty}</p>
       ) : (
         items.map((item) => (
-          <FindingRow key={item.arn} item={item} onHighlight={onHighlight} extra={extra} />
+          <FindingRow
+            key={item.arn}
+            item={item}
+            category={category}
+            onHighlight={onHighlight}
+            extra={extra}
+          />
         ))
       )}
       {accepted.length > 0 && (
@@ -303,7 +318,12 @@ function FindingList({
           {showAccepted && (
             <div className="mt-1.5 space-y-1.5">
               {accepted.map((item) => (
-                <FindingRow key={item.arn} item={item} onHighlight={onHighlight} />
+                <FindingRow
+                  key={item.arn}
+                  item={item}
+                  category={category}
+                  onHighlight={onHighlight}
+                />
               ))}
             </div>
           )}
@@ -320,10 +340,12 @@ function FindingList({
  */
 function FindingRow({
   item,
+  category,
   onHighlight,
   extra,
 }: {
   item: Item;
+  category: FindingCategory;
   onHighlight: (arns: string[]) => void;
   extra?: (item: Item) => string | undefined;
 }) {
@@ -344,6 +366,8 @@ function FindingRow({
   });
 
   const detail = extra?.(item);
+  // Plain text, not links: the row is itself a button. The title names each.
+  const controls = controlsFor(category, item.kind);
   return (
     <div
       className={`rounded border border-ink-800 bg-ink-850 transition hover:border-ink-600 ${
@@ -361,6 +385,14 @@ function FindingRow({
         {detail && <div className="text-[10px] text-ink-300">{detail}</div>}
         {item.reason && (
           <div className="mt-0.5 text-[10px] leading-snug text-ink-400">{item.reason}</div>
+        )}
+        {controls.length > 0 && (
+          <div
+            className="mt-0.5 font-mono text-[10px] text-ink-400"
+            title={controls.map((c) => `${c.framework} ${c.id}: ${c.title}`).join("\n")}
+          >
+            {controls.map((c) => `FSBP ${c.id}`).join(" · ")}
+          </div>
         )}
         {isAccepted && finding.statusReason && (
           <div className="mt-0.5 text-[10px] leading-snug text-ink-300">
