@@ -417,7 +417,7 @@ function FindingRow({
             className="mt-0.5 font-mono text-[10px] text-ink-400"
             title={controls.map((c) => `${c.framework} ${c.id}: ${c.title}`).join("\n")}
           >
-            {controls.map((c) => `FSBP ${c.id}`).join(" · ")}
+            {controls.map((c) => c.label).join(" · ")}
           </div>
         )}
         {isAccepted && finding.statusReason && (
