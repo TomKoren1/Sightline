@@ -493,3 +493,23 @@ export const latestEvalRun = z.union([
   z.object({ run: z.null(), hint: z.string() }).strict(),
   z.object({ run: agentEvalRun.nullable(), currentModel: z.string() }).strict(),
 ]);
+
+/** The next page of one findings list; `next` is null on the last. */
+export const findingsPage = z
+  .object({
+    rows: z.array(graphNode.extend({ finding: findingState.nullable() }).passthrough()),
+    total: z.number(),
+    offset: z.number(),
+    next: z.number().nullable(),
+  })
+  .strict();
+export type FindingsPage = z.infer<typeof findingsPage>;
+export const findingLists = [
+  "publicResources",
+  "adminPrincipals",
+  "idle",
+  "exposed",
+  "unprotected",
+  "unused",
+] as const;
+export type FindingListName = (typeof findingLists)[number];

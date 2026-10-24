@@ -16,6 +16,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   api,
   type FindingCategory,
+  type FindingListName,
   type FindingState,
   type Findings as FindingsData,
   type GraphNode,
@@ -24,6 +25,7 @@ import {
 import { controlsFor } from "@sightline/shared";
 
 import { ChangesPanel } from "./ChangesPanel.js";
+import { useLoadMore } from "../hooks/useLoadMore.js";
 
 export interface FindingsProps {
   summary: Summary | undefined;
@@ -152,6 +154,7 @@ export function Findings({ summary, findings, loading, onHighlight }: FindingsPr
         {tab === "exposed" && (
           <FindingList
             items={findings.publicResources}
+            list="publicResources"
             accepted={acceptedIn("exposed")}
             category="exposed"
             empty="Nothing in this account is reachable from the internet."
@@ -162,6 +165,7 @@ export function Findings({ summary, findings, loading, onHighlight }: FindingsPr
         {tab === "admin" && (
           <FindingList
             items={findings.adminPrincipals}
+            list="adminPrincipals"
             accepted={acceptedIn("admin")}
             category="admin"
             empty="No role or user grants unrestricted access."
@@ -199,6 +203,7 @@ export function Findings({ summary, findings, loading, onHighlight }: FindingsPr
             </p>
             <FindingList
               items={findings.unprotected}
+              list="unprotected"
               accepted={acceptedIn("unguarded")}
               category="unguarded"
               empty="Every bucket has Block Public Access fully enabled."
@@ -217,6 +222,7 @@ export function Findings({ summary, findings, loading, onHighlight }: FindingsPr
         {tab === "unused" && (
           <FindingList
             items={findings.unused ?? []}
+            list="unused"
             accepted={acceptedIn("unused")}
             category="unused"
             empty="Every role and user has been used in the last 90 days, or is newer than that."
@@ -230,6 +236,7 @@ export function Findings({ summary, findings, loading, onHighlight }: FindingsPr
         {tab === "idle" && (
           <FindingList
             items={findings.idle}
+            list="idle"
             accepted={acceptedIn("idle")}
             category="idle"
             empty="Nothing obviously idle."
@@ -276,7 +283,8 @@ function Row({ left, right }: { left: string; right: string }) {
 type Item = GraphNode & { reason?: string | null; finding?: FindingState | null };
 
 function FindingList({
-  items,
+  items: firstPage,
+  list,
   accepted,
   category,
   empty,
@@ -284,6 +292,8 @@ function FindingList({
   extra,
 }: {
   items: Item[];
+  /** Which server list this is, so more of it can be fetched past the first 50. */
+  list?: FindingListName;
   category: FindingCategory;
   accepted: Item[];
   empty: string;
@@ -291,6 +301,8 @@ function FindingList({
   extra?: (item: Item) => string | undefined;
 }) {
   const [showAccepted, setShowAccepted] = useState(false);
+  const more = useLoadMore(list, firstPage);
+  const items = more.items;
   return (
     <div className="space-y-1.5">
       {items.length === 0 ? (
@@ -306,6 +318,20 @@ function FindingList({
           />
         ))
       )}
+      {more.canLoad && (
+        <button
+          onClick={() => void more.load()}
+          disabled={more.loading}
+          className="w-full rounded border border-ink-700 px-2 py-1 text-[11px] text-ink-400 hover:text-ink-100 disabled:opacity-50"
+        >
+          {more.loading
+            ? "Loading…"
+            : more.total !== null
+              ? `Showing ${items.length} of ${more.total.toLocaleString()} - load more`
+              : "Load more"}
+        </button>
+      )}
+      {more.error && <p className="text-[11px] text-danger">{more.error}</p>}
       {accepted.length > 0 && (
         <div className="pt-1">
           <button

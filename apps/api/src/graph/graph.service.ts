@@ -48,6 +48,17 @@ const EMPTY_FINDINGS = {
   accepted: [],
 };
 
+/** Each list `findings()` returns: the finder behind it, and its finding category. */
+export const FINDING_LISTS = {
+  publicResources: ["findPublicResources", "exposed"],
+  adminPrincipals: ["findAdminPrincipals", "admin"],
+  idle: ["findIdleResources", "idle"],
+  exposed: ["findOpenSecurityGroups", "exposed"],
+  unprotected: ["findUnprotectedBuckets", "unguarded"],
+  unused: ["findUnusedAccess", "unused"],
+} as const satisfies Record<api.FindingListName, readonly [q.FinderName, FindingCategory]>;
+export type FindingList = keyof typeof FINDING_LISTS;
+
 @Injectable()
 export class GraphService {
   async summary(scope: Scope): Promise<api.Summary> {
@@ -187,6 +198,36 @@ export class GraphService {
       unused: annotate("unused", unused),
       accepted,
     };
+  }
+
+  /**
+   * The next page of one findings list, past the 50 `findings()` returns.
+   *
+   * Offsets count the whole list, accepted findings included, because the
+   * finders know nothing of finding state; accepted ones are then hidden as
+   * on the first page. A caller asking from the number it has shown may see a
+   * few rows again, never miss one, and follows `next` from there.
+   */
+  async findingsPage(scope: Scope, list: FindingList, offset: number) {
+    const graph = await graphScopeFor(scope);
+    if (!graph) return { rows: [], total: 0, offset: 0, next: null };
+    const [finder, category] = FINDING_LISTS[list];
+    const page = await q.pageOf(finder, graph, { limit: 50, offset });
+    const states = await listFindingStates(scope, { acceptedOr: page.rows.map((r) => r.arn) });
+    const tracked = new Map(states.map((st) => [`${st.category} ${st.resourceArn}`, st]));
+    const rows = page.rows
+      .map((row) => {
+        const state = tracked.get(`${category} ${row.arn}`);
+        return {
+          ...row,
+          finding: state
+            ? { id: state.id, status: state.status, firstSeenAt: state.firstSeenAt }
+            : null,
+        };
+      })
+      .filter((row) => row.finding?.status !== "accepted");
+    const end = page.offset + page.rows.length;
+    return { rows, total: page.total, offset: page.offset, next: end < page.total ? end : null };
   }
 
   /** Accept a finding's risk with a reason, or reopen it. */

@@ -143,6 +143,12 @@ const CONTRACTS: Contract[] = [
   },
   {
     method: "GET",
+    route: "/api/findings/page",
+    url: "/api/findings/page?list=idle&offset=0",
+    responses: { 200: api.findingsPage, 400: error },
+  },
+  {
+    method: "GET",
     route: "/api/findings/accounts",
     url: "/api/findings/accounts",
     responses: { 200: api.acrossAccounts },

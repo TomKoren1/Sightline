@@ -18,3 +18,9 @@ AWS package to be reached only from `evals/` and `cli/`. When a new import
 would close a cycle, the usual fix is the one used here: the thing both
 sides need is a type or a pure function, and it belongs in `core/` or in the
 lower of the two folders.
+
+Considered: splitting `apps/api` into workspace packages - scanner, agent,
+HTTP. Folders under an enforced, acyclic layering already give each part a
+boundary its imports cannot cross; separate packages would add a build and
+a version per part for no boundary that the test does not already hold. If
+a part ever needs to ship on its own, its folder is already the package.

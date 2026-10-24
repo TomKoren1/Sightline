@@ -5,6 +5,8 @@ import type { AgentEvent, AgentMessage, ScanDiff, ScanEvent, ScanRun } from "@si
 // Graph and findings shapes come from the one contract the API is tested
 // against (packages/shared/src/api.ts), as types only.
 export type {
+  FindingListName,
+  FindingsPage,
   CheckResult,
   GroundTruthRun,
   AgentEvalCase,
@@ -34,6 +36,8 @@ export type {
   Summary,
 } from "@sightline/shared/api";
 import type {
+  FindingListName,
+  FindingsPage,
   CheckResult,
   GroundTruthRun,
   AgentEvalRun,
@@ -211,6 +215,8 @@ export const api = {
   removeWebhook: () => send<void>("/api/webhook", { method: "DELETE" }),
   testWebhook: () => send<{ ok: boolean; status: string }>("/api/webhook/test", { method: "POST" }),
   apiTokens: () => get<{ tokens: ApiToken[] }>("/api/tokens"),
+  findingsPage: (list: FindingListName, offset: number) =>
+    get<FindingsPage>(`/api/findings/page?list=${list}&offset=${offset}`),
   findingsAcrossAccounts: () => get<AcrossAccounts>("/api/findings/accounts"),
   operatorTenants: () => get<{ tenants: TenantHealth[] }>("/api/operator/tenants"),
   createApiToken: (input: { name: string; role: TeamRole; expiresInDays: number }) =>

@@ -16,7 +16,7 @@ import type { AuthedRequest } from "../core/request.js";
 
 import { CurrentScope } from "../tenancy/currentScope.decorator.js";
 import type { Scope } from "../core/scope.js";
-import { GraphService } from "./graph.service.js";
+import { FINDING_LISTS, GraphService, type FindingList } from "./graph.service.js";
 import { FINDING_CATEGORIES, findingsAcrossAccounts } from "../db/findings.js";
 import type { FindingCategory } from "../db/schema.js";
 import { MinRole } from "../core/access.js";
@@ -97,6 +97,19 @@ export class GraphController {
   @Get("findings")
   findings(@CurrentScope() scope: Scope) {
     return this.graph.findings(scope);
+  }
+
+  /** The next page of one findings list: `?list=idle&offset=50`. */
+  @Get("findings/page")
+  findingsPage(@CurrentScope() scope: Scope, @Query() query: { list?: string; offset?: string }) {
+    const list = query.list;
+    if (!list || !(list in FINDING_LISTS)) {
+      throw new BadRequestException({
+        error: `list is one of ${Object.keys(FINDING_LISTS).join(", ")}.`,
+      });
+    }
+    const offset = Math.max(0, Math.floor(Number(query.offset ?? 0) || 0));
+    return this.graph.findingsPage(scope, list as FindingList, offset);
   }
 
   /** Open findings in every account of the workspace, worst first. */
