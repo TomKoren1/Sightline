@@ -1,23 +1,24 @@
 /** Process configuration, read once and validated at startup. */
 
-import { fileURLToPath } from "node:url";
+import { join } from "node:path";
 
 import { config as loadDotenv } from "dotenv";
 import { existsSync, readdirSync } from "node:fs";
 import { z } from "zod";
 
 import { validateAssumeRoleTarget } from "./aws/principal.js";
+import { REPO_ROOT } from "./paths.js";
 import { rolesAnywhereProvider } from "./aws/rolesAnywhere.js";
 import type { AwsCredentialIdentity, AwsCredentialIdentityProvider } from "@aws-sdk/types";
 
 /**
- * `fileURLToPath`, never `URL.pathname`: the latter is a URL path, so a drive
+ * From paths.ts, which uses `fileURLToPath`, never `URL.pathname`: the latter is a URL path, so a drive
  * letter or a space in the directory gives `fs` something it cannot open.
  * `dotenv` then failed silently and no `.env` value loaded at all - only
  * `ANTHROPIC_API_KEY` broke visibly, since the Zod defaults below cover the
  * rest.
  */
-export const ENV_FILE = fileURLToPath(new URL("../../../.env", import.meta.url));
+export const ENV_FILE = join(REPO_ROOT, ".env");
 
 loadDotenv({ path: ENV_FILE, quiet: true });
 

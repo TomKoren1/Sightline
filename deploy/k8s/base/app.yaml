@@ -50,7 +50,8 @@ spec:
           securityContext:
             allowPrivilegeEscalation: false
             capabilities: { drop: [ALL] }
-          command: ["npm", "run", "db:migrate", "-w", "@sightline/api"]
+            readOnlyRootFilesystem: true
+          command: ["node", "--enable-source-maps", "apps/api/dist/migrate.js"]
           envFrom:
             - configMapRef: { name: sightline-config }
             - secretRef: { name: sightline-app }
@@ -111,6 +112,7 @@ spec:
           securityContext:
             allowPrivilegeEscalation: false
             capabilities: { drop: [ALL] }
+            readOnlyRootFilesystem: true
           ports:
             - { name: http, containerPort: 3000 }
             - { name: metrics, containerPort: 9464 }
@@ -216,7 +218,8 @@ spec:
           securityContext:
             allowPrivilegeEscalation: false
             capabilities: { drop: [ALL] }
-          command: ["npm", "run", "worker", "-w", "@sightline/api"]
+            readOnlyRootFilesystem: true
+          command: ["node", "--enable-source-maps", "apps/api/dist/worker.js"]
           ports: [{ name: metrics, containerPort: 9464 }]
           envFrom:
             - configMapRef: { name: sightline-config }

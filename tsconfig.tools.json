@@ -16,6 +16,7 @@
     "infra/**/*.ts",
     "e2e/**/*.ts",
     "scripts/**/*.mjs",
+    "apps/api/build.mjs",
     "vitest.config.ts",
     "eslint.config.mjs"
   ]

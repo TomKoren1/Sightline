@@ -19,13 +19,14 @@
 import { AsyncLocalStorage } from "node:async_hooks";
 import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
-import { fileURLToPath } from "node:url";
+import { join } from "node:path";
 import { drizzle } from "drizzle-orm/node-postgres";
 import { migrate as runMigrations } from "drizzle-orm/node-postgres/migrator";
 import pg from "pg";
 import type { Resource } from "@sightline/shared";
 
 import { cfg } from "../config.js";
+import { API_ROOT } from "../paths.js";
 import * as schema from "./schema.js";
 
 /** The setting the policies read. Also in the migration; they must agree. */
@@ -215,14 +216,14 @@ export const currentTenant = (): string | null => bound.getStore()?.tenantId ?? 
  * On `system`, because migrations create and alter tables: the restricted role
  * has DML only, which is the point of it.
  *
- * `fileURLToPath`, not `URL.pathname`: the latter yields `/C:/…` on Windows and
- * percent-encodes a directory containing a space.
+ * Found from the package root, not counted from this file: compiled, this
+ * module is no longer two directories below it (paths.ts).
  */
 export async function migrate(): Promise<void> {
   await runMigrations(system, { migrationsFolder: MIGRATIONS_FOLDER });
 }
 
-const MIGRATIONS_FOLDER = fileURLToPath(new URL("../../drizzle", import.meta.url));
+const MIGRATIONS_FOLDER = join(API_ROOT, "drizzle");
 
 /**
  * Migrations this build carries that the database has not applied.

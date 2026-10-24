@@ -1,9 +1,11 @@
 # Container images for the API and the built frontend.
 #
-# Two targets, built from one dependency layer:
+# Three targets:
 #
-#   --target api   Node runtime for the Fastify server and the CLIs
-#   --target web   nginx serving the built SPA and proxying /api to the API
+#   --target api     the compiled server, worker and migrations, on production
+#                    dependencies only
+#   --target web     nginx serving the built SPA and proxying /api to the API
+#   --target tools   the whole workspace on tsx, for the mock seeder
 #
 # Used only by the optional `app` profile in docker-compose.yml. The documented
 # local-development path does not build these, so nothing here can break it.
@@ -26,31 +28,66 @@ COPY apps/web/package.json apps/web/
 # silently resolves a different tree than CI tested is not a reproduction.
 RUN npm ci
 
-# --- API runtime -----------------------------------------------------------
-# The API runs through tsx rather than a compiled bundle, matching how it runs
-# locally, so devDependencies are part of the runtime here. That is a deliberate
-# trade: a slightly larger image in exchange for one execution path instead of
-# two, which is one fewer thing that can differ between this and a laptop.
-FROM deps AS api
+# --- API build -------------------------------------------------------------
+# The server as JavaScript, bundled by esbuild - the transform tsx applies in
+# development, so the two cannot disagree (apps/api/build.mjs).
+FROM deps AS apibuild
 WORKDIR /app
-COPY tsconfig.base.json vitest.config.ts ./
-# Root `package.json` scripts run `scripts/deps.mjs` first, so an image that runs
-# one - the compose `seed` service runs `npm run seed` - needs the directory. Its
-# absence failed the whole `app` profile at the seeding step, before the API was
-# ever reached (engineering log #51). Here the guard is a no-op: `npm ci` above
-# installed devDependencies deliberately, so it finds tsx and exits immediately.
-COPY scripts/ scripts/
+COPY tsconfig.base.json ./
 COPY packages/ packages/
 COPY apps/api/ apps/api/
+RUN npm run build -w @sightline/api
+
+# --- API production dependencies --------------------------------------------
+# The API's runtime dependencies and nothing else: no tsx, no esbuild, no
+# drizzle-kit, no vitest, and none of the frontend's. Workspace packages are
+# bundled into the build, so their links here are never followed.
+FROM node:22.23.3-alpine@sha256:0a7108bf6c7bf5de370ffb1a3ed6be93d405b43ff159f681a8d18c0e2bc2e402 AS apideps
+WORKDIR /app
+COPY package.json package-lock.json ./
+COPY packages/shared/package.json packages/shared/
+COPY packages/mock-aws/package.json packages/mock-aws/
+COPY apps/api/package.json apps/api/
+COPY apps/web/package.json apps/web/
+RUN npm ci --omit=dev --workspace @sightline/api --include-workspace-root=false  && npm cache clean --force
+
+# --- API runtime -----------------------------------------------------------
+# Node, the build, its migrations and its production dependencies. npm is
+# removed: nothing here runs through it - every command is `node <file>`,
+# which also delivers SIGTERM to the server rather than to an npm wrapper -
+# and a package manager in a production image is only attack surface.
+FROM node:22.23.3-alpine@sha256:0a7108bf6c7bf5de370ffb1a3ed6be93d405b43ff159f681a8d18c0e2bc2e402 AS api
+WORKDIR /app
+RUN rm -rf /usr/local/lib/node_modules/npm /usr/local/lib/node_modules/corepack       /usr/local/bin/npm /usr/local/bin/npx /usr/local/bin/corepack
+COPY --from=apideps /app/node_modules node_modules
+COPY --from=apideps /app/apps/api/ apps/api/
+COPY apps/api/package.json apps/api/
+COPY apps/api/drizzle/ apps/api/drizzle/
+COPY --from=apibuild /app/apps/api/dist/ apps/api/dist/
+ENV NODE_ENV=production
 # Fastify must accept connections from the nginx container, not just loopback.
 ENV BACKEND_HOST=0.0.0.0
 EXPOSE 3000
-# Non-root. The `node` user ships with the image, `/app` only needs to be read,
-# and the server writes nothing at runtime - the two CLIs that do write run on
-# the host. tsx caches transforms under the system temp directory, not the tree.
+# Non-root. The `node` user ships with the image and `/app` only needs to be
+# read; the server writes nothing at runtime.
 USER node
 # The server applies the Postgres schema on boot, so no migrate step is needed.
-CMD ["npm", "run", "start", "-w", "@sightline/api"]
+# The worker, migrations and the restricted role's password are the other
+# entry points: node apps/api/dist/{worker,migrate,app-role}.js.
+CMD ["node", "--enable-source-maps", "apps/api/dist/server.js"]
+
+# --- tools -----------------------------------------------------------------
+# The whole workspace on tsx, for what is not part of the product: the compose
+# profile's one-shot mock seeder, which runs `npm run seed`.
+FROM deps AS tools
+WORKDIR /app
+COPY tsconfig.base.json ./
+# Root `package.json` scripts run `scripts/deps.mjs` first, so the seeder needs
+# the directory; with devDependencies installed it finds tsx and exits.
+COPY scripts/ scripts/
+COPY packages/ packages/
+COPY apps/api/ apps/api/
+USER node
 
 # --- frontend build --------------------------------------------------------
 FROM deps AS webbuild

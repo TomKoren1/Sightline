@@ -312,7 +312,7 @@ password in a migration is a password in git. Set it after the migrate Job has
 run and before the API pods are ready:
 
 ```bash
-kubectl -n sightline exec deploy/api -- npm run db:app-role -w @sightline/api
+kubectl -n sightline exec deploy/api -- node apps/api/dist/app-role.js
 ```
 
 That reads `DATABASE_URL_APP`, sets the role's password to match, and then
