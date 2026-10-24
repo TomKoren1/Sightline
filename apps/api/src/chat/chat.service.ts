@@ -137,6 +137,8 @@ export class ChatService {
           citations: params.message.citations ?? [],
           warnings: params.message.warnings ?? [],
           scanId: params.scanId,
+          inputTokens: params.message.usage?.inputTokens ?? null,
+          outputTokens: params.message.usage?.outputTokens ?? null,
         },
       ]);
     });

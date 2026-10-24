@@ -201,6 +201,9 @@ export const messages = pgTable(
     citations: jsonb("citations").notNull().default([]),
     warnings: jsonb("warnings").notNull().default([]),
     scanId: uuid("scan_id").references(() => scanRuns.id, { onDelete: "set null" }),
+    /** On an answer: what it cost, for the token budget. Null on a question. */
+    inputTokens: integer("input_tokens"),
+    outputTokens: integer("output_tokens"),
     createdAt: timestamp("created_at", tz).notNull().defaultNow(),
   },
   (t) => [

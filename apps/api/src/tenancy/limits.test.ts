@@ -319,6 +319,65 @@ describe.runIf(HAS_INFRA)("the spending limits", () => {
     });
   });
 
+  describe("the token budget", () => {
+    async function answered(tokens: number[], hoursAgo = 0) {
+      const conversationId = randomUUID();
+      await system.insert(conversations).values({
+        id: conversationId,
+        tenantId,
+        connectionId: scope.connectionId,
+        accountId: "123456789012",
+      });
+      await system.insert(messages).values(
+        tokens.map((n) => ({
+          id: randomUUID(),
+          tenantId,
+          conversationId,
+          role: "assistant" as const,
+          content: "x",
+          inputTokens: n - 100,
+          outputTokens: 100,
+        })),
+      );
+      if (hoursAgo > 0) {
+        await system.execute(sql`
+          UPDATE messages SET created_at = now() - ${`${hoursAgo} hours`}::interval
+           WHERE conversation_id = ${conversationId}`);
+      }
+    }
+
+    it("refuses once the day's tokens are spent, counting input and output", async () => {
+      if (!available) return;
+      const { mayChat } = await withEnv({ CHAT_TOKENS_PER_DAY: "1000" });
+      await answered([600, 400]);
+      const decision = await mayChat(scope);
+      expect(decision.allowed).toBe(false);
+      if (decision.allowed) return;
+      expect(decision.reason).toMatch(/1,000 model tokens/);
+    });
+
+    it("allows the next question below the budget", async () => {
+      if (!available) return;
+      const { mayChat } = await withEnv({ CHAT_TOKENS_PER_DAY: "1000" });
+      await answered([600, 300]);
+      expect(await mayChat(scope)).toEqual({ allowed: true });
+    });
+
+    it("forgets answers older than a day", async () => {
+      if (!available) return;
+      const { mayChat } = await withEnv({ CHAT_TOKENS_PER_DAY: "1000" });
+      await answered([5000], 25);
+      expect(await mayChat(scope)).toEqual({ allowed: true });
+    });
+
+    it("applies with no question quota at all", async () => {
+      if (!available) return;
+      const { mayChat } = await withEnv({ CHAT_TOKENS_PER_DAY: "1000" });
+      await answered([1500]);
+      expect((await mayChat(scope)).allowed).toBe(false);
+    });
+  });
+
   describe("the kill switches", () => {
     it("is a 503 and not a 429, because the caller did nothing wrong", async () => {
       if (!available) return;

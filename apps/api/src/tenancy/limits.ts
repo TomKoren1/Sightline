@@ -16,7 +16,7 @@
 
 import { and, count, eq, gte, sql } from "drizzle-orm";
 
-import { cfg, chatQuestionsPerHour, scanCooldownSeconds } from "../config.js";
+import { cfg, chatQuestionsPerHour, chatTokensPerDay, scanCooldownSeconds } from "../config.js";
 import { db, withTenant } from "../db/postgres.js";
 import { messages, scanJobs, scanRuns } from "../db/schema.js";
 import type { Scope } from "./scope.js";
@@ -159,7 +159,7 @@ export async function mayChat(scope: Scope): Promise<Decision> {
     }
 
     const perHour = chatQuestionsPerHour();
-    if (perHour === null) return ALLOWED;
+    if (perHour === null) return tokenBudget(scope);
 
     const since = new Date(Date.now() - 60 * 60 * 1000);
     /**
@@ -195,8 +195,42 @@ export async function mayChat(scope: Scope): Promise<Decision> {
       };
     }
 
-    return ALLOWED;
+    return tokenBudget(scope);
   });
+}
+
+/**
+ * The tenant's answers in the last 24 hours, in tokens. Inside `mayChat`'s
+ * tenant context. Counts what was spent before this question, so the one
+ * that crosses the line is answered and the next is refused.
+ */
+async function tokenBudget(scope: Scope): Promise<Decision> {
+  const perDay = chatTokensPerDay();
+  if (perDay === null) return ALLOWED;
+  const since = new Date(Date.now() - 24 * 60 * 60 * 1000);
+  const [spent] = await db
+    .select({
+      n: sql<number>`coalesce(sum(${messages.inputTokens} + ${messages.outputTokens}), 0)::int`,
+    })
+    .from(messages)
+    .where(
+      and(
+        eq(messages.tenantId, scope.tenantId),
+        eq(messages.role, "assistant"),
+        gte(messages.createdAt, since),
+      ),
+    );
+  const used = Number(spent?.n ?? 0);
+  if (used < perDay) return ALLOWED;
+  return {
+    allowed: false,
+    kind: "throttled",
+    reason:
+      `Your questions have used ${used.toLocaleString("en-US")} model tokens in the last 24 hours, ` +
+      `which is this deployment's limit of ${perDay.toLocaleString("en-US")}. Earlier answers age ` +
+      "out of the window; the graph, the findings and search are unaffected.",
+    retryAfterSeconds: 60 * 60,
+  };
 }
 
 /**

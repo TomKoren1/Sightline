@@ -257,6 +257,13 @@ const schema = z.object({
   CHAT_QUESTIONS_PER_HOUR: blankAsUnset(z.coerce.number().int().positive().optional()),
 
   /**
+   * Model tokens, input and output, one tenant's answers may use in 24 hours.
+   * Questions are a poor measure of cost on their own: one that walks the
+   * whole estate can cost a hundred short ones. Defaulted like the above.
+   */
+  CHAT_TOKENS_PER_DAY: blankAsUnset(z.coerce.number().int().positive().optional()),
+
+  /**
    * Requests per minute, per signed-in session or per address when signed out.
    * Hosted mode only. Every endpoint, beside the stricter limits above on what
    * costs money; sign-in routes get the second, much lower number.
@@ -383,6 +390,9 @@ export const scanCooldownSeconds = (): number =>
 
 export const chatQuestionsPerHour = (): number | null =>
   cfg.CHAT_QUESTIONS_PER_HOUR ?? (isHosted() ? 60 : null);
+
+export const chatTokensPerDay = (): number | null =>
+  cfg.CHAT_TOKENS_PER_DAY ?? (isHosted() ? 2_000_000 : null);
 
 /** Whether this process migrates on boot. See `MIGRATE_ON_BOOT`. */
 export const migrateOnBoot = (): boolean =>

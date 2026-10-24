@@ -350,8 +350,10 @@ export async function ask(options: AskOptions): Promise<AgentMessage> {
    * once the stream is drained, which has happened by here. Tokens are the
    * only direct measure of what a question costs in money.
    */
+  let spent: AgentMessage["usage"];
   try {
     const usage = await result.usage;
+    spent = { inputTokens: usage?.inputTokens ?? 0, outputTokens: usage?.outputTokens ?? 0 };
     if (usage?.inputTokens) agentTokens.inc({ kind: "input" }, usage.inputTokens);
     if (usage?.outputTokens) agentTokens.inc({ kind: "output" }, usage.outputTokens);
     // Part of the input above, read from the cache: whether caching pays.
@@ -376,6 +378,7 @@ export async function ask(options: AskOptions): Promise<AgentMessage> {
     toolCalls,
     citations,
     ...(warnings.length > 0 ? { warnings } : {}),
+    ...(spent ? { usage: spent } : {}),
   };
 
   /**

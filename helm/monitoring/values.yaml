@@ -260,7 +260,7 @@ prometheus:
                 service: sightline
               annotations:
                 summary: "Sightline is spending Anthropic tokens unusually fast"
-                description: "More than two million tokens an hour. Check CHAT_QUESTIONS_PER_HOUR and whether one tenant is responsible."
+                description: "More than two million tokens an hour. Check CHAT_QUESTIONS_PER_HOUR, CHAT_TOKENS_PER_DAY and whether one tenant is responsible."
 
             - alert: SightlineOnboardingFailing
               # Not an outage - a funnel problem, and the reason is the useful
