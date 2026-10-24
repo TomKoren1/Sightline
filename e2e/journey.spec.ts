@@ -74,9 +74,10 @@ test("sign in, scan, read the findings, ask, and connect", async ({ page }) => {
     await page.getByLabel("Find a resource").fill("northwind-reports");
     const findings = page.getByRole("complementary", { name: "Findings" });
     await findings.getByRole("button", { name: /^northwind-reports/ }).click();
-    await expect(
-      page.getByRole("complementary", { name: "Resource" }).getByText("northwind-reports").first(),
-    ).toBeVisible();
+    const detail = page.getByRole("complementary", { name: "Resource" });
+    await expect(detail.getByText("northwind-reports").first()).toBeVisible();
+    await detail.getByRole("button", { name: "Close" }).click();
+    await expect(detail).toHaveCount(0);
   });
 
   await test.step("asks the agent, and gets an answer from the scanned inventory", async () => {
