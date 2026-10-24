@@ -17,6 +17,8 @@ import type { AuthedRequest } from "../auth/auth.guard.js";
 import { CurrentScope } from "../tenancy/currentScope.decorator.js";
 import type { Scope } from "../tenancy/scope.js";
 import { GraphService } from "./graph.service.js";
+import { FINDING_CATEGORIES, findingsAcrossAccounts } from "../db/findings.js";
+import type { FindingCategory } from "../db/schema.js";
 import { MinRole } from "../auth/roles.js";
 
 /**
@@ -95,6 +97,21 @@ export class GraphController {
   @Get("findings")
   findings(@CurrentScope() scope: Scope) {
     return this.graph.findings(scope);
+  }
+
+  /** Open findings in every account of the workspace, worst first. */
+  @Get("findings/accounts")
+  findingsAcrossAccounts(@CurrentScope() scope: Scope, @Query() query: { category?: string }) {
+    const category = query.category;
+    if (category !== undefined && !(FINDING_CATEGORIES as string[]).includes(category)) {
+      throw new BadRequestException({
+        error: `category is one of ${FINDING_CATEGORIES.join(", ")}.`,
+      });
+    }
+    return findingsAcrossAccounts(scope.tenantId, {
+      ...(category ? { category: category as FindingCategory } : {}),
+      limit: 200,
+    });
   }
 
   @MinRole("member")

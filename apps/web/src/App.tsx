@@ -16,6 +16,7 @@ import { api, can, selectConnection, startScan, watchScan } from "./api.js";
 import { captureJoinToken, clearJoin, pendingJoin } from "./join.js";
 import { Team } from "./components/Team.js";
 import { OperatorView } from "./components/OperatorView.js";
+import { AllAccounts } from "./components/AllAccounts.js";
 import type { ConnectionSummary, GraphData } from "./api.js";
 import { GraphGroups } from "./components/GraphGroups.js";
 import { FOCUS, LARGE_ACCOUNT, mergeGraphs } from "./graphViews.js";
@@ -50,7 +51,7 @@ export function App() {
   const [visibleKinds, setVisibleKinds] = useState<string[]>(DEFAULT_VISIBLE_KINDS);
   const [showFilters, setShowFilters] = useState(false);
   const [modal, setModal] = useState<
-    "trust" | "connection" | "delete" | "team" | "operator" | null
+    "trust" | "connection" | "delete" | "team" | "operator" | "accounts" | null
   >(null);
   const [connectionId, setConnectionId] = useState<string | null>(null);
   /**
@@ -335,6 +336,9 @@ export function App() {
         onDeleteAccount={() => setModal("delete")}
         canScan={can(me.data?.role, "member")}
         {...(me.data?.hosted ? { onOpenTeam: () => setModal("team") } : {})}
+        {...((me.data?.connections.length ?? 0) > 1
+          ? { onOpenAllAccounts: () => setModal("accounts") }
+          : {})}
         {...(me.data?.hosted && me.data.isAdmin && can(me.data.role, "admin")
           ? { onOpenOperator: () => setModal("operator") }
           : {})}
@@ -353,6 +357,22 @@ export function App() {
           onClose={() => setModal(null)}
         >
           <Team />
+        </Modal>
+      )}
+
+      {modal === "accounts" && (
+        <Modal
+          title="All accounts"
+          subtitle="Open findings in every connected account, worst first"
+          onClose={() => setModal(null)}
+        >
+          <AllAccounts
+            onOpen={(connectionId, arn) => {
+              switchConnection(connectionId);
+              setSelectedArn(arn);
+              setModal(null);
+            }}
+          />
         </Modal>
       )}
 

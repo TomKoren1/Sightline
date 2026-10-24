@@ -22,6 +22,7 @@ import { sql } from "drizzle-orm";
 
 import { db, withTenant } from "./postgres.js";
 import type { FindingCategory, FindingStatus } from "./schema.js";
+import type { TenantId } from "../tenancy/ids.js";
 import type { Scope } from "../tenancy/scope.js";
 
 /**
@@ -217,5 +218,101 @@ export async function setFindingStatus(
   ).then(async (id) => {
     if (!id) return null;
     return (await listFindingStates(scope)).find((f) => f.id === id) ?? null;
+  });
+}
+
+/** Worst first, for the cross-account list: exposure, then standing access, then cost. */
+const SEVERITY = ["exposed", "admin", "unused", "unguarded", "idle"] as const;
+
+export interface AccountFindings {
+  connectionId: string;
+  label: string;
+  accountId: string | null;
+  open: Record<FindingCategory, number>;
+}
+
+/**
+ * Open findings across every account in the tenant, from the tracked
+ * findings rather than each account's graph: one query however many accounts
+ * there are, and it already holds what every account's last scan saw.
+ */
+export async function findingsAcrossAccounts(
+  tenantId: TenantId,
+  opts: { category?: FindingCategory; limit: number },
+): Promise<{
+  accounts: AccountFindings[];
+  findings: {
+    id: string;
+    connectionId: string;
+    category: FindingCategory;
+    arn: string;
+    name: string;
+    kind: string;
+    reason: string | null;
+    firstSeenAt: string;
+  }[];
+}> {
+  return withTenant(tenantId, async () => {
+    const { rows: counts } = await db.execute<{
+      connection_id: string;
+      label: string;
+      account_id: string | null;
+      category: FindingCategory | null;
+      n: number;
+    }>(sql`
+      SELECT c.id AS connection_id, c.label, c.account_id, f.category, count(f.id)::int AS n
+        FROM connections c
+        LEFT JOIN findings f ON f.connection_id = c.id AND f.status = 'open'
+       WHERE c.tenant_id = ${tenantId} AND c.kind <> 'organization'
+       GROUP BY c.id, c.label, c.account_id, f.category
+       ORDER BY c.label`);
+    const accounts = new Map<string, AccountFindings>();
+    for (const r of counts) {
+      const account = accounts.get(r.connection_id) ?? {
+        connectionId: r.connection_id,
+        label: r.label,
+        accountId: r.account_id,
+        open: Object.fromEntries(FINDING_CATEGORIES.map((c) => [c, 0])) as Record<
+          FindingCategory,
+          number
+        >,
+      };
+      if (r.category) account.open[r.category] = r.n;
+      accounts.set(r.connection_id, account);
+    }
+
+    const rank = sql.raw(
+      `CASE category ${SEVERITY.map((c, i) => `WHEN '${c}' THEN ${i}`).join(" ")} ELSE 9 END`,
+    );
+    const { rows } = await db.execute<{
+      id: string;
+      connection_id: string;
+      category: FindingCategory;
+      resource_arn: string;
+      resource_name: string;
+      resource_kind: string;
+      reason: string | null;
+      first_seen_at: Date | string;
+    }>(sql`
+      SELECT id, connection_id, category, resource_arn, resource_name, resource_kind, reason,
+             first_seen_at
+        FROM findings
+       WHERE tenant_id = ${tenantId} AND status = 'open'
+         ${opts.category ? sql`AND category = ${opts.category}` : sql``}
+       ORDER BY ${rank}, first_seen_at, resource_arn
+       LIMIT ${opts.limit}`);
+    return {
+      accounts: [...accounts.values()],
+      findings: rows.map((r) => ({
+        id: r.id,
+        connectionId: r.connection_id,
+        category: r.category,
+        arn: r.resource_arn,
+        name: r.resource_name,
+        kind: r.resource_kind,
+        reason: r.reason,
+        firstSeenAt: new Date(r.first_seen_at).toISOString(),
+      })),
+    };
   });
 }

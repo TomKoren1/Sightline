@@ -224,6 +224,25 @@ export interface AuditEntry {
 /** A plain link rather than a fetch: the browser saves the file itself. */
 export const auditExportUrl = (format: "csv" | "json") => `/api/audit/export?format=${format}`;
 
+export interface AcrossAccounts {
+  accounts: {
+    connectionId: string;
+    label: string;
+    accountId: string | null;
+    open: Record<FindingCategory, number>;
+  }[];
+  findings: {
+    id: string;
+    connectionId: string;
+    category: FindingCategory;
+    arn: string;
+    name: string;
+    kind: string;
+    reason: string | null;
+    firstSeenAt: string;
+  }[];
+}
+
 export interface TenantHealth {
   id: string;
   name: string;
@@ -470,6 +489,7 @@ export const api = {
   // --- the team -------------------------------------------------------------
   team: () => get<Team>("/api/team"),
   apiTokens: () => get<{ tokens: ApiToken[] }>("/api/tokens"),
+  findingsAcrossAccounts: () => get<AcrossAccounts>("/api/findings/accounts"),
   operatorTenants: () => get<{ tenants: TenantHealth[] }>("/api/operator/tenants"),
   createApiToken: (input: { name: string; role: TeamRole; expiresInDays: number }) =>
     send<{ id: string; token: string; expiresAt: string | null }>("/api/tokens", asJson(input)),
