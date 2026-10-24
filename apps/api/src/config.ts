@@ -243,6 +243,11 @@ const schema = z.object({
    * Fixing that needs streaming collection, which this is not. What it does buy
    * is a clear message instead of a graph too large to query or render, and
    * that is worth having on its own.
+   *
+   * Measured, not guessed (load test, Oct 2026): peak heap 467 MiB at 50,000
+   * resources and 2,470 MiB at 150,000 - per-resource cost grows with size -
+   * so the worker's 2 GiB fits about 124,000. Raise this only together with
+   * the worker's memory limit in deploy/k8s/base/app.yaml.
    */
   MAX_RESOURCES_PER_SCAN: blankAsUnset(z.coerce.number().int().positive().default(100_000)),
 
