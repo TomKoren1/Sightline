@@ -239,5 +239,5 @@ function StatusDot({ status }: { status: string }) {
         : status === "running"
           ? "bg-accent"
           : "bg-danger";
-  return <span className={`h-1.5 w-1.5 rounded-full ${color}`} aria-label={status} />;
+  return <span className={`h-1.5 w-1.5 rounded-full ${color}`} role="img" aria-label={status} />;
 }

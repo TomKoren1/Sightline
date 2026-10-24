@@ -13,7 +13,7 @@
   --color-ink-800: #1c212b;
   --color-ink-700: #272d3a;
   --color-ink-600: #3a4354;
-  --color-ink-400: #6b7689;
+  --color-ink-400: #808b9e; /* 4.7:1 on ink-800, the lightest surface it sits on: WCAG AA */
   --color-ink-300: #98a3b6;
   --color-ink-100: #dfe5ee;
   --color-accent: #4d9fff;
@@ -26,6 +26,13 @@ html,
 body,
 #root {
   height: 100%;
+}
+
+/* A keyboard user must see where they are; the browser's own ring is near
+   invisible on this background. Pointer clicks show nothing (focus-visible). */
+:where(button, a, select, summary, [tabindex]):focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
 }
 
 body {
