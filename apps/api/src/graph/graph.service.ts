@@ -52,15 +52,30 @@ export class GraphService {
     return graph ? q.summariseAccount(graph) : EMPTY_SUMMARY;
   }
 
-  async graph(scope: Scope, params: { region?: string; kinds?: string; limit?: string }) {
+  async graph(
+    scope: Scope,
+    params: { region?: string; kinds?: string; limit?: string; group?: string },
+  ) {
     const graph = await graphScopeFor(scope);
-    if (!graph) return { nodes: [], edges: [] };
+    if (!graph) return { nodes: [], edges: [], total: 0, truncated: false };
     const kinds = params.kinds?.split(",").filter(Boolean);
     return q.fetchGraph(graph, {
       region: params.region,
       ...(kinds && kinds.length > 0 ? { kinds } : {}),
       limit: params.limit ? Number(params.limit) : undefined,
+      ...(params.group ? { group: params.group } : {}),
     });
+  }
+
+  async groups(scope: Scope) {
+    const graph = await graphScopeFor(scope);
+    return { groups: graph ? await q.graphGroups(graph) : [] };
+  }
+
+  async neighbours(scope: Scope, arn: string) {
+    const graph = await graphScopeFor(scope);
+    if (!graph) return { nodes: [], edges: [], total: 0, truncated: false };
+    return q.neighbourhood(graph, arn);
   }
 
   async resource(scope: Scope, arn: string) {

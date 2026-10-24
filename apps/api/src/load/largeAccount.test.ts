@@ -23,7 +23,7 @@ import { eq } from "drizzle-orm";
 import { INTERNET_ARN, type ScanResult } from "@sightline/shared";
 import { seed } from "@sightline/mock-aws";
 
-import { isMock, MOCK_EXTERNAL_ID } from "../config.js";
+import { cfg, isMock, MOCK_EXTERNAL_ID } from "../config.js";
 import * as q from "../db/graph.js";
 import { syncFindings } from "../db/findings.js";
 import { GraphService } from "../graph/graph.service.js";
@@ -119,7 +119,8 @@ beforeAll(async () => {
     skipReason = "AWS_MODE is not 'mock'; refusing to collect from a real account.";
     return;
   }
-  const endpoint = process.env["AWS_ENDPOINT_URL"] ?? "http://localhost:5000";
+  // Parsed config, not the environment: config removes the variable at import.
+  const endpoint = cfg.AWS_ENDPOINT_URL;
   const target = {
     connectionId,
     kind: "demo" as const,
@@ -282,6 +283,21 @@ describe.runIf(ENABLED)("a large account", () => {
   const QUERIES: [string, () => Promise<unknown>][] = [
     ["summary", () => q.summariseAccount(graph())],
     ["graph (500 nodes)", () => q.fetchGraph(graph(), { limit: 500 })],
+    ["graph groups (the large-account overview)", () => q.graphGroups(graph())],
+    [
+      "the largest group, findings first (300 nodes)",
+      async () => {
+        const [largest] = (await q.graphGroups(graph())).sort((a, b) => b.count - a.count);
+        return largest ? q.fetchGraph(graph(), { group: largest.id, limit: 300 }) : null;
+      },
+    ],
+    [
+      "a resource's neighbourhood",
+      async () => {
+        const db = annotated.resources.find((r) => r.kind === "RdsInstance");
+        return db ? q.neighbourhood(graph(), db.arn) : null;
+      },
+    ],
     ["public resources", () => q.findPublicResources(graph(), { limit: 50 })],
     ["admin principals", () => q.findAdminPrincipals(graph(), { limit: 50 })],
     ["idle", () => q.findIdleResources(graph(), { limit: 50 })],

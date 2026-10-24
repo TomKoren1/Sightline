@@ -33,10 +33,13 @@ export function ResourceDetail({
   arn,
   onClose,
   onSelect,
+  onExpand,
 }: {
   arn: string;
   onClose: () => void;
   onSelect: (arn: string) => void;
+  /** Add this resource and its neighbours to the graph on screen. */
+  onExpand?: (arn: string) => void;
 }) {
   const { data, isLoading, error } = useQuery({
     queryKey: ["resource", arn],
@@ -85,6 +88,14 @@ export function ResourceDetail({
 
         {resource && (
           <div className="space-y-3">
+            {onExpand && (
+              <button
+                onClick={() => onExpand(arn)}
+                className="rounded border border-ink-700 px-2 py-1 text-[11px] text-ink-300 transition hover:border-ink-600 hover:text-ink-100"
+              >
+                Show it and its neighbours in the graph
+              </button>
+            )}
             <div>
               <div className="mb-1 text-[10px] font-semibold uppercase tracking-wider text-ink-400">
                 ARN

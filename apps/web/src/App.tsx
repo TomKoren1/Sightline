@@ -7,7 +7,7 @@
  * like the same thing rather than two features.
  */
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { ReactFlowProvider } from "@xyflow/react";
 import type { ScanEvent, ScanUnit } from "@sightline/shared";
@@ -15,7 +15,9 @@ import type { ScanEvent, ScanUnit } from "@sightline/shared";
 import { api, can, selectConnection, startScan, watchScan } from "./api.js";
 import { captureJoinToken, clearJoin, pendingJoin } from "./join.js";
 import { Team } from "./components/Team.js";
-import type { ConnectionSummary } from "./api.js";
+import type { ConnectionSummary, GraphData } from "./api.js";
+import { GraphGroups } from "./components/GraphGroups.js";
+import { FOCUS, LARGE_ACCOUNT, mergeGraphs } from "./graphViews.js";
 import { DEFAULT_VISIBLE_KINDS, KIND_STYLES, styleFor } from "./kinds.js";
 import { Chat } from "./components/Chat.js";
 import { ConnectAccount } from "./components/ConnectAccount.js";
@@ -99,12 +101,39 @@ export function App() {
 
   // The graph and findings are meaningless before a scan, so they are not
   // fetched until there is one - which also keeps the empty state clean.
-  const graph = useQuery({
-    queryKey: ["graph", conn],
-    queryFn: () => api.graph(),
-    enabled: hasScan,
-  });
   const summary = useQuery({ queryKey: ["summary", conn], queryFn: api.summary, enabled: hasScan });
+  const totalResources = (summary.data?.byKind ?? []).reduce((sum, k) => sum + k.count, 0);
+  /**
+   * A large account opens on its groups rather than on everything, and is
+   * drawn a group, or a neighbourhood, at a time. `group` is which: null is
+   * the whole graph or the overview, FOCUS is only what has been expanded.
+   */
+  const large = totalResources > LARGE_ACCOUNT;
+  const [group, setGroup] = useState<string | null>(null);
+  const [expanded, setExpanded] = useState<GraphData[]>([]);
+  useEffect(() => {
+    setGroup(null);
+    setExpanded([]);
+  }, [conn]);
+  const graph = useQuery({
+    queryKey: ["graph", conn, group],
+    queryFn: () => api.graph(group ? { group, limit: 300 } : {}),
+    enabled: hasScan && summary.isSuccess && (!large || (group !== null && group !== FOCUS)),
+  });
+  const groups = useQuery({
+    queryKey: ["graph-groups", conn],
+    queryFn: api.graphGroups,
+    enabled: hasScan && large,
+  });
+  const shown = useMemo(() => mergeGraphs([graph.data, ...expanded]), [graph.data, expanded]);
+  const expand = useCallback(
+    async (arns: string[]) => {
+      const found = await Promise.all(arns.slice(0, 8).map((arn) => api.graphNeighbours(arn)));
+      if (large && group === null) setGroup(FOCUS);
+      setExpanded((prev) => [...prev, ...found]);
+    },
+    [large, group],
+  );
   const findings = useQuery({
     queryKey: ["findings", conn],
     queryFn: api.findings,
@@ -275,8 +304,9 @@ export function App() {
     return <SignIn providers={me.data.providers} invited={invited} />;
   }
 
-  const nodes = graph.data?.nodes ?? [];
-  const edges = graph.data?.edges ?? [];
+  const nodes = shown.nodes;
+  const edges = shown.edges;
+  const citedOutOfView = citedArns.filter((arn) => !nodes.some((n) => n.arn === arn));
   const presentKinds = [...new Set(nodes.map((n) => n.kind))].sort();
 
   return (
@@ -424,6 +454,20 @@ export function App() {
         <main className="relative min-w-0 flex-1">
           {!hasScan && !scanning ? (
             <EmptyState onScan={() => void runScan()} />
+          ) : large && group === null ? (
+            groups.data ? (
+              <GraphGroups
+                groups={groups.data.groups}
+                total={totalResources}
+                onOpen={setGroup}
+                cited={citedOutOfView.length}
+                onShowCited={() => void expand(citedOutOfView)}
+              />
+            ) : (
+              <div className="flex h-full items-center justify-center text-[12px] text-ink-400">
+                Loading groups…
+              </div>
+            )
           ) : graph.isLoading ? (
             <div className="flex h-full items-center justify-center text-[12px] text-ink-400">
               Loading graph…
@@ -459,12 +503,36 @@ export function App() {
 
           {hasScan && nodes.length > 0 && (
             <div className="absolute left-2.5 top-2.5 z-10 flex items-center gap-1.5">
+              {large && (
+                <button
+                  onClick={() => {
+                    setGroup(null);
+                    setExpanded([]);
+                  }}
+                  className="rounded border border-ink-700 bg-ink-850/95 px-2 py-1 text-[11px] text-ink-300 backdrop-blur transition hover:border-ink-600"
+                >
+                  ← All groups
+                </button>
+              )}
               <button
                 onClick={() => setShowFilters((v) => !v)}
                 className="rounded border border-ink-700 bg-ink-850/95 px-2 py-1 text-[11px] text-ink-300 backdrop-blur transition hover:border-ink-600"
               >
                 Filter ({visibleKinds.length}/{presentKinds.length})
               </button>
+              {shown.truncated && (
+                <span className="rounded bg-ink-850/95 px-2 py-1 text-[11px] text-warn backdrop-blur">
+                  {nodes.length} of {shown.total.toLocaleString()}, findings first
+                </span>
+              )}
+              {citedOutOfView.length > 0 && (
+                <button
+                  onClick={() => void expand(citedOutOfView)}
+                  className="rounded border border-accent/50 bg-accent/10 px-2 py-1 text-[11px] text-accent backdrop-blur"
+                >
+                  Show {citedOutOfView.length} cited
+                </button>
+              )}
               {citedArns.length > 0 && (
                 <button
                   onClick={() => setCitedArns([])}
@@ -529,6 +597,7 @@ export function App() {
               arn={selectedArn}
               onClose={() => setSelectedArn(null)}
               onSelect={setSelectedArn}
+              onExpand={(arn) => void expand([arn])}
             />
           </aside>
         )}

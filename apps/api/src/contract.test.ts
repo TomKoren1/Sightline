@@ -42,6 +42,15 @@ const node = z.object({
   region: z.string().nullable(),
 });
 
+const graphView = z
+  .object({
+    nodes: z.array(node),
+    edges: z.array(z.object({ from: z.string(), to: z.string(), type: z.string() })),
+    total: z.number(),
+    truncated: z.boolean(),
+  })
+  .strict();
+
 const scan = z.object({
   id: z.string(),
   accountId: z.string(),
@@ -211,14 +220,37 @@ const CONTRACTS: Contract[] = [
     method: "GET",
     route: "/api/graph",
     url: "/api/graph?limit=5",
+    responses: { 200: graphView },
+  },
+  {
+    method: "GET",
+    route: "/api/graph/groups",
+    url: "/api/graph/groups",
     responses: {
       200: z
         .object({
-          nodes: z.array(node),
-          edges: z.array(z.object({ from: z.string(), to: z.string(), type: z.string() })),
+          groups: z.array(
+            z
+              .object({
+                id: z.string().regex(/^(vpc|kind):/),
+                name: z.string(),
+                region: z.string().nullable(),
+                count: z.number(),
+                publicCount: z.number(),
+                adminCount: z.number(),
+                kinds: z.record(z.string(), z.number()),
+              })
+              .strict(),
+          ),
         })
         .strict(),
     },
+  },
+  {
+    method: "GET",
+    route: "/api/graph/neighbours",
+    url: `/api/graph/neighbours?arn=${encodeURIComponent(UNKNOWN_ARN)}`,
+    responses: { 200: graphView },
   },
   {
     method: "GET",

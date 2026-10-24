@@ -44,7 +44,7 @@ export class GraphController {
   @Get("graph")
   fetchGraph(
     @CurrentScope() scope: Scope,
-    @Query() query: { region?: string; kinds?: string; limit?: string },
+    @Query() query: { region?: string; kinds?: string; limit?: string; group?: string },
   ) {
     /**
      * A limit that is not a number is refused, not guessed at.
@@ -62,6 +62,19 @@ export class GraphController {
       });
     }
     return this.graph.graph(scope, query);
+  }
+
+  /** The groups a large account is browsed by: its VPCs, then kinds outside one. */
+  @Get("graph/groups")
+  graphGroups(@CurrentScope() scope: Scope) {
+    return this.graph.groups(scope);
+  }
+
+  /** One resource and its direct neighbours, to expand the view around it. */
+  @Get("graph/neighbours")
+  neighbours(@CurrentScope() scope: Scope, @Query("arn") arn: string | undefined) {
+    if (!arn) throw new BadRequestException({ error: "arn is required" });
+    return this.graph.neighbours(scope, arn);
   }
 
   @Get("resources/:arn")

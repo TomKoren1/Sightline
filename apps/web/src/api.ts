@@ -22,6 +22,25 @@ export interface GraphEdge {
   ports?: string | null;
 }
 
+export interface GraphData {
+  nodes: GraphNode[];
+  edges: GraphEdge[];
+  /** Every node that matched; `nodes` is capped. */
+  total: number;
+  truncated: boolean;
+}
+
+/** A VPC, or a kind of resource that lives outside one, with what is in it. */
+export interface GraphGroup {
+  id: string;
+  name: string;
+  region: string | null;
+  count: number;
+  publicCount: number;
+  adminCount: number;
+  kinds: Record<string, number>;
+}
+
 export interface Summary {
   byKind: { kind: string; count: number }[];
   byRegion: { region: string; count: number }[];
@@ -355,13 +374,17 @@ export const api = {
       ...asJson(body),
       method: "PATCH",
     }),
-  graph: (params: { region?: string; kinds?: string[] } = {}) => {
+  graph: (params: { region?: string; kinds?: string[]; group?: string; limit?: number } = {}) => {
     const search = new URLSearchParams();
     if (params.region) search.set("region", params.region);
     if (params.kinds?.length) search.set("kinds", params.kinds.join(","));
-    search.set("limit", "500");
-    return get<{ nodes: GraphNode[]; edges: GraphEdge[] }>(`/api/graph?${search}`);
+    if (params.group) search.set("group", params.group);
+    search.set("limit", String(params.limit ?? 500));
+    return get<GraphData>(`/api/graph?${search}`);
   },
+  graphGroups: () => get<{ groups: GraphGroup[] }>("/api/graph/groups"),
+  graphNeighbours: (arn: string) =>
+    get<GraphData>(`/api/graph/neighbours?arn=${encodeURIComponent(arn)}`),
   diff: () => get<{ diff: ScanDiff | null; reason?: string }>("/api/scans/diff"),
 
   checks: () => get<{ checks: Omit<CheckResult, "passed" | "detail">[] }>("/api/evals/checks"),

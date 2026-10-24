@@ -190,6 +190,12 @@ const CALLS: Record<string, (f: Fixture) => Promise<unknown>> = {
   pageOf: (f) => queries.pageOf("searchResources", f.scope, { text: "-db" }),
   summariseAccount: (f) => queries.summariseAccount(f.scope),
   fetchGraph: (f) => queries.fetchGraph(f.scope, {}),
+  graphGroups: (f) => queries.graphGroups(f.scope),
+  neighbourhood: (f) =>
+    queries.neighbourhood(
+      f.scope,
+      f.arns.find((arn) => arn.includes(":role/"))!,
+    ),
 };
 
 /**
@@ -201,7 +207,7 @@ const CALLS: Record<string, (f: Fixture) => Promise<unknown>> = {
  * which checks the numbers against the fixture. Listed explicitly rather than
  * detected, so a query cannot drift into this exemption unnoticed.
  */
-const AGGREGATES = new Set(["summariseAccount"]);
+const AGGREGATES = new Set(["summariseAccount", "graphGroups"]);
 
 /** Every string anywhere in a result, however deeply nested. */
 function strings(value: unknown, into: string[] = []): string[] {
@@ -332,6 +338,13 @@ describe.runIf(HAS_INFRA)("tenant isolation in the graph", () => {
       a.names.instance,
       a.names.database,
     ]);
+  });
+
+  it("groups only one tenant's resources", async () => {
+    if (!available) return;
+    const groups = await queries.graphGroups(a.scope);
+    // The internet and account nodes are not grouped; the other five are.
+    expect(groups.reduce((sum, g) => sum + g.count, 0)).toBe(5);
   });
 
   it("counts only one tenant's resources", async () => {

@@ -16,7 +16,7 @@
  * so a scan id from the wrong tenant returns nothing twice over.
  */
 
-import { sql } from "drizzle-orm";
+import { sql, type SQL } from "drizzle-orm";
 import { INTERNET_ARN, type Relationship, type Resource } from "@sightline/shared";
 
 import { clamp, flag, read, type GraphScope, type ResourceRow } from "./graphRead.js";
@@ -167,40 +167,163 @@ export async function summariseAccount(scope: GraphScope) {
 }
 
 /** The graph, for the frontend to lay out. */
-export async function fetchGraph(
-  scope: GraphScope,
-  params: { region?: string; kinds?: string[]; limit?: number } = {},
-) {
-  const region = params.region ?? null;
-  const kinds = params.kinds ? JSON.stringify(params.kinds) : null;
-  const nodes = await read<ResourceRow>(
-    scope,
-    (r) => sql`
-    SELECT arn, kind, name, region,
-           ${flag("r", "isPublic")} AS "isPublic",
-           ${flag("r", "isAdmin")} AS "isAdmin",
-           ${flag("r", "isIdle")} AS "isIdle",
-           ${flag("r", "isUnprotected")} AS "isUnprotected",
-           (derived->>'estimatedMonthlyCostUsd')::float8 AS "estimatedMonthlyCostUsd",
-           coalesce(derived->>'publicReason', derived->>'adminReason',
-                    derived->>'idleReason', derived->>'unprotectedReason') AS reason
-      FROM ${r} r
-     WHERE (${region}::text IS NULL OR region = ${region} OR region IS NULL)
-       AND (${kinds}::jsonb IS NULL OR ${kinds}::jsonb ? kind)
-     ORDER BY kind, name
-     LIMIT ${clamp(params.limit, 500)}`,
-  );
+/** The node columns every graph read returns. */
+const nodeColumns = sql.raw(`r.arn, r.kind, r.name, r.region,
+           (r.derived->>'isPublic')::boolean AS "isPublic",
+           (r.derived->>'isAdmin')::boolean AS "isAdmin",
+           (r.derived->>'isIdle')::boolean AS "isIdle",
+           (r.derived->>'isUnprotected')::boolean AS "isUnprotected",
+           (r.derived->>'estimatedMonthlyCostUsd')::float8 AS "estimatedMonthlyCostUsd",
+           coalesce(r.derived->>'publicReason', r.derived->>'adminReason',
+                    r.derived->>'idleReason', r.derived->>'unprotectedReason') AS reason`);
 
-  const arns = JSON.stringify(nodes.map((n) => n.arn));
-  const edges = await read<{ from: string; to: string; type: string; ports: string | null }>(
+/** Findings first, so a capped view of a large group shows what matters. */
+const findingsFirst = sql.raw(`coalesce((r.derived->>'isPublic')::boolean, false) DESC,
+           coalesce((r.derived->>'isAdmin')::boolean, false) DESC, r.kind, r.name`);
+
+/**
+ * Which VPC each resource is in: directly (IN_VPC), through its subnet, or -
+ * for a VPC - itself. Everything else is grouped by kind.
+ */
+const membership = (r: SQL, e: SQL) => sql`
+  SELECT DISTINCT ON (r.arn) r.arn,
+         CASE WHEN coalesce(v.to_arn, sv.to_arn, CASE WHEN r.kind = 'Vpc' THEN r.arn END) IS NOT NULL
+              THEN 'vpc:' || coalesce(v.to_arn, sv.to_arn, r.arn)
+              ELSE 'kind:' || r.kind END AS "group"
+    FROM ${r} r
+    LEFT JOIN ${e} v ON v.from_arn = r.arn AND v.rel_type = 'IN_VPC'
+    LEFT JOIN ${e} s ON s.from_arn = r.arn AND s.rel_type = 'IN_SUBNET'
+    LEFT JOIN ${e} sv ON sv.from_arn = s.to_arn AND sv.rel_type = 'IN_VPC'
+   WHERE r.kind NOT IN ('Internet', 'Region', 'Account')
+   ORDER BY r.arn`;
+
+async function edgesAmong(scope: GraphScope, arns: string[]) {
+  const list = JSON.stringify(arns);
+  return read<{ from: string; to: string; type: string; ports: string | null }>(
     scope,
     (_r, e) => sql`
       SELECT from_arn AS "from", to_arn AS "to", rel_type AS type, properties->>'ports' AS ports
         FROM ${e} e
-       WHERE ${arns}::jsonb ? from_arn AND ${arns}::jsonb ? to_arn
-       LIMIT 2000`,
+       WHERE ${list}::jsonb ? from_arn AND ${list}::jsonb ? to_arn
+       LIMIT 4000`,
   );
-  return { nodes, edges };
+}
+
+export interface GraphView {
+  nodes: ResourceRow[];
+  edges: { from: string; to: string; type: string; ports: string | null }[];
+  /** Every node that matched, of which `nodes` is at most `limit`. */
+  total: number;
+  truncated: boolean;
+}
+
+/**
+ * The graph, or one group of it (`vpc:<arn>` or `kind:<Kind>`). Capped, and
+ * says so: an account of fifty thousand resources is read a group at a time.
+ */
+export async function fetchGraph(
+  scope: GraphScope,
+  params: { region?: string; kinds?: string[]; limit?: number; group?: string } = {},
+): Promise<GraphView> {
+  const region = params.region ?? null;
+  const kinds = params.kinds ? JSON.stringify(params.kinds) : null;
+  const group = params.group ?? null;
+  const limit = clamp(params.limit, 500);
+  const nodes = await read<ResourceRow & { total: number }>(
+    scope,
+    (r, e) => sql`
+    WITH m AS (${membership(r, e)})
+    SELECT ${nodeColumns}, count(*) OVER ()::int AS total
+      FROM ${r} r
+      LEFT JOIN m ON m.arn = r.arn
+     WHERE (${region}::text IS NULL OR r.region = ${region} OR r.region IS NULL)
+       AND (${kinds}::jsonb IS NULL OR ${kinds}::jsonb ? r.kind)
+       AND (${group}::text IS NULL OR m."group" = ${group}
+            OR (r.kind = 'Internet' AND EXISTS (
+                  SELECT 1 FROM ${e} x JOIN m mm ON mm.arn = x.to_arn
+                   WHERE x.from_arn = r.arn AND mm."group" = ${group})))
+     ORDER BY ${group === null ? sql.raw("r.kind, r.name") : findingsFirst}
+     LIMIT ${limit}`,
+  );
+  const total = nodes[0]?.total ?? 0;
+  const rows = nodes.map(({ total: _t, ...n }) => n);
+  return {
+    nodes: rows,
+    edges: await edgesAmong(
+      scope,
+      rows.map((n) => n.arn),
+    ),
+    total,
+    truncated: total > rows.length,
+  };
+}
+
+/** The groups a large account is browsed by: each VPC, then each kind outside one. */
+export async function graphGroups(scope: GraphScope) {
+  return read<{
+    id: string;
+    name: string;
+    region: string | null;
+    count: number;
+    publicCount: number;
+    adminCount: number;
+    kinds: Record<string, number>;
+  }>(
+    scope,
+    (r, e) => sql`
+    WITH m AS (${membership(r, e)}),
+    per AS (
+      SELECT m."group", r.kind, count(*)::int AS n,
+             count(*) FILTER (WHERE (r.derived->>'isPublic')::boolean)::int AS pub,
+             count(*) FILTER (WHERE (r.derived->>'isAdmin')::boolean)::int AS adm
+        FROM m JOIN ${r} r ON r.arn = m.arn
+       GROUP BY m."group", r.kind
+    )
+    SELECT per."group" AS id,
+           coalesce(v.name, substr(per."group", 6)) AS name,
+           v.region,
+           sum(per.n)::int AS count,
+           sum(per.pub)::int AS "publicCount",
+           sum(per.adm)::int AS "adminCount",
+           jsonb_object_agg(per.kind, per.n) AS kinds
+      FROM per
+      LEFT JOIN ${r} v ON per."group" = 'vpc:' || v.arn
+     GROUP BY per."group", v.name, v.region
+     ORDER BY (per."group" LIKE 'vpc:%') DESC, sum(per.pub) DESC, sum(per.n) DESC`,
+  );
+}
+
+/** One resource and everything directly joined to it, for expanding a view. */
+export async function neighbourhood(
+  scope: GraphScope,
+  arn: string,
+  limit = 60,
+): Promise<GraphView> {
+  const cap = clamp(limit, 60);
+  const nodes = await read<ResourceRow & { total: number }>(
+    scope,
+    (r, e) => sql`
+    WITH near AS (
+      SELECT ${arn}::text AS arn
+      UNION SELECT to_arn FROM ${e} e WHERE e.from_arn = ${arn} AND e.rel_type <> 'IN_REGION'
+      UNION SELECT from_arn FROM ${e} e WHERE e.to_arn = ${arn} AND e.rel_type <> 'IN_REGION'
+    )
+    SELECT ${nodeColumns}, count(*) OVER ()::int AS total
+      FROM ${r} r JOIN near ON near.arn = r.arn
+     ORDER BY (r.arn = ${arn}) DESC, ${findingsFirst}
+     LIMIT ${cap}`,
+  );
+  const total = nodes[0]?.total ?? 0;
+  const rows = nodes.map(({ total: _t, ...n }) => n);
+  return {
+    nodes: rows,
+    edges: await edgesAmong(
+      scope,
+      rows.map((n) => n.arn),
+    ),
+    total,
+    truncated: total > rows.length,
+  };
 }
 
 // --- Paths ------------------------------------------------------------------
