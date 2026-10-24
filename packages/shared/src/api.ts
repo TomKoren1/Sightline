@@ -78,6 +78,7 @@ export const summary = z
 export type Summary = z.infer<typeof summary>;
 
 export const searchResults = z.object({ results: z.array(graphNode) }).strict();
+export type SearchResults = z.infer<typeof searchResults>;
 
 // --- findings ----------------------------------------------------------------
 

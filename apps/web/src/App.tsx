@@ -29,6 +29,7 @@ import { Findings } from "./components/Findings.js";
 import { GraphView } from "./components/GraphView.js";
 import { LegalPage, legalPathFor } from "./components/LegalPage.js";
 import { ResourceDetail } from "./components/ResourceDetail.js";
+import { ResourceSearch } from "./components/ResourceSearch.js";
 import { ScanBanner } from "./components/ScanBanner.js";
 import { useScanSession } from "./hooks/useScanSession.js";
 import { useAccountGraph } from "./hooks/useAccountGraph.js";
@@ -324,6 +325,14 @@ export function App() {
           aria-label="Findings"
           className="flex w-72 shrink-0 flex-col overflow-hidden border-r border-ink-800 bg-ink-900"
         >
+          {hasScan && (
+            <ResourceSearch
+              onPick={(arn) => {
+                setSelectedArn(arn);
+                setCitedArns([arn]);
+              }}
+            />
+          )}
           <Findings
             summary={summary.data}
             findings={findings.data}
