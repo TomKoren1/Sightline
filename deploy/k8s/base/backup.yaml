@@ -79,6 +79,10 @@ spec:
                       # Optional: a deployment with no Pushgateway simply does
                       # not push, and the alert on staleness is what notices.
                       { name: sightline-config, key: PUSHGATEWAY_URL, optional: true }
+                # Part of the push's grouping key, so prod and staging each keep
+                # their own timestamp instead of overwriting one shared series.
+                - name: POD_NAMESPACE
+                  valueFrom: { fieldRef: { fieldPath: metadata.namespace } }
               command: ["/bin/sh", "-eu", "-c"]
               args:
                 - |
@@ -155,7 +159,7 @@ spec:
                       "sightline_backup_size_bytes $size" > /tmp/backup.prom
 
                     wget -q -O- --post-file=/tmp/backup.prom \
-                      "${PUSHGATEWAY_URL}/metrics/job/sightline_backup" \
+                      "${PUSHGATEWAY_URL}/metrics/job/sightline_backup/namespace/${POD_NAMESPACE}" \
                       || echo "backup written, but the pushgateway did not accept it" >&2
                   fi
               volumeMounts:

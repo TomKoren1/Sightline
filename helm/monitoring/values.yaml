@@ -92,6 +92,16 @@ grafana:
 
 prometheus:
   enabled: true
+  # Where the backup CronJob reports its last success. Persisted, because the
+  # metric is pushed once a night: an in-memory Pushgateway that restarted
+  # would hold nothing until the next backup, and SightlineBackupStale would
+  # fire on a backup that is fine.
+  prometheus-pushgateway:
+    persistentVolume:
+      enabled: true
+      size: 100Mi
+    extraArgs:
+      - --persistence.file=/data/pushgateway.data
   server:
     service:
       type: ClusterIP
@@ -227,14 +237,14 @@ prometheus:
               # that never ran at all - which is how it failed once, sitting in
               # ContainerCreating for thirty hours with nothing looking broken.
               expr: |
-                absent(sightline_backup_last_success_timestamp_seconds)
+                absent(sightline_backup_last_success_timestamp_seconds{namespace="sightline"})
                 or time() - sightline_backup_last_success_timestamp_seconds > 129600
               for: 1h
               labels:
                 severity: critical
                 service: sightline
               annotations:
-                summary: "No successful Sightline backup in 36 hours"
+                summary: "No successful Sightline backup in 36 hours ({{ $labels.namespace }})"
                 description: "The nightly pg_dump has not reported success. An untested, absent backup means every customer redeploys their CloudFormation stack if Postgres is lost."
 
             - alert: SightlineOOMKilled
