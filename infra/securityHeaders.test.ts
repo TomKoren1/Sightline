@@ -38,6 +38,6 @@ describe("nginx security headers", () => {
 
   it("declares no add_header inside a location, which would drop them all there", () => {
     const locations = conf.split(/\n\s*location /).slice(1);
-    expect(locations.filter((l) => /add_header/.test(l.split(/\n\s*}\n/)[0]!))).toEqual([]);
+    expect(locations.filter((l) => l.split(/\n\s*}\n/)[0]!.includes("add_header"))).toEqual([]);
   });
 });
