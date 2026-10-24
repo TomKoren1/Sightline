@@ -147,6 +147,72 @@ One guard is registered globally and a route escapes it only by saying
 omit with nothing failing, whereas forgetting here makes the route refuse. Both
 directions are asserted against the **real** Fastify route table.
 
+### Roles inside a workspace
+
+Each member has one role: viewer, member, admin or owner. Viewers read and ask
+questions, members also run scans and accept findings, admins also connect
+accounts and manage the team, and owners also delete the workspace and make
+owners. The same global guard enforces them. A state-changing route that names
+no role needs `member`, so a new route is protected unless it says otherwise,
+and a test holds every mutating route in the real route table to a declared
+role. A workspace always keeps an owner. People join by a single-use invite link
+that lasts a week, whose token is stored only as a hash, and every invite, join,
+role change and removal is written to the audit log.
+
+### The audit log
+
+Every sign-in and every successful change - a scan, a connection, an accepted
+finding, a question, a sign-out - is recorded with who made it, from which
+address, the route and its parameters, and the status. Request bodies are not
+recorded. It is written by a global interceptor, so a new route cannot leave it
+out, and it is append-only for the database role requests run as: that role may
+insert and read, and cannot update, delete or truncate it. Admins read it under
+Team, Activity, and download it as CSV or JSON from `GET /api/audit/export`.
+The CSV defuses cells a spreadsheet would run as formulas.
+
+### Alert webhooks
+
+An admin can give a workspace one webhook - Slack, Teams workflows or
+Mattermost - and each scan that opens new exposed or admin findings posts a
+short summary to it: counts, up to five names and kinds, and a link. Nothing
+else from the inventory is sent. The URL is a secret (a Slack webhook URL is its
+own credential), so it is encrypted at rest like an ExternalId and never
+returned: the UI shows only its host.
+
+Because the address is the tenant's, the request is one a tenant could aim at
+the cluster. So a webhook must be https, cannot name localhost or a cluster or
+private address, and every address its name resolves to is checked again inside
+the socket's own lookup at the moment of sending - a name that resolved public
+when saved and private when used (DNS rebinding) is still refused. Redirects
+are not followed; each delivery is one attempt with a five-second limit, and
+its outcome is shown beside the webhook. Changing it needs a signed-in admin,
+not an API token.
+
+### API tokens
+
+For scripts and CI, an admin makes a token under Team, API tokens, and it is
+sent as `Authorization: Bearer slt_…`:
+
+```bash
+curl -H "Authorization: Bearer $SIGHTLINE_TOKEN" https://sightline.example/api/v1/findings
+curl -X POST -H "Authorization: Bearer $SIGHTLINE_TOKEN" https://sightline.example/api/v1/scans
+```
+
+Scripts use `/api/v1/...`, the versioned prefix: the same routes as the `/api/...` the UI calls, and the one a breaking change will not touch - that gets `/api/v2`. A token is shown once and stored as a SHA-256 hash. It acts for the person who
+made it, at the lesser of its own role and theirs at the time of each request,
+so demoting someone demotes their tokens and removing them deletes them. It can
+be at most an admin, expires after 30, 90 or 365 days, and cannot manage
+tokens, the team, sessions or the account - a leaked one can read and scan, not
+entrench itself. A request carrying a token needs no `X-Sightline-Request`
+header, because a browser never attaches one to a request another site makes;
+and a bad token is refused outright, never retried as the cookie beside it.
+
+Deleting the account and disconnecting an AWS account also need a sign-in from the last 10 minutes, not only a live session: a laptop left open, or a session stolen last week, cannot destroy a workspace, and no token can do either. Everyone can see their own sessions under Team and sign any of them out.
+
+Rate limits key on a credential only once the guard has accepted it. Before
+that change, sending a made-up session cookie with each request earned a fresh
+allowance every time.
+
 A self-hosted clone has no sign-in, deliberately: it is one operator reading
 their own account, and the `api` service publishes no host port — it is reachable
 only through the `web` container. Publishing port 3000 yourself would expose the
@@ -154,8 +220,10 @@ graph to anyone who can reach it.
 
 ## Deleting an account
 
-`DELETE /api/me`, confirmed by typing the account's own email address. It
-deletes the tenant row, which cascades to every scan, snapshot (the graph is
+`DELETE /api/me`, confirmed by typing the account's own email address. When
+other people are in the workspace it deletes only the caller, who leaves; the
+last owner is refused until someone else is an owner. When the caller is alone
+it deletes the tenant row, which cascades to every scan, snapshot (the graph is
 those snapshots), conversation, connection and encrypted ExternalId — including
 the tenant's own audit trail, which is the right answer to a deletion request.
 
@@ -171,9 +239,15 @@ can, and until they do, the role it created still exists.
   server** will answer cross-origin requests; `drizzle-kit` never starts one —
   it is a CLI that generates migration SQL — so the vulnerable code path is not
   reached. An npm `overrides` entry does not help: the tilde pin means npm
-  records the override and keeps 0.18.20 anyway. `npm audit --omit=dev` reports
-  **zero** vulnerabilities, which is the number that describes what runs in
-  production.
+  records the override and keeps 0.18.20 anyway.
+- **One low advisory in production, held deliberately.** Fastify 5.12.5
+  (GHSA-389g-gv7q-r4x8) lets a request bypass a route's JSON-schema header
+  validation with differently-cased names. This application validates no headers
+  with Fastify schemas - request validation is zod - so the path is not reached.
+  The fix is in `@nestjs/platform-fastify` 12.2, which pins Fastify exactly and
+  needs `@nestjs/core` 12.2; both are days old, and are taken once they are not.
+  Every other production advisory was fixed on 2026-10-24, including zod's
+  high-severity memory exhaustion (moved to zod 4) and undici's.
 - **The policy analyser is not a complete IAM evaluator.** It models identity
   policies, explicit Deny, permissions boundaries and known escalation paths, but
   not service control policies, session policies or resource policies, so

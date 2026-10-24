@@ -45,9 +45,17 @@ export function AccountSwitcher({
 }) {
   const [open, setOpen] = useState(false);
 
-  // No header sent means the server picks the oldest, so that is what is shown
-  // as selected rather than leaving the control blank.
-  const selected = connections.find((c) => c.id === selectedId) ?? connections[0] ?? null;
+  // No header sent means the server picks the oldest account, so that is what
+  // is shown as selected rather than leaving the control blank. An
+  // organization holds no inventory of its own, so it is never the selection
+  // unless it is all there is yet.
+  const accounts = connections.filter((c) => c.kind !== "organization");
+  const selected =
+    accounts.find((c) => c.id === selectedId) ?? accounts[0] ?? connections[0] ?? null;
+  // Each organization followed by the accounts it found.
+  const ordered = connections
+    .filter((c) => !c.parentId)
+    .flatMap((c) => [c, ...connections.filter((child) => child.parentId === c.id)]);
 
   if (!selected) {
     return (
@@ -83,7 +91,7 @@ export function AccountSwitcher({
           {/* Clicking anywhere else closes it, without a global listener. */}
           <div className="fixed inset-0 z-10" onClick={() => setOpen(false)} aria-hidden />
           <div className="absolute left-0 top-full z-20 mt-1 w-72 overflow-hidden rounded border border-ink-700 bg-ink-850 shadow-lg">
-            {connections.map((connection) => (
+            {ordered.map((connection) => (
               /*
                 A row rather than a single button, because it carries two
                 actions now and a button inside a button is invalid markup -
@@ -97,16 +105,25 @@ export function AccountSwitcher({
                 }`}
               >
                 <button
+                  disabled={connection.kind === "organization"}
                   onClick={() => {
                     setOpen(false);
                     if (connection.id !== selected.id) onSelect(connection.id);
                   }}
-                  className="flex min-w-0 flex-1 flex-col items-start gap-0.5 px-2.5 py-1.5 text-left"
+                  className={`flex min-w-0 flex-1 flex-col items-start gap-0.5 py-1.5 text-left disabled:cursor-default ${
+                    connection.parentId ? "pl-6 pr-2.5" : "px-2.5"
+                  }`}
                 >
                   <span className="flex w-full items-center gap-1.5">
                     <span className="text-[11px] text-ink-100">{connection.label}</span>
                     {connection.kind === "demo" && (
                       <span className="rounded bg-ink-700 px-1 text-[10px] text-ink-300">demo</span>
+                    )}
+                    {connection.kind === "organization" && (
+                      <span className="rounded bg-ink-700 px-1 text-[10px] text-ink-300">
+                        organization ·{" "}
+                        {connections.filter((c) => c.parentId === connection.id).length} accounts
+                      </span>
                     )}
                     {connection.id === selected.id && (
                       <span className="ml-auto text-[10px] text-accent">current</span>

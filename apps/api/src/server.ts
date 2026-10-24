@@ -1,15 +1,17 @@
 /** HTTP server: builds the app, migrates, listens. */
 
 import { buildApp } from "./app.js";
-import { cfg, migrateOnBoot, scanWorkerMode } from "./config.js";
+import { startTracing, stopTracing } from "./observability/tracing.js";
+import { cfg, migrateOnBoot, scanWorkerMode } from "./core/config.js";
 import { assertSchemaCurrent, connectedAsOwner, migrate, closePool } from "./db/postgres.js";
 import { apiPrivilegeWarnings, assertHostedInvariants } from "./hostedMode.js";
+import { watchCertificate } from "./aws/certificateWatch.js";
 import { ScanWorker } from "./jobs/worker.js";
 import { ensureLocalTenant } from "./tenancy/local.js";
 import { pruneExpiredSessions } from "./auth/session.js";
 import { recordBuild, startMetricsServer } from "./observability/metrics.js";
-import { startSnapshotLoop } from "./observability/snapshot.js";
-import { VERSION } from "./version.js";
+import { startSnapshotLoop } from "./jobs/snapshot.js";
+import { VERSION } from "./core/version.js";
 
 /**
  * Before anything else, and before the app is even built.
@@ -20,6 +22,7 @@ import { VERSION } from "./version.js";
  * ready, which is what a cluster should see.
  */
 assertHostedInvariants();
+await startTracing("sightline-api", VERSION);
 
 const app = await buildApp();
 // Fastify's logger, reached through the adapter: Nest's own logger is kept to
@@ -57,6 +60,7 @@ try {
   })) {
     log.warn(warning);
   }
+  watchCertificate(log);
   // A clone is one tenant with two connections. No-op in hosted mode, where
   // tenants arrive by signing up.
   await ensureLocalTenant();
@@ -119,6 +123,7 @@ for (const signal of ["SIGINT", "SIGTERM"] as const) {
         // than the process having been asked to stop.
         await worker.stop();
         await app.close();
+        await stopTracing();
         await closePool();
         process.exit(0);
       } catch (err) {

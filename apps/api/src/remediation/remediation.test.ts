@@ -17,7 +17,8 @@
 import { describe, expect, it } from "vitest";
 import { shellQuote } from "@sightline/shared";
 
-import { remediationsFor, type RemediationInput } from "./remediation.js";
+import { remediationsFor } from "./remediation.js";
+import { type RemediationInput } from "./input.js";
 
 const ADMIN_DOC = { Statement: [{ Effect: "Allow", Action: "*", Resource: "*" }] };
 
@@ -466,5 +467,62 @@ describe("IAM remediation targets the policy that grants admin", () => {
     );
     const escalation = out.find((r) => r.id === "iam-escalation");
     expect(escalation?.summary).toContain("iam:PassRole + ec2:RunInstances");
+  });
+});
+
+describe("unused access", () => {
+  it("deactivates only the stale key, and never deletes it", () => {
+    const out = remediationsFor(
+      resource({
+        arn: "arn:aws:iam::111111111111:user/ci",
+        kind: "IamUser",
+        name: "ci",
+        region: null,
+        properties: {
+          credentials: {
+            passwordEnabled: false,
+            accessKeys: [
+              { slot: 1, active: true },
+              { slot: 2, active: true },
+            ],
+          },
+        },
+        derived: { isUnused: true, unusedReason: "Active access key 2 last used 200 days ago" },
+      }),
+    );
+    expect(out.map((r) => r.id)).toEqual(["iam-deactivate-stale-keys"]);
+    expect(out[0]!.title).toBe("Deactivate the unused access key");
+    expect(out[0]!.cli.join("\n")).toContain("--status Inactive");
+    expect(out[0]!.cli.join("\n")).not.toContain("delete-access-key");
+  });
+
+  it("removes a role's policies before the role, by name", () => {
+    const out = remediationsFor(
+      resource({
+        arn: "arn:aws:iam::111111111111:role/old-deploy",
+        kind: "IamRole",
+        name: "old-deploy",
+        region: null,
+        properties: {
+          attachedPolicies: [{ policyArn: "arn:aws:iam::aws:policy/ReadOnlyAccess" }],
+          inlinePolicies: [{ policyName: "extra" }],
+        },
+        derived: { isUnused: true, unusedReason: "Role never used in the 400 days" },
+      }),
+    );
+    const cli = out.find((r) => r.id === "iam-delete-unused-role")!.cli;
+    const at = (text: string) => cli.findIndex((line) => line.startsWith(text));
+    expect(at("aws iam detach-role-policy")).toBeLessThan(at("aws iam delete-role "));
+    expect(
+      at("aws iam delete-role-policy --role-name old-deploy --policy-name extra"),
+    ).toBeGreaterThan(-1);
+    expect(at("aws iam get-role")).toBe(1);
+  });
+
+  it("offers nothing for a role that is in use", () => {
+    const out = remediationsFor(
+      resource({ kind: "IamRole", name: "live", region: null, derived: { isUnused: false } }),
+    );
+    expect(out.filter((r) => r.addresses === "unused")).toEqual([]);
   });
 });

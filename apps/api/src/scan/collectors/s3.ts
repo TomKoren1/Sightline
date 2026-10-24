@@ -27,7 +27,7 @@ import type { Relationship, Resource } from "@sightline/shared";
 
 import { s3Client } from "../../aws/clients.js";
 import { regionArn, s3Arn, tagsToRecord } from "../../aws/arns.js";
-import { cfg } from "../../config.js";
+import { cfg } from "../../core/config.js";
 import { runWithConcurrency } from "../limiter.js";
 import type { CollectorContext, CollectorOutput } from "./types.js";
 import { errorMessage } from "@sightline/shared";

@@ -17,7 +17,7 @@ import { CallHandler, ExecutionContext, Injectable, NestInterceptor } from "@nes
 import { defaultIfEmpty, firstValueFrom, from, type Observable } from "rxjs";
 
 import { withTenant } from "../db/postgres.js";
-import type { AuthedRequest } from "../auth/auth.guard.js";
+import type { AuthedRequest } from "../core/request.js";
 
 @Injectable()
 export class TenantScopeInterceptor implements NestInterceptor {

@@ -15,7 +15,7 @@
 import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
 import { and, eq, lt, sql } from "drizzle-orm";
 
-import { cfg, useSecureCookies } from "../config.js";
+import { cfg, useSecureCookies } from "../core/config.js";
 /**
  * `system`, not `db`, throughout this file.
  *
@@ -32,18 +32,10 @@ import { cfg, useSecureCookies } from "../config.js";
  */
 import { system } from "../db/postgres.js";
 import { sessions, tenants, users } from "../db/schema.js";
-import { asTenantId, type TenantId } from "../tenancy/ids.js";
+import { asTenantId } from "../core/ids.js";
+import type { Session } from "../core/request.js";
 
 export const SESSION_COOKIE = "sightline_session";
-
-export interface Session {
-  id: string;
-  userId: string;
-  tenantId: TenantId;
-  email: string;
-  isAdmin: boolean;
-  expiresAt: Date;
-}
 
 const hash = (token: string): Buffer => createHash("sha256").update(token).digest();
 
@@ -120,8 +112,10 @@ export async function readSession(token: string | undefined): Promise<Session | 
       userId: sessions.userId,
       expiresAt: sessions.expiresAt,
       lastUsedAt: sessions.lastUsedAt,
+      createdAt: sessions.createdAt,
       tenantId: users.tenantId,
       email: users.email,
+      role: users.role,
       isAdmin: tenants.isAdmin,
     })
     .from(sessions)
@@ -163,7 +157,9 @@ export async function readSession(token: string | undefined): Promise<Session | 
     tenantId: asTenantId(row.tenantId),
     email: row.email,
     isAdmin: row.isAdmin,
+    role: row.role,
     expiresAt: row.expiresAt,
+    signedInAt: row.createdAt,
   };
 }
 

@@ -11,7 +11,7 @@ import type { Resource } from "@sightline/shared";
 import { system } from "./postgres.js";
 import * as schema from "./schema.js";
 import { listFindingStates, setFindingStatus, syncFindings } from "./findings.js";
-import { asConnectionId, asTenantId } from "../tenancy/ids.js";
+import { asConnectionId, asTenantId } from "../core/ids.js";
 
 const HAS_INFRA = !process.env["SKIP_INTEGRATION"];
 
@@ -91,7 +91,7 @@ describe.runIf(HAS_INFRA)("finding lifecycle", () => {
   it("opens a finding the first time a scan sees it", async () => {
     if (!available) return;
     const result = await syncFindings(scope, await scanWith([publicBucket, adminRole]), true);
-    expect(result).toEqual({ opened: 2, reopened: 0, resolved: 0 });
+    expect(result).toMatchObject({ opened: 2, reopened: 0, resolved: 0 });
     expect(await byArn(BUCKET)).toMatchObject({ category: "exposed", status: "open" });
     expect(await byArn(ROLE)).toMatchObject({ category: "admin", status: "open" });
   });

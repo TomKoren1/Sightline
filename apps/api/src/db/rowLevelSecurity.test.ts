@@ -15,7 +15,7 @@ import { randomUUID } from "node:crypto";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import pg from "pg";
 
-import { cfg } from "../config.js";
+import { cfg } from "../core/config.js";
 import { system } from "./postgres.js";
 
 const HAS_INFRA = !process.env["SKIP_INTEGRATION"];
@@ -28,9 +28,13 @@ const HAS_INFRA = !process.env["SKIP_INTEGRATION"];
  * gets discovered - so a policy comparing against `app.tenant_id` would make
  * signing in impossible. It, `sessions`, `identities` and `tenants` are reached
  * only from `auth/session.ts` and `auth/users.ts`, on the owner connection, and
- * the exemption is asserted below rather than assumed.
+ * the exemption is asserted below rather than assumed. `invites` is the same:
+ * accepting one looks it up by its token, before the joiner's tenant is
+ * known, and it is reached only from `auth/team.ts`. `api_tokens` likewise: a
+ * bearer token is looked up by its hash to find the tenant, from
+ * `auth/apiTokens.ts` alone.
  */
-const EXEMPT = new Set(["users"]);
+const EXEMPT = new Set(["users", "invites", "api_tokens"]);
 
 /** The role the application connects as, which this test only reads about. */
 const APP_ROLE = "sightline_app";
@@ -330,7 +334,7 @@ describe.runIf(HAS_INFRA)("row-level security", () => {
 
       // The tables it is read alongside must be reachable only from the two
       // auth modules. A third importer would be the thing to look at.
-      expect(EXEMPT.size, "every exemption needs its own argument in the comment above").toBe(1);
+      expect(EXEMPT.size, "every exemption needs its own argument in the comment above").toBe(3);
     });
   });
 });

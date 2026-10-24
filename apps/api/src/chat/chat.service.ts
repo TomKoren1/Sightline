@@ -16,11 +16,43 @@ import { db, withTenant } from "../db/postgres.js";
 import { conversations, messages } from "../db/schema.js";
 import { getLatestScan } from "../db/repository.js";
 import { requireGraphScope } from "../tenancy/graphScope.js";
-import type { ConversationId } from "../tenancy/ids.js";
-import type { Scope } from "../tenancy/scope.js";
+import type { ConversationId } from "../core/ids.js";
+import type { Scope } from "../core/scope.js";
 
 /** Earlier messages sent back to the model: enough for follow-ups, bounded for cost. */
 const HISTORY_LIMIT = 20;
+/**
+ * And their size, about 6,000 tokens: twenty answers with tables in them are
+ * resent on every step of every new question, so the count alone bounds
+ * nothing. Trimmed rather than summarised, which would cost a model call.
+ */
+const HISTORY_CHARS = 24_000;
+
+interface Turn {
+  role: "user" | "assistant";
+  content: string;
+}
+
+/**
+ * The newest turns that fit the budget, oldest first, starting on a question
+ * so the model never sees an answer without what it answered - the provider
+ * expects a transcript to open with the user. A newest turn over the budget
+ * on its own is cut to it.
+ */
+export function fitHistory(turns: Turn[], budget = HISTORY_CHARS): Turn[] {
+  const kept: Turn[] = [];
+  let used = 0;
+  for (let i = turns.length - 1; i >= 0; i--) {
+    const turn = turns[i]!;
+    if (kept.length > 0 && used + turn.content.length > budget) break;
+    const content =
+      turn.content.length > budget ? `${turn.content.slice(0, budget)} [cut]` : turn.content;
+    kept.unshift({ role: turn.role, content });
+    used += content.length;
+  }
+  while (kept.length > 0 && kept[0]!.role === "assistant") kept.shift();
+  return kept;
+}
 
 @Injectable()
 export class ChatService {
@@ -78,7 +110,7 @@ export class ChatService {
         .where(and(eq(messages.conversationId, owned.id), eq(messages.tenantId, scope.tenantId)))
         .orderBy(desc(messages.createdAt))
         .limit(HISTORY_LIMIT);
-      return { conversationId: owned.id, history: recent.reverse() };
+      return { conversationId: owned.id, history: fitHistory(recent.reverse()) };
     });
   }
 
@@ -137,6 +169,8 @@ export class ChatService {
           citations: params.message.citations ?? [],
           warnings: params.message.warnings ?? [],
           scanId: params.scanId,
+          inputTokens: params.message.usage?.inputTokens ?? null,
+          outputTokens: params.message.usage?.outputTokens ?? null,
         },
       ]);
     });

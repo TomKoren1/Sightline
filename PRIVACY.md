@@ -56,6 +56,7 @@ Nobody, with three exceptions that are all mechanical rather than commercial:
 | **AWS**              | the API calls that read your account                                | that is the product     |
 | **Google or GitHub** | that you signed in                                                  | you chose that provider |
 | **Anthropic**        | the question you asked, and the inventory facts needed to answer it | the assistant           |
+| **Cloudflare**       | every request, in transit                                           | it carries the traffic  |
 
 The assistant is the one worth being specific about. When you ask it a question,
 the relevant parts of your inventory — resource names, ARNs, relationships — are
@@ -66,13 +67,32 @@ not use the assistant**; the graph, the findings and the scan history work
 without it. In a self-hosted deployment it uses your own API key and the choice
 is entirely yours.
 
+Cloudflare is how the hosted service is reached: a tunnel from Cloudflare's
+network to Sightline's server, so the encrypted connection from your browser
+ends at Cloudflare's edge and continues to Sightline through the tunnel.
+Cloudflare handles each request on its way through; it does not hold your
+inventory.
+
 Your data is not sold, rented, or used to train anything.
+
+## Where it is held
+
+In one place: Sightline's own database, on a server Sightline operates rather
+than a cloud provider's managed database. Backups are encrypted, and are kept
+only on that server and on other machines Sightline owns. Nothing is replicated
+anywhere else. ExternalIds are encrypted with a key held in AWS KMS,
+so decrypting one needs both that database and Sightline's AWS account.
+
+What leaves it: a question's context to Anthropic, as above, and nothing else.
+Scans read your account through AWS's regional APIs and the results come back
+to that one database; nothing is written into your account.
 
 ## How long it is kept
 
 Scan history accumulates, because comparing two scans is the point — "what
 changed since last week" needs last week. Each scan's resource snapshots are
-immutable and kept until you delete them.
+immutable. The most recent 30 scans of each account are kept; older ones are
+deleted after each new scan.
 
 The graph keeps the current scan and the one before it. Older ones are swept.
 

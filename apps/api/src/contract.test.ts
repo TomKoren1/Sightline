@@ -20,6 +20,7 @@ import type { NestFastifyApplication } from "@nestjs/platform-fastify";
 import { randomUUID } from "node:crypto";
 import { readFileSync, readdirSync } from "node:fs";
 import { fileURLToPath } from "node:url";
+import * as api from "@sightline/shared/api";
 import { z } from "zod";
 
 import { buildApp } from "./app.js";
@@ -33,14 +34,6 @@ const HAS_INFRA = !process.env["SKIP_INTEGRATION"];
 
 const error = z.object({ error: z.string() }).strict();
 const errorWithCode = z.object({ error: z.string(), code: z.string() }).strict();
-
-/** A resource as every list endpoint renders it. Nested, so not strict. */
-const node = z.object({
-  arn: z.string(),
-  kind: z.string(),
-  name: z.string(),
-  region: z.string().nullable(),
-});
 
 const scan = z.object({
   id: z.string(),
@@ -83,16 +76,7 @@ const CONTRACTS: Contract[] = [
     method: "GET",
     route: "/api/health",
     url: "/api/health",
-    responses: {
-      200: z
-        .object({
-          status: z.string(),
-          checks: z.object({ postgres: z.string(), agent: z.string() }).strict(),
-          awsMode: z.string(),
-          lastScan: z.object({ id: z.string(), at: z.string(), status: z.string() }).nullable(),
-        })
-        .strict(),
-    },
+    responses: { 200: api.health },
   },
   {
     method: "GET",
@@ -153,6 +137,42 @@ const CONTRACTS: Contract[] = [
   },
   {
     method: "GET",
+    route: "/api/webhook",
+    url: "/api/webhook",
+    responses: { 200: api.webhookView },
+  },
+  {
+    method: "GET",
+    route: "/api/findings/page",
+    url: "/api/findings/page?list=idle&offset=0",
+    responses: { 200: api.findingsPage, 400: error },
+  },
+  {
+    method: "GET",
+    route: "/api/findings/accounts",
+    url: "/api/findings/accounts",
+    responses: { 200: api.acrossAccounts },
+  },
+  {
+    method: "GET",
+    route: "/api/operator/tenants",
+    url: "/api/operator/tenants",
+    responses: { 200: api.tenantHealthList },
+  },
+  {
+    method: "GET",
+    route: "/api/audit",
+    url: "/api/audit",
+    responses: { 200: api.auditPage },
+  },
+  {
+    method: "GET",
+    route: "/api/audit/export",
+    url: "/api/audit/export?format=json",
+    responses: { 200: api.auditExport },
+  },
+  {
+    method: "GET",
     route: "/api/scans/diff",
     url: "/api/scans/diff",
     responses: {
@@ -187,38 +207,31 @@ const CONTRACTS: Contract[] = [
     method: "GET",
     route: "/api/summary",
     url: "/api/summary",
-    responses: {
-      200: z
-        .object({
-          byKind: z.array(z.object({ kind: z.string(), count: z.number() })),
-          byRegion: z.array(z.object({ region: z.string(), count: z.number() })),
-          publicCount: z.number(),
-          adminCount: z.number(),
-          idleCount: z.number(),
-          unprotectedCount: z.number(),
-          idleCost: z.number(),
-        })
-        .strict(),
-    },
+    responses: { 200: api.summary },
   },
   {
     method: "GET",
     route: "/api/search",
     url: "/api/search?q=prod",
-    responses: { 200: z.object({ results: z.array(node) }).strict() },
+    responses: { 200: api.searchResults },
   },
   {
     method: "GET",
     route: "/api/graph",
     url: "/api/graph?limit=5",
-    responses: {
-      200: z
-        .object({
-          nodes: z.array(node),
-          edges: z.array(z.object({ from: z.string(), to: z.string(), type: z.string() })),
-        })
-        .strict(),
-    },
+    responses: { 200: api.graphData },
+  },
+  {
+    method: "GET",
+    route: "/api/graph/groups",
+    url: "/api/graph/groups",
+    responses: { 200: api.graphGroups },
+  },
+  {
+    method: "GET",
+    route: "/api/graph/neighbours",
+    url: `/api/graph/neighbours?arn=${encodeURIComponent(UNKNOWN_ARN)}`,
+    responses: { 200: api.graphData },
   },
   {
     method: "GET",
@@ -236,25 +249,7 @@ const CONTRACTS: Contract[] = [
     method: "GET",
     route: "/api/findings",
     url: "/api/findings",
-    responses: {
-      200: z
-        .object({
-          publicResources: z.array(node.extend({ reason: z.string() })),
-          adminPrincipals: z.array(node.extend({ reason: z.string() })),
-          idle: z.array(
-            node.extend({ reason: z.string(), estimatedMonthlyCostUsd: z.number().nullable() }),
-          ),
-          exposed: z.array(node.extend({ reason: z.string() })),
-          unprotected: z.array(node.extend({ reason: z.string(), isPublic: z.boolean() })),
-          accepted: z.array(
-            node.extend({
-              category: z.string(),
-              finding: z.object({ id: z.string(), status: z.literal("accepted") }),
-            }),
-          ),
-        })
-        .strict(),
-    },
+    responses: { 200: api.findings },
   },
   {
     method: "PATCH",
@@ -290,30 +285,7 @@ const CONTRACTS: Contract[] = [
     method: "GET",
     route: "/api/connection",
     url: "/api/connection",
-    responses: {
-      200: z
-        .object({
-          callerIdentity: z.string().nullable(),
-          callerIdentityIsMock: z.boolean(),
-          scannerPrincipal: z.string().nullable(),
-          scannerPrincipalConverted: z.boolean(),
-          scannerPrincipalNote: z.string().nullable(),
-          roleArnProblem: z.string().nullable(),
-          containerised: z.boolean(),
-          mode: z.string(),
-          configuredMode: z.string(),
-          realAccountConfigured: z.boolean(),
-          roleArn: z.string().nullable(),
-          accountId: z.string().nullable(),
-          externalIdMasked: z.string().nullable(),
-          externalIdIsPlaceholder: z.boolean(),
-          homeRegion: z.string(),
-          regions: z.array(z.string()),
-          endpointOverride: z.string().nullable(),
-          lastScan: z.object({ id: z.string(), at: z.string(), status: z.string() }).nullable(),
-        })
-        .strict(),
-    },
+    responses: { 200: api.connection },
   },
   {
     method: "POST",
@@ -343,19 +315,7 @@ const CONTRACTS: Contract[] = [
     route: "/api/connection/test",
     url: "/api/connection/test",
     payload: {},
-    responses: {
-      200: z
-        .object({
-          ok: z.boolean(),
-          durationMs: z.number(),
-          mode: z.string(),
-          callerIdentity: z.string().nullable(),
-          code: z.string().optional(),
-          problem: z.string().optional(),
-          fix: z.string().optional(),
-        })
-        .passthrough(),
-    },
+    responses: { 200: api.connectionTest },
   },
   {
     method: "POST",
@@ -376,77 +336,15 @@ const CONTRACTS: Contract[] = [
     method: "GET",
     route: "/api/evals/checks",
     url: "/api/evals/checks",
-    responses: {
-      200: z
-        .object({
-          checks: z.array(
-            z.object({ id: z.string(), description: z.string(), rationale: z.string() }),
-          ),
-        })
-        .strict(),
-    },
+    responses: { 200: api.checkList },
   },
   {
     method: "GET",
     route: "/api/evals/latest",
     url: "/api/evals/latest",
-    responses: {
-      // Two shapes, not one with an optional field: with no run recorded the
-      // response carries a `hint` and no `currentModel`. Captured from a
-      // populated database, this branch was missed until the volume was
-      // dropped for the rename.
-      200: z.union([
-        z.object({ run: z.null(), hint: z.string() }).strict(),
-        z
-          .object({
-            run: z
-              .object({
-                id: z.string(),
-                startedAt: z.string(),
-                model: z.string(),
-                total: z.number(),
-                passed: z.number(),
-                graded: z.number(),
-                errored: z.number(),
-                meanF1: z.number(),
-                unsupportedCitations: z.number(),
-                cases: z.array(z.unknown()),
-              })
-              .nullable(),
-            currentModel: z.string(),
-          })
-          .strict(),
-      ]),
-    },
+    responses: { 200: api.latestEvalRun },
   },
 ];
-
-/**
- * Routes that cannot be contract-tested without doing real work, and what
- * covers them instead.
- *
- * Kept as data rather than as an omission, because an endpoint quietly absent
- * from a list of "every endpoint" is the thing this file exists to prevent. The
- * completeness check below accepts an entry here, and a second check refuses an
- * entry whose reason is a placeholder.
- */
-const CONNECTION_SUMMARY = z
-  .object({
-    id: z.string(),
-    kind: z.enum(["real", "demo"]),
-    label: z.string(),
-    accountId: z.string().nullable(),
-    roleArn: z.string().nullable(),
-    status: z.enum(["pending", "verified", "failed", "disconnected"]),
-    lastError: z.string().nullable(),
-    scanRegions: z.array(z.string()),
-    templateVersion: z.string().nullable(),
-    lastVerifiedAt: z.string().nullable(),
-    lastScanAt: z.string().nullable(),
-  })
-  // No external id, encrypted or otherwise. The shape is asserted strictly so
-  // that adding one to the summary fails here rather than in production.
-  .strict();
 
 CONTRACTS.push(
   {
@@ -461,35 +359,85 @@ CONTRACTS.push(
     method: "GET",
     route: "/api/me",
     url: "/api/me",
-    responses: {
-      200: z
-        .object({
-          hosted: z.boolean(),
-          signedIn: z.boolean(),
-          user: z
-            .object({
-              email: z.string(),
-              name: z.string().nullable(),
-              avatarUrl: z.string().nullable(),
-            })
-            .nullable(),
-          isAdmin: z.boolean(),
-          providers: z.array(z.string()),
-          linked: z.array(z.string()),
-          connections: z.array(CONNECTION_SUMMARY),
-        })
-        .strict(),
-    },
+    responses: { 200: api.me },
+  },
+  {
+    // A team exists only in hosted mode; this suite runs self-hosted, where
+    // the answer is a refusal. The rules are auth/team.test.ts.
+    method: "GET",
+    route: "/api/team",
+    url: "/api/team",
+    responses: { 400: error },
   },
   {
     method: "GET",
     route: "/api/connections",
     url: "/api/connections",
-    responses: { 200: z.object({ connections: z.array(CONNECTION_SUMMARY) }).strict() },
+    responses: { 200: api.connectionList },
   },
 );
 
 const EXCLUDED = new Map<string, string>([
+  [
+    "PUT /api/webhook",
+    "Sends to, or changes, an outside URL; a contract run would post to somebody's chat. " +
+      "Refusing unsafe URLs is integrations/webhook.test.ts, who may call it auth/enforcement.test.ts.",
+  ],
+  [
+    "DELETE /api/webhook",
+    "Sends to, or changes, an outside URL; a contract run would post to somebody's chat. " +
+      "Refusing unsafe URLs is integrations/webhook.test.ts, who may call it auth/enforcement.test.ts.",
+  ],
+  [
+    "POST /api/webhook/test",
+    "Sends to, or changes, an outside URL; a contract run would post to somebody's chat. " +
+      "Refusing unsafe URLs is integrations/webhook.test.ts, who may call it auth/enforcement.test.ts.",
+  ],
+  [
+    "GET /api/tokens",
+    "Hosted only: this suite runs self-hosted, where there is no sign-in for a token to " +
+      "stand for. What a token may and may not do is auth/enforcement.test.ts, against the real app.",
+  ],
+  [
+    "POST /api/tokens",
+    "Hosted only: this suite runs self-hosted, where there is no sign-in for a token to " +
+      "stand for. What a token may and may not do is auth/enforcement.test.ts, against the real app.",
+  ],
+  [
+    "DELETE /api/tokens/:id",
+    "Hosted only: this suite runs self-hosted, where there is no sign-in for a token to " +
+      "stand for. What a token may and may not do is auth/enforcement.test.ts, against the real app.",
+  ],
+  [
+    "POST /api/team/invites",
+    "Hosted only: this suite runs self-hosted, where every team route refuses. The " +
+      "rules - invites used once, roles within what the actor may grant, an owner always kept - " +
+      "are auth/team.test.ts against Postgres, and who may call each is auth/enforcement.test.ts.",
+  ],
+  [
+    "DELETE /api/team/invites/:id",
+    "Hosted only: this suite runs self-hosted, where every team route refuses. The " +
+      "rules - invites used once, roles within what the actor may grant, an owner always kept - " +
+      "are auth/team.test.ts against Postgres, and who may call each is auth/enforcement.test.ts.",
+  ],
+  [
+    "PATCH /api/team/members/:id",
+    "Hosted only: this suite runs self-hosted, where every team route refuses. The " +
+      "rules - invites used once, roles within what the actor may grant, an owner always kept - " +
+      "are auth/team.test.ts against Postgres, and who may call each is auth/enforcement.test.ts.",
+  ],
+  [
+    "DELETE /api/team/members/:id",
+    "Hosted only: this suite runs self-hosted, where every team route refuses. The " +
+      "rules - invites used once, roles within what the actor may grant, an owner always kept - " +
+      "are auth/team.test.ts against Postgres, and who may call each is auth/enforcement.test.ts.",
+  ],
+  [
+    "POST /api/team/join",
+    "Hosted only: this suite runs self-hosted, where every team route refuses. The " +
+      "rules - invites used once, roles within what the actor may grant, an owner always kept - " +
+      "are auth/team.test.ts against Postgres, and who may call each is auth/enforcement.test.ts.",
+  ],
   [
     "POST /api/scans",
     "Queues a real scan, then streams it. There is no input that makes it decline - its " +

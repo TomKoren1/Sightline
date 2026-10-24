@@ -16,12 +16,16 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   api,
   type FindingCategory,
+  type FindingListName,
   type FindingState,
   type Findings as FindingsData,
   type GraphNode,
   type Summary,
 } from "../api.js";
+import { controlsFor } from "@sightline/shared";
+
 import { ChangesPanel } from "./ChangesPanel.js";
+import { useLoadMore } from "../hooks/useLoadMore.js";
 
 export interface FindingsProps {
   summary: Summary | undefined;
@@ -30,7 +34,7 @@ export interface FindingsProps {
   onHighlight: (arns: string[]) => void;
 }
 
-type Tab = "overview" | "exposed" | "admin" | "idle" | "changes" | "unprotected";
+type Tab = "overview" | "exposed" | "admin" | "idle" | "unused" | "changes" | "unprotected";
 
 export function Findings({ summary, findings, loading, onHighlight }: FindingsProps) {
   const [tab, setTab] = useState<Tab>("overview");
@@ -70,6 +74,7 @@ export function Findings({ summary, findings, loading, onHighlight }: FindingsPr
     },
     { id: "admin", label: "Admin", count: open(summary.adminCount, "admin"), tone: "text-warn" },
     { id: "idle", label: "Idle", count: open(summary.idleCount, "idle") },
+    { id: "unused", label: "Unused", count: open(summary.unusedCount ?? 0, "unused") },
     {
       id: "unprotected",
       label: "Unguarded",
@@ -84,9 +89,9 @@ export function Findings({ summary, findings, loading, onHighlight }: FindingsPr
       {/* Wraps rather than overflowing. Six labels do not fit across a 288px
           sidebar, and flex items default to `min-width: auto`, so they refused
           to shrink and spilled across the graph pane instead - where the
-          floating Filter button then covered two of them. Two rows of three is
-          the only arrangement that keeps every label readable and inside the
-          column. Found by screenshotting the running UI. */}
+          floating Filter button then covered two of them. Rows of three is the
+          only arrangement that keeps every label readable and inside the
+          column; the seventh tab takes a row of its own. Found by screenshotting the running UI. */}
       <div className="flex flex-wrap border-b border-ink-800">
         {tabs.map((t) => (
           <button
@@ -121,6 +126,7 @@ export function Findings({ summary, findings, loading, onHighlight }: FindingsPr
                 tone="text-warn"
               />
               <Stat label="Idle" value={open(summary.idleCount, "idle")} />
+              <Stat label="Unused access" value={open(summary.unusedCount ?? 0, "unused")} />
               <Stat
                 label="Unguarded"
                 value={open(summary.unprotectedCount, "unguarded")}
@@ -148,7 +154,9 @@ export function Findings({ summary, findings, loading, onHighlight }: FindingsPr
         {tab === "exposed" && (
           <FindingList
             items={findings.publicResources}
+            list="publicResources"
             accepted={acceptedIn("exposed")}
+            category="exposed"
             empty="Nothing in this account is reachable from the internet."
             onHighlight={onHighlight}
           />
@@ -157,7 +165,9 @@ export function Findings({ summary, findings, loading, onHighlight }: FindingsPr
         {tab === "admin" && (
           <FindingList
             items={findings.adminPrincipals}
+            list="adminPrincipals"
             accepted={acceptedIn("admin")}
+            category="admin"
             empty="No role or user grants unrestricted access."
             onHighlight={onHighlight}
             extra={(item) => {
@@ -193,7 +203,9 @@ export function Findings({ summary, findings, loading, onHighlight }: FindingsPr
             </p>
             <FindingList
               items={findings.unprotected}
+              list="unprotected"
               accepted={acceptedIn("unguarded")}
+              category="unguarded"
               empty="Every bucket has Block Public Access fully enabled."
               onHighlight={onHighlight}
               extra={(item) =>
@@ -207,10 +219,26 @@ export function Findings({ summary, findings, loading, onHighlight }: FindingsPr
 
         {tab === "changes" && <ChangesPanel onHighlight={onHighlight} />}
 
+        {tab === "unused" && (
+          <FindingList
+            items={findings.unused ?? []}
+            list="unused"
+            accepted={acceptedIn("unused")}
+            category="unused"
+            empty="Every role and user has been used in the last 90 days, or is newer than that."
+            onHighlight={onHighlight}
+            extra={(item) =>
+              item.isAdmin ? "Administrator — the most valuable thing to remove" : undefined
+            }
+          />
+        )}
+
         {tab === "idle" && (
           <FindingList
             items={findings.idle}
+            list="idle"
             accepted={acceptedIn("idle")}
+            category="idle"
             empty="Nothing obviously idle."
             onHighlight={onHighlight}
             extra={(item) =>
@@ -255,28 +283,55 @@ function Row({ left, right }: { left: string; right: string }) {
 type Item = GraphNode & { reason?: string | null; finding?: FindingState | null };
 
 function FindingList({
-  items,
+  items: firstPage,
+  list,
   accepted,
+  category,
   empty,
   onHighlight,
   extra,
 }: {
   items: Item[];
+  /** Which server list this is, so more of it can be fetched past the first 50. */
+  list?: FindingListName;
+  category: FindingCategory;
   accepted: Item[];
   empty: string;
   onHighlight: (arns: string[]) => void;
   extra?: (item: Item) => string | undefined;
 }) {
   const [showAccepted, setShowAccepted] = useState(false);
+  const more = useLoadMore(list, firstPage);
+  const items = more.items;
   return (
     <div className="space-y-1.5">
       {items.length === 0 ? (
         <p className="py-3 text-center text-[12px] text-good">{empty}</p>
       ) : (
         items.map((item) => (
-          <FindingRow key={item.arn} item={item} onHighlight={onHighlight} extra={extra} />
+          <FindingRow
+            key={item.arn}
+            item={item}
+            category={category}
+            onHighlight={onHighlight}
+            extra={extra}
+          />
         ))
       )}
+      {more.canLoad && (
+        <button
+          onClick={() => void more.load()}
+          disabled={more.loading}
+          className="w-full rounded border border-ink-700 px-2 py-1 text-[11px] text-ink-400 hover:text-ink-100 disabled:opacity-50"
+        >
+          {more.loading
+            ? "Loading…"
+            : more.total !== null
+              ? `Showing ${items.length} of ${more.total.toLocaleString()} - load more`
+              : "Load more"}
+        </button>
+      )}
+      {more.error && <p className="text-[11px] text-danger">{more.error}</p>}
       {accepted.length > 0 && (
         <div className="pt-1">
           <button
@@ -289,7 +344,12 @@ function FindingList({
           {showAccepted && (
             <div className="mt-1.5 space-y-1.5">
               {accepted.map((item) => (
-                <FindingRow key={item.arn} item={item} onHighlight={onHighlight} />
+                <FindingRow
+                  key={item.arn}
+                  item={item}
+                  category={category}
+                  onHighlight={onHighlight}
+                />
               ))}
             </div>
           )}
@@ -306,10 +366,12 @@ function FindingList({
  */
 function FindingRow({
   item,
+  category,
   onHighlight,
   extra,
 }: {
   item: Item;
+  category: FindingCategory;
   onHighlight: (arns: string[]) => void;
   extra?: (item: Item) => string | undefined;
 }) {
@@ -330,6 +392,8 @@ function FindingRow({
   });
 
   const detail = extra?.(item);
+  // Plain text, not links: the row is itself a button. The title names each.
+  const controls = controlsFor(category, item.kind);
   return (
     <div
       className={`rounded border border-ink-800 bg-ink-850 transition hover:border-ink-600 ${
@@ -347,6 +411,14 @@ function FindingRow({
         {detail && <div className="text-[10px] text-ink-300">{detail}</div>}
         {item.reason && (
           <div className="mt-0.5 text-[10px] leading-snug text-ink-400">{item.reason}</div>
+        )}
+        {controls.length > 0 && (
+          <div
+            className="mt-0.5 font-mono text-[10px] text-ink-400"
+            title={controls.map((c) => `${c.framework} ${c.id}: ${c.title}`).join("\n")}
+          >
+            {controls.map((c) => `FSBP ${c.id}`).join(" · ")}
+          </div>
         )}
         {isAccepted && finding.statusReason && (
           <div className="mt-0.5 text-[10px] leading-snug text-ink-300">

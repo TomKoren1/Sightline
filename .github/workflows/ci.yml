@@ -14,15 +14,18 @@ concurrency:
 env:
   NODE_VERSION: "22"
 
+# Read-only unless a job asks for more.
+permissions:
+  contents: read
+
 jobs:
   # Fast feedback: types, formatting and everything that needs no services.
   static:
     name: Types, format and unit tests
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: npm
@@ -65,9 +68,8 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 25
     steps:
-      - uses: actions/checkout@v4
-
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: npm
@@ -98,6 +100,16 @@ jobs:
 
       - name: Run a full scan and persist it
         run: npm run scan
+
+      - name: Every integration test
+        # The unit job sets SKIP_INTEGRATION, so until this step the tests that
+        # need Postgres or moto - tenant isolation, row-level security, the
+        # collector contracts - ran on developers' machines and nowhere else.
+        # Before the ground-truth step, which drifts the mock account.
+        run: >-
+          npx vitest run
+          --exclude '**/evals/groundTruth.test.ts'
+          --exclude '**/load/largeAccount.test.ts'
 
       - name: Ground-truth assertions
         # Tier 1 of the eval suite. Needs no API key, and catches the
@@ -161,9 +173,8 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
-      - uses: actions/checkout@v4
-
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: npm
@@ -199,11 +210,42 @@ jobs:
 
       - name: Traces and screenshots on failure
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: browser-suite
           path: test-results/
           retention-days: 7
+
+  # The manifests and the chart against Kubernetes' own schemas. The infra/
+  # tests check what only this project knows - that two files agree; whether a
+  # field exists at all is kubeconform's question, and it knows every one.
+  manifests:
+    name: Manifests and chart validate
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+
+      - name: Render every overlay and the monitoring chart
+        # kubectl and helm come with the runner image.
+        run: |
+          mkdir -p rendered
+          for overlay in prod staging; do
+            kubectl kustomize "deploy/k8s/$overlay" > "rendered/$overlay.yaml"
+          done
+          # The runner has no chart repositories configured; Chart.lock pins
+          # the versions, these only say where to fetch them from.
+          helm repo add prometheus-community https://prometheus-community.github.io/helm-charts
+          helm repo add grafana https://grafana.github.io/helm-charts
+          helm dependency build helm/monitoring
+          helm lint helm/monitoring
+          helm template monitoring helm/monitoring > rendered/monitoring.yaml
+
+      - name: kubeconform
+        # -strict refuses unknown fields, the typo that applies cleanly and is
+        # then ignored. Custom resources with no published schema are skipped.
+        run: |
+          docker run --rm -v "$PWD/rendered:/m"             ghcr.io/yannh/kubeconform:v0.8.0@sha256:faffaf43f95aa6425306e1ab8d6fcad72acb9049158f38e574c085ea1ec0f64e             -strict -summary -ignore-missing-schemas -kubernetes-version 1.33.0             /m/prod.yaml /m/staging.yaml /m/monitoring.yaml
 
   # The README offers a second way to run the project. A documented path that CI
   # does not exercise is worse than no path at all, because it is a claim nobody
@@ -214,8 +256,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
-      - uses: actions/checkout@v4
-
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
       - name: Bring up everything, including the app
         run: |
           cp .env.example .env
@@ -283,9 +324,8 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v4
-
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: npm
@@ -349,12 +389,16 @@ jobs:
   secrets:
     name: Secret scan
     runs-on: ubuntu-latest
+    # gitleaks lists a pull request's commits through the API.
+    permissions:
+      contents: read
+      pull-requests: read
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           fetch-depth: 0
 
-      - uses: gitleaks/gitleaks-action@v2
+      - uses: gitleaks/gitleaks-action@ff98106e4c7b2bc287b24eaf42907196329070c7 # v2.3.9
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GITLEAKS_CONFIG: .gitleaks.toml

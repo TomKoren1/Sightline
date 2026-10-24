@@ -1,0 +1,2 @@
+ALTER TABLE "findings" DROP CONSTRAINT "findings_category";--> statement-breakpoint
+ALTER TABLE "findings" ADD CONSTRAINT "findings_category" CHECK ("findings"."category" IN ('exposed','admin','idle','unguarded','unused'));

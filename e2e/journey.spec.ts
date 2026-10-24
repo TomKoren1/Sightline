@@ -9,6 +9,7 @@
 import { expect, test } from "@playwright/test";
 import pg from "pg";
 
+import { expectAccessible } from "./a11y.js";
 import { E2E_USER } from "./stubs.js";
 import { e2eDatabase } from "./env.js";
 
@@ -31,6 +32,7 @@ test("sign in, scan, read the findings, ask, and connect", async ({ page }) => {
   await test.step("signs in with GitHub", async () => {
     await page.goto("/");
     await expect(page.getByText("What Sightline can see, and what it cannot")).toBeVisible();
+    await expectAccessible(page, "the sign-in page");
     await page.getByRole("link", { name: "Continue with GitHub" }).click();
     await expect(page.getByRole("button", { name: "Sign out" })).toBeVisible();
     await expect(page.getByText("No inventory yet")).toBeVisible();
@@ -57,6 +59,7 @@ test("sign in, scan, read the findings, ask, and connect", async ({ page }) => {
     await page.getByRole("button", { name: "Run the first scan" }).click();
     await expect(page.getByRole("button", { name: "Rescan" })).toBeVisible({ timeout: 90_000 });
     await expect(page.getByText(/\d+ resources across 3 regions/)).toBeVisible();
+    await expectAccessible(page, "the scanned workspace");
   });
 
   await test.step("reads the public bucket in the findings", async () => {
@@ -74,6 +77,21 @@ test("sign in, scan, read the findings, ask, and connect", async ({ page }) => {
     await expect(
       chat.getByText(/One bucket is public to the internet: arn:aws:s3:::northwind-public-assets/),
     ).toBeVisible({ timeout: 30_000 });
+  });
+
+  await test.step("invites a teammate with a link", async () => {
+    await page.getByRole("button", { name: "Team" }).click();
+    // Exact: the activity list below names them too.
+    await expect(page.getByText(E2E_USER.email, { exact: true })).toBeVisible();
+    await expectAccessible(page, "the team panel");
+    await page.getByRole("button", { name: "Create link" }).click();
+    await expect(page.getByText(/\?join=[\w-]{20,}/)).toBeVisible();
+    // The scan they ran is in the activity log.
+    await expect(page.getByText("POST /api/scans").first()).toBeVisible();
+    await page.getByLabel("Token name").fill("ci");
+    await page.getByRole("button", { name: "Create token" }).click();
+    await expect(page.getByText(/^slt_[\w-]{40,}$/)).toBeVisible();
+    await page.keyboard.press("Escape");
   });
 
   await test.step("starts connecting an account of their own", async () => {

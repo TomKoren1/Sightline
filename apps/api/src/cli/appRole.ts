@@ -18,7 +18,7 @@
  */
 
 import { closePool, system } from "../db/postgres.js";
-import { cfg } from "../config.js";
+import { cfg } from "../core/config.js";
 
 /** The role and password the application is configured to connect as. */
 function configured(): { role: string; password: string } {

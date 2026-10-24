@@ -21,6 +21,7 @@ import { useState } from "react";
 import { useMutation } from "@tanstack/react-query";
 
 import { api } from "../api.js";
+import { ActionError } from "./ActionError.js";
 
 export function DeleteAccount({ email, onDeleted }: { email: string; onDeleted: () => void }) {
   const [typed, setTyped] = useState("");
@@ -39,7 +40,9 @@ export function DeleteAccount({ email, onDeleted }: { email: string; onDeleted: 
       <p className="text-[12px] leading-relaxed text-ink-300">
         This deletes your account and everything Sightline holds about it: every connected account,
         every scan and its resource history, your graph, and every conversation with the assistant.
-        It is immediate and cannot be undone.
+        It is immediate and cannot be undone. If other people are in this workspace, it deletes only
+        you: you leave, and the workspace and its data stay with them. Its last owner has to make
+        someone else an owner first.
       </p>
 
       <div className="rounded border border-warn/40 bg-warn/10 px-2.5 py-2 text-[11px] leading-relaxed text-warn">
@@ -77,7 +80,7 @@ export function DeleteAccount({ email, onDeleted }: { email: string; onDeleted: 
           {remove.isPending ? "Deleting…" : "Delete everything"}
         </button>
 
-        {remove.isError && <p className="text-[11px] text-danger">{remove.error.message}</p>}
+        {remove.isError && <ActionError error={remove.error} />}
       </form>
 
       <p className="text-[11px] leading-relaxed text-ink-400">

@@ -29,9 +29,9 @@ import { eq, sql } from "drizzle-orm";
  */
 import { system } from "../db/postgres.js";
 import { connections, conversations, messages, scanJobs, scanRuns, tenants } from "../db/schema.js";
-import { asConnectionId, asTenantId } from "./ids.js";
+import { asConnectionId, asTenantId } from "../core/ids.js";
 import { lockQueueForTest } from "../jobs/queueTestLock.js";
-import type { Scope } from "./scope.js";
+import type { Scope } from "../core/scope.js";
 
 const HAS_INFRA = !process.env["SKIP_INTEGRATION"];
 const ORIGINAL = { ...process.env };
@@ -316,6 +316,65 @@ describe.runIf(HAS_INFRA)("the spending limits", () => {
       // A rolling window, not a running total: otherwise the limit is a
       // lifetime cap and the wording about resetting is a lie.
       expect(await mayChat(scope)).toEqual({ allowed: true });
+    });
+  });
+
+  describe("the token budget", () => {
+    async function answered(tokens: number[], hoursAgo = 0) {
+      const conversationId = randomUUID();
+      await system.insert(conversations).values({
+        id: conversationId,
+        tenantId,
+        connectionId: scope.connectionId,
+        accountId: "123456789012",
+      });
+      await system.insert(messages).values(
+        tokens.map((n) => ({
+          id: randomUUID(),
+          tenantId,
+          conversationId,
+          role: "assistant" as const,
+          content: "x",
+          inputTokens: n - 100,
+          outputTokens: 100,
+        })),
+      );
+      if (hoursAgo > 0) {
+        await system.execute(sql`
+          UPDATE messages SET created_at = now() - ${`${hoursAgo} hours`}::interval
+           WHERE conversation_id = ${conversationId}`);
+      }
+    }
+
+    it("refuses once the day's tokens are spent, counting input and output", async () => {
+      if (!available) return;
+      const { mayChat } = await withEnv({ CHAT_TOKENS_PER_DAY: "1000" });
+      await answered([600, 400]);
+      const decision = await mayChat(scope);
+      expect(decision.allowed).toBe(false);
+      if (decision.allowed) return;
+      expect(decision.reason).toMatch(/1,000 model tokens/);
+    });
+
+    it("allows the next question below the budget", async () => {
+      if (!available) return;
+      const { mayChat } = await withEnv({ CHAT_TOKENS_PER_DAY: "1000" });
+      await answered([600, 300]);
+      expect(await mayChat(scope)).toEqual({ allowed: true });
+    });
+
+    it("forgets answers older than a day", async () => {
+      if (!available) return;
+      const { mayChat } = await withEnv({ CHAT_TOKENS_PER_DAY: "1000" });
+      await answered([5000], 25);
+      expect(await mayChat(scope)).toEqual({ allowed: true });
+    });
+
+    it("applies with no question quota at all", async () => {
+      if (!available) return;
+      const { mayChat } = await withEnv({ CHAT_TOKENS_PER_DAY: "1000" });
+      await answered([1500]);
+      expect((await mayChat(scope)).allowed).toBe(false);
     });
   });
 

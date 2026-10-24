@@ -31,9 +31,12 @@ import { ECSClient } from "@aws-sdk/client-ecs";
 import { EKSClient } from "@aws-sdk/client-eks";
 import { Route53Client } from "@aws-sdk/client-route-53";
 import { AutoScalingClient } from "@aws-sdk/client-auto-scaling";
+import { OrganizationsClient } from "@aws-sdk/client-organizations";
 
 import { credentialProvider } from "./credentials.js";
-import type { ScanTarget } from "../tenancy/scanTarget.js";
+import { accountOfRole, pace } from "./pace.js";
+import { inSpan, tracingEnabled } from "../observability/tracing.js";
+import type { ScanTarget } from "../core/scanTarget.js";
 import { awsApiCalls, awsThrottles } from "../observability/metrics.js";
 
 /**
@@ -65,6 +68,12 @@ export class CallCounter {
 export interface AwsContext {
   target: ScanTarget;
   counter: CallCounter;
+  /**
+   * The scan unit making these calls, which they are counted under. Without
+   * it, two units sharing a client - VPC and EC2 both use EC2's - were
+   * counted under one key and each charged the other's calls.
+   */
+  unitKey?: string;
 }
 
 function baseConfig(ctx: AwsContext, region: string) {
@@ -97,7 +106,7 @@ interface MiddlewareStack {
   add: (
     middleware: (
       next: (args: unknown) => Promise<unknown>,
-      context: { commandName?: string },
+      context: { commandName?: string; clientName?: string },
     ) => (args: unknown) => Promise<unknown>,
     options: { step: "deserialize"; name: string; override: boolean },
   ) => void;
@@ -113,14 +122,25 @@ const THROTTLE = /throttl|RequestLimitExceeded|TooManyRequests|SlowDown|Provisio
  * including retries - which is what we want, since retries are exactly what
  * costs us when throttled.
  */
-function instrument<T extends object>(client: T, counter: CallCounter, key: string): T {
-  const { middlewareStack } = client as unknown as { middlewareStack: MiddlewareStack };
+function instrument<T extends object>(client: T, ctx: AwsContext, key: string): T {
+  const { counter } = ctx;
+  const { middlewareStack, config } = client as unknown as {
+    middlewareStack: MiddlewareStack;
+    config: { region: () => Promise<string> };
+  };
+  // Paced per account, SDK client and region: see pace.ts. Resolved once.
+  let paceKey: Promise<string> | null = null;
+  const keyFor = (clientName: string) =>
+    (paceKey ??= config
+      .region()
+      .then((region) => `${accountOfRole(ctx.target.roleArn)}:${clientName}:${region}`));
   // `ec2:us-east-1` - the service half is the metric label, because a region
   // label here would duplicate what the scan unit already reports.
   const service = key.split(":")[0] ?? key;
 
   middlewareStack.add(
     (next, context) => async (args) => {
+      await pace(await keyFor(context.clientName ?? service));
       counter.record(key);
       /**
        * The operation, from the SDK's own context: `DescribeInstancesCommand`.
@@ -132,7 +152,12 @@ function instrument<T extends object>(client: T, counter: CallCounter, key: stri
       awsApiCalls.inc({ service, operation });
 
       try {
-        return await next(args);
+        if (!tracingEnabled()) return await next(args);
+        return await inSpan(
+          `aws ${service}.${operation}`,
+          { "rpc.system": "aws-api", "rpc.service": service, "rpc.method": operation },
+          () => next(args),
+        );
       } catch (err) {
         // Counted separately because throttling is not our error: it is the
         // signal that a scan is competing with the customer's own workloads.
@@ -147,36 +172,48 @@ function instrument<T extends object>(client: T, counter: CallCounter, key: stri
 }
 
 export const ec2Client = (ctx: AwsContext, region: string) =>
-  instrument(new EC2Client(baseConfig(ctx, region)), ctx.counter, `ec2:${region}`);
+  instrument(new EC2Client(baseConfig(ctx, region)), ctx, ctx.unitKey ?? `ec2:${region}`);
 
 export const rdsClient = (ctx: AwsContext, region: string) =>
-  instrument(new RDSClient(baseConfig(ctx, region)), ctx.counter, `rds:${region}`);
+  instrument(new RDSClient(baseConfig(ctx, region)), ctx, ctx.unitKey ?? `rds:${region}`);
 
 export const lambdaClient = (ctx: AwsContext, region: string) =>
-  instrument(new LambdaClient(baseConfig(ctx, region)), ctx.counter, `lambda:${region}`);
+  instrument(new LambdaClient(baseConfig(ctx, region)), ctx, ctx.unitKey ?? `lambda:${region}`);
 
 export const elbv2Client = (ctx: AwsContext, region: string) =>
   instrument(
     new ElasticLoadBalancingV2Client(baseConfig(ctx, region)),
-    ctx.counter,
-    `elbv2:${region}`,
+    ctx,
+    ctx.unitKey ?? `elbv2:${region}`,
   );
 
 /** CloudFront is global and answers in us-east-1, whatever region a scan runs in. */
 export const cloudfrontClient = (ctx: AwsContext) =>
-  instrument(new CloudFrontClient(baseConfig(ctx, "us-east-1")), ctx.counter, "cloudfront:global");
+  instrument(
+    new CloudFrontClient(baseConfig(ctx, "us-east-1")),
+    ctx,
+    ctx.unitKey ?? "cloudfront:global",
+  );
 
 export const apigatewayClient = (ctx: AwsContext, region: string) =>
-  instrument(new APIGatewayClient(baseConfig(ctx, region)), ctx.counter, `apigateway:${region}`);
+  instrument(
+    new APIGatewayClient(baseConfig(ctx, region)),
+    ctx,
+    ctx.unitKey ?? `apigateway:${region}`,
+  );
 
 export const apigatewayV2Client = (ctx: AwsContext, region: string) =>
-  instrument(new ApiGatewayV2Client(baseConfig(ctx, region)), ctx.counter, `apigateway:${region}`);
+  instrument(
+    new ApiGatewayV2Client(baseConfig(ctx, region)),
+    ctx,
+    ctx.unitKey ?? `apigateway:${region}`,
+  );
 
 /** One regional client factory per service, counted under that service's unit. */
 const regional =
   <T extends object>(Client: new (config: ReturnType<typeof baseConfig>) => T, service: string) =>
   (ctx: AwsContext, region: string) =>
-    instrument(new Client(baseConfig(ctx, region)), ctx.counter, `${service}:${region}`);
+    instrument(new Client(baseConfig(ctx, region)), ctx, ctx.unitKey ?? `${service}:${region}`);
 
 export const sqsClient = regional(SQSClient, "sqs");
 export const snsClient = regional(SNSClient, "sns");
@@ -189,13 +226,13 @@ export const autoScalingClient = regional(AutoScalingClient, "autoscaling");
 
 /** Route 53 is global and answers in us-east-1. */
 export const route53Client = (ctx: AwsContext) =>
-  instrument(new Route53Client(baseConfig(ctx, "us-east-1")), ctx.counter, "route53:global");
+  instrument(new Route53Client(baseConfig(ctx, "us-east-1")), ctx, ctx.unitKey ?? "route53:global");
 
 export const resourceExplorerClient = (ctx: AwsContext, region: string) =>
   instrument(
     new ResourceExplorer2Client(baseConfig(ctx, region)),
-    ctx.counter,
-    `resource-explorer:${region}`,
+    ctx,
+    ctx.unitKey ?? `resource-explorer:${region}`,
   );
 
 /** moto serves S3 from a single host, so path-style addressing is required. */
@@ -205,12 +242,20 @@ export const s3Client = (ctx: AwsContext, region: string) =>
       ...baseConfig(ctx, region),
       ...(ctx.target.kind === "demo" ? { forcePathStyle: true } : {}),
     }),
-    ctx.counter,
+    ctx,
     // Counted under the global unit the runner reports, whichever region a
     // bucket lives in.
     "s3:global",
   );
 
 /** IAM is global. Its endpoint lives in us-east-1 regardless of where we scan. */
+/** Organizations is global; its endpoint is us-east-1 wherever the scan runs. */
+export const organizationsClient = (ctx: AwsContext) =>
+  instrument(
+    new OrganizationsClient(baseConfig(ctx, "us-east-1")),
+    ctx,
+    ctx.unitKey ?? "organizations:global",
+  );
+
 export const iamClient = (ctx: AwsContext) =>
-  instrument(new IAMClient(baseConfig(ctx, "us-east-1")), ctx.counter, "iam:global");
+  instrument(new IAMClient(baseConfig(ctx, "us-east-1")), ctx, ctx.unitKey ?? "iam:global");

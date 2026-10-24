@@ -28,8 +28,8 @@ import { eq, sql } from "drizzle-orm";
  */
 import { pool, system } from "../db/postgres.js";
 import { connections, scanJobs, tenants } from "../db/schema.js";
-import { asConnectionId, asTenantId } from "../tenancy/ids.js";
-import type { Scope } from "../tenancy/scope.js";
+import { asConnectionId, asTenantId } from "../core/ids.js";
+import type { Scope } from "../core/scope.js";
 import { lockQueueForTest } from "./queueTestLock.js";
 import {
   cancelQueuedJob,
@@ -260,6 +260,24 @@ describe.runIf(HAS_INFRA)("the scan queue", () => {
     await enqueueScan(scopes[0]!);
     const second = await enqueueScan(scopes[1]!);
     expect(second.status).toBe("queued");
+  });
+
+  it("serves a tenant with nothing running before one already being served", async () => {
+    if (!available) return;
+    await drain();
+    await enqueueScan(scopes[0]!);
+    await enqueueScan(scopes[1]!);
+    const theirs = await enqueueScan(otherScope);
+    await system.execute(
+      sql`UPDATE scan_jobs SET queued_at = now() + interval '1 minute' WHERE id = ${theirs.id}`,
+    );
+
+    // The first tenant's oldest job goes first, then the other tenant - queued
+    // last - is served before the first tenant's second job.
+    const first = await claimNextJob("worker-a");
+    expect(first?.tenantId).toBe(tenantId);
+    const second = await claimNextJob("worker-b");
+    expect(second?.id).toBe(theirs.id);
   });
 
   it("claims the oldest job first", async () => {

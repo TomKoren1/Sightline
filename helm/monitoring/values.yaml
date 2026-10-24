@@ -165,9 +165,8 @@ prometheus:
         # --- sightline -------------------------------------------------------
         #
         # Every rule carries `service: sightline`, which is what routes it to
-        # its own Slack channel. Symptom alerts, not burn-rate SLOs: an error
-        # budget needs traffic to mean anything, and at single-digit users a
-        # burn rate produces thresholds nobody can calibrate.
+        # its own Slack channel. Symptom alerts; the burn-rate SLOs are the
+        # next group, and carry a traffic guard so few users cannot trip them.
         - name: sightline
           rules:
             - alert: SightlineApiDown
@@ -260,7 +259,7 @@ prometheus:
                 service: sightline
               annotations:
                 summary: "Sightline is spending Anthropic tokens unusually fast"
-                description: "More than two million tokens an hour. Check CHAT_QUESTIONS_PER_HOUR and whether one tenant is responsible."
+                description: "More than two million tokens an hour. Check CHAT_QUESTIONS_PER_HOUR, CHAT_TOKENS_PER_DAY and whether one tenant is responsible."
 
             - alert: SightlineOnboardingFailing
               # Not an outage - a funnel problem, and the reason is the useful
@@ -274,6 +273,69 @@ prometheus:
               annotations:
                 summary: "Several customers are failing the same onboarding step"
                 description: "More than five AssumeRole failures with one diagnosed cause in six hours. If it is external_id_mismatch, the instructions are wrong rather than the customers."
+
+        # --- sightline SLOs --------------------------------------------------
+        #
+        # Two objectives, paged on how fast they spend their error budget
+        # rather than on a threshold - the multi-window rules from Google's SRE
+        # workbook. A fast burn spends 2% of a 30-day budget in an hour, a slow
+        # one 5% in six. Each also needs real traffic in the window (the
+        # `> 0.05` request-rate guard, 3 a minute): at a handful of users one
+        # failed request is a 100% error ratio, which is noise, not an outage.
+        #
+        #   availability  99.5% of requests are not 5xx    budget 0.005
+        #   latency       99% of non-streaming requests     budget 0.01
+        #                 finish within 1 s (chat and the scan stream are
+        #                 long-lived by design, so excluded)
+        - name: sightline-slo
+          rules:
+            - alert: SightlineAvailabilityBudgetFastBurn
+              expr: |
+                (sum(rate(http_requests_total{namespace="sightline", status=~"5.."}[1h])) / clamp_min(sum(rate(http_requests_total{namespace="sightline"}[1h])), 0.001)) > (14.4 * 0.005)
+                and (sum(rate(http_requests_total{namespace="sightline", status=~"5.."}[5m])) / clamp_min(sum(rate(http_requests_total{namespace="sightline"}[5m])), 0.001)) > (14.4 * 0.005)
+                and sum(rate(http_requests_total{namespace="sightline"}[1h])) > 0.05
+              labels:
+                severity: critical
+                service: sightline
+              annotations:
+                summary: "Sightline is burning its availability budget 14x too fast"
+                description: "Over the last hour more than 7.2% of requests were 5xx (the SLO is 99.5%). At this rate the month's budget is gone in two days."
+
+            - alert: SightlineAvailabilityBudgetSlowBurn
+              expr: |
+                (sum(rate(http_requests_total{namespace="sightline", status=~"5.."}[6h])) / clamp_min(sum(rate(http_requests_total{namespace="sightline"}[6h])), 0.001)) > (6 * 0.005)
+                and (sum(rate(http_requests_total{namespace="sightline", status=~"5.."}[30m])) / clamp_min(sum(rate(http_requests_total{namespace="sightline"}[30m])), 0.001)) > (6 * 0.005)
+                and sum(rate(http_requests_total{namespace="sightline"}[6h])) > 0.05
+              labels:
+                severity: warning
+                service: sightline
+              annotations:
+                summary: "Sightline is burning its availability budget 6x too fast"
+                description: "Over six hours more than 3% of requests were 5xx (the SLO is 99.5%). Not an outage yet; look before it is one."
+
+            - alert: SightlineLatencyBudgetFastBurn
+              expr: |
+                (1 - (sum(rate(http_request_duration_seconds_bucket{namespace="sightline", le="1", route!~"/api/chat|/api/scans/jobs/:jobId/stream"}[1h])) / clamp_min(sum(rate(http_request_duration_seconds_count{namespace="sightline", route!~"/api/chat|/api/scans/jobs/:jobId/stream"}[1h])), 0.001))) > (14.4 * 0.01)
+                and (1 - (sum(rate(http_request_duration_seconds_bucket{namespace="sightline", le="1", route!~"/api/chat|/api/scans/jobs/:jobId/stream"}[5m])) / clamp_min(sum(rate(http_request_duration_seconds_count{namespace="sightline", route!~"/api/chat|/api/scans/jobs/:jobId/stream"}[5m])), 0.001))) > (14.4 * 0.01)
+                and sum(rate(http_request_duration_seconds_count{namespace="sightline", route!~"/api/chat|/api/scans/jobs/:jobId/stream"}[1h])) > 0.05
+              labels:
+                severity: critical
+                service: sightline
+              annotations:
+                summary: "Sightline requests are slow, burning the latency budget 14x too fast"
+                description: "Over the last hour more than 14% of non-streaming requests took over 1 s (the SLO is 99% within 1 s). Check Postgres and the slowest routes on the dashboard."
+
+            - alert: SightlineLatencyBudgetSlowBurn
+              expr: |
+                (1 - (sum(rate(http_request_duration_seconds_bucket{namespace="sightline", le="1", route!~"/api/chat|/api/scans/jobs/:jobId/stream"}[6h])) / clamp_min(sum(rate(http_request_duration_seconds_count{namespace="sightline", route!~"/api/chat|/api/scans/jobs/:jobId/stream"}[6h])), 0.001))) > (6 * 0.01)
+                and (1 - (sum(rate(http_request_duration_seconds_bucket{namespace="sightline", le="1", route!~"/api/chat|/api/scans/jobs/:jobId/stream"}[30m])) / clamp_min(sum(rate(http_request_duration_seconds_count{namespace="sightline", route!~"/api/chat|/api/scans/jobs/:jobId/stream"}[30m])), 0.001))) > (6 * 0.01)
+                and sum(rate(http_request_duration_seconds_count{namespace="sightline", route!~"/api/chat|/api/scans/jobs/:jobId/stream"}[6h])) > 0.05
+              labels:
+                severity: warning
+                service: sightline
+              annotations:
+                summary: "Sightline requests are slow, burning the latency budget 6x too fast"
+                description: "Over six hours more than 6% of non-streaming requests took over 1 s (the SLO is 99% within 1 s)."
 
         # --- resume-builder --------------------------------------------------
         #

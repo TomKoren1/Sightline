@@ -1,0 +1,31 @@
+{
+  "accountId": "123456789012",
+  "regions": ["us-east-1", "eu-west-1", "ap-southeast-1"],
+  "resources": [
+    {
+      "arn": "arn:aws:dynamodb:us-east-1:123456789012:table/orders",
+      "kind": "DynamoTable",
+      "name": "orders",
+      "region": "us-east-1",
+      "accountId": "123456789012",
+      "tags": {},
+      "properties": {
+        "status": "ACTIVE",
+        "itemCount": 0,
+        "sizeBytes": 0,
+        "billingMode": "PAY_PER_REQUEST",
+        "encryption": "AWS_OWNED",
+        "pointInTimeRecovery": false,
+        "deletionProtection": false
+      },
+      "derived": {}
+    }
+  ],
+  "relationships": [
+    {
+      "from": "arn:aws:dynamodb:us-east-1:123456789012:table/orders",
+      "to": "arn:aws:sightline:us-east-1:123456789012:region/us-east-1",
+      "type": "IN_REGION"
+    }
+  ]
+}

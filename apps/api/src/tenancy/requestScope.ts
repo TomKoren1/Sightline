@@ -16,22 +16,16 @@
  */
 
 import { BadRequestException, ConflictException } from "@nestjs/common";
-import { and, asc, eq } from "drizzle-orm";
+import { and, asc, eq, ne } from "drizzle-orm";
 
-import { isHosted } from "../config.js";
+import { isHosted } from "../core/config.js";
 import { db, withTenant } from "../db/postgres.js";
 import { connections } from "../db/schema.js";
-import { asConnectionId, asTenantId, type ConnectionId, type TenantId } from "./ids.js";
+import { asConnectionId, asTenantId, type ConnectionId, type TenantId } from "../core/ids.js";
 import { localScope } from "./local.js";
-import type { Scope } from "./scope.js";
+import type { Scope } from "../core/scope.js";
 import { requestsWithoutConnection } from "../observability/metrics.js";
-
-/** What the guard has put on the request by the time a scope is wanted. */
-export interface ScopedRequest {
-  tenantId?: TenantId;
-  scope?: Scope;
-  headers?: Record<string, string | string[] | undefined>;
-}
+import type { ScopedRequest } from "../core/request.js";
 
 export const CONNECTION_HEADER = "x-sightline-connection";
 
@@ -94,7 +88,8 @@ async function connectionFor(req: ScopedRequest, tenantId: TenantId, fallback?: 
   const [first] = await db
     .select({ id: connections.id })
     .from(connections)
-    .where(eq(connections.tenantId, tenantId))
+    // An organization holds no inventory of its own; its accounts do.
+    .where(and(eq(connections.tenantId, tenantId), ne(connections.kind, "organization")))
     .orderBy(asc(connections.createdAt))
     .limit(1);
 

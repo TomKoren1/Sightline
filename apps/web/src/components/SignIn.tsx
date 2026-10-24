@@ -35,7 +35,7 @@ function signInMessage(code: string | null): string | null {
   }
 }
 
-export function SignIn({ providers }: { providers: string[] }) {
+export function SignIn({ providers, invited = false }: { providers: string[]; invited?: boolean }) {
   const message = signInMessage(new URLSearchParams(window.location.search).get("signin"));
 
   return (
@@ -46,6 +46,12 @@ export function SignIn({ providers }: { providers: string[] }) {
           Connect an AWS account read-only, and ask what can reach your production database, who is
           effectively an administrator, and what changed since yesterday.
         </p>
+
+        {invited && (
+          <p className="mt-4 rounded border border-accent/40 bg-accent/10 px-3 py-2 text-[11px] leading-relaxed text-accent">
+            You have been invited to a workspace. Sign in, and you will join it.
+          </p>
+        )}
 
         {message && (
           <p className="mt-4 rounded border border-warn/40 bg-warn/10 px-3 py-2 text-[11px] leading-relaxed text-warn">

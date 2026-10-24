@@ -150,6 +150,17 @@ export const GROUND_TRUTH = {
     ["prod-eks", "PlatformPodAdminRole", "*"],
   ],
 
+  /**
+   * Access from other accounts, `[resource, account, needs an ExternalId]`.
+   * The vendor's has none, which is the finding; none of the three accounts
+   * is connected to Sightline.
+   */
+  crossAccountGrants: [
+    ["VendorAuditRole", "999988887777", false],
+    ["BackupVendorRole", "888877776666", true],
+    ["partner-intake", "777766665555", false],
+  ],
+
   /** Node groups whose SSH key is usable from anywhere: no source groups. */
   sshOpenNodeGroups: ["prod-nodes"],
 

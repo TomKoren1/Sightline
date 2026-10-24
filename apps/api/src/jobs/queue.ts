@@ -21,9 +21,10 @@ import { and, eq, sql } from "drizzle-orm";
 
 import { db, system, withTenant } from "../db/postgres.js";
 import { scanJobs } from "../db/schema.js";
-import type { ConnectionId, JobId, ScanId, TenantId } from "../tenancy/ids.js";
-import { asConnectionId, asJobId, asTenantId } from "../tenancy/ids.js";
-import type { Scope } from "../tenancy/scope.js";
+import type { ConnectionId, JobId, ScanId, TenantId } from "../core/ids.js";
+import { asConnectionId, asJobId, asTenantId } from "../core/ids.js";
+import type { Scope } from "../core/scope.js";
+import { currentTraceparent } from "../observability/tracing.js";
 import {
   scanJobs as scanJobsTotal,
   scanJobsReclaimed,
@@ -75,6 +76,8 @@ export interface ScanJob {
   startedAt: Date | null;
   finishedAt: Date | null;
   error: string | null;
+  /** Continues the queuing request's trace in the worker. Claims only. */
+  traceParent?: string | null;
 }
 
 /**
@@ -138,6 +141,7 @@ export async function enqueueScan(
         connectionId: scope.connectionId,
         status: "queued",
         requestedBy,
+        traceParent: currentTraceparent(),
       });
     } catch (err) {
       if (isDuplicateActiveJob(err)) throw new ScanAlreadyQueued(await activeJobId(scope));
@@ -205,11 +209,17 @@ function rowToJob(row: Record<string, unknown>): ScanJob {
     startedAt: row["started_at"] ? new Date(row["started_at"] as string) : null,
     finishedAt: row["finished_at"] ? new Date(row["finished_at"] as string) : null,
     error: (row["error"] as string | null) ?? null,
+    traceParent: (row["trace_parent"] as string | null) ?? null,
   };
 }
 
 /**
- * Take the oldest queued job, or return null if there is none.
+ * Take the next queued job, or return null if there is none.
+ *
+ * Fair across tenants: the next job belongs to whichever waiting tenant has
+ * the fewest scans already running, oldest first among equals. Plain FIFO let
+ * whoever queued first hold every worker - one tenant's three scans, queued a
+ * second before somebody else's one, all ran before it.
  *
  * Raw SQL: the correctness rests on the `FOR UPDATE SKIP LOCKED` subquery being
  * inside the UPDATE, so selecting a row and claiming it are one statement. A
@@ -231,11 +241,13 @@ export async function claimNextJob(workerId: string): Promise<ScanJob | null> {
            started_at = COALESCE(started_at, now()),
            attempts = attempts + 1
      WHERE id = (
-             SELECT id
-               FROM scan_jobs
-              WHERE status = 'queued'
-              ORDER BY queued_at
-                FOR UPDATE SKIP LOCKED
+             SELECT q.id
+               FROM scan_jobs q
+              WHERE q.status = 'queued'
+              ORDER BY (SELECT count(*) FROM scan_jobs r
+                         WHERE r.tenant_id = q.tenant_id AND r.status = 'running'),
+                       q.queued_at
+                FOR UPDATE OF q SKIP LOCKED
               LIMIT 1
            )
     RETURNING *

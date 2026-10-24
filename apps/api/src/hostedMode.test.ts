@@ -145,6 +145,20 @@ describe("hosted invariants", () => {
     );
   });
 
+  it("refuses Roles Anywhere half configured, and accepts all five or none", () => {
+    const all = {
+      ROLES_ANYWHERE_CERTIFICATE: "/etc/c.pem",
+      ROLES_ANYWHERE_PRIVATE_KEY: "/etc/k.pem",
+      ROLES_ANYWHERE_TRUST_ANCHOR_ARN: "arn:aws:rolesanywhere:us-east-1:1:trust-anchor/a",
+      ROLES_ANYWHERE_PROFILE_ARN: "arn:aws:rolesanywhere:us-east-1:1:profile/p",
+      ROLES_ANYWHERE_ROLE_ARN: "arn:aws:iam::1:role/SightlineScanner",
+    };
+    expect(hostedInvariantViolations({ ...valid, ...all })).toEqual([]);
+    expect(reasons({ ...valid, ...all, ROLES_ANYWHERE_PROFILE_ARN: "" })).toMatch(
+      /half configured: ROLES_ANYWHERE_PROFILE_ARN missing/,
+    );
+  });
+
   it("refuses the browser suite's stand-ins anywhere but loopback", () => {
     for (const key of ["KMS_ENDPOINT_URL", "E2E_IDENTITY_PROVIDER_URL"]) {
       expect(reasons({ ...valid, [key]: "http://127.0.0.1:4010" })).toMatch(/test seam/);
@@ -189,10 +203,10 @@ describe("hosted invariants", () => {
     delete process.env["AWS_ENDPOINT_URL"];
     vi.resetModules();
 
-    const hosted = await import("./config.js");
+    const hosted = await import("./core/config.js");
     expect(hosted.isHosted()).toBe(true);
     expect(hosted.cfg.AWS_MODE).toBe("mock");
-    expect(hosted.isMock()).toBe(false);
+    expect((await import("./aws/settings.js")).isMock()).toBe(false);
   });
 
   it("still means what it says in a self-hosted deployment", async () => {
@@ -203,9 +217,9 @@ describe("hosted invariants", () => {
     delete process.env["DEPLOYMENT_MODE"];
     vi.resetModules();
 
-    const selfHosted = await import("./config.js");
+    const selfHosted = await import("./core/config.js");
     expect(selfHosted.isHosted()).toBe(false);
-    expect(selfHosted.isMock()).toBe(true);
+    expect((await import("./aws/settings.js")).isMock()).toBe(true);
   });
 
   it("throws with every reason numbered", () => {

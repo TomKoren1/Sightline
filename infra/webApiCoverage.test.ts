@@ -31,9 +31,6 @@ const UNUSED: Record<string, string> = {
   health:
     "`/api/health` is rendered by the Trust panel's own queries rather than through this method.",
   scans: "The banner shows the latest scan; there is no scan-history view yet.",
-  sessions: "No 'your sessions' screen exists yet, though the routes behind it do.",
-  revokeSession: "Same: per-session revocation has no control.",
-  revokeAllSessions: "Same: 'sign out everywhere' has no control.",
   connections: "`me` already returns the tenant's connections, so nothing fetches them separately.",
 };
 

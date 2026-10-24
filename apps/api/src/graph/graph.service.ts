@@ -15,13 +15,14 @@
  */
 
 import { Injectable, NotFoundException } from "@nestjs/common";
+import type * as api from "@sightline/shared/api";
 
 import { listFindingStates, setFindingStatus } from "../db/findings.js";
 import * as q from "../db/graph.js";
 import type { GraphScope } from "../db/graph.js";
 import type { FindingCategory } from "../db/schema.js";
 import { graphScopeFor } from "../tenancy/graphScope.js";
-import type { Scope } from "../tenancy/scope.js";
+import type { Scope } from "../core/scope.js";
 import { remediationInputFromGraph } from "../remediation/fromGraph.js";
 import { remediationsFor } from "../remediation/remediation.js";
 
@@ -34,6 +35,7 @@ const EMPTY_SUMMARY = {
   idleCount: 0,
   idleCost: 0,
   unprotectedCount: 0,
+  unusedCount: 0,
 };
 
 const EMPTY_FINDINGS = {
@@ -42,25 +44,52 @@ const EMPTY_FINDINGS = {
   idle: [],
   exposed: [],
   unprotected: [],
+  unused: [],
   accepted: [],
 };
 
+/** Each list `findings()` returns: the finder behind it, and its finding category. */
+export const FINDING_LISTS = {
+  publicResources: ["findPublicResources", "exposed"],
+  adminPrincipals: ["findAdminPrincipals", "admin"],
+  idle: ["findIdleResources", "idle"],
+  exposed: ["findOpenSecurityGroups", "exposed"],
+  unprotected: ["findUnprotectedBuckets", "unguarded"],
+  unused: ["findUnusedAccess", "unused"],
+} as const satisfies Record<api.FindingListName, readonly [q.FinderName, FindingCategory]>;
+export type FindingList = keyof typeof FINDING_LISTS;
+
 @Injectable()
 export class GraphService {
-  async summary(scope: Scope) {
+  async summary(scope: Scope): Promise<api.Summary> {
     const graph = await graphScopeFor(scope);
     return graph ? q.summariseAccount(graph) : EMPTY_SUMMARY;
   }
 
-  async graph(scope: Scope, params: { region?: string; kinds?: string; limit?: string }) {
+  async graph(
+    scope: Scope,
+    params: { region?: string; kinds?: string; limit?: string; group?: string },
+  ): Promise<api.GraphData> {
     const graph = await graphScopeFor(scope);
-    if (!graph) return { nodes: [], edges: [] };
+    if (!graph) return { nodes: [], edges: [], total: 0, truncated: false };
     const kinds = params.kinds?.split(",").filter(Boolean);
     return q.fetchGraph(graph, {
       region: params.region,
       ...(kinds && kinds.length > 0 ? { kinds } : {}),
       limit: params.limit ? Number(params.limit) : undefined,
+      ...(params.group ? { group: params.group } : {}),
     });
+  }
+
+  async groups(scope: Scope): Promise<{ groups: api.GraphGroup[] }> {
+    const graph = await graphScopeFor(scope);
+    return { groups: graph ? await q.graphGroups(graph) : [] };
+  }
+
+  async neighbours(scope: Scope, arn: string): Promise<api.GraphData> {
+    const graph = await graphScopeFor(scope);
+    if (!graph) return { nodes: [], edges: [], total: 0, truncated: false };
+    return q.neighbourhood(graph, arn);
   }
 
   async resource(scope: Scope, arn: string) {
@@ -108,17 +137,19 @@ export class GraphService {
     const acceptedCount = (await listFindingStates(scope, { acceptedOr: [] })).length;
     const limit = 50 + acceptedCount;
 
-    const [publicResources, adminPrincipals, idle, exposed, unprotected] = await Promise.all([
-      q.findPublicResources(graph, { limit }),
-      q.findAdminPrincipals(graph, { limit }),
-      q.findIdleResources(graph, { limit }),
-      q.findOpenSecurityGroups(graph, { limit }),
-      q.findUnprotectedBuckets(graph, { limit }),
-    ]);
+    const [publicResources, adminPrincipals, idle, exposed, unprotected, unused] =
+      await Promise.all([
+        q.findPublicResources(graph, { limit }),
+        q.findAdminPrincipals(graph, { limit }),
+        q.findIdleResources(graph, { limit }),
+        q.findOpenSecurityGroups(graph, { limit }),
+        q.findUnprotectedBuckets(graph, { limit }),
+        q.findUnusedAccess(graph, { limit }),
+      ]);
 
     // Only the states of what is about to be shown, plus every acceptance.
-    const shown = [publicResources, adminPrincipals, idle, exposed, unprotected].flatMap((rows) =>
-      rows.map((row) => row.arn),
+    const shown = [publicResources, adminPrincipals, idle, exposed, unprotected, unused].flatMap(
+      (rows) => rows.map((row) => row.arn),
     );
     const states = await listFindingStates(scope, { acceptedOr: shown });
     const tracked = new Map(states.map((s) => [`${s.category} ${s.resourceArn}`, s]));
@@ -164,8 +195,39 @@ export class GraphService {
       // Internet-reachable through a rule: the same exposure, named differently.
       exposed: annotate("exposed", exposed),
       unprotected: annotate("unguarded", unprotected),
+      unused: annotate("unused", unused),
       accepted,
     };
+  }
+
+  /**
+   * The next page of one findings list, past the 50 `findings()` returns.
+   *
+   * Offsets count the whole list, accepted findings included, because the
+   * finders know nothing of finding state; accepted ones are then hidden as
+   * on the first page. A caller asking from the number it has shown may see a
+   * few rows again, never miss one, and follows `next` from there.
+   */
+  async findingsPage(scope: Scope, list: FindingList, offset: number) {
+    const graph = await graphScopeFor(scope);
+    if (!graph) return { rows: [], total: 0, offset: 0, next: null };
+    const [finder, category] = FINDING_LISTS[list];
+    const page = await q.pageOf(finder, graph, { limit: 50, offset });
+    const states = await listFindingStates(scope, { acceptedOr: page.rows.map((r) => r.arn) });
+    const tracked = new Map(states.map((st) => [`${st.category} ${st.resourceArn}`, st]));
+    const rows = page.rows
+      .map((row) => {
+        const state = tracked.get(`${category} ${row.arn}`);
+        return {
+          ...row,
+          finding: state
+            ? { id: state.id, status: state.status, firstSeenAt: state.firstSeenAt }
+            : null,
+        };
+      })
+      .filter((row) => row.finding?.status !== "accepted");
+    const end = page.offset + page.rows.length;
+    return { rows, total: page.total, offset: page.offset, next: end < page.total ? end : null };
   }
 
   /** Accept a finding's risk with a reason, or reopen it. */

@@ -11,7 +11,7 @@ import type { Resource } from "@sightline/shared";
 import { system } from "../db/postgres.js";
 import * as schema from "../db/schema.js";
 import { createScanRun, saveScanResult } from "../db/repository.js";
-import { asConnectionId, asScanId, asTenantId } from "../tenancy/ids.js";
+import { asConnectionId, asScanId, asTenantId } from "../core/ids.js";
 import { pageLine } from "./agent.js";
 import { encodeCursor, runTool, type ToolContext } from "./tools.js";
 

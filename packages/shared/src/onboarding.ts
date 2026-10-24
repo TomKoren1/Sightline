@@ -324,3 +324,42 @@ export const OTHER_MANAGED_ENV_KEYS = [
   "COMPOSE_FILE",
   "COMPOSE_PATH_SEPARATOR",
 ] as const;
+
+/**
+ * The same role in every account of an AWS Organization: a service-managed
+ * StackSet, run from the management account, deploying to the root so new
+ * accounts get it automatically. Service-managed StackSets skip the management
+ * account itself, which gets the ordinary stack - the one-click link.
+ *
+ * One ExternalId for every member: it is the organization connection's, which
+ * each member connection inherits. IAM is global, so one region is enough.
+ */
+export function stackSetCommands(input: {
+  templateUrl: string;
+  scannerPrincipalArn: string;
+  externalId: string;
+  region: string;
+  tenantId: string;
+}): string {
+  const name = stackNameFor(input.tenantId);
+  const param = (key: string, value: string) => `ParameterKey=${key},ParameterValue=${value}`;
+  const more = " \\";
+  return [
+    "aws cloudformation create-stack-set" + more,
+    `  --stack-set-name ${name}` + more,
+    `  --template-url ${input.templateUrl}` + more,
+    "  --capabilities CAPABILITY_NAMED_IAM" + more,
+    "  --permission-model SERVICE_MANAGED" + more,
+    "  --auto-deployment Enabled=true,RetainStacksOnAccountRemoval=false" + more,
+    "  --parameters" + more,
+    `      ${param("SightlineScannerRoleArn", input.scannerPrincipalArn)}` + more,
+    `      ${param("ExternalId", input.externalId)}` + more,
+    `      ${param("RoleName", readOnlyRoleName(input.tenantId))}`,
+    "",
+    "# Your organization's root id: aws organizations list-roots --query 'Roots[0].Id'",
+    "aws cloudformation create-stack-instances" + more,
+    `  --stack-set-name ${name}` + more,
+    "  --deployment-targets OrganizationalUnitIds=<root id, r-xxxx>" + more,
+    `  --regions ${input.region}`,
+  ].join("\n");
+}

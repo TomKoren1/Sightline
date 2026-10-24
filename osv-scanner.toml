@@ -1,0 +1,11 @@
+# Advisories osv-scanner reports that do not apply here, each with the reason.
+# SECURITY.md ("Known limitations") is the long form. Anything new fails CI.
+
+[[IgnoredVulns]]
+id = "GHSA-67mh-4wv8-2f99"
+reason = "esbuild dev server, pinned by drizzle-kit's @esbuild-kit dependencies; drizzle-kit is a migration CLI and never starts the server."
+
+[[IgnoredVulns]]
+id = "GHSA-389g-gv7q-r4x8"
+ignoreUntil = 2026-12-31
+reason = "Fastify header JSON-schema validation; this app validates requests with zod. Fixed with @nestjs/platform-fastify 12.2, taken once it is not days old."

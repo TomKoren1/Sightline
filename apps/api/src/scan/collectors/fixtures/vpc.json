@@ -1,0 +1,3968 @@
+{
+  "accountId": "123456789012",
+  "regions": ["us-east-1", "eu-west-1", "ap-southeast-1"],
+  "resources": [
+    {
+      "arn": "arn:aws:ec2:ap-southeast-1:123456789012:internet-gateway/igw-9a9d5a6b0ae1711a6",
+      "kind": "InternetGateway",
+      "name": "legacy-vpc-igw",
+      "region": "ap-southeast-1",
+      "accountId": "123456789012",
+      "tags": {
+        "Name": "legacy-vpc-igw",
+        "Environment": "legacy",
+        "Owner": "unknown"
+      },
+      "properties": {
+        "internetGatewayId": "igw-9a9d5a6b0ae1711a6",
+        "attachedVpcId": "vpc-ced43c5faf20736d9"
+      },
+      "derived": {}
+    },
+    {
+      "arn": "arn:aws:ec2:ap-southeast-1:123456789012:natgateway/nat-6022a9190a6e27be6",
+      "kind": "NatGateway",
+      "name": "legacy-nat",
+      "region": "ap-southeast-1",
+      "accountId": "123456789012",
+      "tags": {
+        "Name": "legacy-nat",
+        "Environment": "legacy",
+        "Owner": "unknown"
+      },
+      "properties": {
+        "natGatewayId": "nat-6022a9190a6e27be6",
+        "subnetId": "subnet-6bc8aed5ae4aac5da",
+        "vpcId": "vpc-ced43c5faf20736d9",
+        "state": "available",
+        "createdAt": "2026-10-24T05:19:39.000Z"
+      },
+      "derived": {}
+    },
+    {
+      "arn": "arn:aws:ec2:ap-southeast-1:123456789012:network-acl/acl-d7ff01d3b224704c2",
+      "kind": "NetworkAcl",
+      "name": "acl-d7ff01d3b224704c2",
+      "region": "ap-southeast-1",
+      "accountId": "123456789012",
+      "tags": {},
+      "properties": {
+        "networkAclId": "acl-d7ff01d3b224704c2",
+        "vpcId": "vpc-b635d27a468c4ad46",
+        "isDefault": true,
+        "entries": [
+          {
+            "ruleNumber": 100,
+            "egress": true,
+            "action": "allow",
+            "protocol": "-1",
+            "cidr": "0.0.0.0/0",
+            "fromPort": null,
+            "toPort": null
+          },
+          {
+            "ruleNumber": 32767,
+            "egress": true,
+            "action": "deny",
+            "protocol": "-1",
+            "cidr": "0.0.0.0/0",
+            "fromPort": null,
+            "toPort": null
+          },
+          {
+            "ruleNumber": 100,
+            "egress": false,
+            "action": "allow",
+            "protocol": "-1",
+            "cidr": "0.0.0.0/0",
+            "fromPort": null,
+            "toPort": null
+          },
+          {
+            "ruleNumber": 32767,
+            "egress": false,
+            "action": "deny",
+            "protocol": "-1",
+            "cidr": "0.0.0.0/0",
+            "fromPort": null,
+            "toPort": null
+          }
+        ]
+      },
+      "derived": {}
+    },
+    {
+      "arn": "arn:aws:ec2:ap-southeast-1:123456789012:network-acl/acl-fc9a42833a4c701d9",
+      "kind": "NetworkAcl",
+      "name": "acl-fc9a42833a4c701d9",
+      "region": "ap-southeast-1",
+      "accountId": "123456789012",
+      "tags": {},
+      "properties": {
+        "networkAclId": "acl-fc9a42833a4c701d9",
+        "vpcId": "vpc-ced43c5faf20736d9",
+        "isDefault": true,
+        "entries": [
+          {
+            "ruleNumber": 100,
+            "egress": true,
+            "action": "allow",
+            "protocol": "-1",
+            "cidr": "0.0.0.0/0",
+            "fromPort": null,
+            "toPort": null
+          },
+          {
+            "ruleNumber": 32767,
+            "egress": true,
+            "action": "deny",
+            "protocol": "-1",
+            "cidr": "0.0.0.0/0",
+            "fromPort": null,
+            "toPort": null
+          },
+          {
+            "ruleNumber": 100,
+            "egress": false,
+            "action": "allow",
+            "protocol": "-1",
+            "cidr": "0.0.0.0/0",
+            "fromPort": null,
+            "toPort": null
+          },
+          {
+            "ruleNumber": 32767,
+            "egress": false,
+            "action": "deny",
+            "protocol": "-1",
+            "cidr": "0.0.0.0/0",
+            "fromPort": null,
+            "toPort": null
+          }
+        ]
+      },
+      "derived": {}
+    },
+    {
+      "arn": "arn:aws:ec2:ap-southeast-1:123456789012:route-table/rtb-655dbc7288189e3af",
+      "kind": "RouteTable",
+      "name": "rtb-655dbc7288189e3af",
+      "region": "ap-southeast-1",
+      "accountId": "123456789012",
+      "tags": {},
+      "properties": {
+        "routeTableId": "rtb-655dbc7288189e3af",
+        "vpcId": "vpc-b635d27a468c4ad46",
+        "isMain": true,
+        "hasInternetRoute": false,
+        "internetGatewayId": null,
+        "routeCount": 1,
+        "routes": [
+          {
+            "destination": "172.31.0.0/16",
+            "targetType": "local",
+            "targetId": null,
+            "state": "active"
+          }
+        ]
+      },
+      "derived": {}
+    },
+    {
+      "arn": "arn:aws:ec2:ap-southeast-1:123456789012:route-table/rtb-884dd22ecaff6e914",
+      "kind": "RouteTable",
+      "name": "legacy-vpc-private-rt",
+      "region": "ap-southeast-1",
+      "accountId": "123456789012",
+      "tags": {
+        "Name": "legacy-vpc-private-rt",
+        "Environment": "legacy",
+        "Owner": "unknown"
+      },
+      "properties": {
+        "routeTableId": "rtb-884dd22ecaff6e914",
+        "vpcId": "vpc-ced43c5faf20736d9",
+        "isMain": false,
+        "hasInternetRoute": false,
+        "internetGatewayId": null,
+        "routeCount": 2,
+        "routes": [
+          {
+            "destination": "10.2.0.0/16",
+            "targetType": "local",
+            "targetId": null,
+            "state": "active"
+          },
+          {
+            "destination": "0.0.0.0/0",
+            "targetType": "nat-gateway",
+            "targetId": "nat-6022a9190a6e27be6",
+            "state": "active"
+          }
+        ]
+      },
+      "derived": {}
+    },
+    {
+      "arn": "arn:aws:ec2:ap-southeast-1:123456789012:route-table/rtb-c0636fefc84ab8e75",
+      "kind": "RouteTable",
+      "name": "rtb-c0636fefc84ab8e75",
+      "region": "ap-southeast-1",
+      "accountId": "123456789012",
+      "tags": {},
+      "properties": {
+        "routeTableId": "rtb-c0636fefc84ab8e75",
+        "vpcId": "vpc-ced43c5faf20736d9",
+        "isMain": true,
+        "hasInternetRoute": false,
+        "internetGatewayId": null,
+        "routeCount": 1,
+        "routes": [
+          {
+            "destination": "10.2.0.0/16",
+            "targetType": "local",
+            "targetId": null,
+            "state": "active"
+          }
+        ]
+      },
+      "derived": {}
+    },
+    {
+      "arn": "arn:aws:ec2:ap-southeast-1:123456789012:route-table/rtb-c98c64d63658c9a1c",
+      "kind": "RouteTable",
+      "name": "legacy-vpc-public-rt",
+      "region": "ap-southeast-1",
+      "accountId": "123456789012",
+      "tags": {
+        "Name": "legacy-vpc-public-rt",
+        "Environment": "legacy",
+        "Owner": "unknown"
+      },
+      "properties": {
+        "routeTableId": "rtb-c98c64d63658c9a1c",
+        "vpcId": "vpc-ced43c5faf20736d9",
+        "isMain": false,
+        "hasInternetRoute": true,
+        "internetGatewayId": "igw-9a9d5a6b0ae1711a6",
+        "routeCount": 2,
+        "routes": [
+          {
+            "destination": "10.2.0.0/16",
+            "targetType": "local",
+            "targetId": null,
+            "state": "active"
+          },
+          {
+            "destination": "0.0.0.0/0",
+            "targetType": "internet-gateway",
+            "targetId": "igw-9a9d5a6b0ae1711a6",
+            "state": "active"
+          }
+        ]
+      },
+      "derived": {}
+    },
+    {
+      "arn": "arn:aws:ec2:ap-southeast-1:123456789012:security-group/sg-2fe00858128b31c85",
+      "kind": "SecurityGroup",
+      "name": "default",
+      "region": "ap-southeast-1",
+      "accountId": "123456789012",
+      "tags": {},
+      "properties": {
+        "groupId": "sg-2fe00858128b31c85",
+        "groupName": "default",
+        "description": "default VPC security group",
+        "vpcId": "vpc-b635d27a468c4ad46",
+        "ingress": [],
+        "ingressRuleCount": 0
+      },
+      "derived": {}
+    },
+    {
+      "arn": "arn:aws:ec2:ap-southeast-1:123456789012:security-group/sg-544da0e2c217363c1",
+      "kind": "SecurityGroup",
+      "name": "default",
+      "region": "ap-southeast-1",
+      "accountId": "123456789012",
+      "tags": {},
+      "properties": {
+        "groupId": "sg-544da0e2c217363c1",
+        "groupName": "default",
+        "description": "default VPC security group",
+        "vpcId": "vpc-ced43c5faf20736d9",
+        "ingress": [],
+        "ingressRuleCount": 0
+      },
+      "derived": {}
+    },
+    {
+      "arn": "arn:aws:ec2:ap-southeast-1:123456789012:subnet/subnet-1f1c7101c04d9cfe3",
+      "kind": "Subnet",
+      "name": "subnet-1f1c7101c04d9cfe3",
+      "region": "ap-southeast-1",
+      "accountId": "123456789012",
+      "tags": {},
+      "properties": {
+        "subnetId": "subnet-1f1c7101c04d9cfe3",
+        "vpcId": "vpc-b635d27a468c4ad46",
+        "cidrBlock": "172.31.32.0/20",
+        "availabilityZone": "ap-southeast-1c",
+        "mapPublicIpOnLaunch": true,
+        "routeTableId": "rtb-655dbc7288189e3af",
+        "isPublic": false
+      },
+      "derived": {
+        "isPublic": false,
+        "publicReason": "The route table this subnet uses has no active default route to an internet gateway"
+      }
+    },
+    {
+      "arn": "arn:aws:ec2:ap-southeast-1:123456789012:subnet/subnet-33a8f911769ccb7a5",
+      "kind": "Subnet",
+      "name": "legacy-vpc-private-a",
+      "region": "ap-southeast-1",
+      "accountId": "123456789012",
+      "tags": {
+        "Name": "legacy-vpc-private-a",
+        "Environment": "legacy",
+        "Owner": "unknown",
+        "Tier": "private"
+      },
+      "properties": {
+        "subnetId": "subnet-33a8f911769ccb7a5",
+        "vpcId": "vpc-ced43c5faf20736d9",
+        "cidrBlock": "10.2.10.0/24",
+        "availabilityZone": "ap-southeast-1b",
+        "mapPublicIpOnLaunch": false,
+        "routeTableId": "rtb-884dd22ecaff6e914",
+        "isPublic": false
+      },
+      "derived": {
+        "isPublic": false,
+        "publicReason": "The route table this subnet uses has no active default route to an internet gateway"
+      }
+    },
+    {
+      "arn": "arn:aws:ec2:ap-southeast-1:123456789012:subnet/subnet-6bc8aed5ae4aac5da",
+      "kind": "Subnet",
+      "name": "legacy-vpc-public-a",
+      "region": "ap-southeast-1",
+      "accountId": "123456789012",
+      "tags": {
+        "Name": "legacy-vpc-public-a",
+        "Environment": "legacy",
+        "Owner": "unknown",
+        "Tier": "public"
+      },
+      "properties": {
+        "subnetId": "subnet-6bc8aed5ae4aac5da",
+        "vpcId": "vpc-ced43c5faf20736d9",
+        "cidrBlock": "10.2.1.0/24",
+        "availabilityZone": "ap-southeast-1a",
+        "mapPublicIpOnLaunch": false,
+        "routeTableId": "rtb-c98c64d63658c9a1c",
+        "isPublic": true
+      },
+      "derived": {
+        "isPublic": true,
+        "publicReason": "Its route table sends 0.0.0.0/0 to internet gateway igw-9a9d5a6b0ae1711a6"
+      }
+    },
+    {
+      "arn": "arn:aws:ec2:ap-southeast-1:123456789012:subnet/subnet-7b51e5a9520271776",
+      "kind": "Subnet",
+      "name": "subnet-7b51e5a9520271776",
+      "region": "ap-southeast-1",
+      "accountId": "123456789012",
+      "tags": {},
+      "properties": {
+        "subnetId": "subnet-7b51e5a9520271776",
+        "vpcId": "vpc-b635d27a468c4ad46",
+        "cidrBlock": "172.31.16.0/20",
+        "availabilityZone": "ap-southeast-1b",
+        "mapPublicIpOnLaunch": true,
+        "routeTableId": "rtb-655dbc7288189e3af",
+        "isPublic": false
+      },
+      "derived": {
+        "isPublic": false,
+        "publicReason": "The route table this subnet uses has no active default route to an internet gateway"
+      }
+    },
+    {
+      "arn": "arn:aws:ec2:ap-southeast-1:123456789012:subnet/subnet-cc05d3aaa219aa691",
+      "kind": "Subnet",
+      "name": "legacy-vpc-private-b",
+      "region": "ap-southeast-1",
+      "accountId": "123456789012",
+      "tags": {
+        "Name": "legacy-vpc-private-b",
+        "Environment": "legacy",
+        "Owner": "unknown",
+        "Tier": "private"
+      },
+      "properties": {
+        "subnetId": "subnet-cc05d3aaa219aa691",
+        "vpcId": "vpc-ced43c5faf20736d9",
+        "cidrBlock": "10.2.11.0/24",
+        "availabilityZone": "ap-southeast-1b",
+        "mapPublicIpOnLaunch": false,
+        "routeTableId": "rtb-884dd22ecaff6e914",
+        "isPublic": false
+      },
+      "derived": {
+        "isPublic": false,
+        "publicReason": "The route table this subnet uses has no active default route to an internet gateway"
+      }
+    },
+    {
+      "arn": "arn:aws:ec2:ap-southeast-1:123456789012:subnet/subnet-d643a770bc65e6738",
+      "kind": "Subnet",
+      "name": "subnet-d643a770bc65e6738",
+      "region": "ap-southeast-1",
+      "accountId": "123456789012",
+      "tags": {},
+      "properties": {
+        "subnetId": "subnet-d643a770bc65e6738",
+        "vpcId": "vpc-b635d27a468c4ad46",
+        "cidrBlock": "172.31.0.0/20",
+        "availabilityZone": "ap-southeast-1a",
+        "mapPublicIpOnLaunch": true,
+        "routeTableId": "rtb-655dbc7288189e3af",
+        "isPublic": false
+      },
+      "derived": {
+        "isPublic": false,
+        "publicReason": "The route table this subnet uses has no active default route to an internet gateway"
+      }
+    },
+    {
+      "arn": "arn:aws:ec2:ap-southeast-1:123456789012:vpc/vpc-b635d27a468c4ad46",
+      "kind": "Vpc",
+      "name": "vpc-b635d27a468c4ad46",
+      "region": "ap-southeast-1",
+      "accountId": "123456789012",
+      "tags": {},
+      "properties": {
+        "vpcId": "vpc-b635d27a468c4ad46",
+        "cidrBlock": "172.31.0.0/16",
+        "isDefault": true,
+        "state": "available"
+      },
+      "derived": {}
+    },
+    {
+      "arn": "arn:aws:ec2:ap-southeast-1:123456789012:vpc/vpc-ced43c5faf20736d9",
+      "kind": "Vpc",
+      "name": "legacy-vpc",
+      "region": "ap-southeast-1",
+      "accountId": "123456789012",
+      "tags": {
+        "Name": "legacy-vpc",
+        "Environment": "legacy",
+        "Owner": "unknown"
+      },
+      "properties": {
+        "vpcId": "vpc-ced43c5faf20736d9",
+        "cidrBlock": "10.2.0.0/16",
+        "isDefault": false,
+        "state": "available"
+      },
+      "derived": {}
+    },
+    {
+      "arn": "arn:aws:ec2:eu-west-1:123456789012:internet-gateway/igw-fb5c9ed549ee9697e",
+      "kind": "InternetGateway",
+      "name": "staging-vpc-igw",
+      "region": "eu-west-1",
+      "accountId": "123456789012",
+      "tags": {
+        "Name": "staging-vpc-igw",
+        "Environment": "staging",
+        "Owner": "platform",
+        "CostCenter": "eng-core"
+      },
+      "properties": {
+        "internetGatewayId": "igw-fb5c9ed549ee9697e",
+        "attachedVpcId": "vpc-361b3e6643d6d8ca4"
+      },
+      "derived": {}
+    },
+    {
+      "arn": "arn:aws:ec2:eu-west-1:123456789012:network-acl/acl-03a7adf286af9ed0e",
+      "kind": "NetworkAcl",
+      "name": "acl-03a7adf286af9ed0e",
+      "region": "eu-west-1",
+      "accountId": "123456789012",
+      "tags": {},
+      "properties": {
+        "networkAclId": "acl-03a7adf286af9ed0e",
+        "vpcId": "vpc-361b3e6643d6d8ca4",
+        "isDefault": true,
+        "entries": [
+          {
+            "ruleNumber": 100,
+            "egress": true,
+            "action": "allow",
+            "protocol": "-1",
+            "cidr": "0.0.0.0/0",
+            "fromPort": null,
+            "toPort": null
+          },
+          {
+            "ruleNumber": 32767,
+            "egress": true,
+            "action": "deny",
+            "protocol": "-1",
+            "cidr": "0.0.0.0/0",
+            "fromPort": null,
+            "toPort": null
+          },
+          {
+            "ruleNumber": 100,
+            "egress": false,
+            "action": "allow",
+            "protocol": "-1",
+            "cidr": "0.0.0.0/0",
+            "fromPort": null,
+            "toPort": null
+          },
+          {
+            "ruleNumber": 32767,
+            "egress": false,
+            "action": "deny",
+            "protocol": "-1",
+            "cidr": "0.0.0.0/0",
+            "fromPort": null,
+            "toPort": null
+          }
+        ]
+      },
+      "derived": {}
+    },
+    {
+      "arn": "arn:aws:ec2:eu-west-1:123456789012:network-acl/acl-5abc5c3487b969bfe",
+      "kind": "NetworkAcl",
+      "name": "staging-quarantine-acl",
+      "region": "eu-west-1",
+      "accountId": "123456789012",
+      "tags": {
+        "Name": "staging-quarantine-acl",
+        "Environment": "staging",
+        "Owner": "platform",
+        "CostCenter": "eng-core"
+      },
+      "properties": {
+        "networkAclId": "acl-5abc5c3487b969bfe",
+        "vpcId": "vpc-361b3e6643d6d8ca4",
+        "isDefault": false,
+        "entries": [
+          {
+            "ruleNumber": 50,
+            "egress": false,
+            "action": "deny",
+            "protocol": "6",
+            "cidr": "0.0.0.0/0",
+            "fromPort": 22,
+            "toPort": 22
+          },
+          {
+            "ruleNumber": 100,
+            "egress": false,
+            "action": "allow",
+            "protocol": "-1",
+            "cidr": "0.0.0.0/0",
+            "fromPort": null,
+            "toPort": null
+          },
+          {
+            "ruleNumber": 100,
+            "egress": true,
+            "action": "allow",
+            "protocol": "-1",
+            "cidr": "0.0.0.0/0",
+            "fromPort": null,
+            "toPort": null
+          }
+        ]
+      },
+      "derived": {}
+    },
+    {
+      "arn": "arn:aws:ec2:eu-west-1:123456789012:network-acl/acl-9c9bf120f980fcbf4",
+      "kind": "NetworkAcl",
+      "name": "acl-9c9bf120f980fcbf4",
+      "region": "eu-west-1",
+      "accountId": "123456789012",
+      "tags": {},
+      "properties": {
+        "networkAclId": "acl-9c9bf120f980fcbf4",
+        "vpcId": "vpc-b38c0748a11baf7f8",
+        "isDefault": true,
+        "entries": [
+          {
+            "ruleNumber": 100,
+            "egress": true,
+            "action": "allow",
+            "protocol": "-1",
+            "cidr": "0.0.0.0/0",
+            "fromPort": null,
+            "toPort": null
+          },
+          {
+            "ruleNumber": 32767,
+            "egress": true,
+            "action": "deny",
+            "protocol": "-1",
+            "cidr": "0.0.0.0/0",
+            "fromPort": null,
+            "toPort": null
+          },
+          {
+            "ruleNumber": 100,
+            "egress": false,
+            "action": "allow",
+            "protocol": "-1",
+            "cidr": "0.0.0.0/0",
+            "fromPort": null,
+            "toPort": null
+          },
+          {
+            "ruleNumber": 32767,
+            "egress": false,
+            "action": "deny",
+            "protocol": "-1",
+            "cidr": "0.0.0.0/0",
+            "fromPort": null,
+            "toPort": null
+          }
+        ]
+      },
+      "derived": {}
+    },
+    {
+      "arn": "arn:aws:ec2:eu-west-1:123456789012:route-table/rtb-6d8823084da657fed",
+      "kind": "RouteTable",
+      "name": "rtb-6d8823084da657fed",
+      "region": "eu-west-1",
+      "accountId": "123456789012",
+      "tags": {},
+      "properties": {
+        "routeTableId": "rtb-6d8823084da657fed",
+        "vpcId": "vpc-361b3e6643d6d8ca4",
+        "isMain": true,
+        "hasInternetRoute": false,
+        "internetGatewayId": null,
+        "routeCount": 1,
+        "routes": [
+          {
+            "destination": "10.1.0.0/16",
+            "targetType": "local",
+            "targetId": null,
+            "state": "active"
+          }
+        ]
+      },
+      "derived": {}
+    },
+    {
+      "arn": "arn:aws:ec2:eu-west-1:123456789012:route-table/rtb-762c98c5ee9326fa5",
+      "kind": "RouteTable",
+      "name": "staging-vpc-public-rt",
+      "region": "eu-west-1",
+      "accountId": "123456789012",
+      "tags": {
+        "Name": "staging-vpc-public-rt",
+        "Environment": "staging",
+        "Owner": "platform",
+        "CostCenter": "eng-core"
+      },
+      "properties": {
+        "routeTableId": "rtb-762c98c5ee9326fa5",
+        "vpcId": "vpc-361b3e6643d6d8ca4",
+        "isMain": false,
+        "hasInternetRoute": true,
+        "internetGatewayId": "igw-fb5c9ed549ee9697e",
+        "routeCount": 2,
+        "routes": [
+          {
+            "destination": "10.1.0.0/16",
+            "targetType": "local",
+            "targetId": null,
+            "state": "active"
+          },
+          {
+            "destination": "0.0.0.0/0",
+            "targetType": "internet-gateway",
+            "targetId": "igw-fb5c9ed549ee9697e",
+            "state": "active"
+          }
+        ]
+      },
+      "derived": {}
+    },
+    {
+      "arn": "arn:aws:ec2:eu-west-1:123456789012:route-table/rtb-d26f8af387aa60b6f",
+      "kind": "RouteTable",
+      "name": "rtb-d26f8af387aa60b6f",
+      "region": "eu-west-1",
+      "accountId": "123456789012",
+      "tags": {},
+      "properties": {
+        "routeTableId": "rtb-d26f8af387aa60b6f",
+        "vpcId": "vpc-b38c0748a11baf7f8",
+        "isMain": true,
+        "hasInternetRoute": false,
+        "internetGatewayId": null,
+        "routeCount": 1,
+        "routes": [
+          {
+            "destination": "172.31.0.0/16",
+            "targetType": "local",
+            "targetId": null,
+            "state": "active"
+          }
+        ]
+      },
+      "derived": {}
+    },
+    {
+      "arn": "arn:aws:ec2:eu-west-1:123456789012:security-group/sg-08b9dd67011e99f98",
+      "kind": "SecurityGroup",
+      "name": "default",
+      "region": "eu-west-1",
+      "accountId": "123456789012",
+      "tags": {},
+      "properties": {
+        "groupId": "sg-08b9dd67011e99f98",
+        "groupName": "default",
+        "description": "default VPC security group",
+        "vpcId": "vpc-b38c0748a11baf7f8",
+        "ingress": [],
+        "ingressRuleCount": 0
+      },
+      "derived": {}
+    },
+    {
+      "arn": "arn:aws:ec2:eu-west-1:123456789012:security-group/sg-0b512626462b1c13b",
+      "kind": "SecurityGroup",
+      "name": "staging-rdp-sg",
+      "region": "eu-west-1",
+      "accountId": "123456789012",
+      "tags": {
+        "Name": "staging-rdp-sg",
+        "Environment": "staging",
+        "Owner": "platform",
+        "CostCenter": "eng-core"
+      },
+      "properties": {
+        "groupId": "sg-0b512626462b1c13b",
+        "groupName": "staging-rdp-sg",
+        "description": "Staging jump box",
+        "vpcId": "vpc-361b3e6643d6d8ca4",
+        "ingress": [
+          {
+            "protocol": "tcp",
+            "fromPort": 3389,
+            "toPort": 3389,
+            "source": "cidr",
+            "cidr": "0.0.0.0/0",
+            "description": "RDP from anywhere"
+          }
+        ],
+        "ingressRuleCount": 1
+      },
+      "derived": {}
+    },
+    {
+      "arn": "arn:aws:ec2:eu-west-1:123456789012:security-group/sg-32b0b12c7854051a0",
+      "kind": "SecurityGroup",
+      "name": "default",
+      "region": "eu-west-1",
+      "accountId": "123456789012",
+      "tags": {},
+      "properties": {
+        "groupId": "sg-32b0b12c7854051a0",
+        "groupName": "default",
+        "description": "default VPC security group",
+        "vpcId": "vpc-361b3e6643d6d8ca4",
+        "ingress": [],
+        "ingressRuleCount": 0
+      },
+      "derived": {}
+    },
+    {
+      "arn": "arn:aws:ec2:eu-west-1:123456789012:security-group/sg-87d0967f096cd9bf9",
+      "kind": "SecurityGroup",
+      "name": "staging-ssh-sg",
+      "region": "eu-west-1",
+      "accountId": "123456789012",
+      "tags": {
+        "Name": "staging-ssh-sg",
+        "Environment": "staging",
+        "Owner": "platform",
+        "CostCenter": "eng-core"
+      },
+      "properties": {
+        "groupId": "sg-87d0967f096cd9bf9",
+        "groupName": "staging-ssh-sg",
+        "description": "Quarantined host",
+        "vpcId": "vpc-361b3e6643d6d8ca4",
+        "ingress": [
+          {
+            "protocol": "tcp",
+            "fromPort": 22,
+            "toPort": 22,
+            "source": "cidr",
+            "cidr": "0.0.0.0/0",
+            "description": "SSH from anywhere"
+          }
+        ],
+        "ingressRuleCount": 1
+      },
+      "derived": {}
+    },
+    {
+      "arn": "arn:aws:ec2:eu-west-1:123456789012:subnet/subnet-038db28524d6f83e5",
+      "kind": "Subnet",
+      "name": "staging-vpc-private-b",
+      "region": "eu-west-1",
+      "accountId": "123456789012",
+      "tags": {
+        "Name": "staging-vpc-private-b",
+        "Environment": "staging",
+        "Owner": "platform",
+        "CostCenter": "eng-core",
+        "Tier": "private"
+      },
+      "properties": {
+        "subnetId": "subnet-038db28524d6f83e5",
+        "vpcId": "vpc-361b3e6643d6d8ca4",
+        "cidrBlock": "10.1.11.0/24",
+        "availabilityZone": "eu-west-1c",
+        "mapPublicIpOnLaunch": false,
+        "routeTableId": "rtb-6d8823084da657fed",
+        "isPublic": false
+      },
+      "derived": {
+        "isPublic": false,
+        "publicReason": "The route table this subnet uses has no active default route to an internet gateway"
+      }
+    },
+    {
+      "arn": "arn:aws:ec2:eu-west-1:123456789012:subnet/subnet-1be0857bae9653be7",
+      "kind": "Subnet",
+      "name": "subnet-1be0857bae9653be7",
+      "region": "eu-west-1",
+      "accountId": "123456789012",
+      "tags": {},
+      "properties": {
+        "subnetId": "subnet-1be0857bae9653be7",
+        "vpcId": "vpc-b38c0748a11baf7f8",
+        "cidrBlock": "172.31.16.0/20",
+        "availabilityZone": "eu-west-1b",
+        "mapPublicIpOnLaunch": true,
+        "routeTableId": "rtb-d26f8af387aa60b6f",
+        "isPublic": false
+      },
+      "derived": {
+        "isPublic": false,
+        "publicReason": "The route table this subnet uses has no active default route to an internet gateway"
+      }
+    },
+    {
+      "arn": "arn:aws:ec2:eu-west-1:123456789012:subnet/subnet-4d2a98b6ed99e48ff",
+      "kind": "Subnet",
+      "name": "subnet-4d2a98b6ed99e48ff",
+      "region": "eu-west-1",
+      "accountId": "123456789012",
+      "tags": {},
+      "properties": {
+        "subnetId": "subnet-4d2a98b6ed99e48ff",
+        "vpcId": "vpc-b38c0748a11baf7f8",
+        "cidrBlock": "172.31.32.0/20",
+        "availabilityZone": "eu-west-1c",
+        "mapPublicIpOnLaunch": true,
+        "routeTableId": "rtb-d26f8af387aa60b6f",
+        "isPublic": false
+      },
+      "derived": {
+        "isPublic": false,
+        "publicReason": "The route table this subnet uses has no active default route to an internet gateway"
+      }
+    },
+    {
+      "arn": "arn:aws:ec2:eu-west-1:123456789012:subnet/subnet-500ce5538716cd513",
+      "kind": "Subnet",
+      "name": "subnet-500ce5538716cd513",
+      "region": "eu-west-1",
+      "accountId": "123456789012",
+      "tags": {},
+      "properties": {
+        "subnetId": "subnet-500ce5538716cd513",
+        "vpcId": "vpc-b38c0748a11baf7f8",
+        "cidrBlock": "172.31.0.0/20",
+        "availabilityZone": "eu-west-1a",
+        "mapPublicIpOnLaunch": true,
+        "routeTableId": "rtb-d26f8af387aa60b6f",
+        "isPublic": false
+      },
+      "derived": {
+        "isPublic": false,
+        "publicReason": "The route table this subnet uses has no active default route to an internet gateway"
+      }
+    },
+    {
+      "arn": "arn:aws:ec2:eu-west-1:123456789012:subnet/subnet-a1aa097fff2c1ea01",
+      "kind": "Subnet",
+      "name": "staging-vpc-private-a",
+      "region": "eu-west-1",
+      "accountId": "123456789012",
+      "tags": {
+        "Name": "staging-vpc-private-a",
+        "Environment": "staging",
+        "Owner": "platform",
+        "CostCenter": "eng-core",
+        "Tier": "private"
+      },
+      "properties": {
+        "subnetId": "subnet-a1aa097fff2c1ea01",
+        "vpcId": "vpc-361b3e6643d6d8ca4",
+        "cidrBlock": "10.1.10.0/24",
+        "availabilityZone": "eu-west-1a",
+        "mapPublicIpOnLaunch": false,
+        "routeTableId": "rtb-6d8823084da657fed",
+        "isPublic": false
+      },
+      "derived": {
+        "isPublic": false,
+        "publicReason": "The route table this subnet uses has no active default route to an internet gateway"
+      }
+    },
+    {
+      "arn": "arn:aws:ec2:eu-west-1:123456789012:subnet/subnet-d46719f068378dd7f",
+      "kind": "Subnet",
+      "name": "staging-quarantine",
+      "region": "eu-west-1",
+      "accountId": "123456789012",
+      "tags": {
+        "Name": "staging-quarantine",
+        "Environment": "staging",
+        "Owner": "platform",
+        "CostCenter": "eng-core"
+      },
+      "properties": {
+        "subnetId": "subnet-d46719f068378dd7f",
+        "vpcId": "vpc-361b3e6643d6d8ca4",
+        "cidrBlock": "10.1.9.0/24",
+        "availabilityZone": "eu-west-1a",
+        "mapPublicIpOnLaunch": false,
+        "routeTableId": "rtb-762c98c5ee9326fa5",
+        "isPublic": true
+      },
+      "derived": {
+        "isPublic": true,
+        "publicReason": "Its route table sends 0.0.0.0/0 to internet gateway igw-fb5c9ed549ee9697e"
+      }
+    },
+    {
+      "arn": "arn:aws:ec2:eu-west-1:123456789012:subnet/subnet-f37069fd85f17ad9a",
+      "kind": "Subnet",
+      "name": "staging-vpc-public-a",
+      "region": "eu-west-1",
+      "accountId": "123456789012",
+      "tags": {
+        "Name": "staging-vpc-public-a",
+        "Environment": "staging",
+        "Owner": "platform",
+        "CostCenter": "eng-core",
+        "Tier": "public"
+      },
+      "properties": {
+        "subnetId": "subnet-f37069fd85f17ad9a",
+        "vpcId": "vpc-361b3e6643d6d8ca4",
+        "cidrBlock": "10.1.1.0/24",
+        "availabilityZone": "eu-west-1b",
+        "mapPublicIpOnLaunch": false,
+        "routeTableId": "rtb-762c98c5ee9326fa5",
+        "isPublic": true
+      },
+      "derived": {
+        "isPublic": true,
+        "publicReason": "Its route table sends 0.0.0.0/0 to internet gateway igw-fb5c9ed549ee9697e"
+      }
+    },
+    {
+      "arn": "arn:aws:ec2:eu-west-1:123456789012:vpc/vpc-361b3e6643d6d8ca4",
+      "kind": "Vpc",
+      "name": "staging-vpc",
+      "region": "eu-west-1",
+      "accountId": "123456789012",
+      "tags": {
+        "Name": "staging-vpc",
+        "Environment": "staging",
+        "Owner": "platform",
+        "CostCenter": "eng-core"
+      },
+      "properties": {
+        "vpcId": "vpc-361b3e6643d6d8ca4",
+        "cidrBlock": "10.1.0.0/16",
+        "isDefault": false,
+        "state": "available"
+      },
+      "derived": {}
+    },
+    {
+      "arn": "arn:aws:ec2:eu-west-1:123456789012:vpc/vpc-b38c0748a11baf7f8",
+      "kind": "Vpc",
+      "name": "vpc-b38c0748a11baf7f8",
+      "region": "eu-west-1",
+      "accountId": "123456789012",
+      "tags": {},
+      "properties": {
+        "vpcId": "vpc-b38c0748a11baf7f8",
+        "cidrBlock": "172.31.0.0/16",
+        "isDefault": true,
+        "state": "available"
+      },
+      "derived": {}
+    },
+    {
+      "arn": "arn:aws:ec2:us-east-1:123456789012:internet-gateway/igw-be7c80e31455abf3b",
+      "kind": "InternetGateway",
+      "name": "shared-igw",
+      "region": "us-east-1",
+      "accountId": "123456789012",
+      "tags": {
+        "Name": "shared-igw",
+        "Environment": "production",
+        "Owner": "platform",
+        "CostCenter": "eng-core"
+      },
+      "properties": {
+        "internetGatewayId": "igw-be7c80e31455abf3b",
+        "attachedVpcId": "vpc-fd22f2c7955cf8cd6"
+      },
+      "derived": {}
+    },
+    {
+      "arn": "arn:aws:ec2:us-east-1:123456789012:internet-gateway/igw-cb70dc59e56e144e7",
+      "kind": "InternetGateway",
+      "name": "prod-vpc-igw",
+      "region": "us-east-1",
+      "accountId": "123456789012",
+      "tags": {
+        "Name": "prod-vpc-igw",
+        "Environment": "production",
+        "Owner": "platform",
+        "CostCenter": "eng-core"
+      },
+      "properties": {
+        "internetGatewayId": "igw-cb70dc59e56e144e7",
+        "attachedVpcId": "vpc-d1e945fdcc93fb788"
+      },
+      "derived": {}
+    },
+    {
+      "arn": "arn:aws:ec2:us-east-1:123456789012:natgateway/nat-83ecf0a7e67f9a842",
+      "kind": "NatGateway",
+      "name": "prod-vpc-nat",
+      "region": "us-east-1",
+      "accountId": "123456789012",
+      "tags": {
+        "Name": "prod-vpc-nat",
+        "Environment": "production",
+        "Owner": "platform",
+        "CostCenter": "eng-core"
+      },
+      "properties": {
+        "natGatewayId": "nat-83ecf0a7e67f9a842",
+        "subnetId": "subnet-873b59617498b2ba9",
+        "vpcId": "vpc-d1e945fdcc93fb788",
+        "state": "available",
+        "createdAt": "2026-10-24T05:19:34.000Z"
+      },
+      "derived": {}
+    },
+    {
+      "arn": "arn:aws:ec2:us-east-1:123456789012:network-acl/acl-203676587bd09fa19",
+      "kind": "NetworkAcl",
+      "name": "acl-203676587bd09fa19",
+      "region": "us-east-1",
+      "accountId": "123456789012",
+      "tags": {},
+      "properties": {
+        "networkAclId": "acl-203676587bd09fa19",
+        "vpcId": "vpc-fd22f2c7955cf8cd6",
+        "isDefault": true,
+        "entries": [
+          {
+            "ruleNumber": 100,
+            "egress": true,
+            "action": "allow",
+            "protocol": "-1",
+            "cidr": "0.0.0.0/0",
+            "fromPort": null,
+            "toPort": null
+          },
+          {
+            "ruleNumber": 32767,
+            "egress": true,
+            "action": "deny",
+            "protocol": "-1",
+            "cidr": "0.0.0.0/0",
+            "fromPort": null,
+            "toPort": null
+          },
+          {
+            "ruleNumber": 100,
+            "egress": false,
+            "action": "allow",
+            "protocol": "-1",
+            "cidr": "0.0.0.0/0",
+            "fromPort": null,
+            "toPort": null
+          },
+          {
+            "ruleNumber": 32767,
+            "egress": false,
+            "action": "deny",
+            "protocol": "-1",
+            "cidr": "0.0.0.0/0",
+            "fromPort": null,
+            "toPort": null
+          }
+        ]
+      },
+      "derived": {}
+    },
+    {
+      "arn": "arn:aws:ec2:us-east-1:123456789012:network-acl/acl-5b96baa3d6ada3c0a",
+      "kind": "NetworkAcl",
+      "name": "acl-5b96baa3d6ada3c0a",
+      "region": "us-east-1",
+      "accountId": "123456789012",
+      "tags": {},
+      "properties": {
+        "networkAclId": "acl-5b96baa3d6ada3c0a",
+        "vpcId": "vpc-598df3b20d37c8c6a",
+        "isDefault": true,
+        "entries": [
+          {
+            "ruleNumber": 100,
+            "egress": true,
+            "action": "allow",
+            "protocol": "-1",
+            "cidr": "0.0.0.0/0",
+            "fromPort": null,
+            "toPort": null
+          },
+          {
+            "ruleNumber": 32767,
+            "egress": true,
+            "action": "deny",
+            "protocol": "-1",
+            "cidr": "0.0.0.0/0",
+            "fromPort": null,
+            "toPort": null
+          },
+          {
+            "ruleNumber": 100,
+            "egress": false,
+            "action": "allow",
+            "protocol": "-1",
+            "cidr": "0.0.0.0/0",
+            "fromPort": null,
+            "toPort": null
+          },
+          {
+            "ruleNumber": 32767,
+            "egress": false,
+            "action": "deny",
+            "protocol": "-1",
+            "cidr": "0.0.0.0/0",
+            "fromPort": null,
+            "toPort": null
+          }
+        ]
+      },
+      "derived": {}
+    },
+    {
+      "arn": "arn:aws:ec2:us-east-1:123456789012:network-acl/acl-91c79e407be69f021",
+      "kind": "NetworkAcl",
+      "name": "acl-91c79e407be69f021",
+      "region": "us-east-1",
+      "accountId": "123456789012",
+      "tags": {},
+      "properties": {
+        "networkAclId": "acl-91c79e407be69f021",
+        "vpcId": "vpc-d1e945fdcc93fb788",
+        "isDefault": true,
+        "entries": [
+          {
+            "ruleNumber": 100,
+            "egress": true,
+            "action": "allow",
+            "protocol": "-1",
+            "cidr": "0.0.0.0/0",
+            "fromPort": null,
+            "toPort": null
+          },
+          {
+            "ruleNumber": 32767,
+            "egress": true,
+            "action": "deny",
+            "protocol": "-1",
+            "cidr": "0.0.0.0/0",
+            "fromPort": null,
+            "toPort": null
+          },
+          {
+            "ruleNumber": 100,
+            "egress": false,
+            "action": "allow",
+            "protocol": "-1",
+            "cidr": "0.0.0.0/0",
+            "fromPort": null,
+            "toPort": null
+          },
+          {
+            "ruleNumber": 32767,
+            "egress": false,
+            "action": "deny",
+            "protocol": "-1",
+            "cidr": "0.0.0.0/0",
+            "fromPort": null,
+            "toPort": null
+          }
+        ]
+      },
+      "derived": {}
+    },
+    {
+      "arn": "arn:aws:ec2:us-east-1:123456789012:network-acl/acl-cba196accc8e4322c",
+      "kind": "NetworkAcl",
+      "name": "acl-cba196accc8e4322c",
+      "region": "us-east-1",
+      "accountId": "123456789012",
+      "tags": {},
+      "properties": {
+        "networkAclId": "acl-cba196accc8e4322c",
+        "vpcId": "vpc-0a012c31ec2220368",
+        "isDefault": true,
+        "entries": [
+          {
+            "ruleNumber": 100,
+            "egress": true,
+            "action": "allow",
+            "protocol": "-1",
+            "cidr": "0.0.0.0/0",
+            "fromPort": null,
+            "toPort": null
+          },
+          {
+            "ruleNumber": 32767,
+            "egress": true,
+            "action": "deny",
+            "protocol": "-1",
+            "cidr": "0.0.0.0/0",
+            "fromPort": null,
+            "toPort": null
+          },
+          {
+            "ruleNumber": 100,
+            "egress": false,
+            "action": "allow",
+            "protocol": "-1",
+            "cidr": "0.0.0.0/0",
+            "fromPort": null,
+            "toPort": null
+          },
+          {
+            "ruleNumber": 32767,
+            "egress": false,
+            "action": "deny",
+            "protocol": "-1",
+            "cidr": "0.0.0.0/0",
+            "fromPort": null,
+            "toPort": null
+          }
+        ]
+      },
+      "derived": {}
+    },
+    {
+      "arn": "arn:aws:ec2:us-east-1:123456789012:network-acl/acl-f388d0f5ba03efc47",
+      "kind": "NetworkAcl",
+      "name": "acl-f388d0f5ba03efc47",
+      "region": "us-east-1",
+      "accountId": "123456789012",
+      "tags": {},
+      "properties": {
+        "networkAclId": "acl-f388d0f5ba03efc47",
+        "vpcId": "vpc-9df03e1a65a0861dc",
+        "isDefault": true,
+        "entries": [
+          {
+            "ruleNumber": 100,
+            "egress": true,
+            "action": "allow",
+            "protocol": "-1",
+            "cidr": "0.0.0.0/0",
+            "fromPort": null,
+            "toPort": null
+          },
+          {
+            "ruleNumber": 32767,
+            "egress": true,
+            "action": "deny",
+            "protocol": "-1",
+            "cidr": "0.0.0.0/0",
+            "fromPort": null,
+            "toPort": null
+          },
+          {
+            "ruleNumber": 100,
+            "egress": false,
+            "action": "allow",
+            "protocol": "-1",
+            "cidr": "0.0.0.0/0",
+            "fromPort": null,
+            "toPort": null
+          },
+          {
+            "ruleNumber": 32767,
+            "egress": false,
+            "action": "deny",
+            "protocol": "-1",
+            "cidr": "0.0.0.0/0",
+            "fromPort": null,
+            "toPort": null
+          }
+        ]
+      },
+      "derived": {}
+    },
+    {
+      "arn": "arn:aws:ec2:us-east-1:123456789012:route-table/rtb-0b6e02094526cd8a8",
+      "kind": "RouteTable",
+      "name": "rtb-0b6e02094526cd8a8",
+      "region": "us-east-1",
+      "accountId": "123456789012",
+      "tags": {},
+      "properties": {
+        "routeTableId": "rtb-0b6e02094526cd8a8",
+        "vpcId": "vpc-d1e945fdcc93fb788",
+        "isMain": true,
+        "hasInternetRoute": false,
+        "internetGatewayId": null,
+        "routeCount": 1,
+        "routes": [
+          {
+            "destination": "10.0.0.0/16",
+            "targetType": "local",
+            "targetId": null,
+            "state": "active"
+          }
+        ]
+      },
+      "derived": {}
+    },
+    {
+      "arn": "arn:aws:ec2:us-east-1:123456789012:route-table/rtb-142b176cfb1e4ac93",
+      "kind": "RouteTable",
+      "name": "prod-vpc-public-rt",
+      "region": "us-east-1",
+      "accountId": "123456789012",
+      "tags": {
+        "Name": "prod-vpc-public-rt",
+        "Environment": "production",
+        "Owner": "platform",
+        "CostCenter": "eng-core"
+      },
+      "properties": {
+        "routeTableId": "rtb-142b176cfb1e4ac93",
+        "vpcId": "vpc-d1e945fdcc93fb788",
+        "isMain": false,
+        "hasInternetRoute": true,
+        "internetGatewayId": "igw-cb70dc59e56e144e7",
+        "routeCount": 2,
+        "routes": [
+          {
+            "destination": "10.0.0.0/16",
+            "targetType": "local",
+            "targetId": null,
+            "state": "active"
+          },
+          {
+            "destination": "0.0.0.0/0",
+            "targetType": "internet-gateway",
+            "targetId": "igw-cb70dc59e56e144e7",
+            "state": "active"
+          }
+        ]
+      },
+      "derived": {}
+    },
+    {
+      "arn": "arn:aws:ec2:us-east-1:123456789012:route-table/rtb-1a957d60f18486d46",
+      "kind": "RouteTable",
+      "name": "rtb-1a957d60f18486d46",
+      "region": "us-east-1",
+      "accountId": "123456789012",
+      "tags": {},
+      "properties": {
+        "routeTableId": "rtb-1a957d60f18486d46",
+        "vpcId": "vpc-9df03e1a65a0861dc",
+        "isMain": true,
+        "hasInternetRoute": false,
+        "internetGatewayId": null,
+        "routeCount": 1,
+        "routes": [
+          {
+            "destination": "10.4.0.0/16",
+            "targetType": "local",
+            "targetId": null,
+            "state": "active"
+          }
+        ]
+      },
+      "derived": {}
+    },
+    {
+      "arn": "arn:aws:ec2:us-east-1:123456789012:route-table/rtb-515f702c542dd3a0b",
+      "kind": "RouteTable",
+      "name": "rtb-515f702c542dd3a0b",
+      "region": "us-east-1",
+      "accountId": "123456789012",
+      "tags": {},
+      "properties": {
+        "routeTableId": "rtb-515f702c542dd3a0b",
+        "vpcId": "vpc-0a012c31ec2220368",
+        "isMain": true,
+        "hasInternetRoute": false,
+        "internetGatewayId": null,
+        "routeCount": 1,
+        "routes": [
+          {
+            "destination": "172.31.0.0/16",
+            "targetType": "local",
+            "targetId": null,
+            "state": "active"
+          }
+        ]
+      },
+      "derived": {}
+    },
+    {
+      "arn": "arn:aws:ec2:us-east-1:123456789012:route-table/rtb-d5dd7a4871cb12dc0",
+      "kind": "RouteTable",
+      "name": "shared-private-rt",
+      "region": "us-east-1",
+      "accountId": "123456789012",
+      "tags": {
+        "Name": "shared-private-rt",
+        "Environment": "production",
+        "Owner": "platform",
+        "CostCenter": "eng-core"
+      },
+      "properties": {
+        "routeTableId": "rtb-d5dd7a4871cb12dc0",
+        "vpcId": "vpc-fd22f2c7955cf8cd6",
+        "isMain": false,
+        "hasInternetRoute": false,
+        "internetGatewayId": null,
+        "routeCount": 2,
+        "routes": [
+          {
+            "destination": "10.3.0.0/16",
+            "targetType": "local",
+            "targetId": null,
+            "state": "active"
+          },
+          {
+            "destination": "10.0.0.0/16",
+            "targetType": "transit-gateway",
+            "targetId": "tgw-54e59fcb1039eb624",
+            "state": "active"
+          }
+        ]
+      },
+      "derived": {}
+    },
+    {
+      "arn": "arn:aws:ec2:us-east-1:123456789012:route-table/rtb-dc54a5fc843efebe3",
+      "kind": "RouteTable",
+      "name": "rtb-dc54a5fc843efebe3",
+      "region": "us-east-1",
+      "accountId": "123456789012",
+      "tags": {},
+      "properties": {
+        "routeTableId": "rtb-dc54a5fc843efebe3",
+        "vpcId": "vpc-598df3b20d37c8c6a",
+        "isMain": true,
+        "hasInternetRoute": false,
+        "internetGatewayId": null,
+        "routeCount": 1,
+        "routes": [
+          {
+            "destination": "10.1.0.0/16",
+            "targetType": "local",
+            "targetId": null,
+            "state": "active"
+          }
+        ]
+      },
+      "derived": {}
+    },
+    {
+      "arn": "arn:aws:ec2:us-east-1:123456789012:route-table/rtb-e7ea2dffc20778ce3",
+      "kind": "RouteTable",
+      "name": "analytics-private-rt",
+      "region": "us-east-1",
+      "accountId": "123456789012",
+      "tags": {
+        "Name": "analytics-private-rt",
+        "Environment": "production",
+        "Owner": "platform",
+        "CostCenter": "eng-core"
+      },
+      "properties": {
+        "routeTableId": "rtb-e7ea2dffc20778ce3",
+        "vpcId": "vpc-598df3b20d37c8c6a",
+        "isMain": false,
+        "hasInternetRoute": false,
+        "internetGatewayId": null,
+        "routeCount": 2,
+        "routes": [
+          {
+            "destination": "10.1.0.0/16",
+            "targetType": "local",
+            "targetId": null,
+            "state": "active"
+          },
+          {
+            "destination": "10.0.0.0/16",
+            "targetType": "peering",
+            "targetId": "pcx-6c2ac5178bdcd1954",
+            "state": "active"
+          }
+        ]
+      },
+      "derived": {}
+    },
+    {
+      "arn": "arn:aws:ec2:us-east-1:123456789012:route-table/rtb-f30e3dd4e7d242a25",
+      "kind": "RouteTable",
+      "name": "rtb-f30e3dd4e7d242a25",
+      "region": "us-east-1",
+      "accountId": "123456789012",
+      "tags": {},
+      "properties": {
+        "routeTableId": "rtb-f30e3dd4e7d242a25",
+        "vpcId": "vpc-fd22f2c7955cf8cd6",
+        "isMain": true,
+        "hasInternetRoute": true,
+        "internetGatewayId": "igw-be7c80e31455abf3b",
+        "routeCount": 2,
+        "routes": [
+          {
+            "destination": "10.3.0.0/16",
+            "targetType": "local",
+            "targetId": null,
+            "state": "active"
+          },
+          {
+            "destination": "0.0.0.0/0",
+            "targetType": "internet-gateway",
+            "targetId": "igw-be7c80e31455abf3b",
+            "state": "active"
+          }
+        ]
+      },
+      "derived": {}
+    },
+    {
+      "arn": "arn:aws:ec2:us-east-1:123456789012:route-table/rtb-f7415a40d4b302f3c",
+      "kind": "RouteTable",
+      "name": "prod-vpc-private-rt",
+      "region": "us-east-1",
+      "accountId": "123456789012",
+      "tags": {
+        "Name": "prod-vpc-private-rt",
+        "Environment": "production",
+        "Owner": "platform",
+        "CostCenter": "eng-core"
+      },
+      "properties": {
+        "routeTableId": "rtb-f7415a40d4b302f3c",
+        "vpcId": "vpc-d1e945fdcc93fb788",
+        "isMain": false,
+        "hasInternetRoute": false,
+        "internetGatewayId": null,
+        "routeCount": 4,
+        "routes": [
+          {
+            "destination": "10.0.0.0/16",
+            "targetType": "local",
+            "targetId": null,
+            "state": "active"
+          },
+          {
+            "destination": "0.0.0.0/0",
+            "targetType": "nat-gateway",
+            "targetId": "nat-83ecf0a7e67f9a842",
+            "state": "active"
+          },
+          {
+            "destination": "10.1.0.0/16",
+            "targetType": "peering",
+            "targetId": "pcx-6c2ac5178bdcd1954",
+            "state": "active"
+          },
+          {
+            "destination": "10.3.0.0/16",
+            "targetType": "transit-gateway",
+            "targetId": "tgw-54e59fcb1039eb624",
+            "state": "active"
+          }
+        ]
+      },
+      "derived": {}
+    },
+    {
+      "arn": "arn:aws:ec2:us-east-1:123456789012:route-table/rtb-ff4b5607f7277e4d2",
+      "kind": "RouteTable",
+      "name": "partner-private-rt",
+      "region": "us-east-1",
+      "accountId": "123456789012",
+      "tags": {
+        "Name": "partner-private-rt",
+        "Environment": "production",
+        "Owner": "platform",
+        "CostCenter": "eng-core"
+      },
+      "properties": {
+        "routeTableId": "rtb-ff4b5607f7277e4d2",
+        "vpcId": "vpc-9df03e1a65a0861dc",
+        "isMain": false,
+        "hasInternetRoute": false,
+        "internetGatewayId": null,
+        "routeCount": 2,
+        "routes": [
+          {
+            "destination": "10.4.0.0/16",
+            "targetType": "local",
+            "targetId": null,
+            "state": "active"
+          },
+          {
+            "destination": "10.0.0.0/16",
+            "targetType": "peering",
+            "targetId": "pcx-b68e9630b48577983",
+            "state": "active"
+          }
+        ]
+      },
+      "derived": {}
+    },
+    {
+      "arn": "arn:aws:ec2:us-east-1:123456789012:security-group/sg-0db7495889e920168",
+      "kind": "SecurityGroup",
+      "name": "partner-reporting-sg",
+      "region": "us-east-1",
+      "accountId": "123456789012",
+      "tags": {
+        "Name": "partner-reporting-sg",
+        "Environment": "production",
+        "Owner": "platform",
+        "CostCenter": "eng-core"
+      },
+      "properties": {
+        "groupId": "sg-0db7495889e920168",
+        "groupName": "partner-reporting-sg",
+        "description": "partner-reporting-sg",
+        "vpcId": "vpc-9df03e1a65a0861dc",
+        "ingress": [],
+        "ingressRuleCount": 0
+      },
+      "derived": {}
+    },
+    {
+      "arn": "arn:aws:ec2:us-east-1:123456789012:security-group/sg-2d4bafbab3c6249f1",
+      "kind": "SecurityGroup",
+      "name": "default",
+      "region": "us-east-1",
+      "accountId": "123456789012",
+      "tags": {},
+      "properties": {
+        "groupId": "sg-2d4bafbab3c6249f1",
+        "groupName": "default",
+        "description": "default VPC security group",
+        "vpcId": "vpc-9df03e1a65a0861dc",
+        "ingress": [],
+        "ingressRuleCount": 0
+      },
+      "derived": {}
+    },
+    {
+      "arn": "arn:aws:ec2:us-east-1:123456789012:security-group/sg-433149e26d761ccb3",
+      "kind": "SecurityGroup",
+      "name": "shared-ci-sg",
+      "region": "us-east-1",
+      "accountId": "123456789012",
+      "tags": {
+        "Name": "shared-ci-sg",
+        "Environment": "production",
+        "Owner": "platform",
+        "CostCenter": "eng-core"
+      },
+      "properties": {
+        "groupId": "sg-433149e26d761ccb3",
+        "groupName": "shared-ci-sg",
+        "description": "shared-ci-sg",
+        "vpcId": "vpc-fd22f2c7955cf8cd6",
+        "ingress": [],
+        "ingressRuleCount": 0
+      },
+      "derived": {}
+    },
+    {
+      "arn": "arn:aws:ec2:us-east-1:123456789012:security-group/sg-47f1eb82c92aad975",
+      "kind": "SecurityGroup",
+      "name": "analytics-worker-sg",
+      "region": "us-east-1",
+      "accountId": "123456789012",
+      "tags": {
+        "Name": "analytics-worker-sg",
+        "Environment": "production",
+        "Owner": "platform",
+        "CostCenter": "eng-core"
+      },
+      "properties": {
+        "groupId": "sg-47f1eb82c92aad975",
+        "groupName": "analytics-worker-sg",
+        "description": "analytics-worker-sg",
+        "vpcId": "vpc-598df3b20d37c8c6a",
+        "ingress": [],
+        "ingressRuleCount": 0
+      },
+      "derived": {}
+    },
+    {
+      "arn": "arn:aws:ec2:us-east-1:123456789012:security-group/sg-5761be2c8add61a7f",
+      "kind": "SecurityGroup",
+      "name": "prod-isolated-sg",
+      "region": "us-east-1",
+      "accountId": "123456789012",
+      "tags": {
+        "Name": "prod-isolated-sg",
+        "Environment": "production",
+        "Owner": "platform",
+        "CostCenter": "eng-core"
+      },
+      "properties": {
+        "groupId": "sg-5761be2c8add61a7f",
+        "groupName": "prod-isolated-sg",
+        "description": "Deliberately opens nothing",
+        "vpcId": "vpc-d1e945fdcc93fb788",
+        "ingress": [],
+        "ingressRuleCount": 0
+      },
+      "derived": {}
+    },
+    {
+      "arn": "arn:aws:ec2:us-east-1:123456789012:security-group/sg-5e2f8c6b1fbd53f6a",
+      "kind": "SecurityGroup",
+      "name": "status-page-sg",
+      "region": "us-east-1",
+      "accountId": "123456789012",
+      "tags": {
+        "Name": "status-page-sg",
+        "Environment": "production",
+        "Owner": "platform",
+        "CostCenter": "eng-core"
+      },
+      "properties": {
+        "groupId": "sg-5e2f8c6b1fbd53f6a",
+        "groupName": "status-page-sg",
+        "description": "status-page-sg",
+        "vpcId": "vpc-fd22f2c7955cf8cd6",
+        "ingress": [
+          {
+            "protocol": "tcp",
+            "fromPort": 443,
+            "toPort": 443,
+            "source": "cidr",
+            "cidr": "0.0.0.0/0",
+            "description": "HTTPS from the internet"
+          }
+        ],
+        "ingressRuleCount": 1
+      },
+      "derived": {}
+    },
+    {
+      "arn": "arn:aws:ec2:us-east-1:123456789012:security-group/sg-6d8279fcbc49879cd",
+      "kind": "SecurityGroup",
+      "name": "prod-internal-alb-sg",
+      "region": "us-east-1",
+      "accountId": "123456789012",
+      "tags": {
+        "Name": "prod-internal-alb-sg",
+        "Environment": "production",
+        "Owner": "platform",
+        "CostCenter": "eng-core"
+      },
+      "properties": {
+        "groupId": "sg-6d8279fcbc49879cd",
+        "groupName": "prod-internal-alb-sg",
+        "description": "Internal load balancer",
+        "vpcId": "vpc-d1e945fdcc93fb788",
+        "ingress": [
+          {
+            "protocol": "tcp",
+            "fromPort": 443,
+            "toPort": 443,
+            "source": "cidr",
+            "cidr": "0.0.0.0/0",
+            "description": "Anything that can route here"
+          }
+        ],
+        "ingressRuleCount": 1
+      },
+      "derived": {}
+    },
+    {
+      "arn": "arn:aws:ec2:us-east-1:123456789012:security-group/sg-76a6ccc111e4262f9",
+      "kind": "SecurityGroup",
+      "name": "default",
+      "region": "us-east-1",
+      "accountId": "123456789012",
+      "tags": {},
+      "properties": {
+        "groupId": "sg-76a6ccc111e4262f9",
+        "groupName": "default",
+        "description": "default VPC security group",
+        "vpcId": "vpc-0a012c31ec2220368",
+        "ingress": [],
+        "ingressRuleCount": 0
+      },
+      "derived": {}
+    },
+    {
+      "arn": "arn:aws:ec2:us-east-1:123456789012:security-group/sg-89973346a8873d61a",
+      "kind": "SecurityGroup",
+      "name": "prod-alb-sg",
+      "region": "us-east-1",
+      "accountId": "123456789012",
+      "tags": {
+        "Name": "prod-alb-sg",
+        "Environment": "production",
+        "Owner": "platform",
+        "CostCenter": "eng-core"
+      },
+      "properties": {
+        "groupId": "sg-89973346a8873d61a",
+        "groupName": "prod-alb-sg",
+        "description": "Public load balancer",
+        "vpcId": "vpc-d1e945fdcc93fb788",
+        "ingress": [
+          {
+            "protocol": "tcp",
+            "fromPort": 443,
+            "toPort": 443,
+            "source": "cidr",
+            "cidr": "0.0.0.0/0",
+            "description": "HTTPS from the internet"
+          }
+        ],
+        "ingressRuleCount": 1
+      },
+      "derived": {}
+    },
+    {
+      "arn": "arn:aws:ec2:us-east-1:123456789012:security-group/sg-9dca90b5d2b92ce25",
+      "kind": "SecurityGroup",
+      "name": "default",
+      "region": "us-east-1",
+      "accountId": "123456789012",
+      "tags": {},
+      "properties": {
+        "groupId": "sg-9dca90b5d2b92ce25",
+        "groupName": "default",
+        "description": "default VPC security group",
+        "vpcId": "vpc-fd22f2c7955cf8cd6",
+        "ingress": [],
+        "ingressRuleCount": 0
+      },
+      "derived": {}
+    },
+    {
+      "arn": "arn:aws:ec2:us-east-1:123456789012:security-group/sg-ab67ce2a8525c9ef1",
+      "kind": "SecurityGroup",
+      "name": "prod-bastion-sg",
+      "region": "us-east-1",
+      "accountId": "123456789012",
+      "tags": {
+        "Name": "prod-bastion-sg",
+        "Environment": "production",
+        "Owner": "platform",
+        "CostCenter": "eng-core"
+      },
+      "properties": {
+        "groupId": "sg-ab67ce2a8525c9ef1",
+        "groupName": "prod-bastion-sg",
+        "description": "Bastion host",
+        "vpcId": "vpc-d1e945fdcc93fb788",
+        "ingress": [
+          {
+            "protocol": "tcp",
+            "fromPort": 22,
+            "toPort": 22,
+            "source": "cidr",
+            "cidr": "0.0.0.0/0",
+            "description": "SSH from anywhere"
+          }
+        ],
+        "ingressRuleCount": 1
+      },
+      "derived": {}
+    },
+    {
+      "arn": "arn:aws:ec2:us-east-1:123456789012:security-group/sg-b49e313e5b5c0e116",
+      "kind": "SecurityGroup",
+      "name": "default",
+      "region": "us-east-1",
+      "accountId": "123456789012",
+      "tags": {},
+      "properties": {
+        "groupId": "sg-b49e313e5b5c0e116",
+        "groupName": "default",
+        "description": "default VPC security group",
+        "vpcId": "vpc-d1e945fdcc93fb788",
+        "ingress": [],
+        "ingressRuleCount": 0
+      },
+      "derived": {}
+    },
+    {
+      "arn": "arn:aws:ec2:us-east-1:123456789012:security-group/sg-bd01aaccd2ea691db",
+      "kind": "SecurityGroup",
+      "name": "prod-app-sg",
+      "region": "us-east-1",
+      "accountId": "123456789012",
+      "tags": {
+        "Name": "prod-app-sg",
+        "Environment": "production",
+        "Owner": "platform",
+        "CostCenter": "eng-core"
+      },
+      "properties": {
+        "groupId": "sg-bd01aaccd2ea691db",
+        "groupName": "prod-app-sg",
+        "description": "Application tier",
+        "vpcId": "vpc-d1e945fdcc93fb788",
+        "ingress": [
+          {
+            "protocol": "tcp",
+            "fromPort": 9000,
+            "toPort": 9000,
+            "source": "cidr",
+            "cidr": "10.3.0.0/16",
+            "description": "App traffic from CI"
+          },
+          {
+            "protocol": "tcp",
+            "fromPort": 9000,
+            "toPort": 9000,
+            "source": "securityGroup",
+            "groupId": "sg-ecb4b846590db1528",
+            "description": "App traffic from web tier"
+          },
+          {
+            "protocol": "tcp",
+            "fromPort": 9000,
+            "toPort": 9000,
+            "source": "securityGroup",
+            "groupId": "sg-89973346a8873d61a",
+            "description": "App traffic from the ALB"
+          }
+        ],
+        "ingressRuleCount": 3
+      },
+      "derived": {}
+    },
+    {
+      "arn": "arn:aws:ec2:us-east-1:123456789012:security-group/sg-d7b63744adf5f5307",
+      "kind": "SecurityGroup",
+      "name": "prod-db-sg",
+      "region": "us-east-1",
+      "accountId": "123456789012",
+      "tags": {
+        "Name": "prod-db-sg",
+        "Environment": "production",
+        "Owner": "platform",
+        "CostCenter": "eng-core"
+      },
+      "properties": {
+        "groupId": "sg-d7b63744adf5f5307",
+        "groupName": "prod-db-sg",
+        "description": "Database tier",
+        "vpcId": "vpc-d1e945fdcc93fb788",
+        "ingress": [
+          {
+            "protocol": "tcp",
+            "fromPort": 5432,
+            "toPort": 5432,
+            "source": "cidr",
+            "cidr": "10.1.0.0/16",
+            "description": "Postgres from analytics"
+          },
+          {
+            "protocol": "tcp",
+            "fromPort": 5432,
+            "toPort": 5432,
+            "source": "cidr",
+            "cidr": "10.4.0.0/16",
+            "description": "Postgres from partner"
+          },
+          {
+            "protocol": "tcp",
+            "fromPort": 5432,
+            "toPort": 5432,
+            "source": "securityGroup",
+            "groupId": "sg-bd01aaccd2ea691db",
+            "description": "Postgres from app tier"
+          },
+          {
+            "protocol": "tcp",
+            "fromPort": 5432,
+            "toPort": 5432,
+            "source": "securityGroup",
+            "groupId": "sg-ab67ce2a8525c9ef1",
+            "description": "Postgres from bastion"
+          }
+        ],
+        "ingressRuleCount": 4
+      },
+      "derived": {}
+    },
+    {
+      "arn": "arn:aws:ec2:us-east-1:123456789012:security-group/sg-ecb4b846590db1528",
+      "kind": "SecurityGroup",
+      "name": "prod-web-sg",
+      "region": "us-east-1",
+      "accountId": "123456789012",
+      "tags": {
+        "Name": "prod-web-sg",
+        "Environment": "production",
+        "Owner": "platform",
+        "CostCenter": "eng-core"
+      },
+      "properties": {
+        "groupId": "sg-ecb4b846590db1528",
+        "groupName": "prod-web-sg",
+        "description": "Public web tier",
+        "vpcId": "vpc-d1e945fdcc93fb788",
+        "ingress": [
+          {
+            "protocol": "tcp",
+            "fromPort": 443,
+            "toPort": 443,
+            "source": "cidr",
+            "cidr": "0.0.0.0/0",
+            "description": "HTTPS from the internet"
+          },
+          {
+            "protocol": "tcp",
+            "fromPort": 80,
+            "toPort": 80,
+            "source": "cidr",
+            "cidr": "0.0.0.0/0",
+            "description": "HTTP from the internet"
+          }
+        ],
+        "ingressRuleCount": 2
+      },
+      "derived": {}
+    },
+    {
+      "arn": "arn:aws:ec2:us-east-1:123456789012:security-group/sg-fd346a8b2003fdcd4",
+      "kind": "SecurityGroup",
+      "name": "analytics-orders-endpoint-sg",
+      "region": "us-east-1",
+      "accountId": "123456789012",
+      "tags": {
+        "Name": "analytics-orders-endpoint-sg",
+        "Environment": "production",
+        "Owner": "platform",
+        "CostCenter": "eng-core"
+      },
+      "properties": {
+        "groupId": "sg-fd346a8b2003fdcd4",
+        "groupName": "analytics-orders-endpoint-sg",
+        "description": "analytics-orders-endpoint-sg",
+        "vpcId": "vpc-598df3b20d37c8c6a",
+        "ingress": [
+          {
+            "protocol": "tcp",
+            "fromPort": 9000,
+            "toPort": 9000,
+            "source": "cidr",
+            "cidr": "10.1.0.0/16",
+            "description": "Orders from analytics"
+          }
+        ],
+        "ingressRuleCount": 1
+      },
+      "derived": {}
+    },
+    {
+      "arn": "arn:aws:ec2:us-east-1:123456789012:security-group/sg-feac4b3638cf4fa31",
+      "kind": "SecurityGroup",
+      "name": "default",
+      "region": "us-east-1",
+      "accountId": "123456789012",
+      "tags": {},
+      "properties": {
+        "groupId": "sg-feac4b3638cf4fa31",
+        "groupName": "default",
+        "description": "default VPC security group",
+        "vpcId": "vpc-598df3b20d37c8c6a",
+        "ingress": [],
+        "ingressRuleCount": 0
+      },
+      "derived": {}
+    },
+    {
+      "arn": "arn:aws:ec2:us-east-1:123456789012:subnet/subnet-19400805f40629d72",
+      "kind": "Subnet",
+      "name": "subnet-19400805f40629d72",
+      "region": "us-east-1",
+      "accountId": "123456789012",
+      "tags": {},
+      "properties": {
+        "subnetId": "subnet-19400805f40629d72",
+        "vpcId": "vpc-0a012c31ec2220368",
+        "cidrBlock": "172.31.80.0/20",
+        "availabilityZone": "us-east-1f",
+        "mapPublicIpOnLaunch": true,
+        "routeTableId": "rtb-515f702c542dd3a0b",
+        "isPublic": false
+      },
+      "derived": {
+        "isPublic": false,
+        "publicReason": "The route table this subnet uses has no active default route to an internet gateway"
+      }
+    },
+    {
+      "arn": "arn:aws:ec2:us-east-1:123456789012:subnet/subnet-23d5065ac4962bef9",
+      "kind": "Subnet",
+      "name": "shared-private",
+      "region": "us-east-1",
+      "accountId": "123456789012",
+      "tags": {
+        "Name": "shared-private",
+        "Environment": "production",
+        "Owner": "platform",
+        "CostCenter": "eng-core"
+      },
+      "properties": {
+        "subnetId": "subnet-23d5065ac4962bef9",
+        "vpcId": "vpc-fd22f2c7955cf8cd6",
+        "cidrBlock": "10.3.1.0/24",
+        "availabilityZone": "us-east-1a",
+        "mapPublicIpOnLaunch": false,
+        "routeTableId": "rtb-d5dd7a4871cb12dc0",
+        "isPublic": false
+      },
+      "derived": {
+        "isPublic": false,
+        "publicReason": "The route table this subnet uses has no active default route to an internet gateway"
+      }
+    },
+    {
+      "arn": "arn:aws:ec2:us-east-1:123456789012:subnet/subnet-299cf9ec125a5de41",
+      "kind": "Subnet",
+      "name": "subnet-299cf9ec125a5de41",
+      "region": "us-east-1",
+      "accountId": "123456789012",
+      "tags": {},
+      "properties": {
+        "subnetId": "subnet-299cf9ec125a5de41",
+        "vpcId": "vpc-0a012c31ec2220368",
+        "cidrBlock": "172.31.0.0/20",
+        "availabilityZone": "us-east-1a",
+        "mapPublicIpOnLaunch": true,
+        "routeTableId": "rtb-515f702c542dd3a0b",
+        "isPublic": false
+      },
+      "derived": {
+        "isPublic": false,
+        "publicReason": "The route table this subnet uses has no active default route to an internet gateway"
+      }
+    },
+    {
+      "arn": "arn:aws:ec2:us-east-1:123456789012:subnet/subnet-3e6af0a98c0ab494e",
+      "kind": "Subnet",
+      "name": "subnet-3e6af0a98c0ab494e",
+      "region": "us-east-1",
+      "accountId": "123456789012",
+      "tags": {},
+      "properties": {
+        "subnetId": "subnet-3e6af0a98c0ab494e",
+        "vpcId": "vpc-0a012c31ec2220368",
+        "cidrBlock": "172.31.64.0/20",
+        "availabilityZone": "us-east-1e",
+        "mapPublicIpOnLaunch": true,
+        "routeTableId": "rtb-515f702c542dd3a0b",
+        "isPublic": false
+      },
+      "derived": {
+        "isPublic": false,
+        "publicReason": "The route table this subnet uses has no active default route to an internet gateway"
+      }
+    },
+    {
+      "arn": "arn:aws:ec2:us-east-1:123456789012:subnet/subnet-554b3f0cba0f3581c",
+      "kind": "Subnet",
+      "name": "partner-private",
+      "region": "us-east-1",
+      "accountId": "123456789012",
+      "tags": {
+        "Name": "partner-private",
+        "Environment": "production",
+        "Owner": "platform",
+        "CostCenter": "eng-core"
+      },
+      "properties": {
+        "subnetId": "subnet-554b3f0cba0f3581c",
+        "vpcId": "vpc-9df03e1a65a0861dc",
+        "cidrBlock": "10.4.1.0/24",
+        "availabilityZone": "us-east-1a",
+        "mapPublicIpOnLaunch": false,
+        "routeTableId": "rtb-ff4b5607f7277e4d2",
+        "isPublic": false
+      },
+      "derived": {
+        "isPublic": false,
+        "publicReason": "The route table this subnet uses has no active default route to an internet gateway"
+      }
+    },
+    {
+      "arn": "arn:aws:ec2:us-east-1:123456789012:subnet/subnet-634bc61149ce84944",
+      "kind": "Subnet",
+      "name": "shared-status",
+      "region": "us-east-1",
+      "accountId": "123456789012",
+      "tags": {
+        "Name": "shared-status",
+        "Environment": "production",
+        "Owner": "platform",
+        "CostCenter": "eng-core"
+      },
+      "properties": {
+        "subnetId": "subnet-634bc61149ce84944",
+        "vpcId": "vpc-fd22f2c7955cf8cd6",
+        "cidrBlock": "10.3.2.0/24",
+        "availabilityZone": "us-east-1a",
+        "mapPublicIpOnLaunch": false,
+        "routeTableId": "rtb-f30e3dd4e7d242a25",
+        "isPublic": true
+      },
+      "derived": {
+        "isPublic": true,
+        "publicReason": "Its VPC's main route table, which it uses by default, sends 0.0.0.0/0 to internet gateway igw-be7c80e31455abf3b"
+      }
+    },
+    {
+      "arn": "arn:aws:ec2:us-east-1:123456789012:subnet/subnet-72de7af58e8c8503c",
+      "kind": "Subnet",
+      "name": "analytics-private",
+      "region": "us-east-1",
+      "accountId": "123456789012",
+      "tags": {
+        "Name": "analytics-private",
+        "Environment": "production",
+        "Owner": "platform",
+        "CostCenter": "eng-core"
+      },
+      "properties": {
+        "subnetId": "subnet-72de7af58e8c8503c",
+        "vpcId": "vpc-598df3b20d37c8c6a",
+        "cidrBlock": "10.1.1.0/24",
+        "availabilityZone": "us-east-1a",
+        "mapPublicIpOnLaunch": false,
+        "routeTableId": "rtb-e7ea2dffc20778ce3",
+        "isPublic": false
+      },
+      "derived": {
+        "isPublic": false,
+        "publicReason": "The route table this subnet uses has no active default route to an internet gateway"
+      }
+    },
+    {
+      "arn": "arn:aws:ec2:us-east-1:123456789012:subnet/subnet-7db155cb82c927736",
+      "kind": "Subnet",
+      "name": "subnet-7db155cb82c927736",
+      "region": "us-east-1",
+      "accountId": "123456789012",
+      "tags": {},
+      "properties": {
+        "subnetId": "subnet-7db155cb82c927736",
+        "vpcId": "vpc-0a012c31ec2220368",
+        "cidrBlock": "172.31.32.0/20",
+        "availabilityZone": "us-east-1c",
+        "mapPublicIpOnLaunch": true,
+        "routeTableId": "rtb-515f702c542dd3a0b",
+        "isPublic": false
+      },
+      "derived": {
+        "isPublic": false,
+        "publicReason": "The route table this subnet uses has no active default route to an internet gateway"
+      }
+    },
+    {
+      "arn": "arn:aws:ec2:us-east-1:123456789012:subnet/subnet-7dc48870e814b0812",
+      "kind": "Subnet",
+      "name": "subnet-7dc48870e814b0812",
+      "region": "us-east-1",
+      "accountId": "123456789012",
+      "tags": {},
+      "properties": {
+        "subnetId": "subnet-7dc48870e814b0812",
+        "vpcId": "vpc-0a012c31ec2220368",
+        "cidrBlock": "172.31.16.0/20",
+        "availabilityZone": "us-east-1b",
+        "mapPublicIpOnLaunch": true,
+        "routeTableId": "rtb-515f702c542dd3a0b",
+        "isPublic": false
+      },
+      "derived": {
+        "isPublic": false,
+        "publicReason": "The route table this subnet uses has no active default route to an internet gateway"
+      }
+    },
+    {
+      "arn": "arn:aws:ec2:us-east-1:123456789012:subnet/subnet-873b59617498b2ba9",
+      "kind": "Subnet",
+      "name": "prod-vpc-public-a",
+      "region": "us-east-1",
+      "accountId": "123456789012",
+      "tags": {
+        "Name": "prod-vpc-public-a",
+        "Environment": "production",
+        "Owner": "platform",
+        "CostCenter": "eng-core",
+        "Tier": "public"
+      },
+      "properties": {
+        "subnetId": "subnet-873b59617498b2ba9",
+        "vpcId": "vpc-d1e945fdcc93fb788",
+        "cidrBlock": "10.0.1.0/24",
+        "availabilityZone": "us-east-1a",
+        "mapPublicIpOnLaunch": false,
+        "routeTableId": "rtb-142b176cfb1e4ac93",
+        "isPublic": true
+      },
+      "derived": {
+        "isPublic": true,
+        "publicReason": "Its route table sends 0.0.0.0/0 to internet gateway igw-cb70dc59e56e144e7"
+      }
+    },
+    {
+      "arn": "arn:aws:ec2:us-east-1:123456789012:subnet/subnet-ba827b54d037f4ab4",
+      "kind": "Subnet",
+      "name": "subnet-ba827b54d037f4ab4",
+      "region": "us-east-1",
+      "accountId": "123456789012",
+      "tags": {},
+      "properties": {
+        "subnetId": "subnet-ba827b54d037f4ab4",
+        "vpcId": "vpc-0a012c31ec2220368",
+        "cidrBlock": "172.31.48.0/20",
+        "availabilityZone": "us-east-1d",
+        "mapPublicIpOnLaunch": true,
+        "routeTableId": "rtb-515f702c542dd3a0b",
+        "isPublic": false
+      },
+      "derived": {
+        "isPublic": false,
+        "publicReason": "The route table this subnet uses has no active default route to an internet gateway"
+      }
+    },
+    {
+      "arn": "arn:aws:ec2:us-east-1:123456789012:subnet/subnet-c828f0e20f4eb3c7c",
+      "kind": "Subnet",
+      "name": "prod-vpc-private-a",
+      "region": "us-east-1",
+      "accountId": "123456789012",
+      "tags": {
+        "Name": "prod-vpc-private-a",
+        "Environment": "production",
+        "Owner": "platform",
+        "CostCenter": "eng-core",
+        "Tier": "private"
+      },
+      "properties": {
+        "subnetId": "subnet-c828f0e20f4eb3c7c",
+        "vpcId": "vpc-d1e945fdcc93fb788",
+        "cidrBlock": "10.0.10.0/24",
+        "availabilityZone": "us-east-1a",
+        "mapPublicIpOnLaunch": false,
+        "routeTableId": "rtb-f7415a40d4b302f3c",
+        "isPublic": false
+      },
+      "derived": {
+        "isPublic": false,
+        "publicReason": "The route table this subnet uses has no active default route to an internet gateway"
+      }
+    },
+    {
+      "arn": "arn:aws:ec2:us-east-1:123456789012:subnet/subnet-fdf750986bc527082",
+      "kind": "Subnet",
+      "name": "prod-vpc-private-b",
+      "region": "us-east-1",
+      "accountId": "123456789012",
+      "tags": {
+        "Name": "prod-vpc-private-b",
+        "Environment": "production",
+        "Owner": "platform",
+        "CostCenter": "eng-core",
+        "Tier": "private"
+      },
+      "properties": {
+        "subnetId": "subnet-fdf750986bc527082",
+        "vpcId": "vpc-d1e945fdcc93fb788",
+        "cidrBlock": "10.0.11.0/24",
+        "availabilityZone": "us-east-1c",
+        "mapPublicIpOnLaunch": false,
+        "routeTableId": "rtb-f7415a40d4b302f3c",
+        "isPublic": false
+      },
+      "derived": {
+        "isPublic": false,
+        "publicReason": "The route table this subnet uses has no active default route to an internet gateway"
+      }
+    },
+    {
+      "arn": "arn:aws:ec2:us-east-1:123456789012:transit-gateway/tgw-54e59fcb1039eb624",
+      "kind": "TransitGateway",
+      "name": "northwind-tgw",
+      "region": "us-east-1",
+      "accountId": "123456789012",
+      "tags": {
+        "Name": "northwind-tgw",
+        "Environment": "production",
+        "Owner": "platform",
+        "CostCenter": "eng-core"
+      },
+      "properties": {
+        "transitGatewayId": "tgw-54e59fcb1039eb624",
+        "state": "available",
+        "ownerId": "123456789012",
+        "attachments": [
+          {
+            "attachmentId": "tgw-attach-42b09ecf841e23f28",
+            "resourceType": "vpc",
+            "vpcId": "vpc-d1e945fdcc93fb788",
+            "state": "available",
+            "routeTableId": "tgw-rtb-9743300a68cdac587"
+          },
+          {
+            "attachmentId": "tgw-attach-40d30738dfda1676d",
+            "resourceType": "vpc",
+            "vpcId": "vpc-fd22f2c7955cf8cd6",
+            "state": "available",
+            "routeTableId": "tgw-rtb-9743300a68cdac587"
+          }
+        ],
+        "routeTables": [
+          {
+            "routeTableId": "tgw-rtb-9743300a68cdac587",
+            "routes": [
+              {
+                "destination": "10.0.0.0/16",
+                "attachmentIds": [],
+                "state": "active"
+              },
+              {
+                "destination": "10.3.0.0/16",
+                "attachmentIds": [],
+                "state": "active"
+              }
+            ]
+          }
+        ]
+      },
+      "derived": {}
+    },
+    {
+      "arn": "arn:aws:ec2:us-east-1:123456789012:vpc-endpoint-service/vpce-svc-ec21fac5",
+      "kind": "VpcEndpointService",
+      "name": "vpce-svc-ec21fac5",
+      "region": "us-east-1",
+      "accountId": "123456789012",
+      "tags": {},
+      "properties": {
+        "serviceId": "vpce-svc-ec21fac5",
+        "serviceName": "com.amazonaws.vpce.us-east-1.vpce-svc-ec21fac5",
+        "state": "Available",
+        "acceptanceRequired": true,
+        "networkLoadBalancerArns": [
+          "arn:aws:elasticloadbalancing:us-east-1:123456789012:loadbalancer/app/prod-orders-nlb/43703dc6bcd11389"
+        ]
+      },
+      "derived": {}
+    },
+    {
+      "arn": "arn:aws:ec2:us-east-1:123456789012:vpc-endpoint/vpce-42d3433723c0f78fd",
+      "kind": "VpcEndpoint",
+      "name": "analytics-orders-endpoint",
+      "region": "us-east-1",
+      "accountId": "123456789012",
+      "tags": {
+        "Name": "analytics-orders-endpoint",
+        "Environment": "production",
+        "Owner": "platform",
+        "CostCenter": "eng-core"
+      },
+      "properties": {
+        "vpcEndpointId": "vpce-42d3433723c0f78fd",
+        "type": "Interface",
+        "vpcId": "vpc-598df3b20d37c8c6a",
+        "serviceName": "com.amazonaws.vpce.us-east-1.vpce-svc-ec21fac5",
+        "state": "available"
+      },
+      "derived": {}
+    },
+    {
+      "arn": "arn:aws:ec2:us-east-1:123456789012:vpc-peering-connection/pcx-6c2ac5178bdcd1954",
+      "kind": "VpcPeeringConnection",
+      "name": "prod-analytics-peering",
+      "region": "us-east-1",
+      "accountId": "123456789012",
+      "tags": {
+        "Name": "prod-analytics-peering",
+        "Environment": "production",
+        "Owner": "platform",
+        "CostCenter": "eng-core"
+      },
+      "properties": {
+        "peeringId": "pcx-6c2ac5178bdcd1954",
+        "status": "active",
+        "active": true,
+        "requester": {
+          "vpcId": "vpc-598df3b20d37c8c6a",
+          "ownerId": "123456789012",
+          "region": "us-east-1",
+          "cidr": "10.1.0.0/16"
+        },
+        "accepter": {
+          "vpcId": "vpc-d1e945fdcc93fb788",
+          "ownerId": "123456789012",
+          "region": "us-east-1",
+          "cidr": "10.0.0.0/16"
+        }
+      },
+      "derived": {}
+    },
+    {
+      "arn": "arn:aws:ec2:us-east-1:123456789012:vpc-peering-connection/pcx-b68e9630b48577983",
+      "kind": "VpcPeeringConnection",
+      "name": "prod-partner-peering",
+      "region": "us-east-1",
+      "accountId": "123456789012",
+      "tags": {
+        "Name": "prod-partner-peering",
+        "Environment": "production",
+        "Owner": "platform",
+        "CostCenter": "eng-core"
+      },
+      "properties": {
+        "peeringId": "pcx-b68e9630b48577983",
+        "status": "active",
+        "active": true,
+        "requester": {
+          "vpcId": "vpc-9df03e1a65a0861dc",
+          "ownerId": "123456789012",
+          "region": "us-east-1",
+          "cidr": "10.4.0.0/16"
+        },
+        "accepter": {
+          "vpcId": "vpc-d1e945fdcc93fb788",
+          "ownerId": "123456789012",
+          "region": "us-east-1",
+          "cidr": "10.0.0.0/16"
+        }
+      },
+      "derived": {}
+    },
+    {
+      "arn": "arn:aws:ec2:us-east-1:123456789012:vpc/vpc-0a012c31ec2220368",
+      "kind": "Vpc",
+      "name": "vpc-0a012c31ec2220368",
+      "region": "us-east-1",
+      "accountId": "123456789012",
+      "tags": {},
+      "properties": {
+        "vpcId": "vpc-0a012c31ec2220368",
+        "cidrBlock": "172.31.0.0/16",
+        "isDefault": true,
+        "state": "available"
+      },
+      "derived": {}
+    },
+    {
+      "arn": "arn:aws:ec2:us-east-1:123456789012:vpc/vpc-598df3b20d37c8c6a",
+      "kind": "Vpc",
+      "name": "analytics-vpc",
+      "region": "us-east-1",
+      "accountId": "123456789012",
+      "tags": {
+        "Name": "analytics-vpc",
+        "Environment": "production",
+        "Owner": "platform",
+        "CostCenter": "eng-core"
+      },
+      "properties": {
+        "vpcId": "vpc-598df3b20d37c8c6a",
+        "cidrBlock": "10.1.0.0/16",
+        "isDefault": false,
+        "state": "available"
+      },
+      "derived": {}
+    },
+    {
+      "arn": "arn:aws:ec2:us-east-1:123456789012:vpc/vpc-9df03e1a65a0861dc",
+      "kind": "Vpc",
+      "name": "partner-vpc",
+      "region": "us-east-1",
+      "accountId": "123456789012",
+      "tags": {
+        "Name": "partner-vpc",
+        "Environment": "production",
+        "Owner": "platform",
+        "CostCenter": "eng-core"
+      },
+      "properties": {
+        "vpcId": "vpc-9df03e1a65a0861dc",
+        "cidrBlock": "10.4.0.0/16",
+        "isDefault": false,
+        "state": "available"
+      },
+      "derived": {}
+    },
+    {
+      "arn": "arn:aws:ec2:us-east-1:123456789012:vpc/vpc-d1e945fdcc93fb788",
+      "kind": "Vpc",
+      "name": "prod-vpc",
+      "region": "us-east-1",
+      "accountId": "123456789012",
+      "tags": {
+        "Name": "prod-vpc",
+        "Environment": "production",
+        "Owner": "platform",
+        "CostCenter": "eng-core"
+      },
+      "properties": {
+        "vpcId": "vpc-d1e945fdcc93fb788",
+        "cidrBlock": "10.0.0.0/16",
+        "isDefault": false,
+        "state": "available"
+      },
+      "derived": {}
+    },
+    {
+      "arn": "arn:aws:ec2:us-east-1:123456789012:vpc/vpc-fd22f2c7955cf8cd6",
+      "kind": "Vpc",
+      "name": "shared-vpc",
+      "region": "us-east-1",
+      "accountId": "123456789012",
+      "tags": {
+        "Name": "shared-vpc",
+        "Environment": "production",
+        "Owner": "platform",
+        "CostCenter": "eng-core"
+      },
+      "properties": {
+        "vpcId": "vpc-fd22f2c7955cf8cd6",
+        "cidrBlock": "10.3.0.0/16",
+        "isDefault": false,
+        "state": "available"
+      },
+      "derived": {}
+    }
+  ],
+  "relationships": [
+    {
+      "from": "arn:aws:ec2:ap-southeast-1:123456789012:internet-gateway/igw-9a9d5a6b0ae1711a6",
+      "to": "arn:aws:ec2:ap-southeast-1:123456789012:vpc/vpc-ced43c5faf20736d9",
+      "type": "ATTACHED_TO"
+    },
+    {
+      "from": "arn:aws:ec2:ap-southeast-1:123456789012:internet-gateway/igw-9a9d5a6b0ae1711a6",
+      "to": "arn:aws:sightline:ap-southeast-1:123456789012:region/ap-southeast-1",
+      "type": "IN_REGION"
+    },
+    {
+      "from": "arn:aws:ec2:ap-southeast-1:123456789012:natgateway/nat-6022a9190a6e27be6",
+      "to": "arn:aws:sightline:ap-southeast-1:123456789012:region/ap-southeast-1",
+      "type": "IN_REGION"
+    },
+    {
+      "from": "arn:aws:ec2:ap-southeast-1:123456789012:natgateway/nat-6022a9190a6e27be6",
+      "to": "arn:aws:ec2:ap-southeast-1:123456789012:subnet/subnet-6bc8aed5ae4aac5da",
+      "type": "IN_SUBNET"
+    },
+    {
+      "from": "arn:aws:ec2:ap-southeast-1:123456789012:network-acl/acl-d7ff01d3b224704c2",
+      "to": "arn:aws:sightline:ap-southeast-1:123456789012:region/ap-southeast-1",
+      "type": "IN_REGION"
+    },
+    {
+      "from": "arn:aws:ec2:ap-southeast-1:123456789012:network-acl/acl-fc9a42833a4c701d9",
+      "to": "arn:aws:sightline:ap-southeast-1:123456789012:region/ap-southeast-1",
+      "type": "IN_REGION"
+    },
+    {
+      "from": "arn:aws:ec2:ap-southeast-1:123456789012:route-table/rtb-655dbc7288189e3af",
+      "to": "arn:aws:sightline:ap-southeast-1:123456789012:region/ap-southeast-1",
+      "type": "IN_REGION"
+    },
+    {
+      "from": "arn:aws:ec2:ap-southeast-1:123456789012:route-table/rtb-655dbc7288189e3af",
+      "to": "arn:aws:ec2:ap-southeast-1:123456789012:vpc/vpc-b635d27a468c4ad46",
+      "type": "IN_VPC"
+    },
+    {
+      "from": "arn:aws:ec2:ap-southeast-1:123456789012:route-table/rtb-884dd22ecaff6e914",
+      "to": "arn:aws:sightline:ap-southeast-1:123456789012:region/ap-southeast-1",
+      "type": "IN_REGION"
+    },
+    {
+      "from": "arn:aws:ec2:ap-southeast-1:123456789012:route-table/rtb-884dd22ecaff6e914",
+      "to": "arn:aws:ec2:ap-southeast-1:123456789012:vpc/vpc-ced43c5faf20736d9",
+      "type": "IN_VPC"
+    },
+    {
+      "from": "arn:aws:ec2:ap-southeast-1:123456789012:route-table/rtb-c0636fefc84ab8e75",
+      "to": "arn:aws:sightline:ap-southeast-1:123456789012:region/ap-southeast-1",
+      "type": "IN_REGION"
+    },
+    {
+      "from": "arn:aws:ec2:ap-southeast-1:123456789012:route-table/rtb-c0636fefc84ab8e75",
+      "to": "arn:aws:ec2:ap-southeast-1:123456789012:vpc/vpc-ced43c5faf20736d9",
+      "type": "IN_VPC"
+    },
+    {
+      "from": "arn:aws:ec2:ap-southeast-1:123456789012:route-table/rtb-c98c64d63658c9a1c",
+      "to": "arn:aws:sightline:ap-southeast-1:123456789012:region/ap-southeast-1",
+      "type": "IN_REGION"
+    },
+    {
+      "from": "arn:aws:ec2:ap-southeast-1:123456789012:route-table/rtb-c98c64d63658c9a1c",
+      "to": "arn:aws:ec2:ap-southeast-1:123456789012:vpc/vpc-ced43c5faf20736d9",
+      "type": "IN_VPC"
+    },
+    {
+      "from": "arn:aws:ec2:ap-southeast-1:123456789012:route-table/rtb-c98c64d63658c9a1c",
+      "to": "arn:aws:ec2:ap-southeast-1:123456789012:internet-gateway/igw-9a9d5a6b0ae1711a6",
+      "type": "ROUTES_TO",
+      "properties": {
+        "destination": "0.0.0.0/0"
+      }
+    },
+    {
+      "from": "arn:aws:ec2:ap-southeast-1:123456789012:security-group/sg-2fe00858128b31c85",
+      "to": "arn:aws:sightline:ap-southeast-1:123456789012:region/ap-southeast-1",
+      "type": "IN_REGION"
+    },
+    {
+      "from": "arn:aws:ec2:ap-southeast-1:123456789012:security-group/sg-2fe00858128b31c85",
+      "to": "arn:aws:ec2:ap-southeast-1:123456789012:vpc/vpc-b635d27a468c4ad46",
+      "type": "IN_VPC"
+    },
+    {
+      "from": "arn:aws:ec2:ap-southeast-1:123456789012:security-group/sg-544da0e2c217363c1",
+      "to": "arn:aws:sightline:ap-southeast-1:123456789012:region/ap-southeast-1",
+      "type": "IN_REGION"
+    },
+    {
+      "from": "arn:aws:ec2:ap-southeast-1:123456789012:security-group/sg-544da0e2c217363c1",
+      "to": "arn:aws:ec2:ap-southeast-1:123456789012:vpc/vpc-ced43c5faf20736d9",
+      "type": "IN_VPC"
+    },
+    {
+      "from": "arn:aws:ec2:ap-southeast-1:123456789012:subnet/subnet-1f1c7101c04d9cfe3",
+      "to": "arn:aws:ec2:ap-southeast-1:123456789012:network-acl/acl-d7ff01d3b224704c2",
+      "type": "HAS_NACL"
+    },
+    {
+      "from": "arn:aws:ec2:ap-southeast-1:123456789012:subnet/subnet-1f1c7101c04d9cfe3",
+      "to": "arn:aws:sightline:ap-southeast-1:123456789012:region/ap-southeast-1",
+      "type": "IN_REGION"
+    },
+    {
+      "from": "arn:aws:ec2:ap-southeast-1:123456789012:subnet/subnet-1f1c7101c04d9cfe3",
+      "to": "arn:aws:ec2:ap-southeast-1:123456789012:vpc/vpc-b635d27a468c4ad46",
+      "type": "IN_VPC"
+    },
+    {
+      "from": "arn:aws:ec2:ap-southeast-1:123456789012:subnet/subnet-1f1c7101c04d9cfe3",
+      "to": "arn:aws:ec2:ap-southeast-1:123456789012:route-table/rtb-655dbc7288189e3af",
+      "type": "USES_ROUTE_TABLE",
+      "properties": {
+        "main": true
+      }
+    },
+    {
+      "from": "arn:aws:ec2:ap-southeast-1:123456789012:subnet/subnet-33a8f911769ccb7a5",
+      "to": "arn:aws:ec2:ap-southeast-1:123456789012:network-acl/acl-fc9a42833a4c701d9",
+      "type": "HAS_NACL"
+    },
+    {
+      "from": "arn:aws:ec2:ap-southeast-1:123456789012:subnet/subnet-33a8f911769ccb7a5",
+      "to": "arn:aws:sightline:ap-southeast-1:123456789012:region/ap-southeast-1",
+      "type": "IN_REGION"
+    },
+    {
+      "from": "arn:aws:ec2:ap-southeast-1:123456789012:subnet/subnet-33a8f911769ccb7a5",
+      "to": "arn:aws:ec2:ap-southeast-1:123456789012:vpc/vpc-ced43c5faf20736d9",
+      "type": "IN_VPC"
+    },
+    {
+      "from": "arn:aws:ec2:ap-southeast-1:123456789012:subnet/subnet-33a8f911769ccb7a5",
+      "to": "arn:aws:ec2:ap-southeast-1:123456789012:route-table/rtb-884dd22ecaff6e914",
+      "type": "USES_ROUTE_TABLE",
+      "properties": {
+        "main": false
+      }
+    },
+    {
+      "from": "arn:aws:ec2:ap-southeast-1:123456789012:subnet/subnet-6bc8aed5ae4aac5da",
+      "to": "arn:aws:ec2:ap-southeast-1:123456789012:network-acl/acl-fc9a42833a4c701d9",
+      "type": "HAS_NACL"
+    },
+    {
+      "from": "arn:aws:ec2:ap-southeast-1:123456789012:subnet/subnet-6bc8aed5ae4aac5da",
+      "to": "arn:aws:sightline:ap-southeast-1:123456789012:region/ap-southeast-1",
+      "type": "IN_REGION"
+    },
+    {
+      "from": "arn:aws:ec2:ap-southeast-1:123456789012:subnet/subnet-6bc8aed5ae4aac5da",
+      "to": "arn:aws:ec2:ap-southeast-1:123456789012:vpc/vpc-ced43c5faf20736d9",
+      "type": "IN_VPC"
+    },
+    {
+      "from": "arn:aws:ec2:ap-southeast-1:123456789012:subnet/subnet-6bc8aed5ae4aac5da",
+      "to": "arn:aws:ec2:ap-southeast-1:123456789012:route-table/rtb-c98c64d63658c9a1c",
+      "type": "USES_ROUTE_TABLE",
+      "properties": {
+        "main": false
+      }
+    },
+    {
+      "from": "arn:aws:ec2:ap-southeast-1:123456789012:subnet/subnet-7b51e5a9520271776",
+      "to": "arn:aws:ec2:ap-southeast-1:123456789012:network-acl/acl-d7ff01d3b224704c2",
+      "type": "HAS_NACL"
+    },
+    {
+      "from": "arn:aws:ec2:ap-southeast-1:123456789012:subnet/subnet-7b51e5a9520271776",
+      "to": "arn:aws:sightline:ap-southeast-1:123456789012:region/ap-southeast-1",
+      "type": "IN_REGION"
+    },
+    {
+      "from": "arn:aws:ec2:ap-southeast-1:123456789012:subnet/subnet-7b51e5a9520271776",
+      "to": "arn:aws:ec2:ap-southeast-1:123456789012:vpc/vpc-b635d27a468c4ad46",
+      "type": "IN_VPC"
+    },
+    {
+      "from": "arn:aws:ec2:ap-southeast-1:123456789012:subnet/subnet-7b51e5a9520271776",
+      "to": "arn:aws:ec2:ap-southeast-1:123456789012:route-table/rtb-655dbc7288189e3af",
+      "type": "USES_ROUTE_TABLE",
+      "properties": {
+        "main": true
+      }
+    },
+    {
+      "from": "arn:aws:ec2:ap-southeast-1:123456789012:subnet/subnet-cc05d3aaa219aa691",
+      "to": "arn:aws:ec2:ap-southeast-1:123456789012:network-acl/acl-fc9a42833a4c701d9",
+      "type": "HAS_NACL"
+    },
+    {
+      "from": "arn:aws:ec2:ap-southeast-1:123456789012:subnet/subnet-cc05d3aaa219aa691",
+      "to": "arn:aws:sightline:ap-southeast-1:123456789012:region/ap-southeast-1",
+      "type": "IN_REGION"
+    },
+    {
+      "from": "arn:aws:ec2:ap-southeast-1:123456789012:subnet/subnet-cc05d3aaa219aa691",
+      "to": "arn:aws:ec2:ap-southeast-1:123456789012:vpc/vpc-ced43c5faf20736d9",
+      "type": "IN_VPC"
+    },
+    {
+      "from": "arn:aws:ec2:ap-southeast-1:123456789012:subnet/subnet-cc05d3aaa219aa691",
+      "to": "arn:aws:ec2:ap-southeast-1:123456789012:route-table/rtb-884dd22ecaff6e914",
+      "type": "USES_ROUTE_TABLE",
+      "properties": {
+        "main": false
+      }
+    },
+    {
+      "from": "arn:aws:ec2:ap-southeast-1:123456789012:subnet/subnet-d643a770bc65e6738",
+      "to": "arn:aws:ec2:ap-southeast-1:123456789012:network-acl/acl-d7ff01d3b224704c2",
+      "type": "HAS_NACL"
+    },
+    {
+      "from": "arn:aws:ec2:ap-southeast-1:123456789012:subnet/subnet-d643a770bc65e6738",
+      "to": "arn:aws:sightline:ap-southeast-1:123456789012:region/ap-southeast-1",
+      "type": "IN_REGION"
+    },
+    {
+      "from": "arn:aws:ec2:ap-southeast-1:123456789012:subnet/subnet-d643a770bc65e6738",
+      "to": "arn:aws:ec2:ap-southeast-1:123456789012:vpc/vpc-b635d27a468c4ad46",
+      "type": "IN_VPC"
+    },
+    {
+      "from": "arn:aws:ec2:ap-southeast-1:123456789012:subnet/subnet-d643a770bc65e6738",
+      "to": "arn:aws:ec2:ap-southeast-1:123456789012:route-table/rtb-655dbc7288189e3af",
+      "type": "USES_ROUTE_TABLE",
+      "properties": {
+        "main": true
+      }
+    },
+    {
+      "from": "arn:aws:ec2:ap-southeast-1:123456789012:vpc/vpc-b635d27a468c4ad46",
+      "to": "arn:aws:sightline:ap-southeast-1:123456789012:region/ap-southeast-1",
+      "type": "IN_REGION"
+    },
+    {
+      "from": "arn:aws:ec2:ap-southeast-1:123456789012:vpc/vpc-ced43c5faf20736d9",
+      "to": "arn:aws:sightline:ap-southeast-1:123456789012:region/ap-southeast-1",
+      "type": "IN_REGION"
+    },
+    {
+      "from": "arn:aws:ec2:eu-west-1:123456789012:internet-gateway/igw-fb5c9ed549ee9697e",
+      "to": "arn:aws:ec2:eu-west-1:123456789012:vpc/vpc-361b3e6643d6d8ca4",
+      "type": "ATTACHED_TO"
+    },
+    {
+      "from": "arn:aws:ec2:eu-west-1:123456789012:internet-gateway/igw-fb5c9ed549ee9697e",
+      "to": "arn:aws:sightline:eu-west-1:123456789012:region/eu-west-1",
+      "type": "IN_REGION"
+    },
+    {
+      "from": "arn:aws:ec2:eu-west-1:123456789012:network-acl/acl-03a7adf286af9ed0e",
+      "to": "arn:aws:sightline:eu-west-1:123456789012:region/eu-west-1",
+      "type": "IN_REGION"
+    },
+    {
+      "from": "arn:aws:ec2:eu-west-1:123456789012:network-acl/acl-5abc5c3487b969bfe",
+      "to": "arn:aws:sightline:eu-west-1:123456789012:region/eu-west-1",
+      "type": "IN_REGION"
+    },
+    {
+      "from": "arn:aws:ec2:eu-west-1:123456789012:network-acl/acl-9c9bf120f980fcbf4",
+      "to": "arn:aws:sightline:eu-west-1:123456789012:region/eu-west-1",
+      "type": "IN_REGION"
+    },
+    {
+      "from": "arn:aws:ec2:eu-west-1:123456789012:route-table/rtb-6d8823084da657fed",
+      "to": "arn:aws:sightline:eu-west-1:123456789012:region/eu-west-1",
+      "type": "IN_REGION"
+    },
+    {
+      "from": "arn:aws:ec2:eu-west-1:123456789012:route-table/rtb-6d8823084da657fed",
+      "to": "arn:aws:ec2:eu-west-1:123456789012:vpc/vpc-361b3e6643d6d8ca4",
+      "type": "IN_VPC"
+    },
+    {
+      "from": "arn:aws:ec2:eu-west-1:123456789012:route-table/rtb-762c98c5ee9326fa5",
+      "to": "arn:aws:sightline:eu-west-1:123456789012:region/eu-west-1",
+      "type": "IN_REGION"
+    },
+    {
+      "from": "arn:aws:ec2:eu-west-1:123456789012:route-table/rtb-762c98c5ee9326fa5",
+      "to": "arn:aws:ec2:eu-west-1:123456789012:vpc/vpc-361b3e6643d6d8ca4",
+      "type": "IN_VPC"
+    },
+    {
+      "from": "arn:aws:ec2:eu-west-1:123456789012:route-table/rtb-762c98c5ee9326fa5",
+      "to": "arn:aws:ec2:eu-west-1:123456789012:internet-gateway/igw-fb5c9ed549ee9697e",
+      "type": "ROUTES_TO",
+      "properties": {
+        "destination": "0.0.0.0/0"
+      }
+    },
+    {
+      "from": "arn:aws:ec2:eu-west-1:123456789012:route-table/rtb-d26f8af387aa60b6f",
+      "to": "arn:aws:sightline:eu-west-1:123456789012:region/eu-west-1",
+      "type": "IN_REGION"
+    },
+    {
+      "from": "arn:aws:ec2:eu-west-1:123456789012:route-table/rtb-d26f8af387aa60b6f",
+      "to": "arn:aws:ec2:eu-west-1:123456789012:vpc/vpc-b38c0748a11baf7f8",
+      "type": "IN_VPC"
+    },
+    {
+      "from": "arn:aws:ec2:eu-west-1:123456789012:security-group/sg-08b9dd67011e99f98",
+      "to": "arn:aws:sightline:eu-west-1:123456789012:region/eu-west-1",
+      "type": "IN_REGION"
+    },
+    {
+      "from": "arn:aws:ec2:eu-west-1:123456789012:security-group/sg-08b9dd67011e99f98",
+      "to": "arn:aws:ec2:eu-west-1:123456789012:vpc/vpc-b38c0748a11baf7f8",
+      "type": "IN_VPC"
+    },
+    {
+      "from": "arn:aws:ec2:eu-west-1:123456789012:security-group/sg-0b512626462b1c13b",
+      "to": "arn:aws:sightline:eu-west-1:123456789012:region/eu-west-1",
+      "type": "IN_REGION"
+    },
+    {
+      "from": "arn:aws:ec2:eu-west-1:123456789012:security-group/sg-0b512626462b1c13b",
+      "to": "arn:aws:ec2:eu-west-1:123456789012:vpc/vpc-361b3e6643d6d8ca4",
+      "type": "IN_VPC"
+    },
+    {
+      "from": "arn:aws:ec2:eu-west-1:123456789012:security-group/sg-32b0b12c7854051a0",
+      "to": "arn:aws:sightline:eu-west-1:123456789012:region/eu-west-1",
+      "type": "IN_REGION"
+    },
+    {
+      "from": "arn:aws:ec2:eu-west-1:123456789012:security-group/sg-32b0b12c7854051a0",
+      "to": "arn:aws:ec2:eu-west-1:123456789012:vpc/vpc-361b3e6643d6d8ca4",
+      "type": "IN_VPC"
+    },
+    {
+      "from": "arn:aws:ec2:eu-west-1:123456789012:security-group/sg-87d0967f096cd9bf9",
+      "to": "arn:aws:sightline:eu-west-1:123456789012:region/eu-west-1",
+      "type": "IN_REGION"
+    },
+    {
+      "from": "arn:aws:ec2:eu-west-1:123456789012:security-group/sg-87d0967f096cd9bf9",
+      "to": "arn:aws:ec2:eu-west-1:123456789012:vpc/vpc-361b3e6643d6d8ca4",
+      "type": "IN_VPC"
+    },
+    {
+      "from": "arn:aws:ec2:eu-west-1:123456789012:subnet/subnet-038db28524d6f83e5",
+      "to": "arn:aws:ec2:eu-west-1:123456789012:network-acl/acl-03a7adf286af9ed0e",
+      "type": "HAS_NACL"
+    },
+    {
+      "from": "arn:aws:ec2:eu-west-1:123456789012:subnet/subnet-038db28524d6f83e5",
+      "to": "arn:aws:sightline:eu-west-1:123456789012:region/eu-west-1",
+      "type": "IN_REGION"
+    },
+    {
+      "from": "arn:aws:ec2:eu-west-1:123456789012:subnet/subnet-038db28524d6f83e5",
+      "to": "arn:aws:ec2:eu-west-1:123456789012:vpc/vpc-361b3e6643d6d8ca4",
+      "type": "IN_VPC"
+    },
+    {
+      "from": "arn:aws:ec2:eu-west-1:123456789012:subnet/subnet-038db28524d6f83e5",
+      "to": "arn:aws:ec2:eu-west-1:123456789012:route-table/rtb-6d8823084da657fed",
+      "type": "USES_ROUTE_TABLE",
+      "properties": {
+        "main": true
+      }
+    },
+    {
+      "from": "arn:aws:ec2:eu-west-1:123456789012:subnet/subnet-1be0857bae9653be7",
+      "to": "arn:aws:ec2:eu-west-1:123456789012:network-acl/acl-9c9bf120f980fcbf4",
+      "type": "HAS_NACL"
+    },
+    {
+      "from": "arn:aws:ec2:eu-west-1:123456789012:subnet/subnet-1be0857bae9653be7",
+      "to": "arn:aws:sightline:eu-west-1:123456789012:region/eu-west-1",
+      "type": "IN_REGION"
+    },
+    {
+      "from": "arn:aws:ec2:eu-west-1:123456789012:subnet/subnet-1be0857bae9653be7",
+      "to": "arn:aws:ec2:eu-west-1:123456789012:vpc/vpc-b38c0748a11baf7f8",
+      "type": "IN_VPC"
+    },
+    {
+      "from": "arn:aws:ec2:eu-west-1:123456789012:subnet/subnet-1be0857bae9653be7",
+      "to": "arn:aws:ec2:eu-west-1:123456789012:route-table/rtb-d26f8af387aa60b6f",
+      "type": "USES_ROUTE_TABLE",
+      "properties": {
+        "main": true
+      }
+    },
+    {
+      "from": "arn:aws:ec2:eu-west-1:123456789012:subnet/subnet-4d2a98b6ed99e48ff",
+      "to": "arn:aws:ec2:eu-west-1:123456789012:network-acl/acl-9c9bf120f980fcbf4",
+      "type": "HAS_NACL"
+    },
+    {
+      "from": "arn:aws:ec2:eu-west-1:123456789012:subnet/subnet-4d2a98b6ed99e48ff",
+      "to": "arn:aws:sightline:eu-west-1:123456789012:region/eu-west-1",
+      "type": "IN_REGION"
+    },
+    {
+      "from": "arn:aws:ec2:eu-west-1:123456789012:subnet/subnet-4d2a98b6ed99e48ff",
+      "to": "arn:aws:ec2:eu-west-1:123456789012:vpc/vpc-b38c0748a11baf7f8",
+      "type": "IN_VPC"
+    },
+    {
+      "from": "arn:aws:ec2:eu-west-1:123456789012:subnet/subnet-4d2a98b6ed99e48ff",
+      "to": "arn:aws:ec2:eu-west-1:123456789012:route-table/rtb-d26f8af387aa60b6f",
+      "type": "USES_ROUTE_TABLE",
+      "properties": {
+        "main": true
+      }
+    },
+    {
+      "from": "arn:aws:ec2:eu-west-1:123456789012:subnet/subnet-500ce5538716cd513",
+      "to": "arn:aws:ec2:eu-west-1:123456789012:network-acl/acl-9c9bf120f980fcbf4",
+      "type": "HAS_NACL"
+    },
+    {
+      "from": "arn:aws:ec2:eu-west-1:123456789012:subnet/subnet-500ce5538716cd513",
+      "to": "arn:aws:sightline:eu-west-1:123456789012:region/eu-west-1",
+      "type": "IN_REGION"
+    },
+    {
+      "from": "arn:aws:ec2:eu-west-1:123456789012:subnet/subnet-500ce5538716cd513",
+      "to": "arn:aws:ec2:eu-west-1:123456789012:vpc/vpc-b38c0748a11baf7f8",
+      "type": "IN_VPC"
+    },
+    {
+      "from": "arn:aws:ec2:eu-west-1:123456789012:subnet/subnet-500ce5538716cd513",
+      "to": "arn:aws:ec2:eu-west-1:123456789012:route-table/rtb-d26f8af387aa60b6f",
+      "type": "USES_ROUTE_TABLE",
+      "properties": {
+        "main": true
+      }
+    },
+    {
+      "from": "arn:aws:ec2:eu-west-1:123456789012:subnet/subnet-a1aa097fff2c1ea01",
+      "to": "arn:aws:ec2:eu-west-1:123456789012:network-acl/acl-03a7adf286af9ed0e",
+      "type": "HAS_NACL"
+    },
+    {
+      "from": "arn:aws:ec2:eu-west-1:123456789012:subnet/subnet-a1aa097fff2c1ea01",
+      "to": "arn:aws:sightline:eu-west-1:123456789012:region/eu-west-1",
+      "type": "IN_REGION"
+    },
+    {
+      "from": "arn:aws:ec2:eu-west-1:123456789012:subnet/subnet-a1aa097fff2c1ea01",
+      "to": "arn:aws:ec2:eu-west-1:123456789012:vpc/vpc-361b3e6643d6d8ca4",
+      "type": "IN_VPC"
+    },
+    {
+      "from": "arn:aws:ec2:eu-west-1:123456789012:subnet/subnet-a1aa097fff2c1ea01",
+      "to": "arn:aws:ec2:eu-west-1:123456789012:route-table/rtb-6d8823084da657fed",
+      "type": "USES_ROUTE_TABLE",
+      "properties": {
+        "main": true
+      }
+    },
+    {
+      "from": "arn:aws:ec2:eu-west-1:123456789012:subnet/subnet-d46719f068378dd7f",
+      "to": "arn:aws:ec2:eu-west-1:123456789012:network-acl/acl-5abc5c3487b969bfe",
+      "type": "HAS_NACL"
+    },
+    {
+      "from": "arn:aws:ec2:eu-west-1:123456789012:subnet/subnet-d46719f068378dd7f",
+      "to": "arn:aws:sightline:eu-west-1:123456789012:region/eu-west-1",
+      "type": "IN_REGION"
+    },
+    {
+      "from": "arn:aws:ec2:eu-west-1:123456789012:subnet/subnet-d46719f068378dd7f",
+      "to": "arn:aws:ec2:eu-west-1:123456789012:vpc/vpc-361b3e6643d6d8ca4",
+      "type": "IN_VPC"
+    },
+    {
+      "from": "arn:aws:ec2:eu-west-1:123456789012:subnet/subnet-d46719f068378dd7f",
+      "to": "arn:aws:ec2:eu-west-1:123456789012:route-table/rtb-762c98c5ee9326fa5",
+      "type": "USES_ROUTE_TABLE",
+      "properties": {
+        "main": false
+      }
+    },
+    {
+      "from": "arn:aws:ec2:eu-west-1:123456789012:subnet/subnet-f37069fd85f17ad9a",
+      "to": "arn:aws:ec2:eu-west-1:123456789012:network-acl/acl-03a7adf286af9ed0e",
+      "type": "HAS_NACL"
+    },
+    {
+      "from": "arn:aws:ec2:eu-west-1:123456789012:subnet/subnet-f37069fd85f17ad9a",
+      "to": "arn:aws:sightline:eu-west-1:123456789012:region/eu-west-1",
+      "type": "IN_REGION"
+    },
+    {
+      "from": "arn:aws:ec2:eu-west-1:123456789012:subnet/subnet-f37069fd85f17ad9a",
+      "to": "arn:aws:ec2:eu-west-1:123456789012:vpc/vpc-361b3e6643d6d8ca4",
+      "type": "IN_VPC"
+    },
+    {
+      "from": "arn:aws:ec2:eu-west-1:123456789012:subnet/subnet-f37069fd85f17ad9a",
+      "to": "arn:aws:ec2:eu-west-1:123456789012:route-table/rtb-762c98c5ee9326fa5",
+      "type": "USES_ROUTE_TABLE",
+      "properties": {
+        "main": false
+      }
+    },
+    {
+      "from": "arn:aws:ec2:eu-west-1:123456789012:vpc/vpc-361b3e6643d6d8ca4",
+      "to": "arn:aws:sightline:eu-west-1:123456789012:region/eu-west-1",
+      "type": "IN_REGION"
+    },
+    {
+      "from": "arn:aws:ec2:eu-west-1:123456789012:vpc/vpc-b38c0748a11baf7f8",
+      "to": "arn:aws:sightline:eu-west-1:123456789012:region/eu-west-1",
+      "type": "IN_REGION"
+    },
+    {
+      "from": "arn:aws:ec2:us-east-1:123456789012:internet-gateway/igw-be7c80e31455abf3b",
+      "to": "arn:aws:ec2:us-east-1:123456789012:vpc/vpc-fd22f2c7955cf8cd6",
+      "type": "ATTACHED_TO"
+    },
+    {
+      "from": "arn:aws:ec2:us-east-1:123456789012:internet-gateway/igw-be7c80e31455abf3b",
+      "to": "arn:aws:sightline:us-east-1:123456789012:region/us-east-1",
+      "type": "IN_REGION"
+    },
+    {
+      "from": "arn:aws:ec2:us-east-1:123456789012:internet-gateway/igw-cb70dc59e56e144e7",
+      "to": "arn:aws:ec2:us-east-1:123456789012:vpc/vpc-d1e945fdcc93fb788",
+      "type": "ATTACHED_TO"
+    },
+    {
+      "from": "arn:aws:ec2:us-east-1:123456789012:internet-gateway/igw-cb70dc59e56e144e7",
+      "to": "arn:aws:sightline:us-east-1:123456789012:region/us-east-1",
+      "type": "IN_REGION"
+    },
+    {
+      "from": "arn:aws:ec2:us-east-1:123456789012:natgateway/nat-83ecf0a7e67f9a842",
+      "to": "arn:aws:sightline:us-east-1:123456789012:region/us-east-1",
+      "type": "IN_REGION"
+    },
+    {
+      "from": "arn:aws:ec2:us-east-1:123456789012:natgateway/nat-83ecf0a7e67f9a842",
+      "to": "arn:aws:ec2:us-east-1:123456789012:subnet/subnet-873b59617498b2ba9",
+      "type": "IN_SUBNET"
+    },
+    {
+      "from": "arn:aws:ec2:us-east-1:123456789012:network-acl/acl-203676587bd09fa19",
+      "to": "arn:aws:sightline:us-east-1:123456789012:region/us-east-1",
+      "type": "IN_REGION"
+    },
+    {
+      "from": "arn:aws:ec2:us-east-1:123456789012:network-acl/acl-5b96baa3d6ada3c0a",
+      "to": "arn:aws:sightline:us-east-1:123456789012:region/us-east-1",
+      "type": "IN_REGION"
+    },
+    {
+      "from": "arn:aws:ec2:us-east-1:123456789012:network-acl/acl-91c79e407be69f021",
+      "to": "arn:aws:sightline:us-east-1:123456789012:region/us-east-1",
+      "type": "IN_REGION"
+    },
+    {
+      "from": "arn:aws:ec2:us-east-1:123456789012:network-acl/acl-cba196accc8e4322c",
+      "to": "arn:aws:sightline:us-east-1:123456789012:region/us-east-1",
+      "type": "IN_REGION"
+    },
+    {
+      "from": "arn:aws:ec2:us-east-1:123456789012:network-acl/acl-f388d0f5ba03efc47",
+      "to": "arn:aws:sightline:us-east-1:123456789012:region/us-east-1",
+      "type": "IN_REGION"
+    },
+    {
+      "from": "arn:aws:ec2:us-east-1:123456789012:route-table/rtb-0b6e02094526cd8a8",
+      "to": "arn:aws:sightline:us-east-1:123456789012:region/us-east-1",
+      "type": "IN_REGION"
+    },
+    {
+      "from": "arn:aws:ec2:us-east-1:123456789012:route-table/rtb-0b6e02094526cd8a8",
+      "to": "arn:aws:ec2:us-east-1:123456789012:vpc/vpc-d1e945fdcc93fb788",
+      "type": "IN_VPC"
+    },
+    {
+      "from": "arn:aws:ec2:us-east-1:123456789012:route-table/rtb-142b176cfb1e4ac93",
+      "to": "arn:aws:sightline:us-east-1:123456789012:region/us-east-1",
+      "type": "IN_REGION"
+    },
+    {
+      "from": "arn:aws:ec2:us-east-1:123456789012:route-table/rtb-142b176cfb1e4ac93",
+      "to": "arn:aws:ec2:us-east-1:123456789012:vpc/vpc-d1e945fdcc93fb788",
+      "type": "IN_VPC"
+    },
+    {
+      "from": "arn:aws:ec2:us-east-1:123456789012:route-table/rtb-142b176cfb1e4ac93",
+      "to": "arn:aws:ec2:us-east-1:123456789012:internet-gateway/igw-cb70dc59e56e144e7",
+      "type": "ROUTES_TO",
+      "properties": {
+        "destination": "0.0.0.0/0"
+      }
+    },
+    {
+      "from": "arn:aws:ec2:us-east-1:123456789012:route-table/rtb-1a957d60f18486d46",
+      "to": "arn:aws:sightline:us-east-1:123456789012:region/us-east-1",
+      "type": "IN_REGION"
+    },
+    {
+      "from": "arn:aws:ec2:us-east-1:123456789012:route-table/rtb-1a957d60f18486d46",
+      "to": "arn:aws:ec2:us-east-1:123456789012:vpc/vpc-9df03e1a65a0861dc",
+      "type": "IN_VPC"
+    },
+    {
+      "from": "arn:aws:ec2:us-east-1:123456789012:route-table/rtb-515f702c542dd3a0b",
+      "to": "arn:aws:sightline:us-east-1:123456789012:region/us-east-1",
+      "type": "IN_REGION"
+    },
+    {
+      "from": "arn:aws:ec2:us-east-1:123456789012:route-table/rtb-515f702c542dd3a0b",
+      "to": "arn:aws:ec2:us-east-1:123456789012:vpc/vpc-0a012c31ec2220368",
+      "type": "IN_VPC"
+    },
+    {
+      "from": "arn:aws:ec2:us-east-1:123456789012:route-table/rtb-d5dd7a4871cb12dc0",
+      "to": "arn:aws:sightline:us-east-1:123456789012:region/us-east-1",
+      "type": "IN_REGION"
+    },
+    {
+      "from": "arn:aws:ec2:us-east-1:123456789012:route-table/rtb-d5dd7a4871cb12dc0",
+      "to": "arn:aws:ec2:us-east-1:123456789012:vpc/vpc-fd22f2c7955cf8cd6",
+      "type": "IN_VPC"
+    },
+    {
+      "from": "arn:aws:ec2:us-east-1:123456789012:route-table/rtb-dc54a5fc843efebe3",
+      "to": "arn:aws:sightline:us-east-1:123456789012:region/us-east-1",
+      "type": "IN_REGION"
+    },
+    {
+      "from": "arn:aws:ec2:us-east-1:123456789012:route-table/rtb-dc54a5fc843efebe3",
+      "to": "arn:aws:ec2:us-east-1:123456789012:vpc/vpc-598df3b20d37c8c6a",
+      "type": "IN_VPC"
+    },
+    {
+      "from": "arn:aws:ec2:us-east-1:123456789012:route-table/rtb-e7ea2dffc20778ce3",
+      "to": "arn:aws:sightline:us-east-1:123456789012:region/us-east-1",
+      "type": "IN_REGION"
+    },
+    {
+      "from": "arn:aws:ec2:us-east-1:123456789012:route-table/rtb-e7ea2dffc20778ce3",
+      "to": "arn:aws:ec2:us-east-1:123456789012:vpc/vpc-598df3b20d37c8c6a",
+      "type": "IN_VPC"
+    },
+    {
+      "from": "arn:aws:ec2:us-east-1:123456789012:route-table/rtb-f30e3dd4e7d242a25",
+      "to": "arn:aws:sightline:us-east-1:123456789012:region/us-east-1",
+      "type": "IN_REGION"
+    },
+    {
+      "from": "arn:aws:ec2:us-east-1:123456789012:route-table/rtb-f30e3dd4e7d242a25",
+      "to": "arn:aws:ec2:us-east-1:123456789012:vpc/vpc-fd22f2c7955cf8cd6",
+      "type": "IN_VPC"
+    },
+    {
+      "from": "arn:aws:ec2:us-east-1:123456789012:route-table/rtb-f30e3dd4e7d242a25",
+      "to": "arn:aws:ec2:us-east-1:123456789012:internet-gateway/igw-be7c80e31455abf3b",
+      "type": "ROUTES_TO",
+      "properties": {
+        "destination": "0.0.0.0/0"
+      }
+    },
+    {
+      "from": "arn:aws:ec2:us-east-1:123456789012:route-table/rtb-f7415a40d4b302f3c",
+      "to": "arn:aws:sightline:us-east-1:123456789012:region/us-east-1",
+      "type": "IN_REGION"
+    },
+    {
+      "from": "arn:aws:ec2:us-east-1:123456789012:route-table/rtb-f7415a40d4b302f3c",
+      "to": "arn:aws:ec2:us-east-1:123456789012:vpc/vpc-d1e945fdcc93fb788",
+      "type": "IN_VPC"
+    },
+    {
+      "from": "arn:aws:ec2:us-east-1:123456789012:route-table/rtb-ff4b5607f7277e4d2",
+      "to": "arn:aws:sightline:us-east-1:123456789012:region/us-east-1",
+      "type": "IN_REGION"
+    },
+    {
+      "from": "arn:aws:ec2:us-east-1:123456789012:route-table/rtb-ff4b5607f7277e4d2",
+      "to": "arn:aws:ec2:us-east-1:123456789012:vpc/vpc-9df03e1a65a0861dc",
+      "type": "IN_VPC"
+    },
+    {
+      "from": "arn:aws:ec2:us-east-1:123456789012:security-group/sg-0db7495889e920168",
+      "to": "arn:aws:sightline:us-east-1:123456789012:region/us-east-1",
+      "type": "IN_REGION"
+    },
+    {
+      "from": "arn:aws:ec2:us-east-1:123456789012:security-group/sg-0db7495889e920168",
+      "to": "arn:aws:ec2:us-east-1:123456789012:vpc/vpc-9df03e1a65a0861dc",
+      "type": "IN_VPC"
+    },
+    {
+      "from": "arn:aws:ec2:us-east-1:123456789012:security-group/sg-2d4bafbab3c6249f1",
+      "to": "arn:aws:sightline:us-east-1:123456789012:region/us-east-1",
+      "type": "IN_REGION"
+    },
+    {
+      "from": "arn:aws:ec2:us-east-1:123456789012:security-group/sg-2d4bafbab3c6249f1",
+      "to": "arn:aws:ec2:us-east-1:123456789012:vpc/vpc-9df03e1a65a0861dc",
+      "type": "IN_VPC"
+    },
+    {
+      "from": "arn:aws:ec2:us-east-1:123456789012:security-group/sg-433149e26d761ccb3",
+      "to": "arn:aws:sightline:us-east-1:123456789012:region/us-east-1",
+      "type": "IN_REGION"
+    },
+    {
+      "from": "arn:aws:ec2:us-east-1:123456789012:security-group/sg-433149e26d761ccb3",
+      "to": "arn:aws:ec2:us-east-1:123456789012:vpc/vpc-fd22f2c7955cf8cd6",
+      "type": "IN_VPC"
+    },
+    {
+      "from": "arn:aws:ec2:us-east-1:123456789012:security-group/sg-47f1eb82c92aad975",
+      "to": "arn:aws:sightline:us-east-1:123456789012:region/us-east-1",
+      "type": "IN_REGION"
+    },
+    {
+      "from": "arn:aws:ec2:us-east-1:123456789012:security-group/sg-47f1eb82c92aad975",
+      "to": "arn:aws:ec2:us-east-1:123456789012:vpc/vpc-598df3b20d37c8c6a",
+      "type": "IN_VPC"
+    },
+    {
+      "from": "arn:aws:ec2:us-east-1:123456789012:security-group/sg-5761be2c8add61a7f",
+      "to": "arn:aws:sightline:us-east-1:123456789012:region/us-east-1",
+      "type": "IN_REGION"
+    },
+    {
+      "from": "arn:aws:ec2:us-east-1:123456789012:security-group/sg-5761be2c8add61a7f",
+      "to": "arn:aws:ec2:us-east-1:123456789012:vpc/vpc-d1e945fdcc93fb788",
+      "type": "IN_VPC"
+    },
+    {
+      "from": "arn:aws:ec2:us-east-1:123456789012:security-group/sg-5e2f8c6b1fbd53f6a",
+      "to": "arn:aws:sightline:us-east-1:123456789012:region/us-east-1",
+      "type": "IN_REGION"
+    },
+    {
+      "from": "arn:aws:ec2:us-east-1:123456789012:security-group/sg-5e2f8c6b1fbd53f6a",
+      "to": "arn:aws:ec2:us-east-1:123456789012:vpc/vpc-fd22f2c7955cf8cd6",
+      "type": "IN_VPC"
+    },
+    {
+      "from": "arn:aws:ec2:us-east-1:123456789012:security-group/sg-6d8279fcbc49879cd",
+      "to": "arn:aws:sightline:us-east-1:123456789012:region/us-east-1",
+      "type": "IN_REGION"
+    },
+    {
+      "from": "arn:aws:ec2:us-east-1:123456789012:security-group/sg-6d8279fcbc49879cd",
+      "to": "arn:aws:ec2:us-east-1:123456789012:vpc/vpc-d1e945fdcc93fb788",
+      "type": "IN_VPC"
+    },
+    {
+      "from": "arn:aws:ec2:us-east-1:123456789012:security-group/sg-76a6ccc111e4262f9",
+      "to": "arn:aws:sightline:us-east-1:123456789012:region/us-east-1",
+      "type": "IN_REGION"
+    },
+    {
+      "from": "arn:aws:ec2:us-east-1:123456789012:security-group/sg-76a6ccc111e4262f9",
+      "to": "arn:aws:ec2:us-east-1:123456789012:vpc/vpc-0a012c31ec2220368",
+      "type": "IN_VPC"
+    },
+    {
+      "from": "arn:aws:ec2:us-east-1:123456789012:security-group/sg-89973346a8873d61a",
+      "to": "arn:aws:sightline:us-east-1:123456789012:region/us-east-1",
+      "type": "IN_REGION"
+    },
+    {
+      "from": "arn:aws:ec2:us-east-1:123456789012:security-group/sg-89973346a8873d61a",
+      "to": "arn:aws:ec2:us-east-1:123456789012:vpc/vpc-d1e945fdcc93fb788",
+      "type": "IN_VPC"
+    },
+    {
+      "from": "arn:aws:ec2:us-east-1:123456789012:security-group/sg-9dca90b5d2b92ce25",
+      "to": "arn:aws:sightline:us-east-1:123456789012:region/us-east-1",
+      "type": "IN_REGION"
+    },
+    {
+      "from": "arn:aws:ec2:us-east-1:123456789012:security-group/sg-9dca90b5d2b92ce25",
+      "to": "arn:aws:ec2:us-east-1:123456789012:vpc/vpc-fd22f2c7955cf8cd6",
+      "type": "IN_VPC"
+    },
+    {
+      "from": "arn:aws:ec2:us-east-1:123456789012:security-group/sg-ab67ce2a8525c9ef1",
+      "to": "arn:aws:sightline:us-east-1:123456789012:region/us-east-1",
+      "type": "IN_REGION"
+    },
+    {
+      "from": "arn:aws:ec2:us-east-1:123456789012:security-group/sg-ab67ce2a8525c9ef1",
+      "to": "arn:aws:ec2:us-east-1:123456789012:vpc/vpc-d1e945fdcc93fb788",
+      "type": "IN_VPC"
+    },
+    {
+      "from": "arn:aws:ec2:us-east-1:123456789012:security-group/sg-b49e313e5b5c0e116",
+      "to": "arn:aws:sightline:us-east-1:123456789012:region/us-east-1",
+      "type": "IN_REGION"
+    },
+    {
+      "from": "arn:aws:ec2:us-east-1:123456789012:security-group/sg-b49e313e5b5c0e116",
+      "to": "arn:aws:ec2:us-east-1:123456789012:vpc/vpc-d1e945fdcc93fb788",
+      "type": "IN_VPC"
+    },
+    {
+      "from": "arn:aws:ec2:us-east-1:123456789012:security-group/sg-bd01aaccd2ea691db",
+      "to": "arn:aws:sightline:us-east-1:123456789012:region/us-east-1",
+      "type": "IN_REGION"
+    },
+    {
+      "from": "arn:aws:ec2:us-east-1:123456789012:security-group/sg-bd01aaccd2ea691db",
+      "to": "arn:aws:ec2:us-east-1:123456789012:vpc/vpc-d1e945fdcc93fb788",
+      "type": "IN_VPC"
+    },
+    {
+      "from": "arn:aws:ec2:us-east-1:123456789012:security-group/sg-d7b63744adf5f5307",
+      "to": "arn:aws:sightline:us-east-1:123456789012:region/us-east-1",
+      "type": "IN_REGION"
+    },
+    {
+      "from": "arn:aws:ec2:us-east-1:123456789012:security-group/sg-d7b63744adf5f5307",
+      "to": "arn:aws:ec2:us-east-1:123456789012:vpc/vpc-d1e945fdcc93fb788",
+      "type": "IN_VPC"
+    },
+    {
+      "from": "arn:aws:ec2:us-east-1:123456789012:security-group/sg-ecb4b846590db1528",
+      "to": "arn:aws:sightline:us-east-1:123456789012:region/us-east-1",
+      "type": "IN_REGION"
+    },
+    {
+      "from": "arn:aws:ec2:us-east-1:123456789012:security-group/sg-ecb4b846590db1528",
+      "to": "arn:aws:ec2:us-east-1:123456789012:vpc/vpc-d1e945fdcc93fb788",
+      "type": "IN_VPC"
+    },
+    {
+      "from": "arn:aws:ec2:us-east-1:123456789012:security-group/sg-fd346a8b2003fdcd4",
+      "to": "arn:aws:sightline:us-east-1:123456789012:region/us-east-1",
+      "type": "IN_REGION"
+    },
+    {
+      "from": "arn:aws:ec2:us-east-1:123456789012:security-group/sg-fd346a8b2003fdcd4",
+      "to": "arn:aws:ec2:us-east-1:123456789012:vpc/vpc-598df3b20d37c8c6a",
+      "type": "IN_VPC"
+    },
+    {
+      "from": "arn:aws:ec2:us-east-1:123456789012:security-group/sg-feac4b3638cf4fa31",
+      "to": "arn:aws:sightline:us-east-1:123456789012:region/us-east-1",
+      "type": "IN_REGION"
+    },
+    {
+      "from": "arn:aws:ec2:us-east-1:123456789012:security-group/sg-feac4b3638cf4fa31",
+      "to": "arn:aws:ec2:us-east-1:123456789012:vpc/vpc-598df3b20d37c8c6a",
+      "type": "IN_VPC"
+    },
+    {
+      "from": "arn:aws:ec2:us-east-1:123456789012:subnet/subnet-19400805f40629d72",
+      "to": "arn:aws:ec2:us-east-1:123456789012:network-acl/acl-cba196accc8e4322c",
+      "type": "HAS_NACL"
+    },
+    {
+      "from": "arn:aws:ec2:us-east-1:123456789012:subnet/subnet-19400805f40629d72",
+      "to": "arn:aws:sightline:us-east-1:123456789012:region/us-east-1",
+      "type": "IN_REGION"
+    },
+    {
+      "from": "arn:aws:ec2:us-east-1:123456789012:subnet/subnet-19400805f40629d72",
+      "to": "arn:aws:ec2:us-east-1:123456789012:vpc/vpc-0a012c31ec2220368",
+      "type": "IN_VPC"
+    },
+    {
+      "from": "arn:aws:ec2:us-east-1:123456789012:subnet/subnet-19400805f40629d72",
+      "to": "arn:aws:ec2:us-east-1:123456789012:route-table/rtb-515f702c542dd3a0b",
+      "type": "USES_ROUTE_TABLE",
+      "properties": {
+        "main": true
+      }
+    },
+    {
+      "from": "arn:aws:ec2:us-east-1:123456789012:subnet/subnet-23d5065ac4962bef9",
+      "to": "arn:aws:ec2:us-east-1:123456789012:network-acl/acl-203676587bd09fa19",
+      "type": "HAS_NACL"
+    },
+    {
+      "from": "arn:aws:ec2:us-east-1:123456789012:subnet/subnet-23d5065ac4962bef9",
+      "to": "arn:aws:sightline:us-east-1:123456789012:region/us-east-1",
+      "type": "IN_REGION"
+    },
+    {
+      "from": "arn:aws:ec2:us-east-1:123456789012:subnet/subnet-23d5065ac4962bef9",
+      "to": "arn:aws:ec2:us-east-1:123456789012:vpc/vpc-fd22f2c7955cf8cd6",
+      "type": "IN_VPC"
+    },
+    {
+      "from": "arn:aws:ec2:us-east-1:123456789012:subnet/subnet-23d5065ac4962bef9",
+      "to": "arn:aws:ec2:us-east-1:123456789012:route-table/rtb-d5dd7a4871cb12dc0",
+      "type": "USES_ROUTE_TABLE",
+      "properties": {
+        "main": false
+      }
+    },
+    {
+      "from": "arn:aws:ec2:us-east-1:123456789012:subnet/subnet-299cf9ec125a5de41",
+      "to": "arn:aws:ec2:us-east-1:123456789012:network-acl/acl-cba196accc8e4322c",
+      "type": "HAS_NACL"
+    },
+    {
+      "from": "arn:aws:ec2:us-east-1:123456789012:subnet/subnet-299cf9ec125a5de41",
+      "to": "arn:aws:sightline:us-east-1:123456789012:region/us-east-1",
+      "type": "IN_REGION"
+    },
+    {
+      "from": "arn:aws:ec2:us-east-1:123456789012:subnet/subnet-299cf9ec125a5de41",
+      "to": "arn:aws:ec2:us-east-1:123456789012:vpc/vpc-0a012c31ec2220368",
+      "type": "IN_VPC"
+    },
+    {
+      "from": "arn:aws:ec2:us-east-1:123456789012:subnet/subnet-299cf9ec125a5de41",
+      "to": "arn:aws:ec2:us-east-1:123456789012:route-table/rtb-515f702c542dd3a0b",
+      "type": "USES_ROUTE_TABLE",
+      "properties": {
+        "main": true
+      }
+    },
+    {
+      "from": "arn:aws:ec2:us-east-1:123456789012:subnet/subnet-3e6af0a98c0ab494e",
+      "to": "arn:aws:ec2:us-east-1:123456789012:network-acl/acl-cba196accc8e4322c",
+      "type": "HAS_NACL"
+    },
+    {
+      "from": "arn:aws:ec2:us-east-1:123456789012:subnet/subnet-3e6af0a98c0ab494e",
+      "to": "arn:aws:sightline:us-east-1:123456789012:region/us-east-1",
+      "type": "IN_REGION"
+    },
+    {
+      "from": "arn:aws:ec2:us-east-1:123456789012:subnet/subnet-3e6af0a98c0ab494e",
+      "to": "arn:aws:ec2:us-east-1:123456789012:vpc/vpc-0a012c31ec2220368",
+      "type": "IN_VPC"
+    },
+    {
+      "from": "arn:aws:ec2:us-east-1:123456789012:subnet/subnet-3e6af0a98c0ab494e",
+      "to": "arn:aws:ec2:us-east-1:123456789012:route-table/rtb-515f702c542dd3a0b",
+      "type": "USES_ROUTE_TABLE",
+      "properties": {
+        "main": true
+      }
+    },
+    {
+      "from": "arn:aws:ec2:us-east-1:123456789012:subnet/subnet-554b3f0cba0f3581c",
+      "to": "arn:aws:ec2:us-east-1:123456789012:network-acl/acl-f388d0f5ba03efc47",
+      "type": "HAS_NACL"
+    },
+    {
+      "from": "arn:aws:ec2:us-east-1:123456789012:subnet/subnet-554b3f0cba0f3581c",
+      "to": "arn:aws:sightline:us-east-1:123456789012:region/us-east-1",
+      "type": "IN_REGION"
+    },
+    {
+      "from": "arn:aws:ec2:us-east-1:123456789012:subnet/subnet-554b3f0cba0f3581c",
+      "to": "arn:aws:ec2:us-east-1:123456789012:vpc/vpc-9df03e1a65a0861dc",
+      "type": "IN_VPC"
+    },
+    {
+      "from": "arn:aws:ec2:us-east-1:123456789012:subnet/subnet-554b3f0cba0f3581c",
+      "to": "arn:aws:ec2:us-east-1:123456789012:route-table/rtb-ff4b5607f7277e4d2",
+      "type": "USES_ROUTE_TABLE",
+      "properties": {
+        "main": false
+      }
+    },
+    {
+      "from": "arn:aws:ec2:us-east-1:123456789012:subnet/subnet-634bc61149ce84944",
+      "to": "arn:aws:ec2:us-east-1:123456789012:network-acl/acl-203676587bd09fa19",
+      "type": "HAS_NACL"
+    },
+    {
+      "from": "arn:aws:ec2:us-east-1:123456789012:subnet/subnet-634bc61149ce84944",
+      "to": "arn:aws:sightline:us-east-1:123456789012:region/us-east-1",
+      "type": "IN_REGION"
+    },
+    {
+      "from": "arn:aws:ec2:us-east-1:123456789012:subnet/subnet-634bc61149ce84944",
+      "to": "arn:aws:ec2:us-east-1:123456789012:vpc/vpc-fd22f2c7955cf8cd6",
+      "type": "IN_VPC"
+    },
+    {
+      "from": "arn:aws:ec2:us-east-1:123456789012:subnet/subnet-634bc61149ce84944",
+      "to": "arn:aws:ec2:us-east-1:123456789012:route-table/rtb-f30e3dd4e7d242a25",
+      "type": "USES_ROUTE_TABLE",
+      "properties": {
+        "main": true
+      }
+    },
+    {
+      "from": "arn:aws:ec2:us-east-1:123456789012:subnet/subnet-72de7af58e8c8503c",
+      "to": "arn:aws:ec2:us-east-1:123456789012:network-acl/acl-5b96baa3d6ada3c0a",
+      "type": "HAS_NACL"
+    },
+    {
+      "from": "arn:aws:ec2:us-east-1:123456789012:subnet/subnet-72de7af58e8c8503c",
+      "to": "arn:aws:sightline:us-east-1:123456789012:region/us-east-1",
+      "type": "IN_REGION"
+    },
+    {
+      "from": "arn:aws:ec2:us-east-1:123456789012:subnet/subnet-72de7af58e8c8503c",
+      "to": "arn:aws:ec2:us-east-1:123456789012:vpc/vpc-598df3b20d37c8c6a",
+      "type": "IN_VPC"
+    },
+    {
+      "from": "arn:aws:ec2:us-east-1:123456789012:subnet/subnet-72de7af58e8c8503c",
+      "to": "arn:aws:ec2:us-east-1:123456789012:route-table/rtb-e7ea2dffc20778ce3",
+      "type": "USES_ROUTE_TABLE",
+      "properties": {
+        "main": false
+      }
+    },
+    {
+      "from": "arn:aws:ec2:us-east-1:123456789012:subnet/subnet-7db155cb82c927736",
+      "to": "arn:aws:ec2:us-east-1:123456789012:network-acl/acl-cba196accc8e4322c",
+      "type": "HAS_NACL"
+    },
+    {
+      "from": "arn:aws:ec2:us-east-1:123456789012:subnet/subnet-7db155cb82c927736",
+      "to": "arn:aws:sightline:us-east-1:123456789012:region/us-east-1",
+      "type": "IN_REGION"
+    },
+    {
+      "from": "arn:aws:ec2:us-east-1:123456789012:subnet/subnet-7db155cb82c927736",
+      "to": "arn:aws:ec2:us-east-1:123456789012:vpc/vpc-0a012c31ec2220368",
+      "type": "IN_VPC"
+    },
+    {
+      "from": "arn:aws:ec2:us-east-1:123456789012:subnet/subnet-7db155cb82c927736",
+      "to": "arn:aws:ec2:us-east-1:123456789012:route-table/rtb-515f702c542dd3a0b",
+      "type": "USES_ROUTE_TABLE",
+      "properties": {
+        "main": true
+      }
+    },
+    {
+      "from": "arn:aws:ec2:us-east-1:123456789012:subnet/subnet-7dc48870e814b0812",
+      "to": "arn:aws:ec2:us-east-1:123456789012:network-acl/acl-cba196accc8e4322c",
+      "type": "HAS_NACL"
+    },
+    {
+      "from": "arn:aws:ec2:us-east-1:123456789012:subnet/subnet-7dc48870e814b0812",
+      "to": "arn:aws:sightline:us-east-1:123456789012:region/us-east-1",
+      "type": "IN_REGION"
+    },
+    {
+      "from": "arn:aws:ec2:us-east-1:123456789012:subnet/subnet-7dc48870e814b0812",
+      "to": "arn:aws:ec2:us-east-1:123456789012:vpc/vpc-0a012c31ec2220368",
+      "type": "IN_VPC"
+    },
+    {
+      "from": "arn:aws:ec2:us-east-1:123456789012:subnet/subnet-7dc48870e814b0812",
+      "to": "arn:aws:ec2:us-east-1:123456789012:route-table/rtb-515f702c542dd3a0b",
+      "type": "USES_ROUTE_TABLE",
+      "properties": {
+        "main": true
+      }
+    },
+    {
+      "from": "arn:aws:ec2:us-east-1:123456789012:subnet/subnet-873b59617498b2ba9",
+      "to": "arn:aws:ec2:us-east-1:123456789012:network-acl/acl-91c79e407be69f021",
+      "type": "HAS_NACL"
+    },
+    {
+      "from": "arn:aws:ec2:us-east-1:123456789012:subnet/subnet-873b59617498b2ba9",
+      "to": "arn:aws:sightline:us-east-1:123456789012:region/us-east-1",
+      "type": "IN_REGION"
+    },
+    {
+      "from": "arn:aws:ec2:us-east-1:123456789012:subnet/subnet-873b59617498b2ba9",
+      "to": "arn:aws:ec2:us-east-1:123456789012:vpc/vpc-d1e945fdcc93fb788",
+      "type": "IN_VPC"
+    },
+    {
+      "from": "arn:aws:ec2:us-east-1:123456789012:subnet/subnet-873b59617498b2ba9",
+      "to": "arn:aws:ec2:us-east-1:123456789012:route-table/rtb-142b176cfb1e4ac93",
+      "type": "USES_ROUTE_TABLE",
+      "properties": {
+        "main": false
+      }
+    },
+    {
+      "from": "arn:aws:ec2:us-east-1:123456789012:subnet/subnet-ba827b54d037f4ab4",
+      "to": "arn:aws:ec2:us-east-1:123456789012:network-acl/acl-cba196accc8e4322c",
+      "type": "HAS_NACL"
+    },
+    {
+      "from": "arn:aws:ec2:us-east-1:123456789012:subnet/subnet-ba827b54d037f4ab4",
+      "to": "arn:aws:sightline:us-east-1:123456789012:region/us-east-1",
+      "type": "IN_REGION"
+    },
+    {
+      "from": "arn:aws:ec2:us-east-1:123456789012:subnet/subnet-ba827b54d037f4ab4",
+      "to": "arn:aws:ec2:us-east-1:123456789012:vpc/vpc-0a012c31ec2220368",
+      "type": "IN_VPC"
+    },
+    {
+      "from": "arn:aws:ec2:us-east-1:123456789012:subnet/subnet-ba827b54d037f4ab4",
+      "to": "arn:aws:ec2:us-east-1:123456789012:route-table/rtb-515f702c542dd3a0b",
+      "type": "USES_ROUTE_TABLE",
+      "properties": {
+        "main": true
+      }
+    },
+    {
+      "from": "arn:aws:ec2:us-east-1:123456789012:subnet/subnet-c828f0e20f4eb3c7c",
+      "to": "arn:aws:ec2:us-east-1:123456789012:network-acl/acl-91c79e407be69f021",
+      "type": "HAS_NACL"
+    },
+    {
+      "from": "arn:aws:ec2:us-east-1:123456789012:subnet/subnet-c828f0e20f4eb3c7c",
+      "to": "arn:aws:sightline:us-east-1:123456789012:region/us-east-1",
+      "type": "IN_REGION"
+    },
+    {
+      "from": "arn:aws:ec2:us-east-1:123456789012:subnet/subnet-c828f0e20f4eb3c7c",
+      "to": "arn:aws:ec2:us-east-1:123456789012:vpc/vpc-d1e945fdcc93fb788",
+      "type": "IN_VPC"
+    },
+    {
+      "from": "arn:aws:ec2:us-east-1:123456789012:subnet/subnet-c828f0e20f4eb3c7c",
+      "to": "arn:aws:ec2:us-east-1:123456789012:route-table/rtb-f7415a40d4b302f3c",
+      "type": "USES_ROUTE_TABLE",
+      "properties": {
+        "main": false
+      }
+    },
+    {
+      "from": "arn:aws:ec2:us-east-1:123456789012:subnet/subnet-fdf750986bc527082",
+      "to": "arn:aws:ec2:us-east-1:123456789012:network-acl/acl-91c79e407be69f021",
+      "type": "HAS_NACL"
+    },
+    {
+      "from": "arn:aws:ec2:us-east-1:123456789012:subnet/subnet-fdf750986bc527082",
+      "to": "arn:aws:sightline:us-east-1:123456789012:region/us-east-1",
+      "type": "IN_REGION"
+    },
+    {
+      "from": "arn:aws:ec2:us-east-1:123456789012:subnet/subnet-fdf750986bc527082",
+      "to": "arn:aws:ec2:us-east-1:123456789012:vpc/vpc-d1e945fdcc93fb788",
+      "type": "IN_VPC"
+    },
+    {
+      "from": "arn:aws:ec2:us-east-1:123456789012:subnet/subnet-fdf750986bc527082",
+      "to": "arn:aws:ec2:us-east-1:123456789012:route-table/rtb-f7415a40d4b302f3c",
+      "type": "USES_ROUTE_TABLE",
+      "properties": {
+        "main": false
+      }
+    },
+    {
+      "from": "arn:aws:ec2:us-east-1:123456789012:transit-gateway/tgw-54e59fcb1039eb624",
+      "to": "arn:aws:ec2:us-east-1:123456789012:vpc/vpc-d1e945fdcc93fb788",
+      "type": "ATTACHED_TO"
+    },
+    {
+      "from": "arn:aws:ec2:us-east-1:123456789012:transit-gateway/tgw-54e59fcb1039eb624",
+      "to": "arn:aws:ec2:us-east-1:123456789012:vpc/vpc-fd22f2c7955cf8cd6",
+      "type": "ATTACHED_TO"
+    },
+    {
+      "from": "arn:aws:ec2:us-east-1:123456789012:transit-gateway/tgw-54e59fcb1039eb624",
+      "to": "arn:aws:sightline:us-east-1:123456789012:region/us-east-1",
+      "type": "IN_REGION"
+    },
+    {
+      "from": "arn:aws:ec2:us-east-1:123456789012:vpc-endpoint-service/vpce-svc-ec21fac5",
+      "to": "arn:aws:sightline:us-east-1:123456789012:region/us-east-1",
+      "type": "IN_REGION"
+    },
+    {
+      "from": "arn:aws:ec2:us-east-1:123456789012:vpc-endpoint-service/vpce-svc-ec21fac5",
+      "to": "arn:aws:elasticloadbalancing:us-east-1:123456789012:loadbalancer/app/prod-orders-nlb/43703dc6bcd11389",
+      "type": "SERVED_BY"
+    },
+    {
+      "from": "arn:aws:ec2:us-east-1:123456789012:vpc-endpoint/vpce-42d3433723c0f78fd",
+      "to": "arn:aws:ec2:us-east-1:123456789012:vpc-endpoint-service/vpce-svc-ec21fac5",
+      "type": "CONNECTS_TO"
+    },
+    {
+      "from": "arn:aws:ec2:us-east-1:123456789012:vpc-endpoint/vpce-42d3433723c0f78fd",
+      "to": "arn:aws:ec2:us-east-1:123456789012:security-group/sg-fd346a8b2003fdcd4",
+      "type": "HAS_SECURITY_GROUP"
+    },
+    {
+      "from": "arn:aws:ec2:us-east-1:123456789012:vpc-endpoint/vpce-42d3433723c0f78fd",
+      "to": "arn:aws:sightline:us-east-1:123456789012:region/us-east-1",
+      "type": "IN_REGION"
+    },
+    {
+      "from": "arn:aws:ec2:us-east-1:123456789012:vpc-endpoint/vpce-42d3433723c0f78fd",
+      "to": "arn:aws:ec2:us-east-1:123456789012:subnet/subnet-72de7af58e8c8503c",
+      "type": "IN_SUBNET"
+    },
+    {
+      "from": "arn:aws:ec2:us-east-1:123456789012:vpc-endpoint/vpce-42d3433723c0f78fd",
+      "to": "arn:aws:ec2:us-east-1:123456789012:vpc/vpc-598df3b20d37c8c6a",
+      "type": "IN_VPC"
+    },
+    {
+      "from": "arn:aws:ec2:us-east-1:123456789012:vpc-peering-connection/pcx-6c2ac5178bdcd1954",
+      "to": "arn:aws:sightline:us-east-1:123456789012:region/us-east-1",
+      "type": "IN_REGION"
+    },
+    {
+      "from": "arn:aws:ec2:us-east-1:123456789012:vpc-peering-connection/pcx-6c2ac5178bdcd1954",
+      "to": "arn:aws:ec2:us-east-1:123456789012:vpc/vpc-598df3b20d37c8c6a",
+      "type": "PEERS_WITH"
+    },
+    {
+      "from": "arn:aws:ec2:us-east-1:123456789012:vpc-peering-connection/pcx-6c2ac5178bdcd1954",
+      "to": "arn:aws:ec2:us-east-1:123456789012:vpc/vpc-d1e945fdcc93fb788",
+      "type": "PEERS_WITH"
+    },
+    {
+      "from": "arn:aws:ec2:us-east-1:123456789012:vpc-peering-connection/pcx-b68e9630b48577983",
+      "to": "arn:aws:sightline:us-east-1:123456789012:region/us-east-1",
+      "type": "IN_REGION"
+    },
+    {
+      "from": "arn:aws:ec2:us-east-1:123456789012:vpc-peering-connection/pcx-b68e9630b48577983",
+      "to": "arn:aws:ec2:us-east-1:123456789012:vpc/vpc-9df03e1a65a0861dc",
+      "type": "PEERS_WITH"
+    },
+    {
+      "from": "arn:aws:ec2:us-east-1:123456789012:vpc-peering-connection/pcx-b68e9630b48577983",
+      "to": "arn:aws:ec2:us-east-1:123456789012:vpc/vpc-d1e945fdcc93fb788",
+      "type": "PEERS_WITH"
+    },
+    {
+      "from": "arn:aws:ec2:us-east-1:123456789012:vpc/vpc-0a012c31ec2220368",
+      "to": "arn:aws:sightline:us-east-1:123456789012:region/us-east-1",
+      "type": "IN_REGION"
+    },
+    {
+      "from": "arn:aws:ec2:us-east-1:123456789012:vpc/vpc-598df3b20d37c8c6a",
+      "to": "arn:aws:sightline:us-east-1:123456789012:region/us-east-1",
+      "type": "IN_REGION"
+    },
+    {
+      "from": "arn:aws:ec2:us-east-1:123456789012:vpc/vpc-9df03e1a65a0861dc",
+      "to": "arn:aws:sightline:us-east-1:123456789012:region/us-east-1",
+      "type": "IN_REGION"
+    },
+    {
+      "from": "arn:aws:ec2:us-east-1:123456789012:vpc/vpc-d1e945fdcc93fb788",
+      "to": "arn:aws:sightline:us-east-1:123456789012:region/us-east-1",
+      "type": "IN_REGION"
+    },
+    {
+      "from": "arn:aws:ec2:us-east-1:123456789012:vpc/vpc-fd22f2c7955cf8cd6",
+      "to": "arn:aws:sightline:us-east-1:123456789012:region/us-east-1",
+      "type": "IN_REGION"
+    }
+  ]
+}

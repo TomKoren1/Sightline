@@ -9,7 +9,7 @@
 import { existsSync } from "node:fs";
 import { Injectable } from "@nestjs/common";
 
-import { cfg, ENV_FILE, isHosted } from "../config.js";
+import { cfg, ENV_FILE, isHosted } from "../core/config.js";
 import { pool } from "../db/postgres.js";
 import { getLatestScan } from "../db/repository.js";
 import { localScope } from "../tenancy/local.js";

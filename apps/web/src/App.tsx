@@ -7,13 +7,16 @@
  * like the same thing rather than two features.
  */
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { ReactFlowProvider } from "@xyflow/react";
-import type { ScanEvent, ScanUnit } from "@sightline/shared";
 
-import { api, selectConnection, startScan, watchScan } from "./api.js";
+import { api, can, selectConnection } from "./api.js";
+import { Team } from "./components/Team.js";
+import { OperatorView } from "./components/OperatorView.js";
+import { AllAccounts } from "./components/AllAccounts.js";
 import type { ConnectionSummary } from "./api.js";
+import { GraphGroups } from "./components/GraphGroups.js";
 import { DEFAULT_VISIBLE_KINDS, KIND_STYLES, styleFor } from "./kinds.js";
 import { Chat } from "./components/Chat.js";
 import { ConnectAccount } from "./components/ConnectAccount.js";
@@ -27,24 +30,24 @@ import { GraphView } from "./components/GraphView.js";
 import { LegalPage, legalPathFor } from "./components/LegalPage.js";
 import { ResourceDetail } from "./components/ResourceDetail.js";
 import { ScanBanner } from "./components/ScanBanner.js";
+import { useScanSession } from "./hooks/useScanSession.js";
+import { useAccountGraph } from "./hooks/useAccountGraph.js";
+import { useTeamJoin } from "./hooks/useTeamJoin.js";
 import { SignIn } from "./components/SignIn.js";
-import { errorMessage } from "@sightline/shared";
 
 export function App() {
   const queryClient = useQueryClient();
 
-  const [scanning, setScanning] = useState(false);
   /** Accepted, but no worker has picked it up yet. */
-  const [queued, setQueued] = useState(false);
-  const [progress, setProgress] = useState<{ completed: number; total: number } | null>(null);
-  const [liveUnits, setLiveUnits] = useState<ScanUnit[]>([]);
-  const [scanError, setScanError] = useState<string | null>(null);
 
   const [citedArns, setCitedArns] = useState<string[]>([]);
+  const clearCitations = useCallback(() => setCitedArns([]), []);
   const [selectedArn, setSelectedArn] = useState<string | null>(null);
   const [visibleKinds, setVisibleKinds] = useState<string[]>(DEFAULT_VISIBLE_KINDS);
   const [showFilters, setShowFilters] = useState(false);
-  const [modal, setModal] = useState<"trust" | "connection" | "delete" | null>(null);
+  const [modal, setModal] = useState<
+    "trust" | "connection" | "delete" | "team" | "operator" | "accounts" | null
+  >(null);
   const [connectionId, setConnectionId] = useState<string | null>(null);
   /**
    * The account a disconnect has been asked for, pending confirmation.
@@ -62,6 +65,8 @@ export function App() {
   const me = useQuery({ queryKey: ["me"], queryFn: api.me });
   const connections = me.data?.connections ?? [];
 
+  const { invited, joinError } = useTeamJoin(Boolean(me.data?.hosted && me.data.signedIn));
+
   /**
    * Every tenant-data query is keyed by the connection.
    *
@@ -78,19 +83,19 @@ export function App() {
   });
   const hasScan = Boolean(latest.data?.scan);
 
-  // The graph and findings are meaningless before a scan, so they are not
-  // fetched until there is one - which also keeps the empty state clean.
-  const graph = useQuery({
-    queryKey: ["graph", conn],
-    queryFn: () => api.graph(),
-    enabled: hasScan,
-  });
-  const summary = useQuery({ queryKey: ["summary", conn], queryFn: api.summary, enabled: hasScan });
-  const findings = useQuery({
-    queryKey: ["findings", conn],
-    queryFn: api.findings,
-    enabled: hasScan,
-  });
+  const {
+    summary,
+    totalResources,
+    findings,
+    large,
+    group,
+    openGroup,
+    backToGroups,
+    graph,
+    groups,
+    shown,
+    expand,
+  } = useAccountGraph(conn, hasScan);
 
   const switchConnection = useCallback(
     (id: string) => {
@@ -118,118 +123,10 @@ export function App() {
     [queryClient],
   );
 
-  /**
-   * One handler, whether this page started the scan or joined one in progress.
-   *
-   * Both paths receive the same events from the same place - the server derives
-   * them from the database rather than from whichever request happened to start
-   * the scan - so there is no reason for two copies of this, and a second copy
-   * is how a rejoined scan ends up rendering slightly differently.
-   */
-  const onScanEvent = useCallback((event: ScanEvent) => {
-    switch (event.type) {
-      case "scan.queued":
-        // Waiting for a worker. Saying so beats an idle progress bar, which is
-        // indistinguishable from the scan having failed to start.
-        setQueued(true);
-        break;
-      case "scan.started":
-        setQueued(false);
-        // The full plan arrives up front, so the UI shows every service it
-        // intends to scan rather than growing a list as work completes. On a
-        // rejoin these carry the statuses they already have.
-        setLiveUnits(event.units);
-        setProgress({
-          completed: event.units.filter((u) => u.status === "succeeded" || u.status === "failed")
-            .length,
-          total: event.units.length,
-        });
-        break;
-      case "unit.finished":
-        setLiveUnits((prev) =>
-          prev.map((u) =>
-            u.service === event.unit.service && u.region === event.unit.region ? event.unit : u,
-          ),
-        );
-        break;
-      case "scan.progress":
-        setProgress({ completed: event.completed, total: event.total });
-        break;
-      case "scan.failed":
-        setScanError(event.error);
-        break;
-      default:
-        break;
-    }
-  }, []);
-
-  const refreshAfterScan = useCallback(
-    () =>
-      Promise.all([
-        queryClient.invalidateQueries({ queryKey: ["latestScan"] }),
-        queryClient.invalidateQueries({ queryKey: ["graph"] }),
-        queryClient.invalidateQueries({ queryKey: ["summary"] }),
-        queryClient.invalidateQueries({ queryKey: ["findings"] }),
-      ]),
-    [queryClient],
+  const { scanning, queued, progress, liveUnits, scanError, runScan } = useScanSession(
+    latest.data?.activeJobId ?? null,
+    clearCitations,
   );
-
-  const runScan = useCallback(async () => {
-    setScanning(true);
-    setScanError(null);
-    setLiveUnits([]);
-    setProgress(null);
-    setCitedArns([]);
-
-    try {
-      await startScan(onScanEvent);
-      await refreshAfterScan();
-    } catch (err) {
-      setScanError(errorMessage(err));
-    } finally {
-      setScanning(false);
-      setQueued(false);
-    }
-  }, [onScanEvent, refreshAfterScan]);
-
-  /**
-   * Rejoin a scan that was already running when this page loaded.
-   *
-   * The thing the job queue bought. A scan used to live inside the request that
-   * started it, so reloading mid-scan orphaned it and left the page showing
-   * nothing until it finished. Now the server names the active job and this
-   * attaches to it, from wherever it has got to.
-   *
-   * The ref is what stops it attaching twice: this effect re-runs whenever the
-   * `latestScan` query refetches, and without it every refetch would open
-   * another stream onto the same scan.
-   */
-  const watching = useRef<string | null>(null);
-  const activeJobId = latest.data?.activeJobId ?? null;
-
-  useEffect(() => {
-    if (!activeJobId || scanning || watching.current === activeJobId) return;
-    watching.current = activeJobId;
-    setScanning(true);
-    setScanError(null);
-
-    const controller = new AbortController();
-    void (async () => {
-      try {
-        await watchScan(activeJobId, onScanEvent, controller.signal);
-        await refreshAfterScan();
-      } catch (err) {
-        // An aborted stream is this component unmounting, not a failure.
-        if (!controller.signal.aborted) setScanError(errorMessage(err));
-      } finally {
-        setScanning(false);
-        setQueued(false);
-        watching.current = null;
-      }
-    })();
-
-    return () => controller.abort();
-  }, [activeJobId, scanning, onScanEvent, refreshAfterScan]);
 
   /**
    * The privacy policy and the terms, before anything else.
@@ -253,11 +150,12 @@ export function App() {
    * an empty application - and so a request is never made on behalf of nobody.
    */
   if (me.data?.hosted && !me.data.signedIn) {
-    return <SignIn providers={me.data.providers} />;
+    return <SignIn providers={me.data.providers} invited={invited} />;
   }
 
-  const nodes = graph.data?.nodes ?? [];
-  const edges = graph.data?.edges ?? [];
+  const nodes = shown.nodes;
+  const edges = shown.edges;
+  const citedOutOfView = citedArns.filter((arn) => !nodes.some((n) => n.arn === arn));
   const presentKinds = [...new Set(nodes.map((n) => n.kind))].sort();
 
   return (
@@ -281,7 +179,57 @@ export function App() {
           void api.logout().then(() => window.location.reload());
         }}
         onDeleteAccount={() => setModal("delete")}
+        canScan={can(me.data?.role, "member")}
+        {...(me.data?.hosted ? { onOpenTeam: () => setModal("team") } : {})}
+        {...((me.data?.connections.length ?? 0) > 1
+          ? { onOpenAllAccounts: () => setModal("accounts") }
+          : {})}
+        {...(me.data?.hosted && me.data.isAdmin && can(me.data.role, "admin")
+          ? { onOpenOperator: () => setModal("operator") }
+          : {})}
       />
+
+      {joinError && (
+        <div className="border-b border-danger/30 bg-danger/10 px-3 py-1.5 text-[11px] text-danger">
+          The invite could not be accepted: {joinError}
+        </div>
+      )}
+
+      {modal === "team" && (
+        <Modal
+          title="Team"
+          subtitle="Who can see and change this workspace"
+          onClose={() => setModal(null)}
+        >
+          <Team />
+        </Modal>
+      )}
+
+      {modal === "accounts" && (
+        <Modal
+          title="All accounts"
+          subtitle="Open findings in every connected account, worst first"
+          onClose={() => setModal(null)}
+        >
+          <AllAccounts
+            onOpen={(connectionId, arn) => {
+              switchConnection(connectionId);
+              setSelectedArn(arn);
+              setModal(null);
+            }}
+          />
+        </Modal>
+      )}
+
+      {modal === "operator" && (
+        <Modal
+          title="Tenants"
+          subtitle="Every workspace's scans and usage, for support"
+          onClose={() => setModal(null)}
+        >
+          <OperatorView />
+        </Modal>
+      )}
 
       {modal === "delete" && me.data?.user?.email && (
         <Modal
@@ -387,6 +335,20 @@ export function App() {
         <main className="relative min-w-0 flex-1">
           {!hasScan && !scanning ? (
             <EmptyState onScan={() => void runScan()} />
+          ) : large && group === null ? (
+            groups.data ? (
+              <GraphGroups
+                groups={groups.data.groups}
+                total={totalResources}
+                onOpen={openGroup}
+                cited={citedOutOfView.length}
+                onShowCited={() => void expand(citedOutOfView)}
+              />
+            ) : (
+              <div className="flex h-full items-center justify-center text-[12px] text-ink-400">
+                Loading groups…
+              </div>
+            )
           ) : graph.isLoading ? (
             <div className="flex h-full items-center justify-center text-[12px] text-ink-400">
               Loading graph…
@@ -422,12 +384,33 @@ export function App() {
 
           {hasScan && nodes.length > 0 && (
             <div className="absolute left-2.5 top-2.5 z-10 flex items-center gap-1.5">
+              {large && (
+                <button
+                  onClick={backToGroups}
+                  className="rounded border border-ink-700 bg-ink-850/95 px-2 py-1 text-[11px] text-ink-300 backdrop-blur transition hover:border-ink-600"
+                >
+                  ← All groups
+                </button>
+              )}
               <button
                 onClick={() => setShowFilters((v) => !v)}
                 className="rounded border border-ink-700 bg-ink-850/95 px-2 py-1 text-[11px] text-ink-300 backdrop-blur transition hover:border-ink-600"
               >
                 Filter ({visibleKinds.length}/{presentKinds.length})
               </button>
+              {shown.truncated && (
+                <span className="rounded bg-ink-850/95 px-2 py-1 text-[11px] text-warn backdrop-blur">
+                  {nodes.length} of {shown.total.toLocaleString()}, findings first
+                </span>
+              )}
+              {citedOutOfView.length > 0 && (
+                <button
+                  onClick={() => void expand(citedOutOfView)}
+                  className="rounded border border-accent/50 bg-accent/10 px-2 py-1 text-[11px] text-accent backdrop-blur"
+                >
+                  Show {citedOutOfView.length} cited
+                </button>
+              )}
               {citedArns.length > 0 && (
                 <button
                   onClick={() => setCitedArns([])}
@@ -492,6 +475,7 @@ export function App() {
               arn={selectedArn}
               onClose={() => setSelectedArn(null)}
               onSelect={setSelectedArn}
+              onExpand={(arn) => void expand([arn])}
             />
           </aside>
         )}

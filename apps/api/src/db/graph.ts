@@ -16,22 +16,30 @@
  * so a scan id from the wrong tenant returns nothing twice over.
  */
 
-import { sql } from "drizzle-orm";
+import { sql, type SQL } from "drizzle-orm";
 import { INTERNET_ARN, type Relationship, type Resource } from "@sightline/shared";
 
 import { clamp, flag, read, type GraphScope, type ResourceRow } from "./graphRead.js";
 import { withTenant } from "./postgres.js";
 import { withDocuments } from "./repository.js";
-import { hopsFrom, indexReach, type ReachIndex } from "../scan/analysers/reachIndex.js";
+import {
+  hopsFrom,
+  indexReach,
+  searchPaths,
+  type PathSearchStop,
+  type ReachIndex,
+} from "../scan/analysers/reachIndex.js";
 
 export type { GraphScope, ResourceRow } from "./graphRead.js";
 export {
   findAdminPrincipals,
+  findCrossAccountAccess,
   findIdleResources,
   findInstancesInPublicSubnets,
   findOpenSecurityGroups,
   findPublicResources,
   findUnprotectedBuckets,
+  findUnusedAccess,
   listResources,
   pageOf,
   searchResources,
@@ -150,6 +158,7 @@ export async function summariseAccount(scope: GraphScope) {
       idleCount: number;
       idleCost: number;
       unprotectedCount: number;
+      unusedCount: number;
     }>(
       scope,
       (r) => sql`
@@ -157,49 +166,185 @@ export async function summariseAccount(scope: GraphScope) {
              count(*) FILTER (WHERE ${flag("r", "isAdmin")})::int AS "adminCount",
              count(*) FILTER (WHERE ${flag("r", "isIdle")})::int AS "idleCount",
              count(*) FILTER (WHERE ${flag("r", "isUnprotected")})::int AS "unprotectedCount",
+             count(*) FILTER (WHERE ${flag("r", "isUnused")})::int AS "unusedCount",
              coalesce(sum((derived->>'estimatedMonthlyCostUsd')::float8)
                       FILTER (WHERE ${flag("r", "isIdle")}), 0)::float8 AS "idleCost"
         FROM ${r} r`,
     ),
   ]);
-  return { byKind, byRegion, ...(flags[0] ?? {}) };
+  // An aggregate always answers one row; the zeros say so to the type checker.
+  const counts = flags[0] ?? {
+    publicCount: 0,
+    adminCount: 0,
+    idleCount: 0,
+    idleCost: 0,
+    unprotectedCount: 0,
+    unusedCount: 0,
+  };
+  return { byKind, byRegion, ...counts };
 }
 
 /** The graph, for the frontend to lay out. */
-export async function fetchGraph(
-  scope: GraphScope,
-  params: { region?: string; kinds?: string[]; limit?: number } = {},
-) {
-  const region = params.region ?? null;
-  const kinds = params.kinds ? JSON.stringify(params.kinds) : null;
-  const nodes = await read<ResourceRow>(
-    scope,
-    (r) => sql`
-    SELECT arn, kind, name, region,
-           ${flag("r", "isPublic")} AS "isPublic",
-           ${flag("r", "isAdmin")} AS "isAdmin",
-           ${flag("r", "isIdle")} AS "isIdle",
-           ${flag("r", "isUnprotected")} AS "isUnprotected",
-           (derived->>'estimatedMonthlyCostUsd')::float8 AS "estimatedMonthlyCostUsd",
-           coalesce(derived->>'publicReason', derived->>'adminReason',
-                    derived->>'idleReason', derived->>'unprotectedReason') AS reason
-      FROM ${r} r
-     WHERE (${region}::text IS NULL OR region = ${region} OR region IS NULL)
-       AND (${kinds}::jsonb IS NULL OR ${kinds}::jsonb ? kind)
-     ORDER BY kind, name
-     LIMIT ${clamp(params.limit, 500)}`,
-  );
+/** The node columns every graph read returns. */
+const nodeColumns = sql.raw(`r.arn, r.kind, r.name, r.region,
+           (r.derived->>'isPublic')::boolean AS "isPublic",
+           (r.derived->>'isAdmin')::boolean AS "isAdmin",
+           (r.derived->>'isIdle')::boolean AS "isIdle",
+           (r.derived->>'isUnprotected')::boolean AS "isUnprotected",
+           (r.derived->>'isUnused')::boolean AS "isUnused",
+           (r.derived->>'estimatedMonthlyCostUsd')::float8 AS "estimatedMonthlyCostUsd",
+           coalesce(r.derived->>'publicReason', r.derived->>'adminReason',
+                    r.derived->>'idleReason', r.derived->>'unprotectedReason',
+                    r.derived->>'unusedReason') AS reason`);
 
-  const arns = JSON.stringify(nodes.map((n) => n.arn));
-  const edges = await read<{ from: string; to: string; type: string; ports: string | null }>(
+/** Findings first, so a capped view of a large group shows what matters. */
+const findingsFirst = sql.raw(`coalesce((r.derived->>'isPublic')::boolean, false) DESC,
+           coalesce((r.derived->>'isAdmin')::boolean, false) DESC, r.kind, r.name`);
+
+/**
+ * Which VPC each resource is in: directly (IN_VPC), through its subnet, or -
+ * for a VPC - itself. Everything else is grouped by kind.
+ */
+const membership = (r: SQL, e: SQL) => sql`
+  SELECT DISTINCT ON (r.arn) r.arn,
+         CASE WHEN coalesce(v.to_arn, sv.to_arn, CASE WHEN r.kind = 'Vpc' THEN r.arn END) IS NOT NULL
+              THEN 'vpc:' || coalesce(v.to_arn, sv.to_arn, r.arn)
+              ELSE 'kind:' || r.kind END AS "group"
+    FROM ${r} r
+    LEFT JOIN ${e} v ON v.from_arn = r.arn AND v.rel_type = 'IN_VPC'
+    LEFT JOIN ${e} s ON s.from_arn = r.arn AND s.rel_type = 'IN_SUBNET'
+    LEFT JOIN ${e} sv ON sv.from_arn = s.to_arn AND sv.rel_type = 'IN_VPC'
+   WHERE r.kind NOT IN ('Internet', 'Region', 'Account')
+   ORDER BY r.arn`;
+
+/** `IN` lists, so the (scan_id, from_arn) index finds the edges; the view is at most 500 nodes. */
+async function edgesAmong(scope: GraphScope, arns: string[]) {
+  if (arns.length === 0) return [];
+  return read<{ from: string; to: string; type: string; ports: string | null }>(
     scope,
     (_r, e) => sql`
       SELECT from_arn AS "from", to_arn AS "to", rel_type AS type, properties->>'ports' AS ports
         FROM ${e} e
-       WHERE ${arns}::jsonb ? from_arn AND ${arns}::jsonb ? to_arn
-       LIMIT 2000`,
+       WHERE from_arn IN ${arns} AND to_arn IN ${arns}
+       LIMIT 4000`,
   );
-  return { nodes, edges };
+}
+
+export interface GraphView {
+  nodes: ResourceRow[];
+  edges: { from: string; to: string; type: string; ports: string | null }[];
+  /** Every node that matched, of which `nodes` is at most `limit`. */
+  total: number;
+  truncated: boolean;
+}
+
+/**
+ * The graph, or one group of it (`vpc:<arn>` or `kind:<Kind>`). Capped, and
+ * says so: an account of fifty thousand resources is read a group at a time.
+ */
+export async function fetchGraph(
+  scope: GraphScope,
+  params: { region?: string; kinds?: string[]; limit?: number; group?: string } = {},
+): Promise<GraphView> {
+  const region = params.region ?? null;
+  const kinds = params.kinds ? JSON.stringify(params.kinds) : null;
+  const group = params.group ?? null;
+  const limit = clamp(params.limit, 500);
+  const nodes = await read<ResourceRow & { total: number }>(
+    scope,
+    (r, e) => sql`
+    WITH m AS (${membership(r, e)})
+    SELECT ${nodeColumns}, count(*) OVER ()::int AS total
+      FROM ${r} r
+      LEFT JOIN m ON m.arn = r.arn
+     WHERE (${region}::text IS NULL OR r.region = ${region} OR r.region IS NULL)
+       AND (${kinds}::jsonb IS NULL OR ${kinds}::jsonb ? r.kind)
+       AND (${group}::text IS NULL OR m."group" = ${group}
+            OR (r.kind = 'Internet' AND EXISTS (
+                  SELECT 1 FROM ${e} x JOIN m mm ON mm.arn = x.to_arn
+                   WHERE x.from_arn = r.arn AND mm."group" = ${group})))
+     ORDER BY ${group === null ? sql.raw("r.kind, r.name") : findingsFirst}
+     LIMIT ${limit}`,
+  );
+  const total = nodes[0]?.total ?? 0;
+  const rows = nodes.map(({ total: _t, ...n }) => n);
+  return {
+    nodes: rows,
+    edges: await edgesAmong(
+      scope,
+      rows.map((n) => n.arn),
+    ),
+    total,
+    truncated: total > rows.length,
+  };
+}
+
+/** The groups a large account is browsed by: each VPC, then each kind outside one. */
+export async function graphGroups(scope: GraphScope) {
+  return read<{
+    id: string;
+    name: string;
+    region: string | null;
+    count: number;
+    publicCount: number;
+    adminCount: number;
+    kinds: Record<string, number>;
+  }>(
+    scope,
+    (r, e) => sql`
+    WITH m AS (${membership(r, e)}),
+    per AS (
+      SELECT m."group", r.kind, count(*)::int AS n,
+             count(*) FILTER (WHERE (r.derived->>'isPublic')::boolean)::int AS pub,
+             count(*) FILTER (WHERE (r.derived->>'isAdmin')::boolean)::int AS adm
+        FROM m JOIN ${r} r ON r.arn = m.arn
+       GROUP BY m."group", r.kind
+    )
+    SELECT per."group" AS id,
+           coalesce(v.name, substr(per."group", 6)) AS name,
+           v.region,
+           sum(per.n)::int AS count,
+           sum(per.pub)::int AS "publicCount",
+           sum(per.adm)::int AS "adminCount",
+           jsonb_object_agg(per.kind, per.n) AS kinds
+      FROM per
+      LEFT JOIN ${r} v ON per."group" = 'vpc:' || v.arn
+     GROUP BY per."group", v.name, v.region
+     ORDER BY (per."group" LIKE 'vpc:%') DESC, sum(per.pub) DESC, sum(per.n) DESC`,
+  );
+}
+
+/** One resource and everything directly joined to it, for expanding a view. */
+export async function neighbourhood(
+  scope: GraphScope,
+  arn: string,
+  limit = 60,
+): Promise<GraphView> {
+  const cap = clamp(limit, 60);
+  const nodes = await read<ResourceRow & { total: number }>(
+    scope,
+    (r, e) => sql`
+    WITH near AS (
+      SELECT ${arn}::text AS arn
+      UNION SELECT to_arn FROM ${e} e WHERE e.from_arn = ${arn} AND e.rel_type <> 'IN_REGION'
+      UNION SELECT from_arn FROM ${e} e WHERE e.to_arn = ${arn} AND e.rel_type <> 'IN_REGION'
+    )
+    SELECT ${nodeColumns}, count(*) OVER ()::int AS total
+      FROM ${r} r JOIN near ON near.arn = r.arn
+     ORDER BY (r.arn = ${arn}) DESC, ${findingsFirst}
+     LIMIT ${cap}`,
+  );
+  const total = nodes[0]?.total ?? 0;
+  const rows = nodes.map(({ total: _t, ...n }) => n);
+  return {
+    nodes: rows,
+    edges: await edgesAmong(
+      scope,
+      rows.map((n) => n.arn),
+    ),
+    total,
+    truncated: total > rows.length,
+  };
 }
 
 // --- Paths ------------------------------------------------------------------
@@ -301,23 +446,28 @@ async function resolve(scope: GraphScope, arnOrName: string): Promise<string | n
 async function describeNodes(scope: GraphScope, arns: string[]) {
   if (arns.length === 0)
     return new Map<string, { arn: string; name: string; kind: string; region: string | null }>();
-  const list = JSON.stringify(arns);
+  // `IN` (drizzle spreads the array into a parameter list) rather than a JSON
+  // containment test: it can use the snapshot's (scan_id, arn) key, where
+  // `jsonb ? arn` read every row of the scan. Callers pass a page, not a scan.
   const rows = await read<{ arn: string; name: string; kind: string; region: string | null }>(
     scope,
-    (r) => sql`SELECT arn, name, kind, region FROM ${r} r WHERE ${list}::jsonb ? arn`,
+    (r) => sql`SELECT arn, name, kind, region FROM ${r} r WHERE r.arn IN ${arns}`,
   );
   return new Map(rows.map((row) => [row.arn, row]));
 }
 
 /** Paths enumerated before sorting; bounds the work on a dense graph. */
 const MAX_PATHS_EXPLORED = 2000;
+/** And the time it may take, which a dense graph can spend without finding many. */
+const PATH_SEARCH_MS = 2000;
 
 /**
  * Every path by which one resource can be reached from another, shortest
  * first. The default source is the internet, which is what "what can reach
- * X?" almost always means.
+ * X?" almost always means. `stopped` says when the bound was reached, so an
+ * answer built on it can say the list is not exhaustive.
  */
-export async function findNetworkPaths(
+export async function networkPaths(
   scope: GraphScope,
   params: { target: string; source?: string; maxHops?: number; limit?: number },
 ) {
@@ -327,50 +477,20 @@ export async function findNetworkPaths(
     resolve(scope, params.target),
     resolve(scope, params.source ?? INTERNET_ARN),
   ]);
-  if (!target || !source) return [];
+  if (!target || !source) return { paths: [], found: 0, stopped: null as PathSearchStop };
   const index = await reachIndex(scope);
 
-  // Hops from each node to the target, so the search never follows an edge
-  // that cannot arrive within the bound.
-  const toTarget = new Map<string, number>([[target, 0]]);
-  for (let frontier = [target], d = 1; frontier.length > 0 && d <= maxHops; d++) {
-    const next: string[] = [];
-    for (const node of frontier) {
-      for (const prev of index.prev(node)) {
-        if (!toTarget.has(prev)) {
-          toTarget.set(prev, d);
-          next.push(prev);
-        }
-      }
-    }
-    frontier = next;
-  }
-
-  const found: { path: string[]; hops: Hop[] }[] = [];
-  const walk = (path: string[], hops: Hop[]) => {
-    if (found.length >= MAX_PATHS_EXPLORED) return;
-    const here = path[path.length - 1]!;
-    if (here === target && path.length > 1) {
-      found.push({ path: [...path], hops: [...hops] });
-      return;
-    }
-    for (const { to, edges } of index.next(here)) {
-      const remaining = toTarget.get(to);
-      if (remaining === undefined || path.length + remaining > maxHops + 1) continue;
-      if (path.includes(to)) continue;
-      path.push(to);
-      hops.push(hopOf(edges));
-      walk(path, hops);
-      path.pop();
-      hops.pop();
-    }
-  };
-  if (toTarget.has(source)) walk([source], []);
+  const search = searchPaths(index, source, target, maxHops, {
+    maxPaths: MAX_PATHS_EXPLORED,
+    budgetMs: PATH_SEARCH_MS,
+  });
+  const found = search.found.map(({ path, edges }) => ({ path, hops: edges.map(hopOf) }));
+  const stopped = search.stopped;
 
   found.sort((a, b) => a.path.length - b.path.length);
   const chosen = found.slice(0, limit);
   const nodes = await describeNodes(scope, [...new Set(chosen.flatMap((c) => c.path))]);
-  return chosen.map(({ path, hops }) => ({
+  const paths = chosen.map(({ path, hops }) => ({
     hops: path.map((arn) => {
       const n = nodes.get(arn);
       return { arn, name: n?.name ?? arn, kind: n?.kind ?? "Unknown" };
@@ -378,34 +498,53 @@ export async function findNetworkPaths(
     edges: hops,
     length: path.length - 1,
   }));
+  return { paths, found: found.length, stopped };
 }
+
+export const findNetworkPaths = async (
+  scope: GraphScope,
+  params: Parameters<typeof networkPaths>[1],
+) => (await networkPaths(scope, params)).paths;
 
 /**
  * What a resource can reach, rather than what can reach it. The source comes
- * back too, at `hops: 0`, so an answer that names it can cite it.
+ * back too, at `hops: 0`, so an answer that names it can cite it. `total`
+ * counts every target, of which `rows` holds the nearest.
  */
-export async function findReachableFrom(
+export async function reachableFrom(
   scope: GraphScope,
   params: { source: string; maxHops?: number; limit?: number },
 ) {
   const maxHops = Math.min(Math.max(1, params.maxHops ?? 3), 8);
   const sourceArn = await resolve(scope, params.source);
-  if (!sourceArn) return [];
+  if (!sourceArn) return { rows: [], total: 0 };
   const hops = hopsFrom(await reachIndex(scope), sourceArn, maxHops);
 
-  const nodes = await describeNodes(scope, [...hops.keys()]);
-  const rows = [...hops]
-    .map(([arn, h]) => {
-      const n = nodes.get(arn);
-      return {
-        arn,
-        kind: n?.kind ?? "Unknown",
-        name: n?.name ?? arn,
-        region: n?.region ?? null,
-        hops: h,
-      };
-    })
-    .sort((a, b) => a.hops - b.hops || a.name.localeCompare(b.name));
-  const [source, ...targets] = rows;
-  return [source!, ...targets.slice(0, clamp(params.limit))];
+  // Nearest first, ties by ARN, cut before anything is looked up: a host on
+  // a flat network reaches tens of thousands of resources, and naming all of
+  // them to return 25 was most of this query's time.
+  const ordered = [...hops]
+    .filter(([arn]) => arn !== sourceArn)
+    .sort((a, b) => a[1] - b[1] || (a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0));
+  const shown: [string, number][] = [[sourceArn, 0], ...ordered.slice(0, clamp(params.limit))];
+  const nodes = await describeNodes(
+    scope,
+    shown.map(([arn]) => arn),
+  );
+  const rows = shown.map(([arn, h]) => {
+    const n = nodes.get(arn);
+    return {
+      arn,
+      kind: n?.kind ?? "Unknown",
+      name: n?.name ?? arn,
+      region: n?.region ?? null,
+      hops: h,
+    };
+  });
+  return { rows, total: ordered.length };
 }
+
+export const findReachableFrom = async (
+  scope: GraphScope,
+  params: Parameters<typeof reachableFrom>[1],
+) => (await reachableFrom(scope, params)).rows;

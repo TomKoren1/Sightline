@@ -18,12 +18,14 @@
  */
 
 import { randomUUID } from "node:crypto";
+import { getHeapStatistics } from "node:v8";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { eq } from "drizzle-orm";
 import { INTERNET_ARN, type ScanResult } from "@sightline/shared";
 import { seed } from "@sightline/mock-aws";
 
-import { isMock, MOCK_EXTERNAL_ID } from "../config.js";
+import { cfg, MOCK_EXTERNAL_ID } from "../core/config.js";
+import { isMock } from "../aws/settings.js";
 import * as q from "../db/graph.js";
 import { syncFindings } from "../db/findings.js";
 import { GraphService } from "../graph/graph.service.js";
@@ -38,7 +40,7 @@ import {
 import * as schema from "../db/schema.js";
 import { annotate } from "../scan/pipeline.js";
 import { collectEstate } from "../scan/runner.js";
-import { asConnectionId, asTenantId, type ScanId } from "../tenancy/ids.js";
+import { asConnectionId, asTenantId, type ScanId } from "../core/ids.js";
 import { replicateEstate } from "./replicate.js";
 
 const ENABLED = process.env["LOAD_TEST"] === "1";
@@ -119,7 +121,8 @@ beforeAll(async () => {
     skipReason = "AWS_MODE is not 'mock'; refusing to collect from a real account.";
     return;
   }
-  const endpoint = process.env["AWS_ENDPOINT_URL"] ?? "http://localhost:5000";
+  // Parsed config, not the environment: config removes the variable at import.
+  const endpoint = cfg.AWS_ENDPOINT_URL;
   const target = {
     connectionId,
     kind: "demo" as const,
@@ -148,6 +151,10 @@ beforeAll(async () => {
       `${r.relationships.length.toLocaleString()} relationships (${copies} copies of ${per} + ${CROWD})`,
   ));
 
+  // Two phases, measured apart: which one sets the peak is what to fix.
+  const analysed = memory.stop();
+  const saving = memoryPeak();
+
   await system.insert(schema.tenants).values({ id: tenantId, name: "load.test" });
   await system.insert(schema.connections).values({
     id: connectionId,
@@ -166,9 +173,20 @@ beforeAll(async () => {
       apiCalls: 0,
     }),
   );
-  const peak = memory.stop();
+  const saved = saving.stop();
+  const peak = {
+    heap: Math.max(analysed.heap, saved.heap),
+    rss: Math.max(analysed.rss, saved.rss),
+  };
   peakHeap = peak.heap;
   const mib = (b: number) => `${Math.round(b / 1024 ** 2).toLocaleString()} MiB`;
+  timings.push({
+    step: "peak memory by phase",
+    ms: 0,
+    // Under the heap cap it ran with: uncapped, V8 keeps garbage it has room
+    // for, and the peak measures the machine rather than the scan.
+    detail: `collect and analyse ${mib(analysed.heap)}, save ${mib(saved.heap)}, heap cap ${mib(getHeapStatistics().heap_size_limit)}`,
+  });
   const perResource = Math.round(peak.heap / annotated.resources.length);
   timings.push({
     step: "peak memory",
@@ -282,6 +300,21 @@ describe.runIf(ENABLED)("a large account", () => {
   const QUERIES: [string, () => Promise<unknown>][] = [
     ["summary", () => q.summariseAccount(graph())],
     ["graph (500 nodes)", () => q.fetchGraph(graph(), { limit: 500 })],
+    ["graph groups (the large-account overview)", () => q.graphGroups(graph())],
+    [
+      "the largest group, findings first (300 nodes)",
+      async () => {
+        const [largest] = (await q.graphGroups(graph())).sort((a, b) => b.count - a.count);
+        return largest ? q.fetchGraph(graph(), { group: largest.id, limit: 300 }) : null;
+      },
+    ],
+    [
+      "a resource's neighbourhood",
+      async () => {
+        const db = annotated.resources.find((r) => r.kind === "RdsInstance");
+        return db ? q.neighbourhood(graph(), db.arn) : null;
+      },
+    ],
     ["public resources", () => q.findPublicResources(graph(), { limit: 50 })],
     ["admin principals", () => q.findAdminPrincipals(graph(), { limit: 50 })],
     ["idle", () => q.findIdleResources(graph(), { limit: 50 })],

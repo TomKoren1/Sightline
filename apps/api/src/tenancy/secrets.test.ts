@@ -12,6 +12,8 @@
  * environment once, at import.
  */
 
+import { createCipheriv, createHash, randomBytes } from "node:crypto";
+
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const ORIGINAL = { ...process.env };
@@ -53,7 +55,26 @@ describe("secrets at rest", () => {
 
   it("writes a versioned envelope, so a later migration can identify old rows", async () => {
     const { encryptSecret } = await load();
-    expect((await encryptSecret("value")).toString("utf8")).toMatch(/^l1:/);
+    expect((await encryptSecret("value")).toString("utf8")).toMatch(/^l2:/);
+  });
+
+  it("salts every envelope, so equal secrets do not look equal", async () => {
+    const { encryptSecret } = await load();
+    const [a, b] = [await encryptSecret("value"), await encryptSecret("value")];
+    expect(a.subarray(3, 3 + 22)).not.toEqual(b.subarray(3, 3 + 22));
+  });
+
+  it("still reads the first format, and says it should be rewritten", async () => {
+    const { decryptSecret, isLegacySecret, encryptSecret } = await load();
+    // Built the way l1 was: AES-256-GCM under one SHA-256 of the passphrase.
+    const key = createHash("sha256").update("a-long-random-string-for-tests").digest();
+    const iv = randomBytes(12);
+    const cipher = createCipheriv("aes-256-gcm", key, iv);
+    const body = Buffer.concat([cipher.update("old-value", "utf8"), cipher.final()]);
+    const legacy = "l1:" + Buffer.concat([iv, cipher.getAuthTag(), body]).toString("base64");
+    expect(await decryptSecret(legacy)).toBe("old-value");
+    expect(isLegacySecret(legacy)).toBe(true);
+    expect(isLegacySecret(await encryptSecret("old-value"))).toBe(false);
   });
 
   it("rejects a ciphertext it did not write", async () => {
@@ -62,15 +83,16 @@ describe("secrets at rest", () => {
     // A plausible-looking prefix with rubbish inside must still fail, which is
     // what authenticated encryption is for.
     await expect(decryptSecret("l1:bm90LXZhbGlk")).rejects.toThrow();
+    await expect(decryptSecret("l2:bm90LXZhbGlk")).rejects.toThrow();
   });
 
   it("fails loudly when tampered with, rather than decrypting to rubbish", async () => {
     const { encryptSecret, decryptSecret } = await load();
     const envelope = (await encryptSecret("tenant-secret-placeholder-value")).toString("utf8");
     const raw = Buffer.from(envelope.slice(3), "base64");
-    // Flip a bit in the body, past the 12-byte nonce and 16-byte tag.
-    raw[40] = (raw[40]! ^ 0x01) & 0xff;
-    await expect(decryptSecret(`l1:${raw.toString("base64")}`)).rejects.toThrow();
+    // Flip a bit in the body, past the 16-byte salt, 12-byte nonce and 16-byte tag.
+    raw[50] = (raw[50]! ^ 0x01) & 0xff;
+    await expect(decryptSecret(`l2:${raw.toString("base64")}`)).rejects.toThrow();
   });
 
   it("explains itself when no key is configured", async () => {

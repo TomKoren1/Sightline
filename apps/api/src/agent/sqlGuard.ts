@@ -14,7 +14,9 @@
  * account's data.
  */
 
-import pkg from "node-sql-parser";
+// The PostgreSQL grammar alone: the package's default entry carries every
+// dialect it supports, 89 MB installed, for the one this guard parses.
+import pkg from "node-sql-parser/build/postgresql.js";
 
 const { Parser } = pkg;
 const parser = new Parser();

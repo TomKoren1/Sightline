@@ -19,12 +19,22 @@ import {
 } from "@nestjs/common";
 import { Reflector } from "@nestjs/core";
 
-import { isHosted } from "../config.js";
-import { resolveScope, type ScopedRequest } from "../tenancy/requestScope.js";
-import type { Scope } from "../tenancy/scope.js";
+import { isHosted } from "../core/config.js";
+import { resolveScope } from "../tenancy/requestScope.js";
 import { configuredProviders } from "./oauth.js";
 import { IS_PUBLIC } from "./public.decorator.js";
-import { readSession, SESSION_COOKIE, type Session } from "./session.js";
+import { readSession, SESSION_COOKIE } from "./session.js";
+import {
+  atLeast,
+  HUMAN_ONLY,
+  MIN_ROLE,
+  RECENT_SIGN_IN,
+  RECENT_SIGN_IN_MINUTES,
+  type TeamRole,
+} from "../core/access.js";
+import { readApiToken } from "./apiTokens.js";
+import { markVerified } from "./verifiedCredentials.js";
+import type { AuthedRequest } from "../core/request.js";
 
 /** Methods that change something, and therefore need forgery protection. */
 const MUTATING = new Set(["POST", "PUT", "PATCH", "DELETE"]);
@@ -39,24 +49,6 @@ const MUTATING = new Set(["POST", "PUT", "PATCH", "DELETE"]);
  * CORS configuration does not answer.
  */
 const REQUEST_HEADER = "x-sightline-request";
-
-/**
- * The scope, or the reason there isn't one, decided here and raised later.
- *
- * Resolving a connection can legitimately fail - a tenant who has just signed
- * up has none yet - and that must not refuse the very routes they need to
- * create one. So the guard records the outcome and `@CurrentScope()` raises it,
- * which means the error surfaces exactly on the routes that actually wanted a
- * connection and nowhere else.
- */
-export type ScopeOutcome = { ok: true; scope: Scope } | { ok: false; error: unknown };
-
-export interface AuthedRequest extends ScopedRequest {
-  method?: string;
-  session?: Session | null;
-  cookies?: Record<string, string | undefined>;
-  scopeOutcome?: ScopeOutcome;
-}
 
 async function attachScope(req: AuthedRequest): Promise<void> {
   try {
@@ -75,6 +67,14 @@ async function attachScope(req: AuthedRequest): Promise<void> {
   } catch (error) {
     req.scopeOutcome = { ok: false, error };
   }
+}
+
+function bearerToken(header: unknown): string | null {
+  if (typeof header !== "string") return null;
+  // A malformed Authorization header is an empty token - refused - rather
+  // than no header, which would fall back to the cookie.
+  const match = /^Bearer\s+(\S+)$/i.exec(header.trim());
+  return match ? match[1]! : "";
 }
 
 @Injectable()
@@ -103,10 +103,18 @@ export class AuthGuard implements CanActivate {
       return true;
     }
 
-    const token = req.cookies?.[SESSION_COOKIE];
-    const session = await readSession(token);
+    // A bearer token, when one is sent, is the whole identity: the cookie
+    // beside it is ignored rather than tried as a fallback.
+    const bearer = bearerToken(req.headers?.["authorization"]);
+    const session =
+      bearer !== null
+        ? await readApiToken(bearer)
+        : await readSession(req.cookies?.[SESSION_COOKIE]);
     req.session = session;
-    if (session) req.tenantId = session.tenantId;
+    if (session) {
+      req.tenantId = session.tenantId;
+      markVerified(bearer ?? req.cookies?.[SESSION_COOKIE] ?? "");
+    }
 
     if (isPublic) return true;
 
@@ -117,11 +125,52 @@ export class AuthGuard implements CanActivate {
       });
     }
 
-    if (MUTATING.has(req.method ?? "GET") && req.headers?.[REQUEST_HEADER] !== "1") {
+    const marked = (key: string) =>
+      this.reflector.getAllAndOverride<boolean>(key, [context.getHandler(), context.getClass()]);
+    const needsRecent = marked(RECENT_SIGN_IN);
+
+    if (session.via === "token" && (needsRecent || marked(HUMAN_ONLY))) {
+      throw new ForbiddenException({
+        error: "An API token cannot do this; sign in to manage tokens, the team or the account.",
+      });
+    }
+
+    if (
+      needsRecent &&
+      (!session.signedInAt ||
+        Date.now() - session.signedInAt.getTime() > RECENT_SIGN_IN_MINUTES * 60 * 1000)
+    ) {
+      throw new ForbiddenException({
+        error: `For safety this needs a sign-in from the last ${RECENT_SIGN_IN_MINUTES} minutes. Sign out, sign back in, and try again.`,
+        reauth: true,
+      });
+    }
+
+    // Forgery protection is for what a browser sends on its own - its cookie.
+    // A bearer token is never attached by a browser to a request another site
+    // makes, so a request carrying one was written by whoever holds it.
+    if (
+      session.via !== "token" &&
+      MUTATING.has(req.method ?? "GET") &&
+      req.headers?.[REQUEST_HEADER] !== "1"
+    ) {
       throw new ForbiddenException({
         error:
           "This request is missing the X-Sightline-Request header, which Sightline requires on " +
           "anything that changes state so that another site cannot make it on your behalf.",
+      });
+    }
+
+    // What their role allows: what the route names, else `member` to change
+    // anything and `viewer` to read.
+    const min =
+      this.reflector.getAllAndOverride<TeamRole | undefined>(MIN_ROLE, [
+        context.getHandler(),
+        context.getClass(),
+      ]) ?? (MUTATING.has(req.method ?? "GET") ? "member" : "viewer");
+    if (!atLeast(session.role, min)) {
+      throw new ForbiddenException({
+        error: `This needs the ${min} role or above, and you are a ${session.role} in this workspace. An admin can change that.`,
       });
     }
 

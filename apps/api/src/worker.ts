@@ -20,14 +20,16 @@
 
 import pino from "pino";
 
-import { cfg, scanWorkerMode } from "./config.js";
+import { cfg, scanWorkerMode } from "./core/config.js";
 import { assertSchemaCurrent, closePool } from "./db/postgres.js";
 import { assertHostedInvariants } from "./hostedMode.js";
 import { ScanWorker } from "./jobs/worker.js";
 import { loggerOptions } from "./observability/logging.js";
 import { recordBuild, startMetricsServer } from "./observability/metrics.js";
-import { startSnapshotLoop } from "./observability/snapshot.js";
-import { VERSION } from "./version.js";
+import { startSnapshotLoop } from "./jobs/snapshot.js";
+import { VERSION } from "./core/version.js";
+import { startTracing, stopTracing } from "./observability/tracing.js";
+import { watchCertificate } from "./aws/certificateWatch.js";
 
 // The same invariants the API checks, for the same reason: every one of them is
 // a configuration mistake that produces a working process with a silently wrong
@@ -45,6 +47,7 @@ if (scanWorkerMode() === "off") {
   process.exit(1);
 }
 
+await startTracing("sightline-worker", VERSION);
 const worker = new ScanWorker({ log });
 
 try {
@@ -59,6 +62,7 @@ try {
    */
   await assertSchemaCurrent();
   await worker.start();
+  watchCertificate(log);
   if (cfg.METRICS_PORT > 0) {
     startMetricsServer(cfg.METRICS_PORT);
     recordBuild(VERSION);
@@ -88,6 +92,7 @@ for (const signal of ["SIGINT", "SIGTERM"] as const) {
     void (async () => {
       try {
         await worker.stop();
+        await stopTracing();
         await closePool();
         process.exit(0);
       } catch (err) {

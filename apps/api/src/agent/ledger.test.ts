@@ -22,7 +22,7 @@ import { ask } from "./agent.js";
 import * as queries from "../db/graph.js";
 import * as repository from "../db/repository.js";
 import * as tools from "./tools.js";
-import { asConnectionId, asScanId, asTenantId } from "../tenancy/ids.js";
+import { asConnectionId, asScanId, asTenantId } from "../core/ids.js";
 
 /**
  * A scope, because `ask` requires one.
@@ -125,6 +125,7 @@ function stubPromptContext() {
     adminCount: 0,
     idleCount: 0,
     unprotectedCount: 0,
+    unusedCount: 0,
     idleCost: 0,
   });
   return () => {

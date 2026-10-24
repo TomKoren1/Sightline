@@ -6,7 +6,7 @@
 import { sql, type SQL } from "drizzle-orm";
 
 import { db, withTenant } from "./postgres.js";
-import type { ScanId, TenantId } from "../tenancy/ids.js";
+import type { ScanId, TenantId } from "../core/ids.js";
 
 /** Which graph a read may touch: one tenant's one scan. */
 export interface GraphScope {

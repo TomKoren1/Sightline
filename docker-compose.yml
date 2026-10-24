@@ -70,7 +70,7 @@ services:
   # Optional `app` profile: the API and the built frontend.
   # ---------------------------------------------------------------------------
   #
-  # Every connection default in apps/api/src/config.ts is `localhost`, which is
+  # Every connection default in apps/api/src/core/config.ts is `localhost`, which is
   # correct on a laptop and wrong inside a container. The overrides below are set
   # in `environment:`, which takes precedence over `env_file`, so the container
   # gets container hostnames while `.env` stays the single source of truth for
@@ -88,7 +88,7 @@ services:
     profiles: ["app"]
     build:
       context: .
-      target: api
+      target: tools
     container_name: sightline-seed
     restart: "no"
     # Optional, so `docker compose --profile app up` works on a fresh clone with
@@ -149,13 +149,12 @@ services:
       interval: 5s
       timeout: 5s
       retries: 20
-      # tsx compiles on boot, and the server applies the schema before listening.
+      # The server applies the schema before listening.
       start_period: 30s
 
   # Scans, out of the request path.
   #
-  # The same image as the API - it already carries the whole workspace and runs
-  # through tsx - with a different command. A scan holds an account's inventory
+  # The same image as the API, with a different entry point. A scan holds an account's inventory
   # in memory and then projects it, so it is the one thing here that can consume
   # an unbounded amount of memory; in its own process it takes down a worker
   # rather than the API serving everybody else.
@@ -170,7 +169,8 @@ services:
       target: api
     container_name: sightline-worker
     restart: unless-stopped
-    command: ["npm", "run", "worker", "-w", "@sightline/api"]
+    command:
+      ["node", "--enable-source-maps", "--max-old-space-size=1536", "apps/api/dist/worker.js"]
     env_file:
       - path: .env
         required: false

@@ -12,9 +12,11 @@
  */
 
 import type { Relationship, Resource, ScanStatus, ScanUnit } from "@sightline/shared";
+import type { TeamRole } from "../core/access.js";
 import { sql } from "drizzle-orm";
 import {
   boolean,
+  type AnyPgColumn,
   check,
   customType,
   index,
@@ -200,6 +202,9 @@ export const messages = pgTable(
     citations: jsonb("citations").notNull().default([]),
     warnings: jsonb("warnings").notNull().default([]),
     scanId: uuid("scan_id").references(() => scanRuns.id, { onDelete: "set null" }),
+    /** On an answer: what it cost, for the token budget. Null on a question. */
+    inputTokens: integer("input_tokens"),
+    outputTokens: integer("output_tokens"),
     createdAt: timestamp("created_at", tz).notNull().defaultNow(),
   },
   (t) => [
@@ -274,9 +279,92 @@ export const users = pgTable(
     avatarUrl: text("avatar_url"),
     createdAt: timestamp("created_at", tz).notNull().defaultNow(),
     lastSeenAt: timestamp("last_seen_at", tz),
+    /**
+     * What this user may do in their tenant (`auth/roles.ts`). Owner by
+     * default, because every user who arrives without an invite is the only
+     * member of a tenant made for them.
+     */
+    role: text("role").$type<TeamRole>().notNull().default("owner"),
   },
-  (t) => [index("users_tenant").on(t.tenantId)],
+  (t) => [
+    index("users_tenant").on(t.tenantId),
+    check("users_role", sql`${t.role} IN ('owner','admin','member','viewer')`),
+  ],
 );
+
+/**
+ * An invitation to join a tenant: a link copied by hand, so there is no email
+ * to send and nothing to pay for. Only the token's hash is kept - the link is
+ * shown once, to whoever made it - and it works once, within a week.
+ */
+export const invites = pgTable(
+  "invites",
+  {
+    id: uuid("id").primaryKey(),
+    tenantId: uuid("tenant_id")
+      .notNull()
+      .references(() => tenants.id, { onDelete: "cascade" }),
+    tokenHash: bytea("token_hash").notNull().unique(),
+    role: text("role").$type<TeamRole>().notNull(),
+    createdBy: uuid("created_by").references(() => users.id, { onDelete: "set null" }),
+    createdAt: timestamp("created_at", tz).notNull().defaultNow(),
+    expiresAt: timestamp("expires_at", tz).notNull(),
+    acceptedBy: uuid("accepted_by").references(() => users.id, { onDelete: "set null" }),
+    acceptedAt: timestamp("accepted_at", tz),
+    revokedAt: timestamp("revoked_at", tz),
+  },
+  (t) => [
+    index("invites_tenant").on(t.tenantId, t.createdAt.desc()),
+    // An invite can grant anything but ownership, which is given by an owner.
+    check("invites_role", sql`${t.role} IN ('admin','member','viewer')`),
+  ],
+);
+
+/**
+ * Programmatic access: a bearer token acting for whoever created it, at most
+ * at their role. Deleted with its creator, so removing someone from the team
+ * removes their tokens too. Stored as a hash, like a session.
+ */
+export const apiTokens = pgTable(
+  "api_tokens",
+  {
+    id: uuid("id").primaryKey(),
+    tenantId: uuid("tenant_id")
+      .notNull()
+      .references(() => tenants.id, { onDelete: "cascade" }),
+    createdBy: uuid("created_by")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    name: text("name").notNull(),
+    tokenHash: bytea("token_hash").notNull().unique(),
+    role: text("role").$type<TeamRole>().notNull(),
+    createdAt: timestamp("created_at", tz).notNull().defaultNow(),
+    lastUsedAt: timestamp("last_used_at", tz),
+    expiresAt: timestamp("expires_at", tz),
+  },
+  (t) => [
+    index("api_tokens_tenant").on(t.tenantId, t.createdAt.desc()),
+    // Never an owner's power: deleting the workspace is a person's decision.
+    check("api_tokens_role", sql`${t.role} IN ('admin','member','viewer')`),
+  ],
+);
+
+/**
+ * Where a tenant hears about new critical findings: one webhook, its URL
+ * encrypted like an ExternalId, since a Slack webhook URL is its own secret.
+ */
+export const webhooks = pgTable("webhooks", {
+  tenantId: uuid("tenant_id")
+    .primaryKey()
+    .references(() => tenants.id, { onDelete: "cascade" }),
+  urlCiphertext: bytea("url_ciphertext").notNull(),
+  /** The host alone, to show which webhook is set without showing the secret. */
+  host: text("host").notNull(),
+  createdBy: uuid("created_by").references(() => users.id, { onDelete: "set null" }),
+  createdAt: timestamp("created_at", tz).notNull().defaultNow(),
+  lastDeliveryAt: timestamp("last_delivery_at", tz),
+  lastStatus: text("last_status"),
+});
 
 /**
  * One row per external identity, so one user can hold both Google and GitHub.
@@ -342,9 +430,16 @@ export const connections = pgTable(
       .notNull()
       .references(() => tenants.id, { onDelete: "cascade" }),
     /** `demo` is the moto fixture and is admin-only; `real` is a customer account. */
-    kind: text("kind").$type<"real" | "demo">().notNull(),
+    kind: text("kind").$type<"real" | "demo" | "organization">().notNull(),
     /** The tenant's own name for it - "prod", "staging". */
     label: text("label").notNull(),
+    /**
+     * The organization connection that found this account, for a member of
+     * an AWS Organization. Deleting the organization deletes its accounts.
+     */
+    parentId: uuid("parent_id").references((): AnyPgColumn => connections.id, {
+      onDelete: "cascade",
+    }),
     roleArn: text("role_arn"),
     /** Null until the first successful assume-role says what it really is. */
     accountId: text("account_id"),
@@ -394,8 +489,13 @@ export const connections = pgTable(
      * verified and Postgres permits many nulls in a unique index, so several
      * pending connections coexist while only one verified one can.
      */
-    uniqueIndex("connections_tenant_account").on(t.tenantId, t.accountId),
-    check("connections_kind", sql`${t.kind} IN ('real','demo')`),
+    // An organization's account is its management account, which is also one
+    // of its members: the member is the connection that owns the account id.
+    uniqueIndex("connections_tenant_account")
+      .on(t.tenantId, t.accountId)
+      .where(sql`${t.kind} <> 'organization'`),
+    check("connections_kind", sql`${t.kind} IN ('real','demo','organization')`),
+    index("connections_parent").on(t.parentId),
     check(
       "connections_external_id_source",
       sql`${t.externalIdSource} IN ('stored','config','demo')`,
@@ -432,6 +532,8 @@ export const scanJobs = pgTable(
       .notNull()
       .default("queued"),
     requestedBy: uuid("requested_by").references(() => users.id, { onDelete: "set null" }),
+    /** The W3C traceparent of the request that queued it, when tracing is on. */
+    traceParent: text("trace_parent"),
     attempts: integer("attempts").notNull().default(0),
     maxAttempts: integer("max_attempts").notNull().default(3),
     lockedBy: text("locked_by"),
@@ -529,11 +631,14 @@ export const findings = pgTable(
     uniqueIndex("findings_identity").on(t.connectionId, t.category, t.resourceArn),
     index("findings_connection_status").on(t.connectionId, t.status),
     check("findings_status", sql`${t.status} IN ('open','accepted','resolved')`),
-    check("findings_category", sql`${t.category} IN ('exposed','admin','idle','unguarded')`),
+    check(
+      "findings_category",
+      sql`${t.category} IN ('exposed','admin','idle','unguarded','unused')`,
+    ),
   ],
 );
 
-export type FindingCategory = "exposed" | "admin" | "idle" | "unguarded";
+export type FindingCategory = "exposed" | "admin" | "idle" | "unguarded" | "unused";
 export type FindingStatus = "open" | "accepted" | "resolved";
 
 /**

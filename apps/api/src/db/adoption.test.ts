@@ -20,7 +20,7 @@ import { migrate } from "drizzle-orm/node-postgres/migrator";
 import { sql } from "drizzle-orm";
 import pg from "pg";
 
-import { cfg } from "../config.js";
+import { cfg } from "../core/config.js";
 import { errorMessage } from "@sightline/shared";
 
 const HAS_INFRA = !process.env["SKIP_INTEGRATION"];

@@ -24,8 +24,9 @@ import type { GraphScope } from "./graph.js";
 import { system } from "./postgres.js";
 import { createScanRun, markProjected, saveScanResult } from "./repository.js";
 import * as schema from "./schema.js";
-import { runTool, RAW_QUERY_TOOL } from "../agent/tools.js";
-import { asConnectionId, asTenantId } from "../tenancy/ids.js";
+import { runTool } from "../agent/tools.js";
+import { RAW_QUERY_TOOL } from "../agent/toolDefinitions.js";
+import { asConnectionId, asTenantId } from "../core/ids.js";
 
 const HAS_INFRA = !process.env["SKIP_INTEGRATION"];
 
@@ -88,6 +89,8 @@ function build(
     r("IamRole", `${tag}-admin`, role, {
       isAdmin: true,
       adminReason: `${tag} carries AdministratorAccess`,
+      isUnused: true,
+      unusedReason: `${tag} role never used`,
     }),
     r("Ec2Instance", `${tag}-host`, instance, {
       isIdle: true,
@@ -99,6 +102,8 @@ function build(
       publicReason: `${tag} subnet routes to an internet gateway`,
     }),
     r("RdsInstance", `${tag}-db`, database),
+    // Another account that can assume the admin role, as cross-account trust records it.
+    r("Account", `${tag} vendor account`, `arn:aws:sightline:::account/${tag}-vendor`, {}),
   ];
 
   const relationships: Relationship[] = [
@@ -115,6 +120,12 @@ function build(
       properties: { ports: ["tcp/5432"], via: `${tag}-db-sg`, reason: `${tag} db sg` },
     },
     { from: instance, to: subnet, type: "IN_SUBNET", properties: {} },
+    {
+      from: `arn:aws:sightline:::account/${tag}-vendor`,
+      to: role,
+      type: "CAN_ASSUME",
+      properties: { via: "trust policy", reason: `${tag} vendor can assume the admin role` },
+    },
   ];
 
   return { resources, relationships };
@@ -169,10 +180,14 @@ const CALLS: Record<string, (f: Fixture) => Promise<unknown>> = {
   findAdminPrincipals: (f) => queries.findAdminPrincipals(f.scope, {}),
   findNetworkPaths: (f) => queries.findNetworkPaths(f.scope, { target: f.names.database }),
   findReachableFrom: (f) => queries.findReachableFrom(f.scope, { source: INTERNET_ARN }),
+  networkPaths: (f) => queries.networkPaths(f.scope, { target: f.names.database }),
+  reachableFrom: (f) => queries.reachableFrom(f.scope, { source: INTERNET_ARN }),
   findInstancesInPublicSubnets: (f) => queries.findInstancesInPublicSubnets(f.scope, {}),
   findIdleResources: (f) => queries.findIdleResources(f.scope, {}),
   findUnprotectedBuckets: (f) => queries.findUnprotectedBuckets(f.scope, {}),
+  findUnusedAccess: (f) => queries.findUnusedAccess(f.scope, {}),
   findOpenSecurityGroups: (f) => queries.findOpenSecurityGroups(f.scope, {}),
+  findCrossAccountAccess: (f) => queries.findCrossAccountAccess(f.scope, {}),
   // Matches a substring both tenants' names share, so a leak is *likely* rather
   // than merely possible: an unscoped version returns both tenants' rows.
   searchResources: (f) => queries.searchResources(f.scope, { text: "-db" }),
@@ -181,6 +196,12 @@ const CALLS: Record<string, (f: Fixture) => Promise<unknown>> = {
   pageOf: (f) => queries.pageOf("searchResources", f.scope, { text: "-db" }),
   summariseAccount: (f) => queries.summariseAccount(f.scope),
   fetchGraph: (f) => queries.fetchGraph(f.scope, {}),
+  graphGroups: (f) => queries.graphGroups(f.scope),
+  neighbourhood: (f) =>
+    queries.neighbourhood(
+      f.scope,
+      f.arns.find((arn) => arn.includes(":role/"))!,
+    ),
 };
 
 /**
@@ -192,7 +213,7 @@ const CALLS: Record<string, (f: Fixture) => Promise<unknown>> = {
  * which checks the numbers against the fixture. Listed explicitly rather than
  * detected, so a query cannot drift into this exemption unnoticed.
  */
-const AGGREGATES = new Set(["summariseAccount"]);
+const AGGREGATES = new Set(["summariseAccount", "graphGroups"]);
 
 /** Every string anywhere in a result, however deeply nested. */
 function strings(value: unknown, into: string[] = []): string[] {
@@ -325,12 +346,19 @@ describe.runIf(HAS_INFRA)("tenant isolation in the graph", () => {
     ]);
   });
 
+  it("groups only one tenant's resources", async () => {
+    if (!available) return;
+    const groups = await queries.graphGroups(a.scope);
+    // The internet and account nodes are not grouped; the other five are.
+    expect(groups.reduce((sum, g) => sum + g.count, 0)).toBe(5);
+  });
+
   it("counts only one tenant's resources", async () => {
     if (!available) return;
     const summary = await queries.summariseAccount(a.scope);
     const total = summary.byKind.reduce((sum, k) => sum + k.count, 0);
-    // Six resources, less the Internet node which `summariseAccount` excludes.
-    expect(total).toBe(5);
+    // Seven resources, less the Internet node which `summariseAccount` excludes.
+    expect(total).toBe(6);
     expect(summary.publicCount).toBe(2); // the bucket and the subnet
     expect(summary.adminCount).toBe(1);
     expect(summary.idleCount).toBe(1);

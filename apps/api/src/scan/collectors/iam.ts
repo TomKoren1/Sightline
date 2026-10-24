@@ -12,9 +12,14 @@
  * IAM's global, low rate limit - 10k calls on an account with 3,000 roles.
  * `ListRoles` and `ListUsers` still run, as cheap paged listings, for the few
  * fields the sweep omits (description, session length, password last used).
+ * The credential report adds, in two calls for the whole account, what no
+ * listing has: whether each user's password and access keys are active, and
+ * when each was last used - the evidence for "unused access".
  */
 
 import {
+  GenerateCredentialReportCommand,
+  GetCredentialReportCommand,
   GetPolicyCommand,
   GetPolicyVersionCommand,
   paginateGetAccountAuthorizationDetails,
@@ -79,6 +84,84 @@ export interface GroupPolicy {
   document: PolicyDocument | null;
 }
 
+/** One user's row of the credential report, with AWS's "N/A" and "no_information" as null. */
+export interface UserCredentials {
+  passwordEnabled: boolean;
+  passwordLastUsedAt: string | null;
+  mfaActive: boolean;
+  accessKeys: {
+    slot: 1 | 2;
+    active: boolean;
+    lastRotatedAt: string | null;
+    lastUsedAt: string | null;
+    lastUsedService: string | null;
+  }[];
+}
+
+const reportDate = (value: string | undefined): string | null => {
+  if (!value) return null;
+  const at = Date.parse(value);
+  return Number.isNaN(at) ? null : new Date(at).toISOString();
+};
+const reportText = (value: string | undefined): string | null =>
+  !value || ["N/A", "no_information", "not_supported"].includes(value) ? null : value;
+
+/** The credential report's CSV, by user name. No field in it holds a comma. */
+export function parseCredentialReport(csv: string): Map<string, UserCredentials> {
+  const [header, ...lines] = csv.trim().split(/\r?\n/);
+  const columns = (header ?? "").split(",");
+  const users = new Map<string, UserCredentials>();
+  for (const line of lines) {
+    const cells = line.split(",");
+    const at = (name: string) => cells[columns.indexOf(name)];
+    const user = at("user");
+    // The root user's row, which is not an IAM user and has no node.
+    if (!user || user === "<root_account>") continue;
+    users.set(user, {
+      passwordEnabled: at("password_enabled") === "true",
+      passwordLastUsedAt: reportDate(at("password_last_used")),
+      mfaActive: at("mfa_active") === "true",
+      accessKeys: ([1, 2] as const).map((slot) => ({
+        slot,
+        active: at(`access_key_${slot}_active`) === "true",
+        lastRotatedAt: reportDate(at(`access_key_${slot}_last_rotated`)),
+        lastUsedAt: reportDate(at(`access_key_${slot}_last_used_date`)),
+        lastUsedService: reportText(at(`access_key_${slot}_last_used_service`)),
+      })),
+    });
+  }
+  return users;
+}
+
+const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+/**
+ * The credential report, generating it if AWS has none from the last four
+ * hours. `null` when it cannot be read - refused, or still generating after
+ * the wait - which the analyser reads as "unknown", never as "unused".
+ */
+async function credentialReport(
+  client: ReturnType<typeof iamClient>,
+): Promise<Map<string, UserCredentials> | null> {
+  try {
+    await client.send(new GenerateCredentialReportCommand({}));
+    for (let attempt = 0; attempt < 15; attempt++) {
+      try {
+        const report = await client.send(new GetCredentialReportCommand({}));
+        return parseCredentialReport(Buffer.from(report.Content ?? []).toString("utf8"));
+      } catch (err) {
+        const name = (err as { name?: string }).name ?? "";
+        if (!/ReportInProgress|ReportNotPresent|CredentialReportNotReady/.test(name)) throw err;
+        await sleep(1000);
+      }
+    }
+    console.warn("  iam: credential report still generating after 15s; user activity unknown");
+  } catch (err) {
+    console.warn(`  iam: credential report not read - ${errorMessage(err)}`);
+  }
+  return null;
+}
+
 interface AuthorizationDetails {
   roles: RoleDetail[];
   users: UserDetail[];
@@ -110,6 +193,8 @@ export async function collectIam(ctx: CollectorContext): Promise<CollectorOutput
   for await (const page of paginateListUsers({ client }, {})) {
     for (const user of page.Users ?? []) if (user.UserName) userMeta.set(user.UserName, user);
   }
+
+  const credentials = await credentialReport(client);
 
   /** Managed policy ARN -> its default-version document. */
   const managedDocuments = new Map<string, PolicyDocument | null>();
@@ -354,6 +439,8 @@ export async function collectIam(ctx: CollectorContext): Promise<CollectorOutput
         path: user.Path ?? "/",
         createdAt: user.CreateDate?.toISOString() ?? null,
         passwordLastUsed: meta?.PasswordLastUsed?.toISOString() ?? null,
+        /** `null` when the credential report could not be read. */
+        credentials: credentials ? (credentials.get(userName) ?? null) : null,
         permissionsBoundary: await boundaryOf(user.PermissionsBoundary),
         groups,
         attachedPolicies: attached,

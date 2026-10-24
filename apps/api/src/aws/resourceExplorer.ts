@@ -16,7 +16,7 @@
 
 import { ListIndexesCommand, paginateSearch } from "@aws-sdk/client-resource-explorer-2";
 
-import { cfg } from "../config.js";
+import { cfg } from "../core/config.js";
 import { resourceExplorerClient, type AwsContext } from "./clients.js";
 import { errorMessage } from "@sightline/shared";
 

@@ -2,229 +2,74 @@
 
 import type { AgentEvent, AgentMessage, ScanDiff, ScanEvent, ScanRun } from "@sightline/shared";
 
-export interface GraphNode {
-  arn: string;
-  kind: string;
-  name: string;
-  region: string | null;
-  isPublic?: boolean | null;
-  isAdmin?: boolean | null;
-  isIdle?: boolean | null;
-  isUnprotected?: boolean | null;
-  estimatedMonthlyCostUsd?: number | null;
-  reason?: string | null;
-}
+// Graph and findings shapes come from the one contract the API is tested
+// against (packages/shared/src/api.ts), as types only.
+export type {
+  FindingListName,
+  FindingsPage,
+  CheckResult,
+  GroundTruthRun,
+  AgentEvalCase,
+  AgentEvalRun,
+  Connection,
+  ConnectionTest,
+  Health,
+  OnboardingPlan,
+  VerifyResult,
+  AcrossAccounts,
+  ApiToken,
+  AuditEntry,
+  ConnectionSummary,
+  Me,
+  SessionRow,
+  Team,
+  TeamRole,
+  TenantHealth,
+  WebhookView,
+  FindingCategory,
+  FindingState,
+  Findings,
+  GraphData,
+  GraphEdge,
+  GraphGroup,
+  GraphNode,
+  Summary,
+} from "@sightline/shared/api";
+import type {
+  FindingListName,
+  FindingsPage,
+  CheckResult,
+  GroundTruthRun,
+  AgentEvalRun,
+  Connection,
+  ConnectionTest,
+  Health,
+  OnboardingPlan,
+  VerifyResult,
+  AcrossAccounts,
+  ApiToken,
+  AuditEntry,
+  ConnectionSummary,
+  Me,
+  SessionRow,
+  Team,
+  TeamRole,
+  TenantHealth,
+  WebhookView,
+  FindingState,
+  Findings,
+  GraphData,
+  GraphGroup,
+  Summary,
+} from "@sightline/shared/api";
 
-export interface GraphEdge {
-  from: string;
-  to: string;
-  type: string;
-  ports?: string | null;
-}
+const RANK: Record<TeamRole, number> = { viewer: 0, member: 1, admin: 2, owner: 3 };
+/** Whether `role` may do what needs `min`, as the server's guard decides it. */
+export const can = (role: TeamRole | null | undefined, min: TeamRole) =>
+  role != null && RANK[role] >= RANK[min];
 
-export interface Summary {
-  byKind: { kind: string; count: number }[];
-  byRegion: { region: string; count: number }[];
-  publicCount: number;
-  adminCount: number;
-  idleCount: number;
-  idleCost: number;
-  unprotectedCount: number;
-}
-
-export type FindingCategory = "exposed" | "admin" | "idle" | "unguarded";
-
-/** A finding's tracked state. Null on a finding no scan has recorded yet. */
-export interface FindingState {
-  id: string;
-  status: "open" | "accepted";
-  firstSeenAt: string;
-  statusReason?: string | null;
-  statusAt?: string | null;
-}
-
-type Tracked<T> = T & { reason?: string | null; finding: FindingState | null };
-
-export interface Findings {
-  publicResources: Tracked<GraphNode>[];
-  /** Not public, but nothing would stop them becoming public. */
-  unprotected: Tracked<GraphNode & { isPublic?: boolean }>[];
-  adminPrincipals: Tracked<GraphNode & { usedBy?: GraphNode[]; useCount?: number }>[];
-  idle: Tracked<GraphNode>[];
-  exposed: Tracked<GraphNode & { ports?: string[]; securityGroup?: string }>[];
-  /** Findings somebody accepted the risk of, still present in the current scan. */
-  accepted: (GraphNode & {
-    category: FindingCategory;
-    reason?: string | null;
-    finding: FindingState;
-  })[];
-}
-
-export interface CheckResult {
-  id: string;
-  description: string;
-  rationale: string;
-  passed: boolean;
-  detail: string;
-  /**
-   * Why drift accounts for this failure, or null when it does not.
-   *
-   * Only ever set on a failing check in a drifted account. A failing check with
-   * this null is a failure nothing explains, and must stay loud.
-   */
-  expectedAfterDrift?: string | null;
-}
-
-export interface GroundTruthRun {
-  scanId: string;
-  scannedAt: string;
-  durationMs: number;
-  total: number;
-  passed: number;
-  /** True when the account has been changed since seeding, so failures are expected. */
-  drifted: boolean;
-  driftNote?: string;
-  /** Failing checks that drift does not account for. Non-zero means investigate. */
-  unexplainedFailures: number;
-  results: CheckResult[];
-}
-
-export interface AgentEvalCase {
-  id: string;
-  question: string;
-  passed: boolean;
-  f1: number;
-  toolsCalled: string[];
-  failures: string[];
-  unsupportedCitations: number;
-  durationMs: number;
-  /** Non-null when the request never reached the model, rather than the answer being wrong. */
-  errored: string | null;
-}
-
-export interface AgentEvalRun {
-  id: string;
-  startedAt: string;
-  model: string;
-  total: number;
-  passed: number;
-  /** Cases that actually ran. `passed` and `meanF1` are out of this, not `total`. */
-  graded: number;
-  errored: number;
-  meanF1: number;
-  unsupportedCitations: number;
-  /** Present when some cases never ran, so the run is not a quality measurement. */
-  incompleteNote?: string;
-  cases: AgentEvalCase[];
-}
-
-export interface Connection {
-  /** The raw session ARN GetCallerIdentity reports. Shown, but not pasteable. */
-  callerIdentity: string | null;
-  /** True when that identity came from the mock rather than from AWS. */
-  callerIdentityIsMock: boolean;
-  /**
-   * The identity converted into a principal a trust policy can name, or null
-   * with the reason in `scannerPrincipalNote`. This is the value to paste.
-   */
-  scannerPrincipal: string | null;
-  scannerPrincipalConverted: boolean;
-  scannerPrincipalNote: string | null;
-  /** Set when AWS_TARGET_ROLE_ARN cannot be assumed at all. */
-  roleArnProblem: string | null;
-  mode: "mock" | "real";
-  /** True when the API runs in a container, so the guide shows the right restart. */
-  containerised: boolean;
-  /** What .env says, so the UI can show when the toggle has diverged. */
-  configuredMode: "mock" | "real";
-  realAccountConfigured: boolean;
-  roleArn: string;
-  accountId: string | null;
-  externalIdMasked: string;
-  externalIdIsPlaceholder: boolean;
-  homeRegion: string;
-  regions: string[] | null;
-  endpointOverride: string | null;
-  lastScan: { id: string; at: string; status: string } | null;
-}
-
-export interface ConnectionTest {
-  ok: boolean;
-  durationMs: number;
-  mode: string;
-  assumedRoleArn?: string;
-  accountId?: string;
-  callerArn?: string | null;
-  expiresAt?: string;
-  endpoint?: string;
-  code?: string;
-  problem?: string;
-  fix?: string;
-}
-
-export interface Health {
-  status: string;
-  checks: Record<string, string>;
-  awsMode: string;
-  lastScan: { id: string; at: string; status: string } | null;
-}
-
-/** What `/api/me` answers, which is everything the first frame needs. */
-export interface Me {
-  hosted: boolean;
-  signedIn: boolean;
-  user: { email: string; name: string | null; avatarUrl: string | null } | null;
-  isAdmin: boolean;
-  providers: string[];
-  linked: string[];
-  connections: ConnectionSummary[];
-}
-
-export interface ConnectionSummary {
-  id: string;
-  kind: "real" | "demo";
-  label: string;
-  accountId: string | null;
-  roleArn: string | null;
-  status: "pending" | "verified" | "failed" | "disconnected";
-  lastError: string | null;
-  scanRegions: string[];
-  templateVersion: string | null;
-  lastVerifiedAt: string | null;
-  lastScanAt: string | null;
-}
-
-/** Everything the connect screen needs, in one request. */
-export interface OnboardingPlan {
-  connection: ConnectionSummary;
-  externalId: string;
-  scannerPrincipalArn: string;
-  templateUrl: string;
-  templateVersion: string;
-  launchUrl: string;
-  cliCommand: string;
-  terraform: string;
-  roleArnPattern: string;
-}
-
-export interface VerifyResult {
-  ok: boolean;
-  accountId?: string;
-  assumedRoleArn?: string;
-  durationMs: number;
-  /** The useful part of a failure: what is wrong and what to do about it. */
-  diagnosis?: { code: string; problem: string; fix: string };
-  /** A refusal that is not a diagnosis — the account reached is not the one agreed. */
-  problem?: string;
-}
-
-export interface SessionRow {
-  id: string;
-  createdAt: string;
-  lastUsedAt: string | null;
-  userAgent: string | null;
-  current: boolean;
-}
+/** A plain link rather than a fetch: the browser saves the file itself. */
+export const auditExportUrl = (format: "csv" | "json") => `/api/audit/export?format=${format}`;
 
 /**
  * Which of the tenant's AWS accounts the UI is looking at.
@@ -238,10 +83,6 @@ let connectionId: string | null = null;
 
 export function selectConnection(id: string | null): void {
   connectionId = id;
-}
-
-export function selectedConnection(): string | null {
-  return connectionId;
 }
 
 /**
@@ -266,11 +107,14 @@ function request(path: string, init: RequestInit = {}): Promise<Response> {
 }
 
 /** The server's `{ error }` body if there is one, else the status line. */
+/** Refused for want of a recent sign-in: the fix is to sign in again, so the UI offers it. */
+export class ReauthRequired extends Error {}
+
 async function failure(res: Response): Promise<Error> {
   const text = await res.text().catch(() => "");
   try {
-    const body = JSON.parse(text) as { error?: string };
-    if (body.error) return new Error(body.error);
+    const body = JSON.parse(text) as { error?: string; reauth?: boolean };
+    if (body.error) return body.reauth ? new ReauthRequired(body.error) : new Error(body.error);
   } catch {
     /* not JSON; fall through to the raw body */
   }
@@ -315,13 +159,17 @@ export const api = {
       ...asJson(body),
       method: "PATCH",
     }),
-  graph: (params: { region?: string; kinds?: string[] } = {}) => {
+  graph: (params: { region?: string; kinds?: string[]; group?: string; limit?: number } = {}) => {
     const search = new URLSearchParams();
     if (params.region) search.set("region", params.region);
     if (params.kinds?.length) search.set("kinds", params.kinds.join(","));
-    search.set("limit", "500");
-    return get<{ nodes: GraphNode[]; edges: GraphEdge[] }>(`/api/graph?${search}`);
+    if (params.group) search.set("group", params.group);
+    search.set("limit", String(params.limit ?? 500));
+    return get<GraphData>(`/api/graph?${search}`);
   },
+  graphGroups: () => get<{ groups: GraphGroup[] }>("/api/graph/groups"),
+  graphNeighbours: (arn: string) =>
+    get<GraphData>(`/api/graph/neighbours?arn=${encodeURIComponent(arn)}`),
   diff: () => get<{ diff: ScanDiff | null; reason?: string }>("/api/scans/diff"),
 
   checks: () => get<{ checks: Omit<CheckResult, "passed" | "detail">[] }>("/api/evals/checks"),
@@ -355,10 +203,46 @@ export const api = {
    * by a request that does not know it.
    */
   deleteAccount: (confirm: string) =>
-    send<{ deleted: Record<string, number>; note: string }>("/api/me", {
+    send<{ deleted?: Record<string, number>; left?: boolean; note: string }>("/api/me", {
       ...asJson({ confirm }),
       method: "DELETE",
     }),
+
+  // --- the team -------------------------------------------------------------
+  team: () => get<Team>("/api/team"),
+  webhook: () => get<WebhookView>("/api/webhook"),
+  setWebhook: (url: string) => send<unknown>("/api/webhook", { ...asJson({ url }), method: "PUT" }),
+  removeWebhook: () => send<void>("/api/webhook", { method: "DELETE" }),
+  testWebhook: () => send<{ ok: boolean; status: string }>("/api/webhook/test", { method: "POST" }),
+  apiTokens: () => get<{ tokens: ApiToken[] }>("/api/tokens"),
+  findingsPage: (list: FindingListName, offset: number) =>
+    get<FindingsPage>(`/api/findings/page?list=${list}&offset=${offset}`),
+  findingsAcrossAccounts: () => get<AcrossAccounts>("/api/findings/accounts"),
+  operatorTenants: () => get<{ tenants: TenantHealth[] }>("/api/operator/tenants"),
+  createApiToken: (input: { name: string; role: TeamRole; expiresInDays: number }) =>
+    send<{ id: string; token: string; expiresAt: string | null }>("/api/tokens", asJson(input)),
+  revokeApiToken: (id: string) =>
+    send<void>(`/api/tokens/${encodeURIComponent(id)}`, { method: "DELETE" }),
+  audit: (before?: string) =>
+    get<{ entries: AuditEntry[]; next: string | null }>(
+      before ? `/api/audit?before=${encodeURIComponent(before)}` : "/api/audit",
+    ),
+  createInvite: (role: TeamRole) =>
+    send<{ id: string; role: TeamRole; url: string; expiresAt: string }>(
+      "/api/team/invites",
+      asJson({ role }),
+    ),
+  revokeInvite: (id: string) =>
+    send<void>(`/api/team/invites/${encodeURIComponent(id)}`, { method: "DELETE" }),
+  setMemberRole: (id: string, role: TeamRole) =>
+    send<void>(`/api/team/members/${encodeURIComponent(id)}`, {
+      ...asJson({ role }),
+      method: "PATCH",
+    }),
+  removeMember: (id: string) =>
+    send<void>(`/api/team/members/${encodeURIComponent(id)}`, { method: "DELETE" }),
+  joinTeam: (token: string) =>
+    send<{ tenantId: string; role: TeamRole }>("/api/team/join", asJson({ token })),
 
   connections: () => get<{ connections: ConnectionSummary[] }>("/api/connections"),
 
@@ -376,7 +260,7 @@ export const api = {
    */
   resource: <T>(arn: string) => get<T>(`/api/resources/${encodeURIComponent(arn)}`),
   remediation: <T>(arn: string) => get<T>(`/api/resources/${encodeURIComponent(arn)}/remediation`),
-  createConnection: (input: { label: string; kind?: "real" | "demo" }) =>
+  createConnection: (input: { label: string; kind?: "real" | "demo" | "organization" }) =>
     send<{ id: string; externalId: string; note: string }>("/api/connections", asJson(input)),
   setConnectionTarget: (id: string, accountId: string) =>
     send<{ ok: true }>(`/api/connections/${encodeURIComponent(id)}/target`, asJson({ accountId })),

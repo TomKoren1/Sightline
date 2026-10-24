@@ -16,7 +16,7 @@
  * and hosted mode could never have started.
  */
 
-import { looksLikeRealAccessKey } from "./config.js";
+import { looksLikeRealAccessKey } from "./core/config.js";
 
 export type Env = Record<string, string | undefined>;
 
@@ -114,6 +114,23 @@ export function hostedInvariantViolations(env: Env): string[] {
     problems.push(
       "No sign-in provider is configured. Set GOOGLE_CLIENT_ID/SECRET or " +
         "GITHUB_CLIENT_ID/SECRET - hosted mode has no way in without one.",
+    );
+  }
+
+  // All five or none: a partial set would fall back to the standard chain and
+  // pick up whatever identity happens to be lying around.
+  const rolesAnywhere = [
+    "ROLES_ANYWHERE_CERTIFICATE",
+    "ROLES_ANYWHERE_PRIVATE_KEY",
+    "ROLES_ANYWHERE_TRUST_ANCHOR_ARN",
+    "ROLES_ANYWHERE_PROFILE_ARN",
+    "ROLES_ANYWHERE_ROLE_ARN",
+  ];
+  const given = rolesAnywhere.filter((k) => set(env, k));
+  if (given.length > 0 && given.length < rolesAnywhere.length) {
+    problems.push(
+      `Roles Anywhere is half configured: ${rolesAnywhere.filter((k) => !set(env, k)).join(", ")} ` +
+        "missing. Set all five, or none.",
     );
   }
 

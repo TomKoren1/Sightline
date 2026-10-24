@@ -22,7 +22,7 @@ const read = (path: string) => readFileSync(root + path, "utf8");
 
 /** Tool definitions only — the dispatch switch repeats every name. */
 function definedTools(): string[] {
-  const source = read("apps/api/src/agent/tools.ts");
+  const source = read("apps/api/src/agent/toolDefinitions.ts");
   return [...source.matchAll(/^ {4}name: "([a-z_]+)"/gm)].map((m) => m[1]!);
 }
 

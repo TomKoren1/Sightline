@@ -1,0 +1,63 @@
+{
+  "accountId": "123456789012",
+  "regions": ["us-east-1", "eu-west-1", "ap-southeast-1"],
+  "resources": [
+    {
+      "arn": "arn:aws:ecs:us-east-1:123456789012:cluster/prod-ecs",
+      "kind": "EcsCluster",
+      "name": "prod-ecs",
+      "region": "us-east-1",
+      "accountId": "123456789012",
+      "tags": {},
+      "properties": {},
+      "derived": {}
+    },
+    {
+      "arn": "arn:aws:ecs:us-east-1:123456789012:service/prod-ecs/checkout",
+      "kind": "EcsService",
+      "name": "checkout",
+      "region": "us-east-1",
+      "accountId": "123456789012",
+      "tags": {},
+      "properties": {
+        "cluster": "prod-ecs",
+        "launchType": "FARGATE",
+        "desiredCount": 2,
+        "runningCount": 0,
+        "taskDefinition": "arn:aws:ecs:us-east-1:123456789012:task-definition/checkout:1",
+        "taskRoleArn": "arn:aws:iam::123456789012:role/LegacyDeployRole",
+        "executionRoleArn": null,
+        "assignPublicIp": false,
+        "targetGroups": []
+      },
+      "derived": {}
+    }
+  ],
+  "relationships": [
+    {
+      "from": "arn:aws:ecs:us-east-1:123456789012:cluster/prod-ecs",
+      "to": "arn:aws:sightline:us-east-1:123456789012:region/us-east-1",
+      "type": "IN_REGION"
+    },
+    {
+      "from": "arn:aws:ecs:us-east-1:123456789012:service/prod-ecs/checkout",
+      "to": "arn:aws:iam::123456789012:role/LegacyDeployRole",
+      "type": "EXECUTES_AS"
+    },
+    {
+      "from": "arn:aws:ecs:us-east-1:123456789012:service/prod-ecs/checkout",
+      "to": "arn:aws:ec2:us-east-1:123456789012:security-group/sg-bd01aaccd2ea691db",
+      "type": "HAS_SECURITY_GROUP"
+    },
+    {
+      "from": "arn:aws:ecs:us-east-1:123456789012:service/prod-ecs/checkout",
+      "to": "arn:aws:ecs:us-east-1:123456789012:cluster/prod-ecs",
+      "type": "IN_CLUSTER"
+    },
+    {
+      "from": "arn:aws:ecs:us-east-1:123456789012:service/prod-ecs/checkout",
+      "to": "arn:aws:ec2:us-east-1:123456789012:subnet/subnet-c828f0e20f4eb3c7c",
+      "type": "IN_SUBNET"
+    }
+  ]
+}

@@ -47,6 +47,30 @@ Re-importing an image with the same tag does **not** restart the pods. Either
 bump the tag in `base/kustomization.yaml` (`images:`) or
 `kubectl -n sightline rollout restart deploy/api deploy/worker deploy/web`.
 
+Since the image is compiled (`apps/api/build.mjs`), the API, worker and
+migrate Job run `node apps/api/dist/<entry>.js`, and the image has no npm.
+**Rebuild both images before applying manifests from this version:** an older
+image has no `dist/` and the pods fail with "Cannot find module".
+
+### Through ArgoCD
+
+`argocd/sightline-prod.yaml` and `argocd/sightline-staging.yaml` reconcile the
+two overlays the way `argocd/monitoring-application.yaml` does the chart. Apply
+each once with `kubectl apply -f`; both sync by hand until you have watched a
+sync work, then automated sync can be turned on. ArgoCD applies manifests and
+builds nothing, so import a commit's images before syncing it.
+
+### Rolling back
+
+Re-import the previous image tag and restart; do not roll the database back.
+Migrations only expand the schema - add tables, add nullable or defaulted
+columns - so the previous release runs on the new schema unchanged.
+`infra/migrationsExpand.test.ts` refuses a migration that drops, renames,
+retypes or tightens a column unless the file states, on a `-- contract:`
+line, why it is safe: the second half of expand-then-contract, shipped a
+release after nothing reads the old shape. Restoring a backup is for lost
+data, not for a bad release.
+
 ## Staging
 
 `staging/` deploys the same base into `sightline-staging` on the same node, so a
@@ -223,6 +247,83 @@ logs a warning naming each credential it holds but does not need. Create
 `sightline-db-owner` and `sightline-scanner`, then change `sightline-app`'s
 `DATABASE_URL` to the system role and move the AWS keys out of it.
 
+### No access keys at all: IAM Roles Anywhere
+
+The scanner's access key is the most valuable secret here: it can assume every
+customer's role, and it never expires. Roles Anywhere swaps it for a
+certificate the worker presents for credentials that last an hour. It is free
+with a CA of your own, which `scripts/roles-anywhere-ca.sh` makes; only AWS
+Private CA would cost money. The API gets its own certificate and a role that
+can only use the KMS key, so the two pods stay apart as they do today.
+
+```bash
+# 1. A CA and a certificate per pod. Keep roles-anywhere/ca.key off the cluster.
+scripts/roles-anywhere-ca.sh init
+scripts/roles-anywhere-ca.sh issue worker
+scripts/roles-anywhere-ca.sh issue api
+
+# 2. Trust the CA. The ARN this prints is the trust anchor.
+aws rolesanywhere create-trust-anchor --name sightline --enabled \
+  --source "sourceType=CERTIFICATE_BUNDLE,sourceData={x509CertificateData=$(cat roles-anywhere/ca.pem)}"
+```
+
+3. Two roles, each trusting `rolesanywhere.amazonaws.com` for one certificate
+   subject. `SightlineScanner`'s trust policy:
+
+   ```json
+   {
+     "Version": "2012-10-17",
+     "Statement": [
+       {
+         "Effect": "Allow",
+         "Principal": { "Service": "rolesanywhere.amazonaws.com" },
+         "Action": ["sts:AssumeRole", "sts:TagSession", "sts:SetSourceIdentity"],
+         "Condition": {
+           "StringEquals": { "aws:PrincipalTag/x509Subject/CN": "sightline-worker" },
+           "ArnEquals": { "aws:SourceArn": "<trust anchor ARN>" }
+         }
+       }
+     ]
+   }
+   ```
+
+   Its permissions: `sts:AssumeRole` and `sts:SetSourceIdentity` on
+   `arn:aws:iam::*:role/SightlineReadOnlyRole`, plus `kms:Encrypt` and
+   `kms:Decrypt` on the key. `SightlineKms` is the same with CN `sightline-api`,
+   and only the two KMS actions.
+
+```bash
+# 4. A profile naming both roles. The ARN it prints is the profile.
+aws rolesanywhere create-profile --name sightline --enabled \
+  --role-arns arn:aws:iam::<account>:role/SightlineScanner arn:aws:iam::<account>:role/SightlineKms
+
+# 5. Hand each pod its certificate, and say where it is and what to ask for.
+for who in worker api; do
+  kubectl -n sightline create secret generic sightline-roles-anywhere-$who \
+    --from-file=certificate.pem=roles-anywhere/$who.pem \
+    --from-file=private-key.pem=roles-anywhere/$who.key
+done
+kubectl -n sightline create configmap sightline-roles-anywhere \
+  --from-literal=certificate=/etc/sightline/roles-anywhere/certificate.pem \
+  --from-literal=privateKey=/etc/sightline/roles-anywhere/private-key.pem \
+  --from-literal=trustAnchorArn=<trust anchor ARN> \
+  --from-literal=profileArn=<profile ARN> \
+  --from-literal=workerRoleArn=arn:aws:iam::<account>:role/SightlineScanner \
+  --from-literal=apiRoleArn=arn:aws:iam::<account>:role/SightlineKms
+
+# 6. The scanner is now a role, so customers' trust policies name it.
+#    Set SCANNER_PRINCIPAL_ARN in sightline-app to the SightlineScanner ARN,
+#    then delete sightline-scanner and remove KMS_* from sightline-app.
+kubectl -n sightline rollout restart deploy/api deploy/worker
+```
+
+Existing customers' stacks name the old scanner user, so keep that user until
+each has updated its stack with the new principal. Certificates last a year:
+both processes log a warning from thirty days out, and
+`scripts/roles-anywhere-ca.sh issue worker` plus a new secret renews one
+without touching AWS. Hosted mode refuses to start with only some of the five
+`ROLES_ANYWHERE_*` values set.
+
 A sealed secret is encrypted to _this cluster's_ controller key. It is safe in a
 public repository and it is useless to anyone else — including you, on a rebuilt
 cluster. Back up the controller's key, or keep the plaintext somewhere you
@@ -235,7 +336,7 @@ password in a migration is a password in git. Set it after the migrate Job has
 run and before the API pods are ready:
 
 ```bash
-kubectl -n sightline exec deploy/api -- npm run db:app-role -w @sightline/api
+kubectl -n sightline exec deploy/api -- node apps/api/dist/app-role.js
 ```
 
 That reads `DATABASE_URL_APP`, sets the role's password to match, and then
@@ -312,6 +413,30 @@ kubectl -n sightline create configmap sightline-backup-key --from-file=backup-ce
 # Put backup-key.pem somewhere that is not this cluster and not this repository.
 ```
 
+### Copies off the machine
+
+The CronJob writes to a volume on the same node as the database, which
+survives losing the database but not losing the node. `scripts/backup-pull.sh`
+copies every encrypted dump to another machine you own: a laptop, a NAS, a
+second server. It is free and needs nothing new on the cluster. Run it from
+that machine's cron, or from Task Scheduler on Windows through Git Bash:
+
+```bash
+# Through ssh, as this cluster is reached; any kubectl that reaches it works.
+KUBECTL="ssh tom@server sudo k3s kubectl" BACKUP_PULL_DIR=~/sightline-backups BACKUP_KEY=~/keys/backup-key.pem   scripts/backup-pull.sh
+
+# crontab -e, daily after the 03:15 backup:
+# 45 4 * * * cd ~/sightline && KUBECTL="ssh tom@server sudo k3s kubectl" scripts/backup-pull.sh
+```
+
+It starts a throwaway pod that mounts the volume read-only. It copies only
+what is new, checks each copy against the cluster's SHA-256 before keeping it,
+and deletes local copies older than `KEEP_DAYS` (30, the age by which
+[PRIVACY.md](../../PRIVACY.md) promises a deleted account has left every backup). Where the machine holds
+the backup's private key, which belongs off the cluster anyway, it also
+decrypts the newest copy and checks it is a Postgres dump. It exits non-zero on
+any failure, so cron's mail or the scheduler's history is the alert.
+
 ### Restoring
 
 ```bash
@@ -349,6 +474,41 @@ tenants.
 Run it after any change to the backup command. It is verified to fail when
 encryption is accidentally a passthrough, and when the restore loses a policy.
 
+## Recovery objectives
+
+What a failure costs, with the backups above and nothing more:
+
+| Failure                          | Data lost (RPO)                      | Back in service (RTO)                          |
+| -------------------------------- | ------------------------------------ | ---------------------------------------------- |
+| A pod, or the API or worker      | none                                 | seconds: the Deployment replaces it            |
+| Postgres's data, the node intact | up to 24 hours: since the 03:15 dump | under an hour: restore above, then rescan      |
+| The node, or its disk            | up to 24 hours, from the pulled copy | a few hours: new node, k3s, manifests, restore |
+| The node, with no pulled copy    | everything not re-derivable (below)  | as above, and every customer reconnects        |
+
+Not all data is equal. **The inventory is re-derivable**: a scan rebuilds
+every resource, relationship and finding from AWS, so for it the effective RPO
+is zero once each account is rescanned. What a scan cannot rebuild, and the
+backups exist for, is the rest: tenants and members, connections and their
+encrypted ExternalIds (losing one means that customer redeploys their
+CloudFormation stack), accepted findings and their reasons, conversations, and
+the audit log.
+
+Three things a rebuild needs that live outside the database, and so outside
+these backups - keep each off the cluster:
+
+- **The backup private key** (`backup-key.pem`), without which every dump is
+  unreadable.
+- **The sealed-secrets controller key**, without which none of the sealed
+  secrets in `prod/` decrypt on a new cluster:
+  `kubectl -n kube-system get secret -l sealedsecrets.bitnami.com/sealed-secrets-key -o yaml > sealed-secrets-key.yaml`,
+  and `kubectl apply -f` it before installing the controller on the new one.
+- **The KMS key** in AWS, which holds every ExternalId's data key. It survives a
+  cluster loss by construction; do not schedule its deletion with a cluster.
+
+Rehearse a restore - `scripts/backup-restore-test.sh` locally, and once a
+quarter into staging - because an untested backup is a hope, and the RTO above
+assumes someone has done it before.
+
 ## Monitoring
 
 Prometheus, Grafana and Loki are a separate chart in a separate namespace —
@@ -371,12 +531,6 @@ fails if nginx ever starts routing it.
   Cloudflare's API, not Kubernetes objects, so they are not here — and the
   application's own per-tenant limits are in `apps/api/src/tenancy/limits.ts`
   rather than relying on the edge for correctness.
-- **Copying backups off the machine.** The CronJob writes to a PVC on the same
-  node as the database, which survives a lost database and not a lost disk. The
-  job reads `BACKUP_S3_DESTINATION` and says so if it is set, because the
-  `postgres` image has no `aws` CLI and adding a package to a backup job adds a
-  way for the backup job to fail; the right shape is a second container with the
-  CLI, sharing the volume.
 - **A second node.** Every StatefulSet here is one replica, and that is honest
   rather than hidden: neither datastore is replicated, so this is a single point
   of failure whose mitigation is a tested restore.

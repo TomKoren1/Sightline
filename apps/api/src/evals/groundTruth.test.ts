@@ -15,10 +15,11 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { DRIFT_EXPECTED_CHECK_FAILURES, drift, seed } from "@sightline/mock-aws";
 import type { Relationship, Resource } from "@sightline/shared";
 
-import { isMock, MOCK_EXTERNAL_ID } from "../config.js";
+import { MOCK_EXTERNAL_ID } from "../core/config.js";
+import { isMock } from "../aws/settings.js";
 import { runScan } from "../scan/runner.js";
-import { asConnectionId } from "../tenancy/ids.js";
-import type { ScanTarget } from "../tenancy/scanTarget.js";
+import { asConnectionId } from "../core/ids.js";
+import type { ScanTarget } from "../core/scanTarget.js";
 import { CHECKS, runChecks, type CheckResult } from "./checks.js";
 import { errorMessage } from "@sightline/shared";
 

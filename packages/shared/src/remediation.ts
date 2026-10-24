@@ -17,7 +17,8 @@
 export type RemediationRisk = "low" | "medium" | "high";
 
 /** Which derived verdict a remediation answers. */
-export type RemediationAddresses = "public" | "unprotected" | "admin" | "exposed" | "idle";
+export type RemediationAddresses =
+  "public" | "unprotected" | "admin" | "exposed" | "idle" | "unused";
 
 export interface Remediation {
   /** Stable across runs, so the UI and tests can name one. */

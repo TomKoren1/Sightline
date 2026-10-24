@@ -16,7 +16,7 @@ import { randomUUID } from "node:crypto";
 import { writeFile, mkdir } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 
-import { cfg } from "../config.js";
+import { cfg } from "../core/config.js";
 import { ask } from "../agent/agent.js";
 import { EVAL_CASES } from "../evals/cases.js";
 import { gradeCase, summarise, type CaseResult } from "../evals/grade.js";

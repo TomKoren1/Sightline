@@ -12,7 +12,7 @@
 
 import { createHmac, randomBytes, timingSafeEqual } from "node:crypto";
 
-import { cfg } from "../config.js";
+import { cfg } from "../core/config.js";
 
 /** How long a round trip to the provider may take. */
 const STATE_TTL_MS = 10 * 60 * 1000;

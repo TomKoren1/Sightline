@@ -21,8 +21,9 @@
 import { STSClient, AssumeRoleCommand } from "@aws-sdk/client-sts";
 import type { AwsCredentialIdentity } from "@aws-sdk/types";
 
-import { cfg, sourceCredentials, sourceIdentity } from "../config.js";
-import type { ScanTarget } from "../tenancy/scanTarget.js";
+import { cfg } from "../core/config.js";
+import { sourceCredentials, sourceIdentity } from "./settings.js";
+import type { ScanTarget } from "../core/scanTarget.js";
 
 /**
  * Renew this long before expiry. A scan unit can run for a while, and a

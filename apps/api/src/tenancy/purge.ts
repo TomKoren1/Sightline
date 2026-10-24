@@ -21,7 +21,7 @@ import {
   tenants,
   users,
 } from "../db/schema.js";
-import type { TenantId } from "./ids.js";
+import type { TenantId } from "../core/ids.js";
 
 export interface PurgeResult {
   /** Counted before the delete, because afterwards there is nothing to count. */

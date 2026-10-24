@@ -37,6 +37,8 @@ export interface AgentMessage {
   citations?: Citation[];
   /** Set when citation validation found unsupported ARNs. */
   warnings?: string[];
+  /** What the answer cost, when the provider reported it. Counted against the token budget. */
+  usage?: { inputTokens: number; outputTokens: number };
 }
 
 /** Server-sent events emitted while the agent works. */

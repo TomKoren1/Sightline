@@ -7,17 +7,8 @@
  */
 
 import { randomUUID } from "node:crypto";
-import { and, asc, desc, eq, inArray, isNotNull, ne, notExists, sql } from "drizzle-orm";
-import { alias } from "drizzle-orm/pg-core";
-import type {
-  Relationship,
-  Resource,
-  ResourceDiff,
-  ScanDiff,
-  ScanRun,
-  ScanStatus,
-  ScanUnit,
-} from "@sightline/shared";
+import { and, asc, desc, eq, inArray, isNotNull, sql } from "drizzle-orm";
+import type { Relationship, Resource, ScanRun, ScanStatus, ScanUnit } from "@sightline/shared";
 
 import { db, fingerprint, system, withTenant, type Database } from "./postgres.js";
 import {
@@ -38,8 +29,8 @@ import {
  */
 type Writer = Database | Parameters<Parameters<Database["transaction"]>[0]>[0];
 import { relationshipSnapshots, resourceSnapshots, scanRuns, scanUnits } from "./schema.js";
-import type { ScanId } from "../tenancy/ids.js";
-import type { Scope } from "../tenancy/scope.js";
+import type { ScanId } from "../core/ids.js";
+import type { Scope } from "../core/scope.js";
 
 /**
  * Reads are filtered on the tenant as well as on the scan id.
@@ -273,7 +264,17 @@ export async function recordScanUnit(scope: Scope, scanId: string, unit: ScanUni
   });
 }
 
-/** Persist a completed scan: units, resources and relationships, atomically. */
+/**
+ * Persist a completed scan: resources and relationships in short batches,
+ * then units and status together.
+ *
+ * Not one transaction. At 150,000 resources that held a transaction open for
+ * 85 seconds - WAL that cannot be recycled and a vacuum that cannot clean -
+ * on the path of every other tenant's writes. Batches commit as they go, and
+ * nothing reads them early: the graph reads projected scans and history reads
+ * finished ones, and until the last statement this scan is neither. A save
+ * that fails removes what it wrote, so a failed scan leaves no rows behind.
+ */
 export async function saveScanResult(
   scope: Scope,
   scanId: string,
@@ -286,42 +287,40 @@ export async function saveScanResult(
   },
 ): Promise<void> {
   return withTenant(scope.tenantId, async () => {
-    await db.transaction(async (tx) => {
-      for (const unit of params.units) {
-        await writeScanUnit(tx, scope, scanId, unit);
-      }
-
+    try {
       for (let i = 0; i < params.resources.length; i += BATCH_SIZE) {
         const batch = params.resources.slice(i, i + BATCH_SIZE);
-        // Documents first, so no snapshot ever refers to one not yet stored.
-        const extracted = batch.map((r) => extractDocuments(r));
-        const documents = new Map(extracted.flatMap((e) => [...e.documents]));
-        if (documents.size > 0) await tx.execute(upsertDocuments(scope.tenantId, documents));
-        await tx
-          .insert(resourceSnapshots)
-          .values(
-            batch.map((r, j) => ({
-              tenantId: scope.tenantId,
-              scanId,
-              arn: r.arn,
-              kind: r.kind,
-              name: r.name,
-              region: r.region,
-              accountId: r.accountId,
-              tags: r.tags,
-              properties: extracted[j]!.properties,
-              derived: r.derived,
-              // Of the resource as collected: a document's content, not where
-              // it is stored, is what makes two scans of a role differ.
-              fingerprint: fingerprint(r),
-            })),
-          )
-          .onConflictDoNothing({ target: [resourceSnapshots.scanId, resourceSnapshots.arn] });
+        await db.transaction(async (tx) => {
+          // Documents first, so no snapshot ever refers to one not yet stored.
+          const extracted = batch.map((r) => extractDocuments(r));
+          const documents = new Map(extracted.flatMap((e) => [...e.documents]));
+          if (documents.size > 0) await tx.execute(upsertDocuments(scope.tenantId, documents));
+          await tx
+            .insert(resourceSnapshots)
+            .values(
+              batch.map((r, j) => ({
+                tenantId: scope.tenantId,
+                scanId,
+                arn: r.arn,
+                kind: r.kind,
+                name: r.name,
+                region: r.region,
+                accountId: r.accountId,
+                tags: r.tags,
+                properties: extracted[j]!.properties,
+                derived: r.derived,
+                // Of the resource as collected: a document's content, not where
+                // it is stored, is what makes two scans of a role differ.
+                fingerprint: fingerprint(r),
+              })),
+            )
+            .onConflictDoNothing({ target: [resourceSnapshots.scanId, resourceSnapshots.arn] });
+        });
       }
 
       for (let i = 0; i < params.relationships.length; i += BATCH_SIZE) {
         const batch = params.relationships.slice(i, i + BATCH_SIZE);
-        await tx.insert(relationshipSnapshots).values(
+        await db.insert(relationshipSnapshots).values(
           batch.map((rel) => ({
             tenantId: scope.tenantId,
             scanId,
@@ -333,18 +332,44 @@ export async function saveScanResult(
         );
       }
 
-      await tx
-        .update(scanRuns)
-        .set({
-          status: params.status,
-          finishedAt: new Date(),
-          resourceCount: params.resources.length,
-          relationshipCount: params.relationships.length,
-          apiCalls: params.apiCalls,
-        })
-        .where(ownedScan(scope, scanId));
-    });
+      // The publish: until this commits the scan is still running, and unread.
+      await db.transaction(async (tx) => {
+        for (const unit of params.units) {
+          await writeScanUnit(tx, scope, scanId, unit);
+        }
+        await tx
+          .update(scanRuns)
+          .set({
+            status: params.status,
+            finishedAt: new Date(),
+            resourceCount: params.resources.length,
+            relationshipCount: params.relationships.length,
+            apiCalls: params.apiCalls,
+          })
+          .where(ownedScan(scope, scanId));
+      });
+    } catch (err) {
+      await discardSnapshots(scope, scanId).catch(() => undefined);
+      throw err;
+    }
   });
+}
+
+/** What a failed save wrote. Documents stay: they are shared, and pruned by reference. */
+async function discardSnapshots(scope: Scope, scanId: string): Promise<void> {
+  await db
+    .delete(relationshipSnapshots)
+    .where(
+      and(
+        eq(relationshipSnapshots.tenantId, scope.tenantId),
+        eq(relationshipSnapshots.scanId, scanId),
+      ),
+    );
+  await db
+    .delete(resourceSnapshots)
+    .where(
+      and(eq(resourceSnapshots.tenantId, scope.tenantId), eq(resourceSnapshots.scanId, scanId)),
+    );
 }
 
 type ScanRow = typeof scanRuns.$inferSelect;
@@ -521,137 +546,4 @@ export async function loadRelationships(scope: Scope, scanId: string): Promise<R
       );
     return rows;
   });
-}
-
-/**
- * What changed between two scans.
- *
- * Added and removed are set differences on ARN. Modified is a fingerprint
- * mismatch, and only then are the two JSONB blobs compared field by field -
- * so the expensive comparison runs on the handful of rows that actually
- * differ rather than on the whole inventory.
- */
-export async function diffScans(
-  scope: Scope,
-  fromScanId: ScanId,
-  toScanId: ScanId,
-): Promise<ScanDiff> {
-  return withTenant(scope.tenantId, async () => {
-    const [fromRun, toRun] = await Promise.all([
-      getScan(scope, fromScanId),
-      getScan(scope, toScanId),
-    ]);
-    // Both lookups are tenant-scoped, so a scan belonging to another tenant is
-    // indistinguishable from one that does not exist - which is the right answer
-    // to give, and the reason this check is not merely about typos.
-    if (!fromRun || !toRun) throw new Error("One or both scans do not exist");
-
-    // The table is joined to itself, so each side needs its own name.
-    const before = alias(resourceSnapshots, "f");
-    const after = alias(resourceSnapshots, "t");
-
-    const added = await db
-      .select({ arn: after.arn, kind: after.kind, name: after.name })
-      .from(after)
-      .where(
-        and(
-          eq(after.scanId, toScanId),
-          eq(after.tenantId, scope.tenantId),
-          notExists(
-            db
-              .select({ one: sql`1` })
-              .from(before)
-              .where(and(eq(before.scanId, fromScanId), eq(before.arn, after.arn))),
-          ),
-        ),
-      )
-      .orderBy(asc(after.kind), asc(after.name));
-
-    const removed = await db
-      .select({ arn: before.arn, kind: before.kind, name: before.name })
-      .from(before)
-      .where(
-        and(
-          eq(before.scanId, fromScanId),
-          eq(before.tenantId, scope.tenantId),
-          notExists(
-            db
-              .select({ one: sql`1` })
-              .from(after)
-              .where(and(eq(after.scanId, toScanId), eq(after.arn, before.arn))),
-          ),
-        ),
-      )
-      .orderBy(asc(before.kind), asc(before.name));
-
-    const changed = await db
-      .select({
-        arn: before.arn,
-        kind: after.kind,
-        name: after.name,
-        beforeProps: before.properties,
-        afterProps: after.properties,
-        beforeDerived: before.derived,
-        afterDerived: after.derived,
-      })
-      .from(before)
-      .innerJoin(after, and(eq(after.arn, before.arn), eq(after.scanId, toScanId)))
-      .where(
-        and(
-          eq(before.scanId, fromScanId),
-          eq(before.tenantId, scope.tenantId),
-          ne(before.fingerprint, after.fingerprint),
-        ),
-      )
-      .orderBy(asc(after.kind), asc(after.name));
-
-    const modified: ResourceDiff[] = changed.map((row) => ({
-      arn: row.arn,
-      kind: row.kind,
-      name: row.name,
-      change: "modified" as const,
-      changedFields: [
-        ...changedFields(row.beforeProps, row.afterProps, ""),
-        ...changedFields(row.beforeDerived, row.afterDerived, "derived."),
-      ],
-    }));
-
-    return {
-      fromScanId,
-      toScanId,
-      fromScanAt: fromRun.startedAt,
-      toScanAt: toRun.startedAt,
-      added: added.map((r) => ({ ...r, change: "added" as const })),
-      removed: removed.map((r) => ({ ...r, change: "removed" as const })),
-      modified,
-    };
-  });
-}
-
-/** Top-level field comparison. Nested objects are compared as wholes. */
-function changedFields(
-  // `object`, not `Record<string, unknown>`: `derived` is now typed as
-  // `DerivedFacts` rather than arriving as `any` from the driver, and a named
-  // interface has no index signature. Widening here keeps the call sites clean
-  // and keeps the typed column, which is the point of the ORM.
-  beforeValue: object,
-  afterValue: object,
-  prefix: string,
-): { field: string; before: unknown; after: unknown }[] {
-  const before = (beforeValue ?? {}) as Record<string, unknown>;
-  const after = (afterValue ?? {}) as Record<string, unknown>;
-  const fields: { field: string; before: unknown; after: unknown }[] = [];
-  const keys = new Set([...Object.keys(before), ...Object.keys(after)]);
-  for (const key of keys) {
-    const a = before[key];
-    const b = after[key];
-    if (JSON.stringify(a) !== JSON.stringify(b)) {
-      // `undefined` is dropped entirely by JSON.stringify, so a field that
-      // only appeared in the newer scan would serialise with no `before` key
-      // at all and every consumer would have to handle its absence. Normalised
-      // to null so both keys are always present over the wire.
-      fields.push({ field: `${prefix}${key}`, before: a ?? null, after: b ?? null });
-    }
-  }
-  return fields;
 }

@@ -25,9 +25,11 @@
     "verify": "node scripts/deps.mjs && npm run typecheck && npm run lint && vitest run --exclude '**/evals/groundTruth.test.ts' && npm run build -w @sightline/web",
     "drift": "node scripts/deps.mjs && npm run drift -w @sightline/mock-aws",
     "setup": "node scripts/deps.mjs && tsx apps/api/src/cli/setup.ts",
-    "e2e": "node scripts/deps.mjs && playwright test -c e2e/playwright.config.ts"
+    "e2e": "node scripts/deps.mjs && playwright test -c e2e/playwright.config.ts",
+    "gen:fixtures": "node scripts/deps.mjs && npm run seed && npm run gen:collectors -w @sightline/api -- --fixtures"
   },
   "devDependencies": {
+    "@axe-core/playwright": "^4.10.2",
     "@eslint/js": "^9.39.5",
     "@playwright/test": "1.64.0",
     "@types/node": "^22.10.2",

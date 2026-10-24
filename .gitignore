@@ -37,3 +37,8 @@ evals/results/
 
 # Browser suite output
 test-results/
+
+# Roles Anywhere CA and certificates (scripts/roles-anywhere-ca.sh). ca.key can
+# mint a scanner identity: never commit it.
+roles-anywhere/
+*.key

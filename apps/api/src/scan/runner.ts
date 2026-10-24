@@ -20,14 +20,16 @@ import {
   errorMessage,
 } from "@sightline/shared";
 
-import { cfg, faultInjections } from "../config.js";
+import { cfg } from "../core/config.js";
+import { faultInjections } from "../aws/settings.js";
 import { CallCounter, type AwsContext } from "../aws/clients.js";
 import { getSession } from "../aws/credentials.js";
-import { accountMismatch } from "../tenancy/connections.js";
-import type { ScanTarget } from "../tenancy/scanTarget.js";
+import { accountMismatch } from "../core/scanTarget.js";
+import type { ScanTarget } from "../core/scanTarget.js";
 import { resolveRegions } from "../aws/regions.js";
 import { discoverActiveRegions, narrowRegions } from "../aws/resourceExplorer.js";
 import { runWithConcurrency } from "./limiter.js";
+import { inSpan } from "../observability/tracing.js";
 import { mergeOutputs, type CollectorOutput } from "./collectors/types.js";
 import { COLLECTORS } from "./collectors/registry.js";
 import { annotate } from "./pipeline.js";
@@ -43,6 +45,8 @@ export interface ScanOptions {
    * tenant's traffic is never reported as another's.
    */
   counter?: CallCounter;
+  /** The tenant's other accounts by id, to name them where this one trusts them. */
+  knownAccounts?: ReadonlyMap<string, string>;
 }
 
 /** Pull a usable error code out of whatever the SDK threw. */
@@ -98,11 +102,13 @@ export interface CollectedEstate {
   regions: string[];
   units: ScanUnit[];
   collected: CollectorOutput;
+  /** Each succeeded unit's own output, for checking collectors against their declarations. */
+  unitOutputs: { unit: ScanUnit; output: CollectorOutput }[];
 }
 
 export async function runScan(options: ScanOptions): Promise<ScanResult & { units: ScanUnit[] }> {
   const { accountId, regions, units, collected } = await collectEstate(options);
-  return { ...annotate(accountId, regions, collected), units };
+  return { ...annotate(accountId, regions, collected, options.knownAccounts), units };
 }
 
 /**
@@ -190,6 +196,7 @@ export async function collectEstate(options: ScanOptions): Promise<CollectedEsta
 
   let completed = 0;
   const outputs: CollectorOutput[] = [];
+  const unitOutputs: CollectedEstate["unitOutputs"] = [];
 
   const tasks = units.map((unit) => async () => {
     const key = `${unit.service}:${unit.region ?? "global"}`;
@@ -209,12 +216,19 @@ export async function collectEstate(options: ScanOptions): Promise<CollectedEsta
         throw injected;
       }
 
-      const output = await COLLECTORS[unit.service].collect({
-        ...ctx,
-        region: unit.region,
-        accountId: session.accountId,
-      });
+      const output = await inSpan(
+        "scan.unit",
+        { "sightline.service": unit.service, "cloud.region": unit.region ?? "global" },
+        () =>
+          COLLECTORS[unit.service].collect({
+            ...ctx,
+            unitKey: key,
+            region: unit.region,
+            accountId: session.accountId,
+          }),
+      );
       outputs.push(output);
+      unitOutputs.push({ unit, output });
       unit.status = "succeeded";
       unit.resourceCount = output.resources.length;
     } catch (err) {
@@ -239,7 +253,13 @@ export async function collectEstate(options: ScanOptions): Promise<CollectedEsta
 
   await runWithConcurrency(tasks, cfg.SCAN_CONCURRENCY);
 
-  return { accountId: session.accountId, regions, units, collected: mergeOutputs(outputs) };
+  return {
+    accountId: session.accountId,
+    regions,
+    units,
+    collected: mergeOutputs(outputs),
+    unitOutputs,
+  };
 }
 
 export { rollUpStatus };

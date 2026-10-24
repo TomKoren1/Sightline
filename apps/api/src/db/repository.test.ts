@@ -29,15 +29,15 @@ import { system } from "./postgres.js";
 import { connections, tenants } from "./schema.js";
 import {
   createScanRun,
-  diffScans,
   failScanRun,
   getScan,
   loadRelationships,
   loadResources,
   saveScanResult,
 } from "./repository.js";
-import { asConnectionId, asScanId, asTenantId, type ScanId } from "../tenancy/ids.js";
-import type { Scope } from "../tenancy/scope.js";
+import { diffScans } from "./scanDiff.js";
+import { asConnectionId, asScanId, asTenantId, type ScanId } from "../core/ids.js";
+import type { Scope } from "../core/scope.js";
 
 const HAS_INFRA = !process.env["SKIP_INTEGRATION"];
 
@@ -209,7 +209,7 @@ describe.runIf(HAS_INFRA)("saving and reading a scan", () => {
     expect(run!.units.find((u) => u.service === "ec2")?.region).toBe("us-east-1");
   });
 
-  it("is atomic: a failure inside the transaction writes nothing", async () => {
+  it("leaves nothing behind when a save fails part-way", async () => {
     if (!available) return;
     const id = await newScan();
     await expect(
@@ -217,7 +217,7 @@ describe.runIf(HAS_INFRA)("saving and reading a scan", () => {
         status: "succeeded",
         units: [],
         // A resource with no ARN violates NOT NULL, and it is in the second
-        // batch — so anything written by the first batch must be rolled back.
+        // batch - so the first batch, already committed, must be removed.
         resources: [
           ...Array.from({ length: 600 }, (_, i) => resourceAt(100_000 + i)),
           { ...resourceAt(999_999), arn: null as unknown as string },
@@ -229,7 +229,7 @@ describe.runIf(HAS_INFRA)("saving and reading a scan", () => {
 
     expect(
       await loadResources(scope, id),
-      "the first batch survived a failure in the second, so the transaction is not covering both",
+      "the first batch survived a failure in the second",
     ).toHaveLength(0);
     const run = await getScan(scope, id);
     expect(run?.status, "the run was marked succeeded despite the failure").toBe("running");

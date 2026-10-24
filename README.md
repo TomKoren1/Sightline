@@ -113,8 +113,8 @@ is public, whether a role is effectively admin, what can reach what — all of i
 deterministic, and each verdict carries the evidence it was derived from. The model
 chooses which question to ask and explains the answer; it does not decide the answer.
 
-**The agent gets a curated tool library rather than free-form SQL.** Sixteen tools,
-fifteen of them queries written and reviewed in advance and one a guarded escape hatch
+**The agent gets a curated tool library rather than free-form SQL.** Eighteen tools,
+seventeen of them queries written and reviewed in advance and one a guarded escape hatch
 for questions nobody anticipated: a single parsed `SELECT` over two views pinned to one
 scan, run read-only, on a timeout, under the tenant's row-level security. After it answers, every identifier in its reply is
 checked against what the tools actually returned, and anything unsupported is flagged
@@ -154,7 +154,7 @@ fail for leaking. See [SECURITY.md](SECURITY.md).
 
 ### How the answers are checked
 
-Two eval tiers that fail for different reasons: **twenty-eight ground-truth checks**
+Two eval tiers that fail for different reasons: **twenty-nine ground-truth checks**
 against the hand-written answer key, needing no model and no API key, running in CI
 on every commit; and **twenty-one cases** against the live agent, scored on the
 resources each answer cites, with traps that a tool reading flags rather than
@@ -167,8 +167,10 @@ same checks run inside the product, under **Trust**.
 ## Repository layout
 
 ```
+docs/adr/             architecture decisions the code cites by number
 apps/api              backend: scanner, analysers, graph, agent, HTTP API
-  src/config.ts       every setting, with the reason for each default
+  src/core/           what everything else builds on, importing nothing in src:
+                      settings (config.ts), branded ids, scope, paths, version
   src/hostedMode.ts   configuration the public service refuses to start with
   src/aws/            credentials, instrumented clients, region discovery
   src/scan/           collectors, analysers, orchestration; collectors/README.md lists each
@@ -191,7 +193,7 @@ infra/                the read-only role template, and guards on things nothing 
 deploy/k8s/           kustomize manifests for a hosted deployment, and their README
 deploy/               nginx config, and the AWS profile mount for containers
 helm/monitoring/      Prometheus, Grafana and Loki, with this project's dashboards
-argocd/               the Application that deploys that chart
+argocd/               the Applications: the monitoring chart, and the prod and staging overlays
 scripts/              the dependency guard every npm script runs first
 e2e/                  the browser suite: the hosted product, signed in and driven
 Dockerfile            API and frontend images, used only by the `app` profile
@@ -300,7 +302,16 @@ ExternalId already in use rather than rotating a working secret.
 | `npm run setup -- --mock`         | stay on the demo account                        |
 | `npm run setup -- --disconnect`   | delete the role and go back to the demo account |
 | `npm run setup -- --profile work` | use a named AWS CLI profile                     |
-| `npm run setup -- --yes`          | no confirmations, for scripting                 |
+
+**A whole AWS Organization** connects once, in the hosted product: choose
+_An AWS Organization_ when connecting, deploy the stack in the management account
+(or a delegated administrator for Organizations), and run the StackSet the screen
+gives you to put the same role in every member account, including ones added later.
+Checking the organization lists its accounts with `organizations:ListAccounts` and
+makes each active one an account of its own under it: scanned, pinned and isolated
+like one connected by hand. Accounts that leave are marked disconnected. Paths
+_between_ accounts are not modelled yet.
+| `npm run setup -- --yes` | no confirmations, for scripting |
 
 It needs the AWS CLI, which is also what creates the role. The demo account needs
 neither it nor Node.

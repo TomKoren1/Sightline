@@ -12,7 +12,7 @@ import { config } from "dotenv";
 import { drift } from "./drift.js";
 import { waitForMoto } from "./clients.js";
 
-// See apps/api/src/config.ts.
+// See apps/api/src/core/config.ts.
 config({ path: fileURLToPath(new URL("../../../.env", import.meta.url)), quiet: true });
 
 console.log("Applying drift to the mock account...");

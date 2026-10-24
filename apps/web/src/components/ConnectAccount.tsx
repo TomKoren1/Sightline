@@ -26,6 +26,7 @@ type Alternative = "console" | "cli" | "terraform";
 
 export function ConnectAccount({ onConnected }: { onConnected: (id: string) => void }) {
   const [label, setLabel] = useState("");
+  const [kind, setKind] = useState<"real" | "organization">("real");
   const [connectionId, setConnectionId] = useState<string | null>(null);
   const [accountId, setAccountId] = useState("");
   const [alternative, setAlternative] = useState<Alternative>("console");
@@ -33,7 +34,7 @@ export function ConnectAccount({ onConnected }: { onConnected: (id: string) => v
   const [polling, setPolling] = useState(false);
 
   const create = useMutation({
-    mutationFn: () => api.createConnection({ label: label.trim() }),
+    mutationFn: () => api.createConnection({ label: label.trim(), kind }),
     onSuccess: (created) => setConnectionId(created.id),
   });
 
@@ -67,7 +68,10 @@ export function ConnectAccount({ onConnected }: { onConnected: (id: string) => v
       setResult(verified);
       if (verified.ok) {
         setPolling(false);
-        onConnected(connectionId);
+        // An organization holds no inventory of its own: show one of its
+        // accounts, the first that connected.
+        const member = verified.organization?.members.find((m) => m.ok)?.connectionId;
+        if (!verified.organization || member) onConnected(member ?? connectionId);
       }
     } catch {
       // A transport failure is not a connection failure; the next tick retries.
@@ -93,8 +97,30 @@ export function ConnectAccount({ onConnected }: { onConnected: (id: string) => v
           if (label.trim()) create.mutate();
         }}
       >
+        <fieldset className="flex flex-col gap-1.5">
+          <legend className="mb-1 text-[12px] text-ink-300">What are you connecting?</legend>
+          {(
+            [
+              ["real", "One AWS account"],
+              ["organization", "An AWS Organization: every account in it"],
+            ] as const
+          ).map(([value, text]) => (
+            <label key={value} className="flex items-center gap-2 text-[12px] text-ink-100">
+              <input
+                type="radio"
+                name="kind"
+                checked={kind === value}
+                onChange={() => setKind(value)}
+                className="accent-accent"
+              />
+              {text}
+            </label>
+          ))}
+        </fieldset>
         <label className="flex flex-col gap-1.5">
-          <span className="text-[12px] text-ink-300">What should this account be called?</span>
+          <span className="text-[12px] text-ink-300">
+            What should this {kind === "organization" ? "organization" : "account"} be called?
+          </span>
           <input
             autoFocus
             value={label}
@@ -126,6 +152,40 @@ export function ConnectAccount({ onConnected }: { onConnected: (id: string) => v
   if (!plan.data) return null;
 
   // --- step 4: done --------------------------------------------------------
+  if (result?.ok && result.organization) {
+    const org = result.organization;
+    return (
+      <div className="flex flex-col gap-3">
+        <p className="text-[13px] text-good">
+          Connected to the organization: {org.found} active accounts found.
+        </p>
+        <ul className="flex flex-col gap-1 text-[11px]">
+          {org.members.map((m) => (
+            <li key={m.connectionId} className={m.ok ? "text-ink-300" : "text-warn"}>
+              {m.ok ? "✓" : "…"} {m.label}
+              {m.problem ? ` — ${m.problem}` : ""}
+            </li>
+          ))}
+        </ul>
+        {org.unchecked > 0 && (
+          <p className="text-[11px] text-ink-400">
+            {org.unchecked} more are still to be checked; press the check again, or scan them, and
+            each is checked first.
+          </p>
+        )}
+        {org.alreadyConnected.length > 0 && (
+          <p className="text-[11px] text-ink-400">
+            Already connected on their own, so left as they are: {org.alreadyConnected.join(", ")}.
+          </p>
+        )}
+        <p className="text-[11px] text-ink-400">
+          Each account is now its own entry under the organization in the account menu. Accounts
+          that join later are found the next time the organization is checked.
+        </p>
+      </div>
+    );
+  }
+
   if (result?.ok) {
     return (
       <div className="flex flex-col gap-3">
@@ -199,6 +259,19 @@ export function ConnectAccount({ onConnected }: { onConnected: (id: string) => v
         <div className="flex flex-col gap-1.5">
           <p className="text-[11px] text-ink-400">The same stack, for an estate managed as code.</p>
           <Copyable value={plan.data.terraform} />
+        </div>
+      )}
+
+      {plan.data.stackSet && (
+        <div className="flex flex-col gap-1.5 rounded border border-ink-800 p-2.5">
+          <p className="text-[12px] text-ink-100">Every member account</p>
+          <p className="text-[11px] leading-relaxed text-ink-400">
+            Run this from the management account: a StackSet that puts the same role, with the same
+            ExternalId, in every account now and every account added later. It skips the management
+            account itself, which gets the stack above. Then enter the management account&apos;s id
+            below.
+          </p>
+          <Copyable value={plan.data.stackSet} />
         </div>
       )}
 

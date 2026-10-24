@@ -9,8 +9,12 @@ import type { Findings as FindingsData, Summary } from "../api.js";
 import { Findings } from "./Findings.js";
 
 const setFindingStatus = vi.fn();
+const findingsPage = vi.fn();
 vi.mock("../api.js", () => ({
-  api: { setFindingStatus: (...args: unknown[]): unknown => setFindingStatus(...args) },
+  api: {
+    setFindingStatus: (...args: unknown[]): unknown => setFindingStatus(...args),
+    findingsPage: (...args: unknown[]): unknown => findingsPage(...args),
+  },
 }));
 vi.mock("./ChangesPanel.js", () => ({ ChangesPanel: () => null }));
 
@@ -22,6 +26,7 @@ const summary: Summary = {
   idleCount: 0,
   idleCost: 0,
   unprotectedCount: 0,
+  unusedCount: 0,
 };
 
 const findings: FindingsData = {
@@ -39,6 +44,7 @@ const findings: FindingsData = {
   idle: [],
   exposed: [],
   unprotected: [],
+  unused: [],
   accepted: [
     {
       arn: "arn:aws:s3:::website",
@@ -46,6 +52,7 @@ const findings: FindingsData = {
       name: "website",
       region: null,
       category: "exposed",
+      reason: "Its policy allows s3:GetObject to *",
       finding: {
         id: "f-2",
         status: "accepted",
@@ -56,16 +63,11 @@ const findings: FindingsData = {
   ],
 };
 
-function show() {
+function show(data: FindingsData = findings) {
   const client = new QueryClient({ defaultOptions: { mutations: { retry: false } } });
   render(
     <QueryClientProvider client={client}>
-      <Findings
-        summary={summary}
-        findings={findings}
-        loading={false}
-        onHighlight={() => undefined}
-      />
+      <Findings summary={summary} findings={data} loading={false} onHighlight={() => undefined} />
     </QueryClientProvider>,
   );
 }
@@ -110,5 +112,32 @@ describe("Findings", () => {
     expect(screen.getByText("Accepted: Hosts the public site")).toBeTruthy();
     await user.click(screen.getByRole("button", { name: "Reopen" }));
     expect(setFindingStatus).toHaveBeenCalledWith("f-2", { status: "open" });
+  });
+
+  it("loads past the first 50, dropping any row it already shows", async () => {
+    const volume = (i: number) => ({
+      arn: `arn:aws:ec2:us-east-1:111111111111:volume/vol-${i}`,
+      kind: "EbsVolume",
+      name: `vol-${i}`,
+      region: "us-east-1",
+      reason: "Unattached",
+      estimatedMonthlyCostUsd: 1,
+      finding: null,
+    });
+    findingsPage.mockResolvedValue({
+      rows: [volume(49), volume(50), volume(51)],
+      total: 52,
+      offset: 50,
+      next: null,
+    });
+    const user = userEvent.setup();
+    show({ ...findings, idle: Array.from({ length: 50 }, (_, i) => volume(i)) });
+    await user.click(screen.getByRole("button", { name: /^Idle/ }));
+    await user.click(screen.getByRole("button", { name: "Load more" }));
+
+    expect(findingsPage).toHaveBeenCalledWith("idle", 50);
+    expect(await screen.findByText("vol-51")).toBeTruthy();
+    expect(screen.getAllByText("vol-49")).toHaveLength(1);
+    expect(screen.queryByRole("button", { name: /load more/i })).toBeNull();
   });
 });

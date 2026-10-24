@@ -128,3 +128,26 @@ it costs roughly 200 MB more and a migration.
 Alloy and the `loki` chart. Keeping them through this move is intentional:
 changing the collector and the namespace in one step is how a day disappears.
 Migrating is a clean follow-up, and the logs are already arriving.
+
+## Service level objectives
+
+| Objective    | Target                                              | Error budget (30 days) |
+| ------------ | --------------------------------------------------- | ---------------------- |
+| Availability | 99.5% of API requests are not a 5xx                 | about 3.6 hours        |
+| Latency      | 99% of non-streaming API requests finish within 1 s | 1% of requests         |
+
+The `sightline-slo` rule group pages on how fast each budget is spent, using
+the multi-window burn rates from Google's SRE workbook: critical at 14.4 times
+the sustainable rate over an hour (confirmed over 5 minutes), a warning at 6
+times over six hours (confirmed over 30 minutes). Chat and the scan progress
+stream are excluded from latency, since they stay open by design. Every rule
+also needs at least three requests a minute in its window, so a single failed
+request at night cannot page anyone. The symptom alerts in the `sightline`
+group stay: an API that is down serves no requests and burns no budget.
+
+Check the rules after editing them:
+
+```bash
+node -e 'const {parse,stringify}=require("yaml");const v=parse(require("fs").readFileSync("helm/monitoring/values.yaml","utf8"));process.stdout.write(stringify(v.prometheus.serverFiles["alerting_rules.yml"]))' > /tmp/rules.yml
+docker run --rm --entrypoint promtool -v /tmp/rules.yml:/r.yml:ro prom/prometheus:v3.5.0 check rules /r.yml
+```

@@ -33,8 +33,8 @@ import type { ScanEvent, ScanUnit } from "@sightline/shared";
  */
 import { system } from "../db/postgres.js";
 import { connections, scanJobs, scanRuns, scanUnits, tenants } from "../db/schema.js";
-import { asConnectionId, asJobId, asTenantId } from "../tenancy/ids.js";
-import type { Scope } from "../tenancy/scope.js";
+import { asConnectionId, asJobId, asTenantId } from "../core/ids.js";
+import type { Scope } from "../core/scope.js";
 import { streamScanEvents } from "./progress.js";
 import { lockQueueForTest } from "./queueTestLock.js";
 

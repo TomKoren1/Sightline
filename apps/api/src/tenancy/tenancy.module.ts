@@ -5,6 +5,7 @@ import { APP_INTERCEPTOR } from "@nestjs/core";
 
 import { ConnectionsController } from "./connections.controller.js";
 import { TenantScopeInterceptor } from "./tenantScope.interceptor.js";
+import { TracingInterceptor } from "../observability/tracing.interceptor.js";
 
 @Module({
   controllers: [ConnectionsController],
@@ -19,6 +20,10 @@ import { TenantScopeInterceptor } from "./tenantScope.interceptor.js";
    * and puts it on the request. Nest's order is guards then interceptors, so
    * that dependency holds without being declared anywhere.
    */
-  providers: [{ provide: APP_INTERCEPTOR, useClass: TenantScopeInterceptor }],
+  // Tracing first, so its span covers the tenant context and the handler.
+  providers: [
+    { provide: APP_INTERCEPTOR, useClass: TracingInterceptor },
+    { provide: APP_INTERCEPTOR, useClass: TenantScopeInterceptor },
+  ],
 })
 export class TenancyModule {}

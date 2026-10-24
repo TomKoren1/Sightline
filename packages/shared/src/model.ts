@@ -95,8 +95,13 @@ export const RELATIONSHIP_TYPES = [
   "IN_CLUSTER",
   /** Auto Scaling group -> an instance it launched. */
   "MANAGES",
-  /** Cluster -> a role its pods can assume, through IRSA or Pod Identity. */
+  /**
+   * Cluster -> a role its pods can assume, through IRSA or Pod Identity; or
+   * another account -> a role whose trust policy names it.
+   */
   "CAN_ASSUME",
+  /** Another account -> a resource whose policy grants it access. */
+  "CAN_ACCESS",
   "EXECUTES_AS",
   /**
    * Derived, not observed. Computed by the reachability analyser from security
@@ -131,6 +136,10 @@ export interface DerivedFacts {
   /** Provisioned and billable but showing no sign of use. */
   isIdle?: boolean;
   idleReason?: string;
+
+  /** A role or user whose access nobody has exercised in months. */
+  isUnused?: boolean;
+  unusedReason?: string;
 
   /**
    * Nothing prevents this resource from being made public.
@@ -192,19 +201,4 @@ export function formatPortRange(p: PortRange): string {
   if (p.fromPort === null || p.toPort === null) return p.protocol;
   if (p.fromPort === p.toPort) return `${p.protocol}/${p.fromPort}`;
   return `${p.protocol}/${p.fromPort}-${p.toPort}`;
-}
-
-/** True for services whose resources are not scoped to a region. */
-export function isGlobalKind(kind: ResourceKind): boolean {
-  return (
-    kind === "Account" ||
-    kind === "IamRole" ||
-    kind === "IamUser" ||
-    kind === "IamGroup" ||
-    kind === "IamPolicy" ||
-    kind === "CloudFrontDistribution" ||
-    kind === "HostedZone" ||
-    kind === "InstanceProfile" ||
-    kind === "Internet"
-  );
 }

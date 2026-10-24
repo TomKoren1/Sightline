@@ -1,0 +1,88 @@
+{
+  "accountId": "123456789012",
+  "regions": ["us-east-1", "eu-west-1", "ap-southeast-1"],
+  "resources": [
+    {
+      "arn": "arn:aws:eks:us-east-1:123456789012:cluster/prod-eks",
+      "kind": "EksCluster",
+      "name": "prod-eks",
+      "region": "us-east-1",
+      "accountId": "123456789012",
+      "tags": {},
+      "properties": {
+        "version": "1.19",
+        "endpoint": "https://eGpiMSySd1PvJK3bOiBg.KBn.us-east-1.eks.amazonaws.com/",
+        "endpointPublicAccess": true,
+        "endpointPrivateAccess": false,
+        "publicAccessCidrs": ["0.0.0.0/0"],
+        "roleArn": "arn:aws:iam::123456789012:role/LambdaExecRole",
+        "secretsEncrypted": false,
+        "loggingEnabled": false,
+        "oidcIssuer": "https://oidc.eks.us-east-1.amazonaws.com/id/OLJrkgVkUm"
+      },
+      "derived": {}
+    },
+    {
+      "arn": "arn:aws:eks:us-east-1:123456789012:nodegroup/prod-eks/prod-nodes/e0239869-2530-4a59-9ab0-4e0ce01331e4",
+      "kind": "EksNodeGroup",
+      "name": "prod-nodes",
+      "region": "us-east-1",
+      "accountId": "123456789012",
+      "tags": {},
+      "properties": {
+        "clusterName": "prod-eks",
+        "status": "ACTIVE",
+        "version": "1.19",
+        "capacityType": "ON_DEMAND",
+        "amiType": "AL2_x86_64",
+        "instanceTypes": ["m6i.large"],
+        "minSize": 2,
+        "maxSize": 6,
+        "desiredSize": 3,
+        "nodeRole": "arn:aws:iam::123456789012:role/EksNodeRole",
+        "sshKey": "northwind-ops",
+        "sshSourceSecurityGroups": [],
+        "sshOpenToWorld": true,
+        "autoScalingGroups": ["eks-e0239869-2530-4a59-9ab0-4e0ce01331e4"]
+      },
+      "derived": {}
+    }
+  ],
+  "relationships": [
+    {
+      "from": "arn:aws:eks:us-east-1:123456789012:cluster/prod-eks",
+      "to": "arn:aws:iam::123456789012:role/LambdaExecRole",
+      "type": "EXECUTES_AS"
+    },
+    {
+      "from": "arn:aws:eks:us-east-1:123456789012:cluster/prod-eks",
+      "to": "arn:aws:sightline:us-east-1:123456789012:region/us-east-1",
+      "type": "IN_REGION"
+    },
+    {
+      "from": "arn:aws:eks:us-east-1:123456789012:cluster/prod-eks",
+      "to": "arn:aws:ec2:us-east-1:123456789012:subnet/subnet-873b59617498b2ba9",
+      "type": "IN_SUBNET"
+    },
+    {
+      "from": "arn:aws:eks:us-east-1:123456789012:nodegroup/prod-eks/prod-nodes/e0239869-2530-4a59-9ab0-4e0ce01331e4",
+      "to": "arn:aws:iam::123456789012:role/EksNodeRole",
+      "type": "EXECUTES_AS"
+    },
+    {
+      "from": "arn:aws:eks:us-east-1:123456789012:nodegroup/prod-eks/prod-nodes/e0239869-2530-4a59-9ab0-4e0ce01331e4",
+      "to": "arn:aws:eks:us-east-1:123456789012:cluster/prod-eks",
+      "type": "IN_CLUSTER"
+    },
+    {
+      "from": "arn:aws:eks:us-east-1:123456789012:nodegroup/prod-eks/prod-nodes/e0239869-2530-4a59-9ab0-4e0ce01331e4",
+      "to": "arn:aws:sightline:us-east-1:123456789012:region/us-east-1",
+      "type": "IN_REGION"
+    },
+    {
+      "from": "arn:aws:eks:us-east-1:123456789012:nodegroup/prod-eks/prod-nodes/e0239869-2530-4a59-9ab0-4e0ce01331e4",
+      "to": "arn:aws:ec2:us-east-1:123456789012:subnet/subnet-873b59617498b2ba9",
+      "type": "IN_SUBNET"
+    }
+  ]
+}

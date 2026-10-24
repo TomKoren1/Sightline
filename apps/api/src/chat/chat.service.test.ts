@@ -12,8 +12,8 @@ import { eq } from "drizzle-orm";
 
 import { system } from "../db/postgres.js";
 import * as schema from "../db/schema.js";
-import { asConnectionId, asTenantId } from "../tenancy/ids.js";
-import type { Scope } from "../tenancy/scope.js";
+import { asConnectionId, asTenantId } from "../core/ids.js";
+import type { Scope } from "../core/scope.js";
 import { askSchema } from "./chat.dto.js";
 import { ChatService } from "./chat.service.js";
 

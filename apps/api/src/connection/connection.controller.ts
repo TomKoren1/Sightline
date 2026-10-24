@@ -8,8 +8,9 @@
 
 import { Body, Controller, ConflictException, Get, HttpCode, Inject, Post } from "@nestjs/common";
 
-import { isHosted } from "../config.js";
+import { isHosted } from "../core/config.js";
 import { ConnectionService } from "./connection.service.js";
+import { MinRole } from "../core/access.js";
 
 /**
  * Refuse the whole surface in hosted mode.
@@ -48,6 +49,7 @@ export class ConnectionController {
 
   // 200, not Nest's default 201: nothing is created, and the frontend
   // and the contract tests both expect the status this returned before.
+  @MinRole("admin")
   @Post("mode")
   @HttpCode(200)
   setMode(@Body() body: { mode?: string } | undefined) {
@@ -61,6 +63,7 @@ export class ConnectionController {
 
   // 200, not Nest's default 201: nothing is created, and the frontend
   // and the contract tests both expect the status this returned before.
+  @MinRole("admin")
   @Post("test")
   @HttpCode(200)
   test() {

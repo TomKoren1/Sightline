@@ -73,13 +73,6 @@ spec:
                   valueFrom: { secretKeyRef: { name: sightline-db, key: POSTGRES_USER } }
                 - name: PGPASSWORD
                   valueFrom: { secretKeyRef: { name: sightline-db, key: POSTGRES_PASSWORD } }
-                # Optional. With these set the encrypted dump is also copied off
-                # the cluster, which is the difference between surviving a lost
-                # database and surviving a lost machine.
-                - name: S3_DESTINATION
-                  valueFrom:
-                    configMapKeyRef:
-                      { name: sightline-config, key: BACKUP_S3_DESTINATION, optional: true }
                 - name: PUSHGATEWAY_URL
                   valueFrom:
                     configMapKeyRef:
@@ -125,11 +118,9 @@ spec:
                     exit 1
                   fi
 
-                  if [ -n "${S3_DESTINATION:-}" ]; then
-                    # aws-cli is not in this image; the copy is deliberately a
-                    # separate concern. See the README for the sidecar form.
-                    echo "S3_DESTINATION is set but this image has no aws CLI; see README" >&2
-                  fi
+                  # Off the machine: scripts/backup-pull.sh, run elsewhere, copies
+                  # these out. Pulled, so this job needs no network beyond
+                  # Postgres and no tools this image lacks.
 
                   # Retention last, and only after a good backup exists: pruning
                   # before writing would turn one failed run into no backups.

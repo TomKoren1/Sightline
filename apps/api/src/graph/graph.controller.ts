@@ -12,11 +12,14 @@ import {
 import type { FastifyRequest } from "fastify";
 import { z } from "zod";
 
-import type { AuthedRequest } from "../auth/auth.guard.js";
+import type { AuthedRequest } from "../core/request.js";
 
 import { CurrentScope } from "../tenancy/currentScope.decorator.js";
-import type { Scope } from "../tenancy/scope.js";
-import { GraphService } from "./graph.service.js";
+import type { Scope } from "../core/scope.js";
+import { FINDING_LISTS, GraphService, type FindingList } from "./graph.service.js";
+import { FINDING_CATEGORIES, findingsAcrossAccounts } from "../db/findings.js";
+import type { FindingCategory } from "../db/schema.js";
+import { MinRole } from "../core/access.js";
 
 /**
  * Accepting a risk needs a reason, because the reason is the whole value of the
@@ -43,7 +46,7 @@ export class GraphController {
   @Get("graph")
   fetchGraph(
     @CurrentScope() scope: Scope,
-    @Query() query: { region?: string; kinds?: string; limit?: string },
+    @Query() query: { region?: string; kinds?: string; limit?: string; group?: string },
   ) {
     /**
      * A limit that is not a number is refused, not guessed at.
@@ -61,6 +64,19 @@ export class GraphController {
       });
     }
     return this.graph.graph(scope, query);
+  }
+
+  /** The groups a large account is browsed by: its VPCs, then kinds outside one. */
+  @Get("graph/groups")
+  graphGroups(@CurrentScope() scope: Scope) {
+    return this.graph.groups(scope);
+  }
+
+  /** One resource and its direct neighbours, to expand the view around it. */
+  @Get("graph/neighbours")
+  neighbours(@CurrentScope() scope: Scope, @Query("arn") arn: string | undefined) {
+    if (!arn) throw new BadRequestException({ error: "arn is required" });
+    return this.graph.neighbours(scope, arn);
   }
 
   @Get("resources/:arn")
@@ -83,6 +99,35 @@ export class GraphController {
     return this.graph.findings(scope);
   }
 
+  /** The next page of one findings list: `?list=idle&offset=50`. */
+  @Get("findings/page")
+  findingsPage(@CurrentScope() scope: Scope, @Query() query: { list?: string; offset?: string }) {
+    const list = query.list;
+    if (!list || !(list in FINDING_LISTS)) {
+      throw new BadRequestException({
+        error: `list is one of ${Object.keys(FINDING_LISTS).join(", ")}.`,
+      });
+    }
+    const offset = Math.max(0, Math.floor(Number(query.offset ?? 0) || 0));
+    return this.graph.findingsPage(scope, list as FindingList, offset);
+  }
+
+  /** Open findings in every account of the workspace, worst first. */
+  @Get("findings/accounts")
+  findingsAcrossAccounts(@CurrentScope() scope: Scope, @Query() query: { category?: string }) {
+    const category = query.category;
+    if (category !== undefined && !(FINDING_CATEGORIES as string[]).includes(category)) {
+      throw new BadRequestException({
+        error: `category is one of ${FINDING_CATEGORIES.join(", ")}.`,
+      });
+    }
+    return findingsAcrossAccounts(scope.tenantId, {
+      ...(category ? { category: category as FindingCategory } : {}),
+      limit: 200,
+    });
+  }
+
+  @MinRole("member")
   @Patch("findings/:id")
   setFindingStatus(
     @CurrentScope() scope: Scope,

@@ -20,6 +20,7 @@ import { useState } from "react";
 import { useMutation } from "@tanstack/react-query";
 
 import { api, type ConnectionSummary } from "../api.js";
+import { ActionError } from "./ActionError.js";
 
 export function DisconnectAccount({
   connection,
@@ -46,6 +47,8 @@ export function DisconnectAccount({
         <span className="font-mono text-ink-100">{connection.accountId ?? connection.label}</span>{" "}
         from Sightline: every scan of it, its resource history, its graph, and every conversation
         about it. It is immediate and cannot be undone.
+        {connection.kind === "organization" &&
+          " Removing an organization removes every account it found, with all of theirs."}
       </p>
 
       <div className="rounded border border-warn/40 bg-warn/10 px-2.5 py-2 text-[11px] leading-relaxed text-warn">
@@ -83,7 +86,7 @@ export function DisconnectAccount({
           {remove.isPending ? "Disconnecting…" : "Disconnect this account"}
         </button>
 
-        {remove.isError && <p className="text-[11px] text-danger">{remove.error.message}</p>}
+        {remove.isError && <ActionError error={remove.error} />}
       </form>
     </div>
   );

@@ -1,0 +1,956 @@
+{
+  "accountId": "123456789012",
+  "regions": ["us-east-1", "eu-west-1", "ap-southeast-1"],
+  "resources": [
+    {
+      "arn": "arn:aws:ec2:ap-southeast-1:123456789012:elastic-ip/eipalloc-2483779223bbcb2e6",
+      "kind": "ElasticIp",
+      "name": "127.15.248.88",
+      "region": "ap-southeast-1",
+      "accountId": "123456789012",
+      "tags": {},
+      "properties": {
+        "allocationId": "eipalloc-2483779223bbcb2e6",
+        "publicIp": "127.15.248.88",
+        "associationId": "eipassoc-a979e67e5ff69b47f",
+        "instanceId": null,
+        "networkInterfaceId": "eni-6b199d53487dbac32"
+      },
+      "derived": {}
+    },
+    {
+      "arn": "arn:aws:ec2:ap-southeast-1:123456789012:volume/vol-eefafff0323a1c8b8",
+      "kind": "EbsVolume",
+      "name": "legacy-orphaned-vol",
+      "region": "ap-southeast-1",
+      "accountId": "123456789012",
+      "tags": {
+        "Name": "legacy-orphaned-vol",
+        "Environment": "legacy",
+        "Owner": "unknown"
+      },
+      "properties": {
+        "volumeId": "vol-eefafff0323a1c8b8",
+        "sizeGib": 500,
+        "volumeType": "gp2",
+        "state": "available",
+        "encrypted": false,
+        "createdAt": "2026-10-24T05:19:39.000Z",
+        "attachedTo": null
+      },
+      "derived": {}
+    },
+    {
+      "arn": "arn:aws:ec2:eu-west-1:123456789012:instance/i-835e51b80ba226b68",
+      "kind": "Ec2Instance",
+      "name": "staging-ssh-host",
+      "region": "eu-west-1",
+      "accountId": "123456789012",
+      "tags": {
+        "Name": "staging-ssh-host",
+        "Environment": "staging",
+        "Owner": "platform",
+        "CostCenter": "eng-core"
+      },
+      "properties": {
+        "instanceId": "i-835e51b80ba226b68",
+        "instanceType": "t3.micro",
+        "state": "running",
+        "privateIpAddress": "10.1.9.4",
+        "publicIpAddress": null,
+        "subnetId": "subnet-d46719f068378dd7f",
+        "vpcId": "vpc-361b3e6643d6d8ca4",
+        "launchTime": "2026-10-24T05:19:39.000Z",
+        "iamInstanceProfileArn": null,
+        "securityGroupIds": ["sg-87d0967f096cd9bf9"]
+      },
+      "derived": {}
+    },
+    {
+      "arn": "arn:aws:ec2:eu-west-1:123456789012:instance/i-e1d0e38777c98f56b",
+      "kind": "Ec2Instance",
+      "name": "staging-rdp-host",
+      "region": "eu-west-1",
+      "accountId": "123456789012",
+      "tags": {
+        "Name": "staging-rdp-host",
+        "Environment": "staging",
+        "Owner": "platform",
+        "CostCenter": "eng-core"
+      },
+      "properties": {
+        "instanceId": "i-e1d0e38777c98f56b",
+        "instanceType": "t3.small",
+        "state": "running",
+        "privateIpAddress": "10.1.1.4",
+        "publicIpAddress": null,
+        "subnetId": "subnet-f37069fd85f17ad9a",
+        "vpcId": "vpc-361b3e6643d6d8ca4",
+        "launchTime": "2026-10-24T05:19:38.000Z",
+        "iamInstanceProfileArn": null,
+        "securityGroupIds": ["sg-0b512626462b1c13b"]
+      },
+      "derived": {}
+    },
+    {
+      "arn": "arn:aws:ec2:eu-west-1:123456789012:volume/vol-3e446c736de4175ae",
+      "kind": "EbsVolume",
+      "name": "vol-3e446c736de4175ae",
+      "region": "eu-west-1",
+      "accountId": "123456789012",
+      "tags": {},
+      "properties": {
+        "volumeId": "vol-3e446c736de4175ae",
+        "sizeGib": 8,
+        "volumeType": "gp2",
+        "state": "in-use",
+        "encrypted": false,
+        "createdAt": "2026-10-24T05:19:38.000Z",
+        "attachedTo": "i-e1d0e38777c98f56b"
+      },
+      "derived": {}
+    },
+    {
+      "arn": "arn:aws:ec2:eu-west-1:123456789012:volume/vol-898208eff11fafabd",
+      "kind": "EbsVolume",
+      "name": "vol-898208eff11fafabd",
+      "region": "eu-west-1",
+      "accountId": "123456789012",
+      "tags": {},
+      "properties": {
+        "volumeId": "vol-898208eff11fafabd",
+        "sizeGib": 8,
+        "volumeType": "gp2",
+        "state": "in-use",
+        "encrypted": false,
+        "createdAt": "2026-10-24T05:19:39.000Z",
+        "attachedTo": "i-835e51b80ba226b68"
+      },
+      "derived": {}
+    },
+    {
+      "arn": "arn:aws:ec2:us-east-1:123456789012:elastic-ip/eipalloc-68256f67c76c03a1c",
+      "kind": "ElasticIp",
+      "name": "127.133.225.69",
+      "region": "us-east-1",
+      "accountId": "123456789012",
+      "tags": {},
+      "properties": {
+        "allocationId": "eipalloc-68256f67c76c03a1c",
+        "publicIp": "127.133.225.69",
+        "associationId": "eipassoc-adc00a3b7efe706b5",
+        "instanceId": null,
+        "networkInterfaceId": "eni-6a4546b1179418dd4"
+      },
+      "derived": {}
+    },
+    {
+      "arn": "arn:aws:ec2:us-east-1:123456789012:elastic-ip/eipalloc-7d3e6299632d03e94",
+      "kind": "ElasticIp",
+      "name": "orphaned-eip",
+      "region": "us-east-1",
+      "accountId": "123456789012",
+      "tags": {
+        "Name": "orphaned-eip",
+        "Environment": "production",
+        "Owner": "platform",
+        "CostCenter": "eng-core"
+      },
+      "properties": {
+        "allocationId": "eipalloc-7d3e6299632d03e94",
+        "publicIp": "127.143.168.255",
+        "associationId": null,
+        "instanceId": null,
+        "networkInterfaceId": null
+      },
+      "derived": {}
+    },
+    {
+      "arn": "arn:aws:ec2:us-east-1:123456789012:instance/i-23581ae0d3a260cc2",
+      "kind": "Ec2Instance",
+      "name": "prod-web-1",
+      "region": "us-east-1",
+      "accountId": "123456789012",
+      "tags": {
+        "Name": "prod-web-1",
+        "Environment": "production",
+        "Owner": "platform",
+        "CostCenter": "eng-core"
+      },
+      "properties": {
+        "instanceId": "i-23581ae0d3a260cc2",
+        "instanceType": "t3.medium",
+        "state": "running",
+        "privateIpAddress": "10.0.1.4",
+        "publicIpAddress": null,
+        "subnetId": "subnet-873b59617498b2ba9",
+        "vpcId": "vpc-d1e945fdcc93fb788",
+        "launchTime": "2026-10-24T05:19:34.000Z",
+        "iamInstanceProfileArn": null,
+        "securityGroupIds": ["sg-ecb4b846590db1528"]
+      },
+      "derived": {}
+    },
+    {
+      "arn": "arn:aws:ec2:us-east-1:123456789012:instance/i-26d4af3c646150388",
+      "kind": "Ec2Instance",
+      "name": "old-jenkins",
+      "region": "us-east-1",
+      "accountId": "123456789012",
+      "tags": {
+        "Name": "old-jenkins",
+        "Environment": "production",
+        "Owner": "platform",
+        "CostCenter": "eng-core"
+      },
+      "properties": {
+        "instanceId": "i-26d4af3c646150388",
+        "instanceType": "t3.medium",
+        "state": "stopped",
+        "privateIpAddress": "10.0.11.4",
+        "publicIpAddress": null,
+        "subnetId": "subnet-fdf750986bc527082",
+        "vpcId": "vpc-d1e945fdcc93fb788",
+        "launchTime": "2026-10-24T05:19:35.000Z",
+        "iamInstanceProfileArn": null,
+        "securityGroupIds": ["sg-5761be2c8add61a7f"]
+      },
+      "derived": {}
+    },
+    {
+      "arn": "arn:aws:ec2:us-east-1:123456789012:instance/i-44071846b511cc3c1",
+      "kind": "Ec2Instance",
+      "name": "shared-ci-runner",
+      "region": "us-east-1",
+      "accountId": "123456789012",
+      "tags": {
+        "Name": "shared-ci-runner",
+        "Environment": "production",
+        "Owner": "platform",
+        "CostCenter": "eng-core"
+      },
+      "properties": {
+        "instanceId": "i-44071846b511cc3c1",
+        "instanceType": "t3.small",
+        "state": "running",
+        "privateIpAddress": "10.3.1.4",
+        "publicIpAddress": null,
+        "subnetId": "subnet-23d5065ac4962bef9",
+        "vpcId": "vpc-fd22f2c7955cf8cd6",
+        "launchTime": "2026-10-24T05:19:36.000Z",
+        "iamInstanceProfileArn": null,
+        "securityGroupIds": ["sg-433149e26d761ccb3"]
+      },
+      "derived": {}
+    },
+    {
+      "arn": "arn:aws:ec2:us-east-1:123456789012:instance/i-45e100bfb88e3612e",
+      "kind": "Ec2Instance",
+      "name": "partner-reporting",
+      "region": "us-east-1",
+      "accountId": "123456789012",
+      "tags": {
+        "Name": "partner-reporting",
+        "Environment": "production",
+        "Owner": "platform",
+        "CostCenter": "eng-core"
+      },
+      "properties": {
+        "instanceId": "i-45e100bfb88e3612e",
+        "instanceType": "t3.small",
+        "state": "running",
+        "privateIpAddress": "10.4.1.4",
+        "publicIpAddress": null,
+        "subnetId": "subnet-554b3f0cba0f3581c",
+        "vpcId": "vpc-9df03e1a65a0861dc",
+        "launchTime": "2026-10-24T05:19:36.000Z",
+        "iamInstanceProfileArn": null,
+        "securityGroupIds": ["sg-0db7495889e920168"]
+      },
+      "derived": {}
+    },
+    {
+      "arn": "arn:aws:ec2:us-east-1:123456789012:instance/i-48a30c5eebef16031",
+      "kind": "Ec2Instance",
+      "name": "prod-web-2",
+      "region": "us-east-1",
+      "accountId": "123456789012",
+      "tags": {
+        "Name": "prod-web-2",
+        "Environment": "production",
+        "Owner": "platform",
+        "CostCenter": "eng-core"
+      },
+      "properties": {
+        "instanceId": "i-48a30c5eebef16031",
+        "instanceType": "t3.medium",
+        "state": "running",
+        "privateIpAddress": "10.0.1.5",
+        "publicIpAddress": null,
+        "subnetId": "subnet-873b59617498b2ba9",
+        "vpcId": "vpc-d1e945fdcc93fb788",
+        "launchTime": "2026-10-24T05:19:34.000Z",
+        "iamInstanceProfileArn": null,
+        "securityGroupIds": ["sg-ecb4b846590db1528"]
+      },
+      "derived": {}
+    },
+    {
+      "arn": "arn:aws:ec2:us-east-1:123456789012:instance/i-5522eae0ae0d8db90",
+      "kind": "Ec2Instance",
+      "name": "prod-bastion",
+      "region": "us-east-1",
+      "accountId": "123456789012",
+      "tags": {
+        "Name": "prod-bastion",
+        "Environment": "production",
+        "Owner": "platform",
+        "CostCenter": "eng-core"
+      },
+      "properties": {
+        "instanceId": "i-5522eae0ae0d8db90",
+        "instanceType": "t3.micro",
+        "state": "running",
+        "privateIpAddress": "10.0.1.6",
+        "publicIpAddress": null,
+        "subnetId": "subnet-873b59617498b2ba9",
+        "vpcId": "vpc-d1e945fdcc93fb788",
+        "launchTime": "2026-10-24T05:19:35.000Z",
+        "iamInstanceProfileArn": null,
+        "securityGroupIds": ["sg-ab67ce2a8525c9ef1"]
+      },
+      "derived": {}
+    },
+    {
+      "arn": "arn:aws:ec2:us-east-1:123456789012:instance/i-adf8b744c9602d3af",
+      "kind": "Ec2Instance",
+      "name": "prod-app-1",
+      "region": "us-east-1",
+      "accountId": "123456789012",
+      "tags": {
+        "Name": "prod-app-1",
+        "Environment": "production",
+        "Owner": "platform",
+        "CostCenter": "eng-core"
+      },
+      "properties": {
+        "instanceId": "i-adf8b744c9602d3af",
+        "instanceType": "t3.medium",
+        "state": "running",
+        "privateIpAddress": "10.0.10.4",
+        "publicIpAddress": null,
+        "subnetId": "subnet-c828f0e20f4eb3c7c",
+        "vpcId": "vpc-d1e945fdcc93fb788",
+        "launchTime": "2026-10-24T05:19:35.000Z",
+        "iamInstanceProfileArn": "arn:aws:iam::123456789012:instance-profile/NorthwindAppProfile",
+        "securityGroupIds": ["sg-bd01aaccd2ea691db"]
+      },
+      "derived": {}
+    },
+    {
+      "arn": "arn:aws:ec2:us-east-1:123456789012:instance/i-e26124e52810cc3ca",
+      "kind": "Ec2Instance",
+      "name": "analytics-worker",
+      "region": "us-east-1",
+      "accountId": "123456789012",
+      "tags": {
+        "Name": "analytics-worker",
+        "Environment": "production",
+        "Owner": "platform",
+        "CostCenter": "eng-core"
+      },
+      "properties": {
+        "instanceId": "i-e26124e52810cc3ca",
+        "instanceType": "t3.small",
+        "state": "running",
+        "privateIpAddress": "10.1.1.4",
+        "publicIpAddress": null,
+        "subnetId": "subnet-72de7af58e8c8503c",
+        "vpcId": "vpc-598df3b20d37c8c6a",
+        "launchTime": "2026-10-24T05:19:36.000Z",
+        "iamInstanceProfileArn": null,
+        "securityGroupIds": ["sg-47f1eb82c92aad975"]
+      },
+      "derived": {}
+    },
+    {
+      "arn": "arn:aws:ec2:us-east-1:123456789012:instance/i-fef83513815bd67ac",
+      "kind": "Ec2Instance",
+      "name": "status-page",
+      "region": "us-east-1",
+      "accountId": "123456789012",
+      "tags": {
+        "Name": "status-page",
+        "Environment": "production",
+        "Owner": "platform",
+        "CostCenter": "eng-core"
+      },
+      "properties": {
+        "instanceId": "i-fef83513815bd67ac",
+        "instanceType": "t3.small",
+        "state": "running",
+        "privateIpAddress": "10.3.2.4",
+        "publicIpAddress": null,
+        "subnetId": "subnet-634bc61149ce84944",
+        "vpcId": "vpc-fd22f2c7955cf8cd6",
+        "launchTime": "2026-10-24T05:19:37.000Z",
+        "iamInstanceProfileArn": null,
+        "securityGroupIds": ["sg-5e2f8c6b1fbd53f6a"]
+      },
+      "derived": {}
+    },
+    {
+      "arn": "arn:aws:ec2:us-east-1:123456789012:volume/vol-04b3135f8192d0ff8",
+      "kind": "EbsVolume",
+      "name": "orphaned-vol-2",
+      "region": "us-east-1",
+      "accountId": "123456789012",
+      "tags": {
+        "Name": "orphaned-vol-2",
+        "Environment": "production",
+        "Owner": "platform",
+        "CostCenter": "eng-core"
+      },
+      "properties": {
+        "volumeId": "vol-04b3135f8192d0ff8",
+        "sizeGib": 100,
+        "volumeType": "gp3",
+        "state": "available",
+        "encrypted": false,
+        "createdAt": "2026-10-24T05:19:35.000Z",
+        "attachedTo": null
+      },
+      "derived": {}
+    },
+    {
+      "arn": "arn:aws:ec2:us-east-1:123456789012:volume/vol-0ec0178e0cccd09a0",
+      "kind": "EbsVolume",
+      "name": "vol-0ec0178e0cccd09a0",
+      "region": "us-east-1",
+      "accountId": "123456789012",
+      "tags": {},
+      "properties": {
+        "volumeId": "vol-0ec0178e0cccd09a0",
+        "sizeGib": 8,
+        "volumeType": "gp2",
+        "state": "in-use",
+        "encrypted": false,
+        "createdAt": "2026-10-24T05:19:35.000Z",
+        "attachedTo": "i-5522eae0ae0d8db90"
+      },
+      "derived": {}
+    },
+    {
+      "arn": "arn:aws:ec2:us-east-1:123456789012:volume/vol-1b10a7a69c73d2131",
+      "kind": "EbsVolume",
+      "name": "vol-1b10a7a69c73d2131",
+      "region": "us-east-1",
+      "accountId": "123456789012",
+      "tags": {},
+      "properties": {
+        "volumeId": "vol-1b10a7a69c73d2131",
+        "sizeGib": 8,
+        "volumeType": "gp2",
+        "state": "in-use",
+        "encrypted": false,
+        "createdAt": "2026-10-24T05:19:35.000Z",
+        "attachedTo": "i-26d4af3c646150388"
+      },
+      "derived": {}
+    },
+    {
+      "arn": "arn:aws:ec2:us-east-1:123456789012:volume/vol-1ccbefd9ce0d172e8",
+      "kind": "EbsVolume",
+      "name": "vol-1ccbefd9ce0d172e8",
+      "region": "us-east-1",
+      "accountId": "123456789012",
+      "tags": {},
+      "properties": {
+        "volumeId": "vol-1ccbefd9ce0d172e8",
+        "sizeGib": 8,
+        "volumeType": "gp2",
+        "state": "in-use",
+        "encrypted": false,
+        "createdAt": "2026-10-24T05:19:37.000Z",
+        "attachedTo": "i-fef83513815bd67ac"
+      },
+      "derived": {}
+    },
+    {
+      "arn": "arn:aws:ec2:us-east-1:123456789012:volume/vol-4df20c4f65e700daa",
+      "kind": "EbsVolume",
+      "name": "vol-4df20c4f65e700daa",
+      "region": "us-east-1",
+      "accountId": "123456789012",
+      "tags": {},
+      "properties": {
+        "volumeId": "vol-4df20c4f65e700daa",
+        "sizeGib": 8,
+        "volumeType": "gp2",
+        "state": "in-use",
+        "encrypted": false,
+        "createdAt": "2026-10-24T05:19:35.000Z",
+        "attachedTo": "i-adf8b744c9602d3af"
+      },
+      "derived": {}
+    },
+    {
+      "arn": "arn:aws:ec2:us-east-1:123456789012:volume/vol-87a4a73332ed24bf7",
+      "kind": "EbsVolume",
+      "name": "vol-87a4a73332ed24bf7",
+      "region": "us-east-1",
+      "accountId": "123456789012",
+      "tags": {},
+      "properties": {
+        "volumeId": "vol-87a4a73332ed24bf7",
+        "sizeGib": 8,
+        "volumeType": "gp2",
+        "state": "in-use",
+        "encrypted": false,
+        "createdAt": "2026-10-24T05:19:34.000Z",
+        "attachedTo": "i-48a30c5eebef16031"
+      },
+      "derived": {}
+    },
+    {
+      "arn": "arn:aws:ec2:us-east-1:123456789012:volume/vol-8e132c3c7c2803d0a",
+      "kind": "EbsVolume",
+      "name": "vol-8e132c3c7c2803d0a",
+      "region": "us-east-1",
+      "accountId": "123456789012",
+      "tags": {},
+      "properties": {
+        "volumeId": "vol-8e132c3c7c2803d0a",
+        "sizeGib": 8,
+        "volumeType": "gp2",
+        "state": "in-use",
+        "encrypted": false,
+        "createdAt": "2026-10-24T05:19:36.000Z",
+        "attachedTo": "i-44071846b511cc3c1"
+      },
+      "derived": {}
+    },
+    {
+      "arn": "arn:aws:ec2:us-east-1:123456789012:volume/vol-a1a2401fb2e111ef0",
+      "kind": "EbsVolume",
+      "name": "orphaned-vol-1",
+      "region": "us-east-1",
+      "accountId": "123456789012",
+      "tags": {
+        "Name": "orphaned-vol-1",
+        "Environment": "production",
+        "Owner": "platform",
+        "CostCenter": "eng-core"
+      },
+      "properties": {
+        "volumeId": "vol-a1a2401fb2e111ef0",
+        "sizeGib": 100,
+        "volumeType": "gp3",
+        "state": "available",
+        "encrypted": false,
+        "createdAt": "2026-10-24T05:19:35.000Z",
+        "attachedTo": null
+      },
+      "derived": {}
+    },
+    {
+      "arn": "arn:aws:ec2:us-east-1:123456789012:volume/vol-b6e325d57e71cc510",
+      "kind": "EbsVolume",
+      "name": "vol-b6e325d57e71cc510",
+      "region": "us-east-1",
+      "accountId": "123456789012",
+      "tags": {},
+      "properties": {
+        "volumeId": "vol-b6e325d57e71cc510",
+        "sizeGib": 8,
+        "volumeType": "gp2",
+        "state": "in-use",
+        "encrypted": false,
+        "createdAt": "2026-10-24T05:19:34.000Z",
+        "attachedTo": "i-23581ae0d3a260cc2"
+      },
+      "derived": {}
+    },
+    {
+      "arn": "arn:aws:ec2:us-east-1:123456789012:volume/vol-bfea4291b3f04f503",
+      "kind": "EbsVolume",
+      "name": "vol-bfea4291b3f04f503",
+      "region": "us-east-1",
+      "accountId": "123456789012",
+      "tags": {},
+      "properties": {
+        "volumeId": "vol-bfea4291b3f04f503",
+        "sizeGib": 8,
+        "volumeType": "gp2",
+        "state": "in-use",
+        "encrypted": false,
+        "createdAt": "2026-10-24T05:19:36.000Z",
+        "attachedTo": "i-e26124e52810cc3ca"
+      },
+      "derived": {}
+    },
+    {
+      "arn": "arn:aws:ec2:us-east-1:123456789012:volume/vol-d37051a0036324c1d",
+      "kind": "EbsVolume",
+      "name": "vol-d37051a0036324c1d",
+      "region": "us-east-1",
+      "accountId": "123456789012",
+      "tags": {},
+      "properties": {
+        "volumeId": "vol-d37051a0036324c1d",
+        "sizeGib": 8,
+        "volumeType": "gp2",
+        "state": "in-use",
+        "encrypted": false,
+        "createdAt": "2026-10-24T05:19:36.000Z",
+        "attachedTo": "i-45e100bfb88e3612e"
+      },
+      "derived": {}
+    }
+  ],
+  "relationships": [
+    {
+      "from": "arn:aws:ec2:ap-southeast-1:123456789012:elastic-ip/eipalloc-2483779223bbcb2e6",
+      "to": "arn:aws:sightline:ap-southeast-1:123456789012:region/ap-southeast-1",
+      "type": "IN_REGION"
+    },
+    {
+      "from": "arn:aws:ec2:ap-southeast-1:123456789012:volume/vol-eefafff0323a1c8b8",
+      "to": "arn:aws:sightline:ap-southeast-1:123456789012:region/ap-southeast-1",
+      "type": "IN_REGION"
+    },
+    {
+      "from": "arn:aws:ec2:eu-west-1:123456789012:instance/i-835e51b80ba226b68",
+      "to": "arn:aws:ec2:eu-west-1:123456789012:security-group/sg-87d0967f096cd9bf9",
+      "type": "HAS_SECURITY_GROUP"
+    },
+    {
+      "from": "arn:aws:ec2:eu-west-1:123456789012:instance/i-835e51b80ba226b68",
+      "to": "arn:aws:sightline:eu-west-1:123456789012:region/eu-west-1",
+      "type": "IN_REGION"
+    },
+    {
+      "from": "arn:aws:ec2:eu-west-1:123456789012:instance/i-835e51b80ba226b68",
+      "to": "arn:aws:ec2:eu-west-1:123456789012:subnet/subnet-d46719f068378dd7f",
+      "type": "IN_SUBNET"
+    },
+    {
+      "from": "arn:aws:ec2:eu-west-1:123456789012:instance/i-e1d0e38777c98f56b",
+      "to": "arn:aws:ec2:eu-west-1:123456789012:security-group/sg-0b512626462b1c13b",
+      "type": "HAS_SECURITY_GROUP"
+    },
+    {
+      "from": "arn:aws:ec2:eu-west-1:123456789012:instance/i-e1d0e38777c98f56b",
+      "to": "arn:aws:sightline:eu-west-1:123456789012:region/eu-west-1",
+      "type": "IN_REGION"
+    },
+    {
+      "from": "arn:aws:ec2:eu-west-1:123456789012:instance/i-e1d0e38777c98f56b",
+      "to": "arn:aws:ec2:eu-west-1:123456789012:subnet/subnet-f37069fd85f17ad9a",
+      "type": "IN_SUBNET"
+    },
+    {
+      "from": "arn:aws:ec2:eu-west-1:123456789012:volume/vol-3e446c736de4175ae",
+      "to": "arn:aws:ec2:eu-west-1:123456789012:instance/i-e1d0e38777c98f56b",
+      "type": "ATTACHED_TO",
+      "properties": {
+        "device": "/dev/sda1"
+      }
+    },
+    {
+      "from": "arn:aws:ec2:eu-west-1:123456789012:volume/vol-3e446c736de4175ae",
+      "to": "arn:aws:sightline:eu-west-1:123456789012:region/eu-west-1",
+      "type": "IN_REGION"
+    },
+    {
+      "from": "arn:aws:ec2:eu-west-1:123456789012:volume/vol-898208eff11fafabd",
+      "to": "arn:aws:ec2:eu-west-1:123456789012:instance/i-835e51b80ba226b68",
+      "type": "ATTACHED_TO",
+      "properties": {
+        "device": "/dev/sda1"
+      }
+    },
+    {
+      "from": "arn:aws:ec2:eu-west-1:123456789012:volume/vol-898208eff11fafabd",
+      "to": "arn:aws:sightline:eu-west-1:123456789012:region/eu-west-1",
+      "type": "IN_REGION"
+    },
+    {
+      "from": "arn:aws:ec2:us-east-1:123456789012:elastic-ip/eipalloc-68256f67c76c03a1c",
+      "to": "arn:aws:sightline:us-east-1:123456789012:region/us-east-1",
+      "type": "IN_REGION"
+    },
+    {
+      "from": "arn:aws:ec2:us-east-1:123456789012:elastic-ip/eipalloc-7d3e6299632d03e94",
+      "to": "arn:aws:sightline:us-east-1:123456789012:region/us-east-1",
+      "type": "IN_REGION"
+    },
+    {
+      "from": "arn:aws:ec2:us-east-1:123456789012:instance/i-23581ae0d3a260cc2",
+      "to": "arn:aws:ec2:us-east-1:123456789012:security-group/sg-ecb4b846590db1528",
+      "type": "HAS_SECURITY_GROUP"
+    },
+    {
+      "from": "arn:aws:ec2:us-east-1:123456789012:instance/i-23581ae0d3a260cc2",
+      "to": "arn:aws:sightline:us-east-1:123456789012:region/us-east-1",
+      "type": "IN_REGION"
+    },
+    {
+      "from": "arn:aws:ec2:us-east-1:123456789012:instance/i-23581ae0d3a260cc2",
+      "to": "arn:aws:ec2:us-east-1:123456789012:subnet/subnet-873b59617498b2ba9",
+      "type": "IN_SUBNET"
+    },
+    {
+      "from": "arn:aws:ec2:us-east-1:123456789012:instance/i-26d4af3c646150388",
+      "to": "arn:aws:ec2:us-east-1:123456789012:security-group/sg-5761be2c8add61a7f",
+      "type": "HAS_SECURITY_GROUP"
+    },
+    {
+      "from": "arn:aws:ec2:us-east-1:123456789012:instance/i-26d4af3c646150388",
+      "to": "arn:aws:sightline:us-east-1:123456789012:region/us-east-1",
+      "type": "IN_REGION"
+    },
+    {
+      "from": "arn:aws:ec2:us-east-1:123456789012:instance/i-26d4af3c646150388",
+      "to": "arn:aws:ec2:us-east-1:123456789012:subnet/subnet-fdf750986bc527082",
+      "type": "IN_SUBNET"
+    },
+    {
+      "from": "arn:aws:ec2:us-east-1:123456789012:instance/i-44071846b511cc3c1",
+      "to": "arn:aws:ec2:us-east-1:123456789012:security-group/sg-433149e26d761ccb3",
+      "type": "HAS_SECURITY_GROUP"
+    },
+    {
+      "from": "arn:aws:ec2:us-east-1:123456789012:instance/i-44071846b511cc3c1",
+      "to": "arn:aws:sightline:us-east-1:123456789012:region/us-east-1",
+      "type": "IN_REGION"
+    },
+    {
+      "from": "arn:aws:ec2:us-east-1:123456789012:instance/i-44071846b511cc3c1",
+      "to": "arn:aws:ec2:us-east-1:123456789012:subnet/subnet-23d5065ac4962bef9",
+      "type": "IN_SUBNET"
+    },
+    {
+      "from": "arn:aws:ec2:us-east-1:123456789012:instance/i-45e100bfb88e3612e",
+      "to": "arn:aws:ec2:us-east-1:123456789012:security-group/sg-0db7495889e920168",
+      "type": "HAS_SECURITY_GROUP"
+    },
+    {
+      "from": "arn:aws:ec2:us-east-1:123456789012:instance/i-45e100bfb88e3612e",
+      "to": "arn:aws:sightline:us-east-1:123456789012:region/us-east-1",
+      "type": "IN_REGION"
+    },
+    {
+      "from": "arn:aws:ec2:us-east-1:123456789012:instance/i-45e100bfb88e3612e",
+      "to": "arn:aws:ec2:us-east-1:123456789012:subnet/subnet-554b3f0cba0f3581c",
+      "type": "IN_SUBNET"
+    },
+    {
+      "from": "arn:aws:ec2:us-east-1:123456789012:instance/i-48a30c5eebef16031",
+      "to": "arn:aws:ec2:us-east-1:123456789012:security-group/sg-ecb4b846590db1528",
+      "type": "HAS_SECURITY_GROUP"
+    },
+    {
+      "from": "arn:aws:ec2:us-east-1:123456789012:instance/i-48a30c5eebef16031",
+      "to": "arn:aws:sightline:us-east-1:123456789012:region/us-east-1",
+      "type": "IN_REGION"
+    },
+    {
+      "from": "arn:aws:ec2:us-east-1:123456789012:instance/i-48a30c5eebef16031",
+      "to": "arn:aws:ec2:us-east-1:123456789012:subnet/subnet-873b59617498b2ba9",
+      "type": "IN_SUBNET"
+    },
+    {
+      "from": "arn:aws:ec2:us-east-1:123456789012:instance/i-5522eae0ae0d8db90",
+      "to": "arn:aws:ec2:us-east-1:123456789012:security-group/sg-ab67ce2a8525c9ef1",
+      "type": "HAS_SECURITY_GROUP"
+    },
+    {
+      "from": "arn:aws:ec2:us-east-1:123456789012:instance/i-5522eae0ae0d8db90",
+      "to": "arn:aws:sightline:us-east-1:123456789012:region/us-east-1",
+      "type": "IN_REGION"
+    },
+    {
+      "from": "arn:aws:ec2:us-east-1:123456789012:instance/i-5522eae0ae0d8db90",
+      "to": "arn:aws:ec2:us-east-1:123456789012:subnet/subnet-873b59617498b2ba9",
+      "type": "IN_SUBNET"
+    },
+    {
+      "from": "arn:aws:ec2:us-east-1:123456789012:instance/i-adf8b744c9602d3af",
+      "to": "arn:aws:iam::123456789012:instance-profile/NorthwindAppProfile",
+      "type": "HAS_INSTANCE_PROFILE"
+    },
+    {
+      "from": "arn:aws:ec2:us-east-1:123456789012:instance/i-adf8b744c9602d3af",
+      "to": "arn:aws:ec2:us-east-1:123456789012:security-group/sg-bd01aaccd2ea691db",
+      "type": "HAS_SECURITY_GROUP"
+    },
+    {
+      "from": "arn:aws:ec2:us-east-1:123456789012:instance/i-adf8b744c9602d3af",
+      "to": "arn:aws:sightline:us-east-1:123456789012:region/us-east-1",
+      "type": "IN_REGION"
+    },
+    {
+      "from": "arn:aws:ec2:us-east-1:123456789012:instance/i-adf8b744c9602d3af",
+      "to": "arn:aws:ec2:us-east-1:123456789012:subnet/subnet-c828f0e20f4eb3c7c",
+      "type": "IN_SUBNET"
+    },
+    {
+      "from": "arn:aws:ec2:us-east-1:123456789012:instance/i-e26124e52810cc3ca",
+      "to": "arn:aws:ec2:us-east-1:123456789012:security-group/sg-47f1eb82c92aad975",
+      "type": "HAS_SECURITY_GROUP"
+    },
+    {
+      "from": "arn:aws:ec2:us-east-1:123456789012:instance/i-e26124e52810cc3ca",
+      "to": "arn:aws:sightline:us-east-1:123456789012:region/us-east-1",
+      "type": "IN_REGION"
+    },
+    {
+      "from": "arn:aws:ec2:us-east-1:123456789012:instance/i-e26124e52810cc3ca",
+      "to": "arn:aws:ec2:us-east-1:123456789012:subnet/subnet-72de7af58e8c8503c",
+      "type": "IN_SUBNET"
+    },
+    {
+      "from": "arn:aws:ec2:us-east-1:123456789012:instance/i-fef83513815bd67ac",
+      "to": "arn:aws:ec2:us-east-1:123456789012:security-group/sg-5e2f8c6b1fbd53f6a",
+      "type": "HAS_SECURITY_GROUP"
+    },
+    {
+      "from": "arn:aws:ec2:us-east-1:123456789012:instance/i-fef83513815bd67ac",
+      "to": "arn:aws:sightline:us-east-1:123456789012:region/us-east-1",
+      "type": "IN_REGION"
+    },
+    {
+      "from": "arn:aws:ec2:us-east-1:123456789012:instance/i-fef83513815bd67ac",
+      "to": "arn:aws:ec2:us-east-1:123456789012:subnet/subnet-634bc61149ce84944",
+      "type": "IN_SUBNET"
+    },
+    {
+      "from": "arn:aws:ec2:us-east-1:123456789012:volume/vol-04b3135f8192d0ff8",
+      "to": "arn:aws:sightline:us-east-1:123456789012:region/us-east-1",
+      "type": "IN_REGION"
+    },
+    {
+      "from": "arn:aws:ec2:us-east-1:123456789012:volume/vol-0ec0178e0cccd09a0",
+      "to": "arn:aws:ec2:us-east-1:123456789012:instance/i-5522eae0ae0d8db90",
+      "type": "ATTACHED_TO",
+      "properties": {
+        "device": "/dev/sda1"
+      }
+    },
+    {
+      "from": "arn:aws:ec2:us-east-1:123456789012:volume/vol-0ec0178e0cccd09a0",
+      "to": "arn:aws:sightline:us-east-1:123456789012:region/us-east-1",
+      "type": "IN_REGION"
+    },
+    {
+      "from": "arn:aws:ec2:us-east-1:123456789012:volume/vol-1b10a7a69c73d2131",
+      "to": "arn:aws:ec2:us-east-1:123456789012:instance/i-26d4af3c646150388",
+      "type": "ATTACHED_TO",
+      "properties": {
+        "device": "/dev/sda1"
+      }
+    },
+    {
+      "from": "arn:aws:ec2:us-east-1:123456789012:volume/vol-1b10a7a69c73d2131",
+      "to": "arn:aws:sightline:us-east-1:123456789012:region/us-east-1",
+      "type": "IN_REGION"
+    },
+    {
+      "from": "arn:aws:ec2:us-east-1:123456789012:volume/vol-1ccbefd9ce0d172e8",
+      "to": "arn:aws:ec2:us-east-1:123456789012:instance/i-fef83513815bd67ac",
+      "type": "ATTACHED_TO",
+      "properties": {
+        "device": "/dev/sda1"
+      }
+    },
+    {
+      "from": "arn:aws:ec2:us-east-1:123456789012:volume/vol-1ccbefd9ce0d172e8",
+      "to": "arn:aws:sightline:us-east-1:123456789012:region/us-east-1",
+      "type": "IN_REGION"
+    },
+    {
+      "from": "arn:aws:ec2:us-east-1:123456789012:volume/vol-4df20c4f65e700daa",
+      "to": "arn:aws:ec2:us-east-1:123456789012:instance/i-adf8b744c9602d3af",
+      "type": "ATTACHED_TO",
+      "properties": {
+        "device": "/dev/sda1"
+      }
+    },
+    {
+      "from": "arn:aws:ec2:us-east-1:123456789012:volume/vol-4df20c4f65e700daa",
+      "to": "arn:aws:sightline:us-east-1:123456789012:region/us-east-1",
+      "type": "IN_REGION"
+    },
+    {
+      "from": "arn:aws:ec2:us-east-1:123456789012:volume/vol-87a4a73332ed24bf7",
+      "to": "arn:aws:ec2:us-east-1:123456789012:instance/i-48a30c5eebef16031",
+      "type": "ATTACHED_TO",
+      "properties": {
+        "device": "/dev/sda1"
+      }
+    },
+    {
+      "from": "arn:aws:ec2:us-east-1:123456789012:volume/vol-87a4a73332ed24bf7",
+      "to": "arn:aws:sightline:us-east-1:123456789012:region/us-east-1",
+      "type": "IN_REGION"
+    },
+    {
+      "from": "arn:aws:ec2:us-east-1:123456789012:volume/vol-8e132c3c7c2803d0a",
+      "to": "arn:aws:ec2:us-east-1:123456789012:instance/i-44071846b511cc3c1",
+      "type": "ATTACHED_TO",
+      "properties": {
+        "device": "/dev/sda1"
+      }
+    },
+    {
+      "from": "arn:aws:ec2:us-east-1:123456789012:volume/vol-8e132c3c7c2803d0a",
+      "to": "arn:aws:sightline:us-east-1:123456789012:region/us-east-1",
+      "type": "IN_REGION"
+    },
+    {
+      "from": "arn:aws:ec2:us-east-1:123456789012:volume/vol-a1a2401fb2e111ef0",
+      "to": "arn:aws:sightline:us-east-1:123456789012:region/us-east-1",
+      "type": "IN_REGION"
+    },
+    {
+      "from": "arn:aws:ec2:us-east-1:123456789012:volume/vol-b6e325d57e71cc510",
+      "to": "arn:aws:ec2:us-east-1:123456789012:instance/i-23581ae0d3a260cc2",
+      "type": "ATTACHED_TO",
+      "properties": {
+        "device": "/dev/sda1"
+      }
+    },
+    {
+      "from": "arn:aws:ec2:us-east-1:123456789012:volume/vol-b6e325d57e71cc510",
+      "to": "arn:aws:sightline:us-east-1:123456789012:region/us-east-1",
+      "type": "IN_REGION"
+    },
+    {
+      "from": "arn:aws:ec2:us-east-1:123456789012:volume/vol-bfea4291b3f04f503",
+      "to": "arn:aws:ec2:us-east-1:123456789012:instance/i-e26124e52810cc3ca",
+      "type": "ATTACHED_TO",
+      "properties": {
+        "device": "/dev/sda1"
+      }
+    },
+    {
+      "from": "arn:aws:ec2:us-east-1:123456789012:volume/vol-bfea4291b3f04f503",
+      "to": "arn:aws:sightline:us-east-1:123456789012:region/us-east-1",
+      "type": "IN_REGION"
+    },
+    {
+      "from": "arn:aws:ec2:us-east-1:123456789012:volume/vol-d37051a0036324c1d",
+      "to": "arn:aws:ec2:us-east-1:123456789012:instance/i-45e100bfb88e3612e",
+      "type": "ATTACHED_TO",
+      "properties": {
+        "device": "/dev/sda1"
+      }
+    },
+    {
+      "from": "arn:aws:ec2:us-east-1:123456789012:volume/vol-d37051a0036324c1d",
+      "to": "arn:aws:sightline:us-east-1:123456789012:region/us-east-1",
+      "type": "IN_REGION"
+    }
+  ]
+}

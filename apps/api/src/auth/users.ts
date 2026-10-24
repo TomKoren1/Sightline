@@ -28,7 +28,7 @@ import { and, eq } from "drizzle-orm";
  */
 import { system } from "../db/postgres.js";
 import { identities, tenants, users } from "../db/schema.js";
-import { asTenantId, type TenantId } from "../tenancy/ids.js";
+import { asTenantId, type TenantId } from "../core/ids.js";
 import type { ExternalIdentity } from "./oauth.js";
 
 export interface SignedInUser {

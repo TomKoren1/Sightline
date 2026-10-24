@@ -17,9 +17,6 @@ export const s3Arn = (bucket: string) => `arn:${PARTITION}:s3:::${bucket}`;
 export const iamArn = (account: string, type: string, name: string) =>
   `arn:${PARTITION}:iam::${account}:${type}/${name}`;
 
-export const rdsArn = (region: string, account: string, type: string, id: string) =>
-  `arn:${PARTITION}:rds:${region}:${account}:${type}:${id}`;
-
 export const lambdaArn = (region: string, account: string, name: string) =>
   `arn:${PARTITION}:lambda:${region}:${account}:function:${name}`;
 

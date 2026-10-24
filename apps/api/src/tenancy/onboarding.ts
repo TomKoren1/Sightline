@@ -21,23 +21,27 @@ import {
   formatDeployCommand,
   quickCreateUrl,
   readOnlyRoleArn,
+  stackSetCommands,
   terraformSnippet,
 } from "@sightline/shared";
 
-import { cfg } from "../config.js";
+import { cfg } from "../core/config.js";
+import { sourceCredentials } from "../aws/settings.js";
 import { assumablePrincipalArn } from "../aws/principal.js";
 import { getSession, resetSession } from "../aws/credentials.js";
-import { diagnose, type Diagnosis } from "../connection/diagnose.js";
+import { diagnose, type Diagnosis } from "../aws/diagnose.js";
 import {
-  accountMismatch,
   externalIdFor,
   getConnection,
   markFailed,
   markVerified,
   type ConnectionSummary,
 } from "./connections.js";
+import { accountMismatch } from "../core/scanTarget.js";
+import { listMemberAccounts, syncMembers } from "./organization.js";
 import { resolveScanTarget } from "./scanTarget.js";
-import type { Scope } from "./scope.js";
+import { type ScanTarget } from "../core/scanTarget.js";
+import type { Scope } from "../core/scope.js";
 import { assumeRoleFailures, verifyDuration } from "../observability/metrics.js";
 
 export interface OnboardingPlan {
@@ -67,6 +71,8 @@ export interface OnboardingPlan {
   terraform: string;
   /** What the role ARN will be, once they tell us the account id. */
   roleArnPattern: string;
+  /** For an organization: the StackSet that puts the role in every member. */
+  stackSet?: string;
 }
 
 /**
@@ -155,6 +161,17 @@ export async function onboardingPlan(scope: Scope): Promise<OnboardingPlan> {
     // Shown so the customer can see what we will derive, rather than being
     // asked to paste it.
     roleArnPattern: readOnlyRoleArn("<your account id>", scope.tenantId),
+    ...(connection.kind === "organization"
+      ? {
+          stackSet: stackSetCommands({
+            templateUrl,
+            scannerPrincipalArn: principal,
+            externalId,
+            region,
+            tenantId: scope.tenantId,
+          }),
+        }
+      : {}),
   };
 }
 
@@ -168,7 +185,20 @@ export interface VerifyResult {
   diagnosis?: Diagnosis;
   /** A refusal that is not a diagnosis - a mismatch against the pinned account. */
   problem?: string;
+  /** For an organization: what was found, and how each account's check went. */
+  organization?: {
+    found: number;
+    added: number;
+    departed: number;
+    alreadyConnected: string[];
+    members: { connectionId: string; label: string; ok: boolean; problem?: string }[];
+    /** Accounts left pending because the check ran out of time; checked next time. */
+    unchecked: number;
+  };
 }
+
+/** How long an organization's check spends verifying members before answering. */
+const MEMBER_BUDGET_MS = 15_000;
 
 /**
  * Minimum gap between attempts on one connection.
@@ -225,8 +255,16 @@ export async function performVerification(scope: Scope): Promise<VerifyResult> {
   let callerIdentity: string | null = null;
   try {
     callerIdentity =
-      (await new STSClient({ region: cfg.AWS_REGION }).send(new GetCallerIdentityCommand({})))
-        .Arn ?? null;
+      (
+        await new STSClient({
+          region: cfg.AWS_REGION,
+          // The same identity the assume will use, Roles Anywhere included.
+          ...(() => {
+            const credentials = sourceCredentials(connection.kind === "demo");
+            return credentials ? { credentials } : {};
+          })(),
+        }).send(new GetCallerIdentityCommand({}))
+      ).Arn ?? null;
   } catch {
     // Falls through; the diagnosis handles a missing identity.
   }
@@ -246,12 +284,27 @@ export async function performVerification(scope: Scope): Promise<VerifyResult> {
 
     await markVerified(scope, session.accountId);
     verifyDuration.observe({ outcome: "verified" }, (Date.now() - started) / 1000);
-    return {
+    const verified = {
       ok: true,
       accountId: session.accountId,
       assumedRoleArn: session.assumedRoleArn,
       durationMs: Date.now() - started,
     };
+    if (connection.kind !== "organization") return verified;
+    try {
+      return { ...verified, organization: await discover(scope, target, started) };
+    } catch (err) {
+      // The role works; it is the listing that was refused, which is a
+      // different fix from a trust policy.
+      return {
+        ok: false,
+        accountId: session.accountId,
+        durationMs: Date.now() - started,
+        problem:
+          `The role works, but it cannot list the organization's accounts (${err instanceof Error ? err.message : String(err)}). ` +
+          "Deploy it in the management account, or in a delegated administrator for Organizations.",
+      };
+    }
   } catch (err) {
     // The customer has a Connect screen, not a `.env`.
     const diagnosis = diagnose(err, callerIdentity, "connect-screen");
@@ -268,4 +321,39 @@ export async function performVerification(scope: Scope): Promise<VerifyResult> {
     await markFailed(scope, `${diagnosis.problem} ${diagnosis.fix}`.slice(0, 2000));
     return { ok: false, durationMs: Date.now() - started, diagnosis };
   }
+}
+
+/**
+ * An organization's members: listed, synced to child connections, and as many
+ * of the unverified ones checked as fit in the budget - the rest wait for the
+ * next check, so a large organization answers in seconds rather than timing out.
+ */
+async function discover(
+  scope: Scope,
+  target: ScanTarget,
+  started: number,
+): Promise<NonNullable<VerifyResult["organization"]>> {
+  const accounts = await listMemberAccounts(target);
+  const sync = await syncMembers(scope, accounts);
+  const members: NonNullable<VerifyResult["organization"]>["members"] = [];
+  for (const child of sync.pending) {
+    if (Date.now() - started > MEMBER_BUDGET_MS) break;
+    const result = await performVerification({ tenantId: scope.tenantId, connectionId: child.id });
+    members.push({
+      connectionId: child.id,
+      label: child.label,
+      ok: result.ok,
+      ...(result.ok
+        ? {}
+        : { problem: result.problem ?? result.diagnosis?.problem ?? "Not connected yet" }),
+    });
+  }
+  return {
+    found: accounts.filter((a) => a.state === "ACTIVE").length,
+    added: sync.added,
+    departed: sync.departed,
+    alreadyConnected: sync.alreadyConnected,
+    members,
+    unchecked: sync.pending.length - members.length,
+  };
 }

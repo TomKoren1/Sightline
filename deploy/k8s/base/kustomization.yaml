@@ -13,8 +13,11 @@ resources:
   - networkpolicy.yaml
   - backup.yaml
 
-commonLabels:
-  app.kubernetes.io/part-of: sightline
+# `labels` with selectors, which is what the deprecated `commonLabels` did.
+labels:
+  - pairs:
+      app.kubernetes.io/part-of: sightline
+    includeSelectors: true
 
 configMapGenerator:
   # Non-secret configuration. Everything here is safe in git; anything that is
@@ -32,7 +35,8 @@ configMapGenerator:
       - SCAN_COOLDOWN_SECONDS=300
       - MAX_ACTIVE_SCANS_PER_TENANT=3
       - CHAT_QUESTIONS_PER_HOUR=60
-      - MAX_RESOURCES_PER_SCAN=100000
+      - CHAT_TOKENS_PER_DAY=2000000
+      - MAX_RESOURCES_PER_SCAN=150000
       - SCANS_ENABLED=true
       - CHAT_ENABLED=true
       # The Job owns the schema; see the comment on it in app.yaml.
