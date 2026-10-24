@@ -138,6 +138,67 @@ export async function getResource(
   };
 }
 
+/** Edges that mean "that resource is in use by this one" - what a fix's caution counts. */
+const USAGE_EDGES = ["EXECUTES_AS", "HAS_INSTANCE_PROFILE", "PROVIDES_ROLE", "ATTACHED_TO"];
+
+/**
+ * Every flagged resource, shaped as `getResource` shapes one, for the fix plan.
+ * Three queries however many there are, rather than `getResource` per finding.
+ * Capped: `limit + 1` are read so the caller can say when it cut the list.
+ */
+export async function flaggedResources(scope: GraphScope, limit: number) {
+  const rows = await read<Resource & { account_id: string }>(
+    scope,
+    (r) => sql`
+    SELECT arn, kind, name, region, account_id, tags, properties, derived
+      FROM ${r} r
+     WHERE ${flag("r", "isPublic")} OR ${flag("r", "isAdmin")} OR ${flag("r", "isIdle")}
+        OR ${flag("r", "isUnprotected")} OR ${flag("r", "isUnused")}
+     ORDER BY kind, name, arn
+     LIMIT ${limit + 1}`,
+  );
+  const truncated = rows.length > limit;
+  const kept = rows.slice(0, limit);
+  if (kept.length === 0) return { resources: [], truncated };
+  const restored = await withTenant(scope.tenantId, () => withDocuments(scope.tenantId, kept));
+  const arns = kept.map((r) => r.arn);
+  const incoming = await read<{
+    to: string;
+    type: string;
+    arn: string;
+    name: string;
+    kind: string;
+  }>(
+    scope,
+    (r, e) => sql`
+      SELECT e.to_arn AS "to", e.rel_type AS type, o.arn, o.name, o.kind
+        FROM ${e} e JOIN ${r} o ON o.arn = e.from_arn
+       WHERE e.to_arn IN ${arns} AND e.rel_type IN ${USAGE_EDGES}`,
+  );
+  const usedBy = new Map<string, typeof incoming>();
+  for (const edge of incoming) {
+    const list = usedBy.get(edge.to);
+    if (list) list.push(edge);
+    else usedBy.set(edge.to, [edge]);
+  }
+  return {
+    truncated,
+    resources: restored.map((resource, i) => ({
+      props: flattenResource({ ...resource, accountId: kept[i]!.account_id }),
+      arn: resource.arn,
+      kind: resource.kind,
+      name: resource.name,
+      region: resource.region,
+      incoming: (usedBy.get(resource.arn) ?? []).map(({ type, arn, name, kind }) => ({
+        type,
+        arn,
+        name,
+        kind,
+      })),
+    })),
+  };
+}
+
 /** Counts by kind and region - cheap orientation for an opening question. */
 export async function summariseAccount(scope: GraphScope) {
   const [byKind, byRegion, flags] = await Promise.all([

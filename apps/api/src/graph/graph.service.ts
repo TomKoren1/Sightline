@@ -25,6 +25,20 @@ import { graphScopeFor } from "../tenancy/graphScope.js";
 import type { Scope } from "../core/scope.js";
 import { remediationInputFromGraph } from "../remediation/fromGraph.js";
 import { remediationsFor } from "../remediation/remediation.js";
+import { getConnection } from "../tenancy/connections.js";
+
+/** Flagged resources one fix plan covers. Beyond this it says it was cut. */
+const FIX_PLAN_LIMIT = 2_000;
+
+/** Which finding category each kind of fix answers, to honour an accepted risk. */
+const CATEGORY_OF: Record<api.FixPlanItem["remediation"]["addresses"], FindingCategory> = {
+  public: "exposed",
+  exposed: "exposed",
+  admin: "admin",
+  unprotected: "unguarded",
+  unused: "unused",
+  idle: "idle",
+};
 
 /** What a connection with no projected scan looks like. */
 const EMPTY_SUMMARY = {
@@ -110,6 +124,50 @@ export class GraphService {
       arn: resource.arn,
       remediations: remediationsFor(remediationInputFromGraph(resource)),
       note: "Generated for you to review and run yourself. Sightline holds read-only access and will never apply these.",
+    };
+  }
+
+  /**
+   * Every computed fix for the account's open findings, for the fix plan.
+   *
+   * The same documents as `remediation`, gathered: still strings for a person
+   * to choose from, read and run. A fix for a finding someone accepted as a
+   * risk is left out - accepting it was the decision not to fix it.
+   */
+  async fixPlan(scope: Scope): Promise<api.FixPlan> {
+    const graph = await graphScopeFor(scope);
+    if (!graph)
+      return { accountId: null, scanId: null, items: [], withoutFix: [], truncated: false };
+    const [{ resources, truncated }, accepted, connection] = await Promise.all([
+      q.flaggedResources(graph, FIX_PLAN_LIMIT),
+      listFindingStates(scope, { acceptedOr: [] }),
+      getConnection(scope),
+    ]);
+    const acceptedKey = new Set(
+      accepted.filter((f) => f.status === "accepted").map((f) => `${f.category}|${f.resourceArn}`),
+    );
+    const items: api.FixPlanItem[] = [];
+    const withoutFix: api.FixPlan["withoutFix"] = [];
+    for (const resource of resources) {
+      const fixes = remediationsFor(remediationInputFromGraph(resource)).filter(
+        (r) => !acceptedKey.has(`${CATEGORY_OF[r.addresses]}|${resource.arn}`),
+      );
+      const where = {
+        arn: resource.arn,
+        name: resource.name,
+        kind: resource.kind,
+        region: resource.region,
+      };
+      if (fixes.length === 0)
+        withoutFix.push({ arn: where.arn, name: where.name, kind: where.kind });
+      for (const remediation of fixes) items.push({ ...where, remediation });
+    }
+    return {
+      accountId: connection?.accountId ?? null,
+      scanId: graph.scanId,
+      items,
+      withoutFix,
+      truncated,
     };
   }
 

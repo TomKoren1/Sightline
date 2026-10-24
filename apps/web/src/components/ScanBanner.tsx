@@ -41,6 +41,8 @@ export interface ScanBannerProps {
   error: string | null;
   onScan: () => void;
   onOpenTrust: () => void;
+  /** Every computed fix, to choose from and download. Offered once there is a scan. */
+  onOpenFixPlan: () => void;
   onOpenConnection: () => void;
   connections: ConnectionSummary[];
   /** Null means the server picks the oldest, which is what the switcher shows. */
@@ -71,6 +73,7 @@ export function ScanBanner({
   error,
   onScan,
   onOpenTrust,
+  onOpenFixPlan,
   onOpenConnection,
   connections,
   selectedConnectionId,
@@ -202,6 +205,14 @@ export function ScanBanner({
           >
             Coverage
           </button>
+          {scan && (
+            <button
+              onClick={onOpenFixPlan}
+              className="rounded border border-ink-700 bg-ink-800 px-2 py-1 text-[11px] text-ink-300 transition hover:border-ink-600 hover:text-ink-100"
+            >
+              Fix plan
+            </button>
+          )}
           <button
             onClick={onScan}
             disabled={scanning || !canScan}

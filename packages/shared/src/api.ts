@@ -515,6 +515,47 @@ export const findingLists = [
 ] as const;
 export type FindingListName = (typeof findingLists)[number];
 
+// --- remediation and the fix plan ----------------------------------------------
+
+export const remediation = z
+  .object({
+    id: z.string(),
+    addresses: z.enum(["public", "unprotected", "admin", "exposed", "idle", "unused"]),
+    title: z.string(),
+    summary: z.string(),
+    caution: z.string(),
+    risk: z.enum(["low", "medium", "high"]),
+    cli: z.array(z.string()),
+    terraform: z.string().optional(),
+    verify: z.string().optional(),
+  })
+  .strict();
+
+export const fixPlanItem = z
+  .object({
+    arn: z.string(),
+    name: z.string(),
+    kind: z.string(),
+    region: z.string().nullable(),
+    remediation,
+  })
+  .strict();
+export type FixPlanItem = z.infer<typeof fixPlanItem>;
+
+/** Every computed fix for the account's open findings, for a person to choose from and run. */
+export const fixPlan = z
+  .object({
+    accountId: z.string().nullable(),
+    scanId: z.string().nullable(),
+    items: z.array(fixPlanItem),
+    /** Flagged resources with no computed fix: they need a person, not a command. */
+    withoutFix: z.array(z.object({ arn: z.string(), name: z.string(), kind: z.string() }).strict()),
+    /** True when the account has more flagged resources than one plan holds. */
+    truncated: z.boolean(),
+  })
+  .strict();
+export type FixPlan = z.infer<typeof fixPlan>;
+
 // --- request bodies ------------------------------------------------------------
 // What each route accepts, validated by the server before anything else runs.
 

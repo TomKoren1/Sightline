@@ -62,6 +62,7 @@ import type {
   GraphGroup,
   SearchResults,
   Summary,
+  FixPlan,
 } from "@sightline/shared/api";
 
 const RANK: Record<TeamRole, number> = { viewer: 0, member: 1, admin: 2, owner: 3 };
@@ -261,6 +262,7 @@ export const api = {
    * Typed by the caller: each component owns the shape it renders.
    */
   resource: <T>(arn: string) => get<T>(`/api/resources/${encodeURIComponent(arn)}`),
+  fixPlan: () => get<FixPlan>("/api/fix-plan"),
   remediation: <T>(arn: string) => get<T>(`/api/resources/${encodeURIComponent(arn)}/remediation`),
   createConnection: (input: { label: string; kind?: "real" | "demo" | "organization" }) =>
     send<{ id: string; externalId: string; note: string }>("/api/connections", asJson(input)),

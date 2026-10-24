@@ -25,6 +25,7 @@ import { DeleteAccount } from "./components/DeleteAccount.js";
 import { DisconnectAccount } from "./components/DisconnectAccount.js";
 import { Modal } from "./components/Modal.js";
 import { TrustPanel } from "./components/TrustPanel.js";
+import { FixPlan } from "./components/FixPlan.js";
 import { Findings } from "./components/Findings.js";
 import { GraphView } from "./components/GraphView.js";
 import { LegalPage, legalPathFor } from "./components/LegalPage.js";
@@ -47,7 +48,7 @@ export function App() {
   const [visibleKinds, setVisibleKinds] = useState<string[]>(DEFAULT_VISIBLE_KINDS);
   const [showFilters, setShowFilters] = useState(false);
   const [modal, setModal] = useState<
-    "trust" | "connection" | "delete" | "team" | "operator" | "accounts" | null
+    "trust" | "fixplan" | "connection" | "delete" | "team" | "operator" | "accounts" | null
   >(null);
   const [connectionId, setConnectionId] = useState<string | null>(null);
   /**
@@ -170,6 +171,7 @@ export function App() {
         error={scanError}
         onScan={() => void runScan()}
         onOpenTrust={() => setModal("trust")}
+        onOpenFixPlan={() => setModal("fixplan")}
         onOpenConnection={() => setModal("connection")}
         connections={connections}
         selectedConnectionId={conn}
@@ -279,6 +281,16 @@ export function App() {
               void queryClient.invalidateQueries();
             }}
           />
+        </Modal>
+      )}
+
+      {modal === "fixplan" && (
+        <Modal
+          title="Fix plan"
+          subtitle="Every computed fix for the open findings, to choose from and run yourself"
+          onClose={() => setModal(null)}
+        >
+          <FixPlan />
         </Modal>
       )}
 

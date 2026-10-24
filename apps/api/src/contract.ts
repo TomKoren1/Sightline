@@ -226,6 +226,12 @@ export const CONTRACTS: Contract[] = [
   },
   {
     method: "GET",
+    route: "/api/fix-plan",
+    url: "/api/fix-plan",
+    responses: { 200: api.fixPlan },
+  },
+  {
+    method: "GET",
     route: "/api/findings",
     url: "/api/findings",
     responses: { 200: api.findings },

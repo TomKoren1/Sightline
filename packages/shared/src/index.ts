@@ -5,3 +5,4 @@ export * from "./remediation.js";
 export * from "./onboarding.js";
 export * from "./text.js";
 export * from "./frameworks.js";
+export * from "./fixPlan.js";
