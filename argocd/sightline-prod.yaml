@@ -3,9 +3,9 @@
 # unnoticed.
 #
 # Not applied by anything in this repository: `kubectl apply -f` it once.
-# Images are still built and imported on the node (deploy/k8s/README.md,
-# "Images") - ArgoCD applies manifests, it does not build - so import the
-# image a commit needs before syncing that commit.
+# Images come from ghcr.io: .github/workflows/deliver.yml builds them for each
+# commit on main that passes CI and pins this overlay to their digests, and
+# that pin commit is the change ArgoCD rolls out.
 #
 # Manual sync first, as with monitoring: look at the diff ArgoCD shows, sync
 # it, and only then consider `automated: { prune: true, selfHeal: true }`.

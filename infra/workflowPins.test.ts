@@ -25,6 +25,8 @@ describe("GitHub workflows", () => {
   it("pin every action to a full commit SHA, with its version beside it", () => {
     const loose = workflows.flatMap((w) =>
       [...w.text.matchAll(/^\s*(?:-\s*)?uses:\s*(\S+)(.*)$/gm)]
+        // A reusable workflow in this repository is versioned with the commit itself.
+        .filter(([, ref]) => !ref!.startsWith("./"))
         .filter(([, ref, rest]) => !/@[0-9a-f]{40}$/.test(ref!) || !/#\s*v\d/.test(rest!))
         .map(([, ref]) => `${w.name}: ${ref}`),
     );
