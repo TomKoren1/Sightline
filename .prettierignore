@@ -37,3 +37,7 @@ apps/api/src/scan/collectors/README.md
 # Recorded collector output, written by `npm run gen:collectors -- --fixtures`.
 # Data, not code: reformatting it would only churn the diff on every re-record.
 apps/api/src/scan/collectors/fixtures/
+
+# Written by `npm run openapi -w @sightline/api` and compared byte for byte by
+# apps/api/src/openapi.test.ts, so reformatting it would fail that test.
+docs/openapi.json

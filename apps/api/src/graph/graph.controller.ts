@@ -10,7 +10,6 @@ import {
   Req,
 } from "@nestjs/common";
 import type { FastifyRequest } from "fastify";
-import { z } from "zod";
 
 import type { AuthedRequest } from "../core/request.js";
 
@@ -20,16 +19,7 @@ import { FINDING_LISTS, GraphService, type FindingList } from "./graph.service.j
 import { FINDING_CATEGORIES, findingsAcrossAccounts } from "../db/findings.js";
 import type { FindingCategory } from "../db/schema.js";
 import { MinRole } from "../core/access.js";
-
-/**
- * Accepting a risk needs a reason, because the reason is the whole value of the
- * record: "accepted" alone tells the next engineer nothing about whether the
- * decision still holds. Reopening needs none.
- */
-const findingStatusSchema = z.discriminatedUnion("status", [
-  z.object({ status: z.literal("accepted"), reason: z.string().trim().min(3).max(500) }),
-  z.object({ status: z.literal("open") }),
-]);
+import { findingStatusRequest as findingStatusSchema } from "@sightline/shared/api";
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 

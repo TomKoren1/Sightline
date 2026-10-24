@@ -20,13 +20,7 @@ import { createApiToken, listApiTokens, revokeApiToken, TokenRefused } from "./a
 import type { AuthedRequest } from "../core/request.js";
 import { HumanOnly, MinRole } from "../core/access.js";
 import type { Session } from "../core/request.js";
-
-const createSchema = z.object({
-  name: z.string().trim().min(1).max(80),
-  role: z.enum(["viewer", "member", "admin"]),
-  /** Null for a token that does not expire, which the UI does not offer by default. */
-  expiresInDays: z.number().int().min(1).max(366).nullable().default(90),
-});
+import { tokenCreateRequest as createSchema } from "@sightline/shared/api";
 
 function sessionOf(req: FastifyRequest): Session {
   if (!isHosted()) {

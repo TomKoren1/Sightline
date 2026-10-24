@@ -1,6 +1,5 @@
 /**
- * Which compliance controls a finding bears on: AWS Foundational Security Best
- * Practices, and the CIS AWS Foundations Benchmark.
+ * Which AWS FSBP controls and CIS AWS Foundations requirements a finding bears on.
  *
  * Buyers report against named controls, so a finding that says "IAM.1" is one
  * they can file. Only controls whose check matches what the finding detects:

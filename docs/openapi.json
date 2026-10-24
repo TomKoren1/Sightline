@@ -1,0 +1,4439 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Sightline API",
+    "version": "1",
+    "description": "Every route Sightline serves. Response shapes are the ones its contract test enforces; a route that test leaves out says why. Requests are authenticated by session cookie or, in hosted mode, an API token (`Authorization: Bearer`). Generated from apps/api/src/contract.ts."
+  },
+  "paths": {
+    "/api/audit": {
+      "get": {
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$schema": "https://json-schema.org/draft/2020-12/schema",
+                  "type": "object",
+                  "properties": {
+                    "entries": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "at": {
+                            "type": "string"
+                          },
+                          "action": {
+                            "type": "string"
+                          },
+                          "subject": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "detail": {
+                            "type": "object",
+                            "propertyNames": {
+                              "type": "string"
+                            },
+                            "additionalProperties": {}
+                          },
+                          "ip": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "actor": {
+                            "anyOf": [
+                              {
+                                "type": "object",
+                                "properties": {
+                                  "id": {
+                                    "type": "string"
+                                  },
+                                  "email": {
+                                    "type": [
+                                      "string",
+                                      "null"
+                                    ]
+                                  }
+                                },
+                                "required": [
+                                  "id",
+                                  "email"
+                                ],
+                                "additionalProperties": false
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "at",
+                          "action",
+                          "subject",
+                          "detail",
+                          "ip",
+                          "actor"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "next": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "entries",
+                    "next"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/audit/export": {
+      "get": {
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$schema": "https://json-schema.org/draft/2020-12/schema",
+                  "type": "object",
+                  "properties": {
+                    "entries": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "at": {
+                            "type": "string"
+                          },
+                          "action": {
+                            "type": "string"
+                          },
+                          "subject": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "detail": {
+                            "type": "object",
+                            "propertyNames": {
+                              "type": "string"
+                            },
+                            "additionalProperties": {}
+                          },
+                          "ip": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "actor": {
+                            "anyOf": [
+                              {
+                                "type": "object",
+                                "properties": {
+                                  "id": {
+                                    "type": "string"
+                                  },
+                                  "email": {
+                                    "type": [
+                                      "string",
+                                      "null"
+                                    ]
+                                  }
+                                },
+                                "required": [
+                                  "id",
+                                  "email"
+                                ],
+                                "additionalProperties": false
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "at",
+                          "action",
+                          "subject",
+                          "detail",
+                          "ip",
+                          "actor"
+                        ],
+                        "additionalProperties": false
+                      }
+                    }
+                  },
+                  "required": [
+                    "entries"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/auth/{provider}": {
+      "get": {
+        "description": "Response shape not covered by the contract test: A 302 to the provider's consent screen. There is no body to have a shape, and the query string it builds is asserted directly in auth/providers.test.ts.",
+        "parameters": [
+          {
+            "name": "provider",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "default": {
+            "description": "Not shape-tested"
+          }
+        }
+      }
+    },
+    "/api/auth/{provider}/callback": {
+      "get": {
+        "description": "Response shape not covered by the contract test: A 302 either into the app or back to it with a reason. Every branch is a redirect, and the claim checks behind it are asserted in auth/providers.test.ts without a network.",
+        "parameters": [
+          {
+            "name": "provider",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "default": {
+            "description": "Not shape-tested"
+          }
+        }
+      }
+    },
+    "/api/auth/logout": {
+      "post": {
+        "description": "Response shape not covered by the contract test: 204 and a cleared cookie: no body to declare. Revocation is asserted against real rows in auth/signin.test.ts.",
+        "responses": {
+          "default": {
+            "description": "Not shape-tested"
+          }
+        }
+      }
+    },
+    "/api/auth/providers": {
+      "get": {
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$schema": "https://json-schema.org/draft/2020-12/schema",
+                  "type": "object",
+                  "properties": {
+                    "providers": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "hosted": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "providers",
+                    "hosted"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/auth/sessions": {
+      "get": {
+        "description": "Response shape not covered by the contract test: Session management has no meaning in a self-hosted deployment, which has no sessions, and this suite runs self-hosted. Covered by auth/signin.test.ts.",
+        "responses": {
+          "default": {
+            "description": "Not shape-tested"
+          }
+        }
+      }
+    },
+    "/api/auth/sessions/{id}": {
+      "delete": {
+        "description": "Response shape not covered by the contract test: Revokes one session, scoped to its owner. Covered by auth/signin.test.ts.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "default": {
+            "description": "Not shape-tested"
+          }
+        }
+      }
+    },
+    "/api/auth/sessions/revoke-all": {
+      "post": {
+        "description": "Response shape not covered by the contract test: Revokes every session for the caller. Covered by auth/signin.test.ts, which asserts each token is dead afterwards.",
+        "responses": {
+          "default": {
+            "description": "Not shape-tested"
+          }
+        }
+      }
+    },
+    "/api/chat": {
+      "post": {
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$schema": "https://json-schema.org/draft/2020-12/schema",
+                "type": "object",
+                "properties": {
+                  "question": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 2000
+                  },
+                  "conversationId": {
+                    "type": "string",
+                    "format": "uuid",
+                    "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                  }
+                },
+                "required": [
+                  "question"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "400": {
+            "description": "Refused",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$schema": "https://json-schema.org/draft/2020-12/schema",
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "details": {}
+                  },
+                  "required": [
+                    "error",
+                    "details"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/connection": {
+      "get": {
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$schema": "https://json-schema.org/draft/2020-12/schema",
+                  "type": "object",
+                  "properties": {
+                    "callerIdentity": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "callerIdentityIsMock": {
+                      "type": "boolean"
+                    },
+                    "scannerPrincipal": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "scannerPrincipalConverted": {
+                      "type": "boolean"
+                    },
+                    "scannerPrincipalNote": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "roleArnProblem": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "containerised": {
+                      "type": "boolean"
+                    },
+                    "mode": {
+                      "type": "string",
+                      "enum": [
+                        "mock",
+                        "real"
+                      ]
+                    },
+                    "configuredMode": {
+                      "type": "string",
+                      "enum": [
+                        "mock",
+                        "real"
+                      ]
+                    },
+                    "realAccountConfigured": {
+                      "type": "boolean"
+                    },
+                    "roleArn": {
+                      "type": "string"
+                    },
+                    "accountId": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "externalIdMasked": {
+                      "type": "string"
+                    },
+                    "externalIdIsPlaceholder": {
+                      "type": "boolean"
+                    },
+                    "homeRegion": {
+                      "type": "string"
+                    },
+                    "regions": {
+                      "anyOf": [
+                        {
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          }
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "endpointOverride": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "lastScan": {
+                      "anyOf": [
+                        {
+                          "type": "object",
+                          "properties": {
+                            "id": {
+                              "type": "string"
+                            },
+                            "at": {
+                              "type": "string"
+                            },
+                            "status": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "id",
+                            "at",
+                            "status"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    }
+                  },
+                  "required": [
+                    "callerIdentity",
+                    "callerIdentityIsMock",
+                    "scannerPrincipal",
+                    "scannerPrincipalConverted",
+                    "scannerPrincipalNote",
+                    "roleArnProblem",
+                    "containerised",
+                    "mode",
+                    "configuredMode",
+                    "realAccountConfigured",
+                    "roleArn",
+                    "accountId",
+                    "externalIdMasked",
+                    "externalIdIsPlaceholder",
+                    "homeRegion",
+                    "regions",
+                    "endpointOverride",
+                    "lastScan"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/connection/external-id": {
+      "get": {
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$schema": "https://json-schema.org/draft/2020-12/schema",
+                  "type": "object",
+                  "properties": {
+                    "externalId": {
+                      "type": "string"
+                    },
+                    "note": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "externalId",
+                    "note"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/connection/mode": {
+      "post": {
+        "responses": {
+          "400": {
+            "description": "Refused",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$schema": "https://json-schema.org/draft/2020-12/schema",
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/connection/test": {
+      "post": {
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$schema": "https://json-schema.org/draft/2020-12/schema",
+                  "type": "object",
+                  "properties": {
+                    "ok": {
+                      "type": "boolean"
+                    },
+                    "durationMs": {
+                      "type": "number"
+                    },
+                    "mode": {
+                      "type": "string"
+                    },
+                    "assumedRoleArn": {
+                      "type": "string"
+                    },
+                    "accountId": {
+                      "type": "string"
+                    },
+                    "callerArn": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "callerIdentity": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "expiresAt": {
+                      "type": "string"
+                    },
+                    "endpoint": {
+                      "type": "string"
+                    },
+                    "code": {
+                      "type": "string"
+                    },
+                    "problem": {
+                      "type": "string"
+                    },
+                    "fix": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "ok",
+                    "durationMs",
+                    "mode"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/connections": {
+      "get": {
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$schema": "https://json-schema.org/draft/2020-12/schema",
+                  "type": "object",
+                  "properties": {
+                    "connections": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "kind": {
+                            "type": "string",
+                            "enum": [
+                              "real",
+                              "demo",
+                              "organization"
+                            ]
+                          },
+                          "label": {
+                            "type": "string"
+                          },
+                          "accountId": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "roleArn": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "status": {
+                            "type": "string",
+                            "enum": [
+                              "pending",
+                              "verified",
+                              "failed",
+                              "disconnected"
+                            ]
+                          },
+                          "lastError": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "scanRegions": {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          },
+                          "templateVersion": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "lastVerifiedAt": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "lastScanAt": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "parentId": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "kind",
+                          "label",
+                          "accountId",
+                          "roleArn",
+                          "status",
+                          "lastError",
+                          "scanRegions",
+                          "templateVersion",
+                          "lastVerifiedAt",
+                          "lastScanAt",
+                          "parentId"
+                        ],
+                        "additionalProperties": false
+                      }
+                    }
+                  },
+                  "required": [
+                    "connections"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "description": "Response shape not covered by the contract test: Creates a connection and returns an ExternalId that is shown once. Calling it here would leave rows behind and put a one-time secret in a test log; the behaviour is covered by the tenancy suites.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$schema": "https://json-schema.org/draft/2020-12/schema",
+                "type": "object",
+                "properties": {
+                  "kind": {
+                    "default": "real",
+                    "type": "string",
+                    "enum": [
+                      "real",
+                      "demo",
+                      "organization"
+                    ]
+                  },
+                  "label": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 60
+                  }
+                },
+                "required": [
+                  "label"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "default": {
+            "description": "Not shape-tested"
+          }
+        }
+      }
+    },
+    "/api/connections/{id}": {
+      "delete": {
+        "description": "Response shape not covered by the contract test: Forgets a connection and purges its graph scopes. Destructive by design, so it is exercised where the rows are disposable rather than against the running app.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "default": {
+            "description": "Not shape-tested"
+          }
+        }
+      }
+    },
+    "/api/connections/{id}/onboarding": {
+      "get": {
+        "description": "Response shape not covered by the contract test: Returns a one-click link carrying the connection's ExternalId. Needs a real connection to exist and would put that secret in a test log; the link's shape is asserted in packages/shared's onboarding tests, which need no database.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "default": {
+            "description": "Not shape-tested"
+          }
+        }
+      }
+    },
+    "/api/connections/{id}/target": {
+      "post": {
+        "description": "Response shape not covered by the contract test: Writes a role ARN derived from an account id. Mutating, and the derivation is asserted in packages/shared's onboarding tests.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$schema": "https://json-schema.org/draft/2020-12/schema",
+                "type": "object",
+                "properties": {
+                  "accountId": {
+                    "type": "string",
+                    "pattern": "^\\d{12}$"
+                  },
+                  "templateVersion": {
+                    "type": "string",
+                    "maxLength": 40
+                  }
+                },
+                "required": [
+                  "accountId"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "default": {
+            "description": "Not shape-tested"
+          }
+        }
+      }
+    },
+    "/api/connections/{id}/verify": {
+      "post": {
+        "description": "Response shape not covered by the contract test: Attempts a real sts:AssumeRole into a customer account. Read-only, but it is still an outbound call per invocation, and the diagnosis it returns is asserted in connection/credentialDiagnosis.test.ts against the error shapes AWS produces.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "default": {
+            "description": "Not shape-tested"
+          }
+        }
+      }
+    },
+    "/api/conversations/{id}": {
+      "get": {
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$schema": "https://json-schema.org/draft/2020-12/schema",
+                  "type": "object",
+                  "properties": {
+                    "messages": {
+                      "type": "array",
+                      "items": {}
+                    }
+                  },
+                  "required": [
+                    "messages"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/evals/checks": {
+      "get": {
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$schema": "https://json-schema.org/draft/2020-12/schema",
+                  "type": "object",
+                  "properties": {
+                    "checks": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "description": {
+                            "type": "string"
+                          },
+                          "rationale": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "description",
+                          "rationale"
+                        ],
+                        "additionalProperties": false
+                      }
+                    }
+                  },
+                  "required": [
+                    "checks"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/evals/ground-truth": {
+      "post": {
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$schema": "https://json-schema.org/draft/2020-12/schema",
+                  "type": "object",
+                  "properties": {
+                    "results": {
+                      "type": "array",
+                      "items": {}
+                    }
+                  },
+                  "required": [
+                    "results"
+                  ],
+                  "additionalProperties": {}
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Refused",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$schema": "https://json-schema.org/draft/2020-12/schema",
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "code": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "code"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/evals/latest": {
+      "get": {
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$schema": "https://json-schema.org/draft/2020-12/schema",
+                  "anyOf": [
+                    {
+                      "type": "object",
+                      "properties": {
+                        "run": {
+                          "type": "null"
+                        },
+                        "hint": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "run",
+                        "hint"
+                      ],
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "run": {
+                          "anyOf": [
+                            {
+                              "type": "object",
+                              "properties": {
+                                "id": {
+                                  "type": "string"
+                                },
+                                "startedAt": {
+                                  "type": "string"
+                                },
+                                "model": {
+                                  "type": "string"
+                                },
+                                "total": {
+                                  "type": "number"
+                                },
+                                "passed": {
+                                  "type": "number"
+                                },
+                                "graded": {
+                                  "type": "number"
+                                },
+                                "errored": {
+                                  "type": "number"
+                                },
+                                "meanF1": {
+                                  "type": "number"
+                                },
+                                "unsupportedCitations": {
+                                  "type": "number"
+                                },
+                                "incompleteNote": {
+                                  "type": "string"
+                                },
+                                "cases": {
+                                  "type": "array",
+                                  "items": {
+                                    "type": "object",
+                                    "properties": {
+                                      "id": {
+                                        "type": "string"
+                                      },
+                                      "question": {
+                                        "type": "string"
+                                      },
+                                      "passed": {
+                                        "type": "boolean"
+                                      },
+                                      "f1": {
+                                        "type": "number"
+                                      },
+                                      "toolsCalled": {
+                                        "type": "array",
+                                        "items": {
+                                          "type": "string"
+                                        }
+                                      },
+                                      "failures": {
+                                        "type": "array",
+                                        "items": {
+                                          "type": "string"
+                                        }
+                                      },
+                                      "unsupportedCitations": {
+                                        "type": "number"
+                                      },
+                                      "durationMs": {
+                                        "type": "number"
+                                      },
+                                      "errored": {
+                                        "type": [
+                                          "string",
+                                          "null"
+                                        ]
+                                      }
+                                    },
+                                    "required": [
+                                      "id",
+                                      "question",
+                                      "passed",
+                                      "f1",
+                                      "toolsCalled",
+                                      "failures",
+                                      "unsupportedCitations",
+                                      "durationMs",
+                                      "errored"
+                                    ],
+                                    "additionalProperties": false
+                                  }
+                                }
+                              },
+                              "required": [
+                                "id",
+                                "startedAt",
+                                "model",
+                                "total",
+                                "passed",
+                                "graded",
+                                "errored",
+                                "meanF1",
+                                "unsupportedCitations",
+                                "cases"
+                              ],
+                              "additionalProperties": false
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "currentModel": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "run",
+                        "currentModel"
+                      ],
+                      "additionalProperties": false
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/findings": {
+      "get": {
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$schema": "https://json-schema.org/draft/2020-12/schema",
+                  "type": "object",
+                  "properties": {
+                    "publicResources": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "arn": {
+                            "type": "string"
+                          },
+                          "kind": {
+                            "type": "string"
+                          },
+                          "name": {
+                            "type": "string"
+                          },
+                          "region": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "isPublic": {
+                            "type": [
+                              "boolean",
+                              "null"
+                            ]
+                          },
+                          "isAdmin": {
+                            "type": [
+                              "boolean",
+                              "null"
+                            ]
+                          },
+                          "isIdle": {
+                            "type": [
+                              "boolean",
+                              "null"
+                            ]
+                          },
+                          "isUnprotected": {
+                            "type": [
+                              "boolean",
+                              "null"
+                            ]
+                          },
+                          "isUnused": {
+                            "type": [
+                              "boolean",
+                              "null"
+                            ]
+                          },
+                          "estimatedMonthlyCostUsd": {
+                            "type": [
+                              "number",
+                              "null"
+                            ]
+                          },
+                          "reason": {
+                            "type": "string"
+                          },
+                          "finding": {
+                            "anyOf": [
+                              {
+                                "type": "object",
+                                "properties": {
+                                  "id": {
+                                    "type": "string"
+                                  },
+                                  "status": {
+                                    "type": "string",
+                                    "enum": [
+                                      "open",
+                                      "accepted"
+                                    ]
+                                  },
+                                  "firstSeenAt": {
+                                    "type": "string"
+                                  },
+                                  "statusReason": {
+                                    "type": [
+                                      "string",
+                                      "null"
+                                    ]
+                                  },
+                                  "statusAt": {
+                                    "type": [
+                                      "string",
+                                      "null"
+                                    ]
+                                  }
+                                },
+                                "required": [
+                                  "id",
+                                  "status",
+                                  "firstSeenAt"
+                                ],
+                                "additionalProperties": false
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          }
+                        },
+                        "required": [
+                          "arn",
+                          "kind",
+                          "name",
+                          "region",
+                          "reason",
+                          "finding"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "adminPrincipals": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "arn": {
+                            "type": "string"
+                          },
+                          "kind": {
+                            "type": "string"
+                          },
+                          "name": {
+                            "type": "string"
+                          },
+                          "region": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "isPublic": {
+                            "type": [
+                              "boolean",
+                              "null"
+                            ]
+                          },
+                          "isAdmin": {
+                            "type": [
+                              "boolean",
+                              "null"
+                            ]
+                          },
+                          "isIdle": {
+                            "type": [
+                              "boolean",
+                              "null"
+                            ]
+                          },
+                          "isUnprotected": {
+                            "type": [
+                              "boolean",
+                              "null"
+                            ]
+                          },
+                          "isUnused": {
+                            "type": [
+                              "boolean",
+                              "null"
+                            ]
+                          },
+                          "estimatedMonthlyCostUsd": {
+                            "type": [
+                              "number",
+                              "null"
+                            ]
+                          },
+                          "reason": {
+                            "type": "string"
+                          },
+                          "finding": {
+                            "anyOf": [
+                              {
+                                "type": "object",
+                                "properties": {
+                                  "id": {
+                                    "type": "string"
+                                  },
+                                  "status": {
+                                    "type": "string",
+                                    "enum": [
+                                      "open",
+                                      "accepted"
+                                    ]
+                                  },
+                                  "firstSeenAt": {
+                                    "type": "string"
+                                  },
+                                  "statusReason": {
+                                    "type": [
+                                      "string",
+                                      "null"
+                                    ]
+                                  },
+                                  "statusAt": {
+                                    "type": [
+                                      "string",
+                                      "null"
+                                    ]
+                                  }
+                                },
+                                "required": [
+                                  "id",
+                                  "status",
+                                  "firstSeenAt"
+                                ],
+                                "additionalProperties": false
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "adminVia": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "usedBy": {
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "properties": {
+                                "arn": {
+                                  "type": "string"
+                                },
+                                "name": {
+                                  "type": "string"
+                                },
+                                "kind": {
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "arn",
+                                "name",
+                                "kind"
+                              ],
+                              "additionalProperties": false
+                            }
+                          },
+                          "useCount": {
+                            "type": "number"
+                          }
+                        },
+                        "required": [
+                          "arn",
+                          "kind",
+                          "name",
+                          "region",
+                          "reason",
+                          "finding",
+                          "usedBy",
+                          "useCount"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "idle": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "arn": {
+                            "type": "string"
+                          },
+                          "kind": {
+                            "type": "string"
+                          },
+                          "name": {
+                            "type": "string"
+                          },
+                          "region": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "isPublic": {
+                            "type": [
+                              "boolean",
+                              "null"
+                            ]
+                          },
+                          "isAdmin": {
+                            "type": [
+                              "boolean",
+                              "null"
+                            ]
+                          },
+                          "isIdle": {
+                            "type": [
+                              "boolean",
+                              "null"
+                            ]
+                          },
+                          "isUnprotected": {
+                            "type": [
+                              "boolean",
+                              "null"
+                            ]
+                          },
+                          "isUnused": {
+                            "type": [
+                              "boolean",
+                              "null"
+                            ]
+                          },
+                          "estimatedMonthlyCostUsd": {
+                            "type": [
+                              "number",
+                              "null"
+                            ]
+                          },
+                          "reason": {
+                            "type": "string"
+                          },
+                          "finding": {
+                            "anyOf": [
+                              {
+                                "type": "object",
+                                "properties": {
+                                  "id": {
+                                    "type": "string"
+                                  },
+                                  "status": {
+                                    "type": "string",
+                                    "enum": [
+                                      "open",
+                                      "accepted"
+                                    ]
+                                  },
+                                  "firstSeenAt": {
+                                    "type": "string"
+                                  },
+                                  "statusReason": {
+                                    "type": [
+                                      "string",
+                                      "null"
+                                    ]
+                                  },
+                                  "statusAt": {
+                                    "type": [
+                                      "string",
+                                      "null"
+                                    ]
+                                  }
+                                },
+                                "required": [
+                                  "id",
+                                  "status",
+                                  "firstSeenAt"
+                                ],
+                                "additionalProperties": false
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          }
+                        },
+                        "required": [
+                          "arn",
+                          "kind",
+                          "name",
+                          "region",
+                          "estimatedMonthlyCostUsd",
+                          "reason",
+                          "finding"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "exposed": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "arn": {
+                            "type": "string"
+                          },
+                          "kind": {
+                            "type": "string"
+                          },
+                          "name": {
+                            "type": "string"
+                          },
+                          "region": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "isPublic": {
+                            "type": [
+                              "boolean",
+                              "null"
+                            ]
+                          },
+                          "isAdmin": {
+                            "type": [
+                              "boolean",
+                              "null"
+                            ]
+                          },
+                          "isIdle": {
+                            "type": [
+                              "boolean",
+                              "null"
+                            ]
+                          },
+                          "isUnprotected": {
+                            "type": [
+                              "boolean",
+                              "null"
+                            ]
+                          },
+                          "isUnused": {
+                            "type": [
+                              "boolean",
+                              "null"
+                            ]
+                          },
+                          "estimatedMonthlyCostUsd": {
+                            "type": [
+                              "number",
+                              "null"
+                            ]
+                          },
+                          "reason": {
+                            "type": "string"
+                          },
+                          "finding": {
+                            "anyOf": [
+                              {
+                                "type": "object",
+                                "properties": {
+                                  "id": {
+                                    "type": "string"
+                                  },
+                                  "status": {
+                                    "type": "string",
+                                    "enum": [
+                                      "open",
+                                      "accepted"
+                                    ]
+                                  },
+                                  "firstSeenAt": {
+                                    "type": "string"
+                                  },
+                                  "statusReason": {
+                                    "type": [
+                                      "string",
+                                      "null"
+                                    ]
+                                  },
+                                  "statusAt": {
+                                    "type": [
+                                      "string",
+                                      "null"
+                                    ]
+                                  }
+                                },
+                                "required": [
+                                  "id",
+                                  "status",
+                                  "firstSeenAt"
+                                ],
+                                "additionalProperties": false
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "ports": {
+                            "type": "array",
+                            "items": {
+                              "type": [
+                                "string",
+                                "null"
+                              ]
+                            }
+                          },
+                          "securityGroup": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          }
+                        },
+                        "required": [
+                          "arn",
+                          "kind",
+                          "name",
+                          "region",
+                          "reason",
+                          "finding"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "unprotected": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "arn": {
+                            "type": "string"
+                          },
+                          "kind": {
+                            "type": "string"
+                          },
+                          "name": {
+                            "type": "string"
+                          },
+                          "region": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "isPublic": {
+                            "type": "boolean"
+                          },
+                          "isAdmin": {
+                            "type": [
+                              "boolean",
+                              "null"
+                            ]
+                          },
+                          "isIdle": {
+                            "type": [
+                              "boolean",
+                              "null"
+                            ]
+                          },
+                          "isUnprotected": {
+                            "type": [
+                              "boolean",
+                              "null"
+                            ]
+                          },
+                          "isUnused": {
+                            "type": [
+                              "boolean",
+                              "null"
+                            ]
+                          },
+                          "estimatedMonthlyCostUsd": {
+                            "type": [
+                              "number",
+                              "null"
+                            ]
+                          },
+                          "reason": {
+                            "type": "string"
+                          },
+                          "finding": {
+                            "anyOf": [
+                              {
+                                "type": "object",
+                                "properties": {
+                                  "id": {
+                                    "type": "string"
+                                  },
+                                  "status": {
+                                    "type": "string",
+                                    "enum": [
+                                      "open",
+                                      "accepted"
+                                    ]
+                                  },
+                                  "firstSeenAt": {
+                                    "type": "string"
+                                  },
+                                  "statusReason": {
+                                    "type": [
+                                      "string",
+                                      "null"
+                                    ]
+                                  },
+                                  "statusAt": {
+                                    "type": [
+                                      "string",
+                                      "null"
+                                    ]
+                                  }
+                                },
+                                "required": [
+                                  "id",
+                                  "status",
+                                  "firstSeenAt"
+                                ],
+                                "additionalProperties": false
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          }
+                        },
+                        "required": [
+                          "arn",
+                          "kind",
+                          "name",
+                          "region",
+                          "isPublic",
+                          "reason",
+                          "finding"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "unused": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "arn": {
+                            "type": "string"
+                          },
+                          "kind": {
+                            "type": "string"
+                          },
+                          "name": {
+                            "type": "string"
+                          },
+                          "region": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "isPublic": {
+                            "type": [
+                              "boolean",
+                              "null"
+                            ]
+                          },
+                          "isAdmin": {
+                            "type": "boolean"
+                          },
+                          "isIdle": {
+                            "type": [
+                              "boolean",
+                              "null"
+                            ]
+                          },
+                          "isUnprotected": {
+                            "type": [
+                              "boolean",
+                              "null"
+                            ]
+                          },
+                          "isUnused": {
+                            "type": [
+                              "boolean",
+                              "null"
+                            ]
+                          },
+                          "estimatedMonthlyCostUsd": {
+                            "type": [
+                              "number",
+                              "null"
+                            ]
+                          },
+                          "reason": {
+                            "type": "string"
+                          },
+                          "finding": {
+                            "anyOf": [
+                              {
+                                "type": "object",
+                                "properties": {
+                                  "id": {
+                                    "type": "string"
+                                  },
+                                  "status": {
+                                    "type": "string",
+                                    "enum": [
+                                      "open",
+                                      "accepted"
+                                    ]
+                                  },
+                                  "firstSeenAt": {
+                                    "type": "string"
+                                  },
+                                  "statusReason": {
+                                    "type": [
+                                      "string",
+                                      "null"
+                                    ]
+                                  },
+                                  "statusAt": {
+                                    "type": [
+                                      "string",
+                                      "null"
+                                    ]
+                                  }
+                                },
+                                "required": [
+                                  "id",
+                                  "status",
+                                  "firstSeenAt"
+                                ],
+                                "additionalProperties": false
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "lastUsedAt": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          }
+                        },
+                        "required": [
+                          "arn",
+                          "kind",
+                          "name",
+                          "region",
+                          "isAdmin",
+                          "reason",
+                          "finding",
+                          "lastUsedAt"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "accepted": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "arn": {
+                            "type": "string"
+                          },
+                          "kind": {
+                            "type": "string"
+                          },
+                          "name": {
+                            "type": "string"
+                          },
+                          "region": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "isPublic": {
+                            "type": [
+                              "boolean",
+                              "null"
+                            ]
+                          },
+                          "isAdmin": {
+                            "type": [
+                              "boolean",
+                              "null"
+                            ]
+                          },
+                          "isIdle": {
+                            "type": [
+                              "boolean",
+                              "null"
+                            ]
+                          },
+                          "isUnprotected": {
+                            "type": [
+                              "boolean",
+                              "null"
+                            ]
+                          },
+                          "isUnused": {
+                            "type": [
+                              "boolean",
+                              "null"
+                            ]
+                          },
+                          "estimatedMonthlyCostUsd": {
+                            "type": [
+                              "number",
+                              "null"
+                            ]
+                          },
+                          "reason": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "category": {
+                            "type": "string",
+                            "enum": [
+                              "exposed",
+                              "admin",
+                              "idle",
+                              "unguarded",
+                              "unused"
+                            ]
+                          },
+                          "finding": {
+                            "type": "object",
+                            "properties": {
+                              "id": {
+                                "type": "string"
+                              },
+                              "status": {
+                                "type": "string",
+                                "const": "accepted"
+                              },
+                              "firstSeenAt": {
+                                "type": "string"
+                              },
+                              "statusReason": {
+                                "type": [
+                                  "string",
+                                  "null"
+                                ]
+                              },
+                              "statusAt": {
+                                "type": [
+                                  "string",
+                                  "null"
+                                ]
+                              }
+                            },
+                            "required": [
+                              "id",
+                              "status",
+                              "firstSeenAt"
+                            ],
+                            "additionalProperties": false
+                          }
+                        },
+                        "required": [
+                          "arn",
+                          "kind",
+                          "name",
+                          "region",
+                          "reason",
+                          "category",
+                          "finding"
+                        ],
+                        "additionalProperties": false
+                      }
+                    }
+                  },
+                  "required": [
+                    "publicResources",
+                    "adminPrincipals",
+                    "idle",
+                    "exposed",
+                    "unprotected",
+                    "unused",
+                    "accepted"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/findings/{id}": {
+      "patch": {
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$schema": "https://json-schema.org/draft/2020-12/schema",
+                "oneOf": [
+                  {
+                    "type": "object",
+                    "properties": {
+                      "status": {
+                        "type": "string",
+                        "const": "accepted"
+                      },
+                      "reason": {
+                        "type": "string",
+                        "minLength": 3,
+                        "maxLength": 500
+                      }
+                    },
+                    "required": [
+                      "status",
+                      "reason"
+                    ]
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "status": {
+                        "type": "string",
+                        "const": "open"
+                      }
+                    },
+                    "required": [
+                      "status"
+                    ]
+                  }
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$schema": "https://json-schema.org/draft/2020-12/schema",
+                  "type": "object",
+                  "properties": {
+                    "finding": {
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string"
+                        },
+                        "status": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "id",
+                        "status"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "finding"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Refused",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$schema": "https://json-schema.org/draft/2020-12/schema",
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "details": {}
+                  },
+                  "required": [
+                    "error",
+                    "details"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Refused",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$schema": "https://json-schema.org/draft/2020-12/schema",
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/findings/accounts": {
+      "get": {
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$schema": "https://json-schema.org/draft/2020-12/schema",
+                  "type": "object",
+                  "properties": {
+                    "accounts": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "connectionId": {
+                            "type": "string"
+                          },
+                          "label": {
+                            "type": "string"
+                          },
+                          "accountId": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "open": {
+                            "type": "object",
+                            "propertyNames": {
+                              "type": "string",
+                              "enum": [
+                                "exposed",
+                                "admin",
+                                "idle",
+                                "unguarded",
+                                "unused"
+                              ]
+                            },
+                            "additionalProperties": {
+                              "type": "number"
+                            },
+                            "required": [
+                              "exposed",
+                              "admin",
+                              "idle",
+                              "unguarded",
+                              "unused"
+                            ]
+                          }
+                        },
+                        "required": [
+                          "connectionId",
+                          "label",
+                          "accountId",
+                          "open"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "findings": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "connectionId": {
+                            "type": "string"
+                          },
+                          "category": {
+                            "type": "string",
+                            "enum": [
+                              "exposed",
+                              "admin",
+                              "idle",
+                              "unguarded",
+                              "unused"
+                            ]
+                          },
+                          "arn": {
+                            "type": "string"
+                          },
+                          "name": {
+                            "type": "string"
+                          },
+                          "kind": {
+                            "type": "string"
+                          },
+                          "reason": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "firstSeenAt": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "connectionId",
+                          "category",
+                          "arn",
+                          "name",
+                          "kind",
+                          "reason",
+                          "firstSeenAt"
+                        ],
+                        "additionalProperties": false
+                      }
+                    }
+                  },
+                  "required": [
+                    "accounts",
+                    "findings"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/findings/page": {
+      "get": {
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$schema": "https://json-schema.org/draft/2020-12/schema",
+                  "type": "object",
+                  "properties": {
+                    "rows": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "arn": {
+                            "type": "string"
+                          },
+                          "kind": {
+                            "type": "string"
+                          },
+                          "name": {
+                            "type": "string"
+                          },
+                          "region": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "isPublic": {
+                            "type": [
+                              "boolean",
+                              "null"
+                            ]
+                          },
+                          "isAdmin": {
+                            "type": [
+                              "boolean",
+                              "null"
+                            ]
+                          },
+                          "isIdle": {
+                            "type": [
+                              "boolean",
+                              "null"
+                            ]
+                          },
+                          "isUnprotected": {
+                            "type": [
+                              "boolean",
+                              "null"
+                            ]
+                          },
+                          "isUnused": {
+                            "type": [
+                              "boolean",
+                              "null"
+                            ]
+                          },
+                          "estimatedMonthlyCostUsd": {
+                            "type": [
+                              "number",
+                              "null"
+                            ]
+                          },
+                          "reason": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "finding": {
+                            "anyOf": [
+                              {
+                                "type": "object",
+                                "properties": {
+                                  "id": {
+                                    "type": "string"
+                                  },
+                                  "status": {
+                                    "type": "string",
+                                    "enum": [
+                                      "open",
+                                      "accepted"
+                                    ]
+                                  },
+                                  "firstSeenAt": {
+                                    "type": "string"
+                                  },
+                                  "statusReason": {
+                                    "type": [
+                                      "string",
+                                      "null"
+                                    ]
+                                  },
+                                  "statusAt": {
+                                    "type": [
+                                      "string",
+                                      "null"
+                                    ]
+                                  }
+                                },
+                                "required": [
+                                  "id",
+                                  "status",
+                                  "firstSeenAt"
+                                ],
+                                "additionalProperties": false
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          }
+                        },
+                        "required": [
+                          "arn",
+                          "kind",
+                          "name",
+                          "region",
+                          "finding"
+                        ],
+                        "additionalProperties": {}
+                      }
+                    },
+                    "total": {
+                      "type": "number"
+                    },
+                    "offset": {
+                      "type": "number"
+                    },
+                    "next": {
+                      "type": [
+                        "number",
+                        "null"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "rows",
+                    "total",
+                    "offset",
+                    "next"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Refused",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$schema": "https://json-schema.org/draft/2020-12/schema",
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/graph": {
+      "get": {
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$schema": "https://json-schema.org/draft/2020-12/schema",
+                  "type": "object",
+                  "properties": {
+                    "nodes": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "arn": {
+                            "type": "string"
+                          },
+                          "kind": {
+                            "type": "string"
+                          },
+                          "name": {
+                            "type": "string"
+                          },
+                          "region": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "isPublic": {
+                            "type": [
+                              "boolean",
+                              "null"
+                            ]
+                          },
+                          "isAdmin": {
+                            "type": [
+                              "boolean",
+                              "null"
+                            ]
+                          },
+                          "isIdle": {
+                            "type": [
+                              "boolean",
+                              "null"
+                            ]
+                          },
+                          "isUnprotected": {
+                            "type": [
+                              "boolean",
+                              "null"
+                            ]
+                          },
+                          "isUnused": {
+                            "type": [
+                              "boolean",
+                              "null"
+                            ]
+                          },
+                          "estimatedMonthlyCostUsd": {
+                            "type": [
+                              "number",
+                              "null"
+                            ]
+                          },
+                          "reason": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          }
+                        },
+                        "required": [
+                          "arn",
+                          "kind",
+                          "name",
+                          "region"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "edges": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "from": {
+                            "type": "string"
+                          },
+                          "to": {
+                            "type": "string"
+                          },
+                          "type": {
+                            "type": "string"
+                          },
+                          "ports": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          }
+                        },
+                        "required": [
+                          "from",
+                          "to",
+                          "type"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "total": {
+                      "type": "number"
+                    },
+                    "truncated": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "nodes",
+                    "edges",
+                    "total",
+                    "truncated"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/graph/groups": {
+      "get": {
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$schema": "https://json-schema.org/draft/2020-12/schema",
+                  "type": "object",
+                  "properties": {
+                    "groups": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string",
+                            "pattern": "^(vpc|kind):"
+                          },
+                          "name": {
+                            "type": "string"
+                          },
+                          "region": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "count": {
+                            "type": "number"
+                          },
+                          "publicCount": {
+                            "type": "number"
+                          },
+                          "adminCount": {
+                            "type": "number"
+                          },
+                          "kinds": {
+                            "type": "object",
+                            "propertyNames": {
+                              "type": "string"
+                            },
+                            "additionalProperties": {
+                              "type": "number"
+                            }
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "name",
+                          "region",
+                          "count",
+                          "publicCount",
+                          "adminCount",
+                          "kinds"
+                        ],
+                        "additionalProperties": false
+                      }
+                    }
+                  },
+                  "required": [
+                    "groups"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/graph/neighbours": {
+      "get": {
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$schema": "https://json-schema.org/draft/2020-12/schema",
+                  "type": "object",
+                  "properties": {
+                    "nodes": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "arn": {
+                            "type": "string"
+                          },
+                          "kind": {
+                            "type": "string"
+                          },
+                          "name": {
+                            "type": "string"
+                          },
+                          "region": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "isPublic": {
+                            "type": [
+                              "boolean",
+                              "null"
+                            ]
+                          },
+                          "isAdmin": {
+                            "type": [
+                              "boolean",
+                              "null"
+                            ]
+                          },
+                          "isIdle": {
+                            "type": [
+                              "boolean",
+                              "null"
+                            ]
+                          },
+                          "isUnprotected": {
+                            "type": [
+                              "boolean",
+                              "null"
+                            ]
+                          },
+                          "isUnused": {
+                            "type": [
+                              "boolean",
+                              "null"
+                            ]
+                          },
+                          "estimatedMonthlyCostUsd": {
+                            "type": [
+                              "number",
+                              "null"
+                            ]
+                          },
+                          "reason": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          }
+                        },
+                        "required": [
+                          "arn",
+                          "kind",
+                          "name",
+                          "region"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "edges": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "from": {
+                            "type": "string"
+                          },
+                          "to": {
+                            "type": "string"
+                          },
+                          "type": {
+                            "type": "string"
+                          },
+                          "ports": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          }
+                        },
+                        "required": [
+                          "from",
+                          "to",
+                          "type"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "total": {
+                      "type": "number"
+                    },
+                    "truncated": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "nodes",
+                    "edges",
+                    "total",
+                    "truncated"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/health": {
+      "get": {
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$schema": "https://json-schema.org/draft/2020-12/schema",
+                  "type": "object",
+                  "properties": {
+                    "status": {
+                      "type": "string"
+                    },
+                    "checks": {
+                      "type": "object",
+                      "properties": {
+                        "postgres": {
+                          "type": "string"
+                        },
+                        "agent": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "postgres",
+                        "agent"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "awsMode": {
+                      "type": "string"
+                    },
+                    "lastScan": {
+                      "anyOf": [
+                        {
+                          "type": "object",
+                          "properties": {
+                            "id": {
+                              "type": "string"
+                            },
+                            "at": {
+                              "type": "string"
+                            },
+                            "status": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "id",
+                            "at",
+                            "status"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    }
+                  },
+                  "required": [
+                    "status",
+                    "checks",
+                    "awsMode",
+                    "lastScan"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/me": {
+      "delete": {
+        "description": "Response shape not covered by the contract test: Deletes the account and everything in it. Not exercised here for the obvious reason - this suite runs against a populated database and the refusal path it *can* reach (self-hosted has no account to delete) is the uninteresting half. The purge itself is asserted in tenancy/purge.test.ts, which seeds two tenants, deletes one, and checks both that nothing of it remains and that the other is untouched.",
+        "responses": {
+          "default": {
+            "description": "Not shape-tested"
+          }
+        }
+      },
+      "get": {
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$schema": "https://json-schema.org/draft/2020-12/schema",
+                  "type": "object",
+                  "properties": {
+                    "hosted": {
+                      "type": "boolean"
+                    },
+                    "signedIn": {
+                      "type": "boolean"
+                    },
+                    "user": {
+                      "anyOf": [
+                        {
+                          "type": "object",
+                          "properties": {
+                            "email": {
+                              "type": "string"
+                            },
+                            "name": {
+                              "type": [
+                                "string",
+                                "null"
+                              ]
+                            },
+                            "avatarUrl": {
+                              "type": [
+                                "string",
+                                "null"
+                              ]
+                            }
+                          },
+                          "required": [
+                            "email",
+                            "name",
+                            "avatarUrl"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "isAdmin": {
+                      "type": "boolean"
+                    },
+                    "role": {
+                      "anyOf": [
+                        {
+                          "type": "string",
+                          "enum": [
+                            "owner",
+                            "admin",
+                            "member",
+                            "viewer"
+                          ]
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "providers": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "linked": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "connections": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "kind": {
+                            "type": "string",
+                            "enum": [
+                              "real",
+                              "demo",
+                              "organization"
+                            ]
+                          },
+                          "label": {
+                            "type": "string"
+                          },
+                          "accountId": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "roleArn": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "status": {
+                            "type": "string",
+                            "enum": [
+                              "pending",
+                              "verified",
+                              "failed",
+                              "disconnected"
+                            ]
+                          },
+                          "lastError": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "scanRegions": {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          },
+                          "templateVersion": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "lastVerifiedAt": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "lastScanAt": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "parentId": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "kind",
+                          "label",
+                          "accountId",
+                          "roleArn",
+                          "status",
+                          "lastError",
+                          "scanRegions",
+                          "templateVersion",
+                          "lastVerifiedAt",
+                          "lastScanAt",
+                          "parentId"
+                        ],
+                        "additionalProperties": false
+                      }
+                    }
+                  },
+                  "required": [
+                    "hosted",
+                    "signedIn",
+                    "user",
+                    "isAdmin",
+                    "role",
+                    "providers",
+                    "linked",
+                    "connections"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/operator/tenants": {
+      "get": {
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$schema": "https://json-schema.org/draft/2020-12/schema",
+                  "type": "object",
+                  "properties": {
+                    "tenants": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "name": {
+                            "type": "string"
+                          },
+                          "createdAt": {
+                            "type": "string"
+                          },
+                          "members": {
+                            "type": "number"
+                          },
+                          "connections": {
+                            "type": "number"
+                          },
+                          "activeScans": {
+                            "type": "number"
+                          },
+                          "scansFailed7d": {
+                            "type": "number"
+                          },
+                          "scansSucceeded7d": {
+                            "type": "number"
+                          },
+                          "lastScan": {
+                            "anyOf": [
+                              {
+                                "type": "object",
+                                "properties": {
+                                  "status": {
+                                    "type": "string"
+                                  },
+                                  "at": {
+                                    "type": [
+                                      "string",
+                                      "null"
+                                    ]
+                                  },
+                                  "error": {
+                                    "type": [
+                                      "string",
+                                      "null"
+                                    ]
+                                  }
+                                },
+                                "required": [
+                                  "status",
+                                  "at",
+                                  "error"
+                                ],
+                                "additionalProperties": false
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "questions24h": {
+                            "type": "number"
+                          },
+                          "tokens24h": {
+                            "type": "number"
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "name",
+                          "createdAt",
+                          "members",
+                          "connections",
+                          "activeScans",
+                          "scansFailed7d",
+                          "scansSucceeded7d",
+                          "lastScan",
+                          "questions24h",
+                          "tokens24h"
+                        ],
+                        "additionalProperties": false
+                      }
+                    }
+                  },
+                  "required": [
+                    "tenants"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/resources/{arn}": {
+      "get": {
+        "parameters": [
+          {
+            "name": "arn",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$schema": "https://json-schema.org/draft/2020-12/schema",
+                  "type": "object",
+                  "properties": {
+                    "resource": {}
+                  },
+                  "required": [
+                    "resource"
+                  ],
+                  "additionalProperties": {}
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Refused",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$schema": "https://json-schema.org/draft/2020-12/schema",
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/resources/{arn}/remediation": {
+      "get": {
+        "parameters": [
+          {
+            "name": "arn",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$schema": "https://json-schema.org/draft/2020-12/schema",
+                  "type": "object",
+                  "properties": {},
+                  "additionalProperties": {}
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Refused",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$schema": "https://json-schema.org/draft/2020-12/schema",
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/scans": {
+      "get": {
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$schema": "https://json-schema.org/draft/2020-12/schema",
+                  "type": "object",
+                  "properties": {
+                    "scans": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "accountId": {
+                            "type": "string"
+                          },
+                          "status": {
+                            "type": "string"
+                          },
+                          "startedAt": {
+                            "type": "string"
+                          },
+                          "finishedAt": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "regions": {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          },
+                          "units": {
+                            "type": "array",
+                            "items": {}
+                          },
+                          "resourceCount": {
+                            "type": "number"
+                          },
+                          "relationshipCount": {
+                            "type": "number"
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "accountId",
+                          "status",
+                          "startedAt",
+                          "finishedAt",
+                          "regions",
+                          "units",
+                          "resourceCount",
+                          "relationshipCount"
+                        ],
+                        "additionalProperties": false
+                      }
+                    }
+                  },
+                  "required": [
+                    "scans"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "description": "Response shape not covered by the contract test: Queues a real scan, then streams it. There is no input that makes it decline - its 409 needs a scan already queued, and reaching that state means having queued one - so calling it would scan whichever AWS account the deployment is pointed at and overwrite the graph. The events are covered by jobs/progress.test.ts, which seeds the rows they are derived from, and typed as `ScanEvent` in @sightline/shared, so a port that changes them fails typecheck. The queue itself is jobs/queue.test.ts.",
+        "responses": {
+          "default": {
+            "description": "Not shape-tested"
+          }
+        }
+      }
+    },
+    "/api/scans/{id}": {
+      "get": {
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$schema": "https://json-schema.org/draft/2020-12/schema",
+                  "type": "object",
+                  "properties": {
+                    "scan": {
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string"
+                        },
+                        "accountId": {
+                          "type": "string"
+                        },
+                        "status": {
+                          "type": "string"
+                        },
+                        "startedAt": {
+                          "type": "string"
+                        },
+                        "finishedAt": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "regions": {
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          }
+                        },
+                        "units": {
+                          "type": "array",
+                          "items": {}
+                        },
+                        "resourceCount": {
+                          "type": "number"
+                        },
+                        "relationshipCount": {
+                          "type": "number"
+                        }
+                      },
+                      "required": [
+                        "id",
+                        "accountId",
+                        "status",
+                        "startedAt",
+                        "finishedAt",
+                        "regions",
+                        "units",
+                        "resourceCount",
+                        "relationshipCount"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "scan"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Refused",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$schema": "https://json-schema.org/draft/2020-12/schema",
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/scans/diff": {
+      "get": {
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$schema": "https://json-schema.org/draft/2020-12/schema",
+                  "anyOf": [
+                    {
+                      "type": "object",
+                      "properties": {
+                        "diff": {
+                          "type": "object",
+                          "properties": {
+                            "fromScanId": {
+                              "type": "string"
+                            },
+                            "toScanId": {
+                              "type": "string"
+                            },
+                            "fromScanAt": {
+                              "type": "string"
+                            },
+                            "toScanAt": {
+                              "type": "string"
+                            },
+                            "added": {
+                              "type": "array",
+                              "items": {}
+                            },
+                            "removed": {
+                              "type": "array",
+                              "items": {}
+                            },
+                            "modified": {
+                              "type": "array",
+                              "items": {}
+                            }
+                          },
+                          "required": [
+                            "fromScanId",
+                            "toScanId",
+                            "fromScanAt",
+                            "toScanAt",
+                            "added",
+                            "removed",
+                            "modified"
+                          ],
+                          "additionalProperties": false
+                        }
+                      },
+                      "required": [
+                        "diff"
+                      ],
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "diff": {
+                          "type": "null"
+                        },
+                        "reason": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "diff",
+                        "reason"
+                      ],
+                      "additionalProperties": false
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Refused",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$schema": "https://json-schema.org/draft/2020-12/schema",
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/scans/jobs/{jobId}": {
+      "delete": {
+        "parameters": [
+          {
+            "name": "jobId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$schema": "https://json-schema.org/draft/2020-12/schema",
+                  "type": "object",
+                  "properties": {
+                    "cancelled": {
+                      "type": "boolean"
+                    },
+                    "note": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "cancelled"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      },
+      "get": {
+        "parameters": [
+          {
+            "name": "jobId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$schema": "https://json-schema.org/draft/2020-12/schema",
+                  "type": "object",
+                  "properties": {
+                    "status": {
+                      "type": "string"
+                    },
+                    "queuedAt": {
+                      "type": "string"
+                    },
+                    "scanId": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "run": {
+                      "anyOf": [
+                        {
+                          "type": "object",
+                          "properties": {
+                            "id": {
+                              "type": "string"
+                            },
+                            "accountId": {
+                              "type": "string"
+                            },
+                            "status": {
+                              "type": "string"
+                            },
+                            "startedAt": {
+                              "type": "string"
+                            },
+                            "finishedAt": {
+                              "type": [
+                                "string",
+                                "null"
+                              ]
+                            },
+                            "regions": {
+                              "type": "array",
+                              "items": {
+                                "type": "string"
+                              }
+                            },
+                            "units": {
+                              "type": "array",
+                              "items": {}
+                            },
+                            "resourceCount": {
+                              "type": "number"
+                            },
+                            "relationshipCount": {
+                              "type": "number"
+                            }
+                          },
+                          "required": [
+                            "id",
+                            "accountId",
+                            "status",
+                            "startedAt",
+                            "finishedAt",
+                            "regions",
+                            "units",
+                            "resourceCount",
+                            "relationshipCount"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "error": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "status",
+                    "queuedAt",
+                    "scanId",
+                    "run",
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Refused",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$schema": "https://json-schema.org/draft/2020-12/schema",
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/scans/jobs/{jobId}/stream": {
+      "get": {
+        "description": "Response shape not covered by the contract test: An event stream, so it has no single response body to declare, and it stays open until the scan ends. What it emits is asserted directly in jobs/progress.test.ts by seeding the rows the events are derived from - which is possible precisely because the stream is now a function of the database rather than of a live scan.",
+        "parameters": [
+          {
+            "name": "jobId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "default": {
+            "description": "Not shape-tested"
+          }
+        }
+      }
+    },
+    "/api/scans/latest": {
+      "get": {
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$schema": "https://json-schema.org/draft/2020-12/schema",
+                  "type": "object",
+                  "properties": {
+                    "scan": {
+                      "anyOf": [
+                        {
+                          "type": "object",
+                          "properties": {
+                            "id": {
+                              "type": "string"
+                            },
+                            "accountId": {
+                              "type": "string"
+                            },
+                            "status": {
+                              "type": "string"
+                            },
+                            "startedAt": {
+                              "type": "string"
+                            },
+                            "finishedAt": {
+                              "type": [
+                                "string",
+                                "null"
+                              ]
+                            },
+                            "regions": {
+                              "type": "array",
+                              "items": {
+                                "type": "string"
+                              }
+                            },
+                            "units": {
+                              "type": "array",
+                              "items": {}
+                            },
+                            "resourceCount": {
+                              "type": "number"
+                            },
+                            "relationshipCount": {
+                              "type": "number"
+                            }
+                          },
+                          "required": [
+                            "id",
+                            "accountId",
+                            "status",
+                            "startedAt",
+                            "finishedAt",
+                            "regions",
+                            "units",
+                            "resourceCount",
+                            "relationshipCount"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "scanning": {
+                      "type": "boolean"
+                    },
+                    "activeJobId": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "scan",
+                    "scanning",
+                    "activeJobId"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/search": {
+      "get": {
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$schema": "https://json-schema.org/draft/2020-12/schema",
+                  "type": "object",
+                  "properties": {
+                    "results": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "arn": {
+                            "type": "string"
+                          },
+                          "kind": {
+                            "type": "string"
+                          },
+                          "name": {
+                            "type": "string"
+                          },
+                          "region": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "isPublic": {
+                            "type": [
+                              "boolean",
+                              "null"
+                            ]
+                          },
+                          "isAdmin": {
+                            "type": [
+                              "boolean",
+                              "null"
+                            ]
+                          },
+                          "isIdle": {
+                            "type": [
+                              "boolean",
+                              "null"
+                            ]
+                          },
+                          "isUnprotected": {
+                            "type": [
+                              "boolean",
+                              "null"
+                            ]
+                          },
+                          "isUnused": {
+                            "type": [
+                              "boolean",
+                              "null"
+                            ]
+                          },
+                          "estimatedMonthlyCostUsd": {
+                            "type": [
+                              "number",
+                              "null"
+                            ]
+                          },
+                          "reason": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          }
+                        },
+                        "required": [
+                          "arn",
+                          "kind",
+                          "name",
+                          "region"
+                        ],
+                        "additionalProperties": false
+                      }
+                    }
+                  },
+                  "required": [
+                    "results"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/summary": {
+      "get": {
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$schema": "https://json-schema.org/draft/2020-12/schema",
+                  "type": "object",
+                  "properties": {
+                    "byKind": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "kind": {
+                            "type": "string"
+                          },
+                          "count": {
+                            "type": "number"
+                          }
+                        },
+                        "required": [
+                          "kind",
+                          "count"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "byRegion": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "region": {
+                            "type": "string"
+                          },
+                          "count": {
+                            "type": "number"
+                          }
+                        },
+                        "required": [
+                          "region",
+                          "count"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "publicCount": {
+                      "type": "number"
+                    },
+                    "adminCount": {
+                      "type": "number"
+                    },
+                    "idleCount": {
+                      "type": "number"
+                    },
+                    "idleCost": {
+                      "type": "number"
+                    },
+                    "unprotectedCount": {
+                      "type": "number"
+                    },
+                    "unusedCount": {
+                      "type": "number"
+                    }
+                  },
+                  "required": [
+                    "byKind",
+                    "byRegion",
+                    "publicCount",
+                    "adminCount",
+                    "idleCount",
+                    "idleCost",
+                    "unprotectedCount",
+                    "unusedCount"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/team": {
+      "get": {
+        "responses": {
+          "400": {
+            "description": "Refused",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$schema": "https://json-schema.org/draft/2020-12/schema",
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/team/invites": {
+      "post": {
+        "description": "Response shape not covered by the contract test: Hosted only: this suite runs self-hosted, where every team route refuses. The rules - invites used once, roles within what the actor may grant, an owner always kept - are auth/team.test.ts against Postgres, and who may call each is auth/enforcement.test.ts.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$schema": "https://json-schema.org/draft/2020-12/schema",
+                "type": "object",
+                "properties": {
+                  "role": {
+                    "type": "string",
+                    "enum": [
+                      "owner",
+                      "admin",
+                      "member",
+                      "viewer"
+                    ]
+                  }
+                },
+                "required": [
+                  "role"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "default": {
+            "description": "Not shape-tested"
+          }
+        }
+      }
+    },
+    "/api/team/invites/{id}": {
+      "delete": {
+        "description": "Response shape not covered by the contract test: Hosted only: this suite runs self-hosted, where every team route refuses. The rules - invites used once, roles within what the actor may grant, an owner always kept - are auth/team.test.ts against Postgres, and who may call each is auth/enforcement.test.ts.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "default": {
+            "description": "Not shape-tested"
+          }
+        }
+      }
+    },
+    "/api/team/join": {
+      "post": {
+        "description": "Response shape not covered by the contract test: Hosted only: this suite runs self-hosted, where every team route refuses. The rules - invites used once, roles within what the actor may grant, an owner always kept - are auth/team.test.ts against Postgres, and who may call each is auth/enforcement.test.ts.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$schema": "https://json-schema.org/draft/2020-12/schema",
+                "type": "object",
+                "properties": {
+                  "token": {
+                    "type": "string",
+                    "minLength": 20,
+                    "maxLength": 200
+                  }
+                },
+                "required": [
+                  "token"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "default": {
+            "description": "Not shape-tested"
+          }
+        }
+      }
+    },
+    "/api/team/members/{id}": {
+      "delete": {
+        "description": "Response shape not covered by the contract test: Hosted only: this suite runs self-hosted, where every team route refuses. The rules - invites used once, roles within what the actor may grant, an owner always kept - are auth/team.test.ts against Postgres, and who may call each is auth/enforcement.test.ts.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "default": {
+            "description": "Not shape-tested"
+          }
+        }
+      },
+      "patch": {
+        "description": "Response shape not covered by the contract test: Hosted only: this suite runs self-hosted, where every team route refuses. The rules - invites used once, roles within what the actor may grant, an owner always kept - are auth/team.test.ts against Postgres, and who may call each is auth/enforcement.test.ts.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$schema": "https://json-schema.org/draft/2020-12/schema",
+                "type": "object",
+                "properties": {
+                  "role": {
+                    "type": "string",
+                    "enum": [
+                      "owner",
+                      "admin",
+                      "member",
+                      "viewer"
+                    ]
+                  }
+                },
+                "required": [
+                  "role"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "default": {
+            "description": "Not shape-tested"
+          }
+        }
+      }
+    },
+    "/api/tokens": {
+      "get": {
+        "description": "Response shape not covered by the contract test: Hosted only: this suite runs self-hosted, where there is no sign-in for a token to stand for. What a token may and may not do is auth/enforcement.test.ts, against the real app.",
+        "responses": {
+          "default": {
+            "description": "Not shape-tested"
+          }
+        }
+      },
+      "post": {
+        "description": "Response shape not covered by the contract test: Hosted only: this suite runs self-hosted, where there is no sign-in for a token to stand for. What a token may and may not do is auth/enforcement.test.ts, against the real app.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$schema": "https://json-schema.org/draft/2020-12/schema",
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 80
+                  },
+                  "role": {
+                    "type": "string",
+                    "enum": [
+                      "viewer",
+                      "member",
+                      "admin"
+                    ]
+                  },
+                  "expiresInDays": {
+                    "default": 90,
+                    "anyOf": [
+                      {
+                        "type": "integer",
+                        "minimum": 1,
+                        "maximum": 366
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  }
+                },
+                "required": [
+                  "name",
+                  "role"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "default": {
+            "description": "Not shape-tested"
+          }
+        }
+      }
+    },
+    "/api/tokens/{id}": {
+      "delete": {
+        "description": "Response shape not covered by the contract test: Hosted only: this suite runs self-hosted, where there is no sign-in for a token to stand for. What a token may and may not do is auth/enforcement.test.ts, against the real app.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "default": {
+            "description": "Not shape-tested"
+          }
+        }
+      }
+    },
+    "/api/webhook": {
+      "delete": {
+        "description": "Response shape not covered by the contract test: Sends to, or changes, an outside URL; a contract run would post to somebody's chat. Refusing unsafe URLs is integrations/webhook.test.ts, who may call it auth/enforcement.test.ts.",
+        "responses": {
+          "default": {
+            "description": "Not shape-tested"
+          }
+        }
+      },
+      "get": {
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$schema": "https://json-schema.org/draft/2020-12/schema",
+                  "type": "object",
+                  "properties": {
+                    "configured": {
+                      "type": "boolean"
+                    },
+                    "host": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "lastDeliveryAt": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "lastStatus": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "configured",
+                    "host",
+                    "lastDeliveryAt",
+                    "lastStatus"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "description": "Response shape not covered by the contract test: Sends to, or changes, an outside URL; a contract run would post to somebody's chat. Refusing unsafe URLs is integrations/webhook.test.ts, who may call it auth/enforcement.test.ts.",
+        "responses": {
+          "default": {
+            "description": "Not shape-tested"
+          }
+        }
+      }
+    },
+    "/api/webhook/test": {
+      "post": {
+        "description": "Response shape not covered by the contract test: Sends to, or changes, an outside URL; a contract run would post to somebody's chat. Refusing unsafe URLs is integrations/webhook.test.ts, who may call it auth/enforcement.test.ts.",
+        "responses": {
+          "default": {
+            "description": "Not shape-tested"
+          }
+        }
+      }
+    }
+  }
+}
