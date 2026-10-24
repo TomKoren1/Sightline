@@ -113,6 +113,10 @@ spec:
             allowPrivilegeEscalation: false
             capabilities: { drop: [ALL] }
             readOnlyRootFilesystem: true
+          # The image's command, with V8's heap capped under the 1Gi limit for
+          # the same reason as the worker's: collect before the kernel kills.
+          command:
+            ["node", "--enable-source-maps", "--max-old-space-size=768", "apps/api/dist/server.js"]
           ports:
             - { name: http, containerPort: 3000 }
             - { name: metrics, containerPort: 9464 }
