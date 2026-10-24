@@ -233,6 +233,10 @@ jobs:
           for overlay in prod staging; do
             kubectl kustomize "deploy/k8s/$overlay" > "rendered/$overlay.yaml"
           done
+          # The runner has no chart repositories configured; Chart.lock pins
+          # the versions, these only say where to fetch them from.
+          helm repo add prometheus-community https://prometheus-community.github.io/helm-charts
+          helm repo add grafana https://grafana.github.io/helm-charts
           helm dependency build helm/monitoring
           helm lint helm/monitoring
           helm template monitoring helm/monitoring > rendered/monitoring.yaml

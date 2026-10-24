@@ -13,8 +13,11 @@ resources:
   - networkpolicy.yaml
   - backup.yaml
 
-commonLabels:
-  app.kubernetes.io/part-of: sightline
+# `labels` with selectors, which is what the deprecated `commonLabels` did.
+labels:
+  - pairs:
+      app.kubernetes.io/part-of: sightline
+    includeSelectors: true
 
 configMapGenerator:
   # Non-secret configuration. Everything here is safe in git; anything that is
