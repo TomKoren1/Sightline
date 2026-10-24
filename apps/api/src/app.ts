@@ -13,8 +13,11 @@
  */
 
 import "reflect-metadata";
+import { HttpException } from "@nestjs/common";
 
+import { createHash } from "node:crypto";
 import cookie from "@fastify/cookie";
+import rateLimit, { type RateLimitPluginOptions } from "@fastify/rate-limit";
 import cors from "@fastify/cors";
 import { NestFactory } from "@nestjs/core";
 import { FastifyAdapter, type NestFastifyApplication } from "@nestjs/platform-fastify";
@@ -24,6 +27,7 @@ import { AppModule } from "./app.module.js";
 import { cfg, isHosted } from "./config.js";
 import { InvalidIdFilter, SchemaErrorFilter } from "./malformedRequest.filter.js";
 import { loggerOptions } from "./observability/logging.js";
+import { SESSION_COOKIE } from "./auth/session.js";
 
 /** One registered route, as Fastify sees it. */
 export interface RouteInfo {
@@ -101,6 +105,8 @@ export async function buildApp(options: BuildOptions = {}): Promise<NestFastifyA
     credentials: isHosted(),
   });
 
+  if (isHosted()) await instance.register(rateLimit, rateLimitOptions());
+
   /**
    * Request rate, errors and duration, by route *template*.
    *
@@ -134,4 +140,41 @@ export async function buildApp(options: BuildOptions = {}): Promise<NestFastifyA
 
   await app.init();
   return app;
+}
+
+/**
+ * Every endpoint, rate-limited: per session when signed in, per address when
+ * not - and the sign-in routes far lower, because they are what a credential-
+ * stuffing script or a redirect loop hits. In memory, so per API replica: the
+ * point is a ceiling, not an exact count, and a shared store would be one more
+ * thing to run. `CF-Connecting-IP` is Cloudflare's view of the visitor; the
+ * API is reachable only through the web pods, so a visitor cannot set it.
+ */
+export function rateLimitOptions(): RateLimitPluginOptions {
+  return {
+    timeWindow: "1 minute",
+    max: (req) =>
+      req.url.startsWith("/api/auth/") ? cfg.RATE_LIMIT_AUTH_PER_MINUTE : cfg.RATE_LIMIT_PER_MINUTE,
+    keyGenerator: (req) => {
+      const session = (req.cookies as Record<string, string | undefined> | undefined)?.[
+        SESSION_COOKIE
+      ];
+      if (session) return `s:${createHash("sha256").update(session).digest("hex").slice(0, 32)}`;
+      const forwarded = req.headers["cf-connecting-ip"];
+      return `ip:${typeof forwarded === "string" ? forwarded : req.ip}`;
+    },
+    // Probes poll this every few seconds, and are not a visitor.
+    allowList: (req) => req.url.startsWith("/api/health"),
+    // A Nest HttpException, not a plain object: the plugin throws what this
+    // returns, and Nest's error handler answers anything else with a 500.
+    errorResponseBuilder: (_req, context) =>
+      new HttpException(
+        {
+          error:
+            `Too many requests: at most ${context.max} a minute. ` +
+            `Try again in ${Math.ceil(context.ttl / 1000)} seconds.`,
+        },
+        429,
+      ),
+  };
 }

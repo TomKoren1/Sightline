@@ -256,6 +256,14 @@ const schema = z.object({
   CHAT_QUESTIONS_PER_HOUR: blankAsUnset(z.coerce.number().int().positive().optional()),
 
   /**
+   * Requests per minute, per signed-in session or per address when signed out.
+   * Hosted mode only. Every endpoint, beside the stricter limits above on what
+   * costs money; sign-in routes get the second, much lower number.
+   */
+  RATE_LIMIT_PER_MINUTE: blankAsUnset(z.coerce.number().int().positive().default(300)),
+  RATE_LIMIT_AUTH_PER_MINUTE: blankAsUnset(z.coerce.number().int().positive().default(20)),
+
+  /**
    * Testing hook: comma-separated `service:region` pairs that should fail.
    * Used to demonstrate partial-failure handling without breaking the mock.
    * Example: `rds:eu-west-1,lambda:ap-southeast-1`
