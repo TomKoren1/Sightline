@@ -41,6 +41,11 @@ configMapGenerator:
       - CHAT_ENABLED=true
       # The Job owns the schema; see the comment on it in app.yaml.
       - MIGRATE_ON_BOOT=false
+      # Where the backup CronJob reports its last success. The monitoring
+      # chart's Prometheus brings this Pushgateway and scrapes it; without the
+      # key the push is skipped, the metric is absent, and SightlineBackupStale
+      # fires however well the backups are going.
+      - PUSHGATEWAY_URL=http://monitoring-prometheus-pushgateway.monitoring.svc:9091
 
   # Grafana's sidecar discovers dashboards by label, in any namespace, so this
   # project's dashboards ship with this project rather than with the monitoring
