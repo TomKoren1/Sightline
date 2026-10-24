@@ -52,7 +52,8 @@ watch the scan stream service by service.
    **Changes**. Two buckets get the same permissive policy and only one becomes
    public, because the other's access block neutralises it. Verdicts are computed,
    not read off a field.
-3. **Open Trust.** What is checked, when it last ran, and the last agent eval.
+3. **Open Coverage.** What the last scan could see, the data checks against the demo
+   account's answer key, and the last agent eval.
 
 **Then add an Anthropic key to talk to it:**
 
@@ -160,7 +161,7 @@ on every commit; and **twenty-one cases** against the live agent, scored on the
 resources each answer cites, with traps that a tool reading flags rather than
 evaluating them would fall into. The split makes failures diagnosable — tier 1
 passing and tier 2 failing means the data is right and the agent misused it. The
-same checks run inside the product, under **Trust**.
+same checks run inside the product, under **Coverage**, for the demo account.
 
 ---
 
@@ -302,6 +303,7 @@ ExternalId already in use rather than rotating a working secret.
 | `npm run setup -- --mock`         | stay on the demo account                        |
 | `npm run setup -- --disconnect`   | delete the role and go back to the demo account |
 | `npm run setup -- --profile work` | use a named AWS CLI profile                     |
+| `npm run setup -- --yes`          | no confirmations, for scripting                 |
 
 **A whole AWS Organization** connects once, in the hosted product: choose
 _An AWS Organization_ when connecting, deploy the stack in the management account
@@ -311,7 +313,6 @@ Checking the organization lists its accounts with `organizations:ListAccounts` a
 makes each active one an account of its own under it: scanned, pinned and isolated
 like one connected by hand. Accounts that leave are marked disconnected. Paths
 _between_ accounts are not modelled yet.
-| `npm run setup -- --yes` | no confirmations, for scripting |
 
 It needs the AWS CLI, which is also what creates the role. The demo account needs
 neither it nor Node.

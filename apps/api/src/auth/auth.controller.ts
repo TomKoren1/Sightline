@@ -31,10 +31,19 @@ import { cfg, isHosted } from "../core/config.js";
 import { listConnections } from "../tenancy/connections.js";
 import { confirmationMatches, purgeTenant } from "../tenancy/purge.js";
 import { Public } from "./public.decorator.js";
-import { configuredProviders, createState, verifyState, type ProviderName } from "./oauth.js";
+import {
+  configuredProviders,
+  createState,
+  newBinding,
+  OAUTH_COOKIE,
+  pkceVerifier,
+  verifyState,
+  type ProviderName,
+} from "./oauth.js";
 import { authorizationUrl, exchangeCode } from "./providers.js";
 import {
   cookieOptions,
+  flowCookieOptions,
   issueSession,
   listSessions,
   revokeAllSessions,
@@ -119,7 +128,9 @@ export class AuthController {
     if (!configuredProviders().includes(name)) {
       throw new BadRequestException({ error: `${name} sign-in is not configured` });
     }
-    return reply.redirect(authorizationUrl(name, createState(name)), 302);
+    const binding = newBinding();
+    reply.setCookie(OAUTH_COOKIE, binding, flowCookieOptions());
+    return reply.redirect(authorizationUrl(name, createState(name, binding)), 302);
   }
 
   /**
@@ -138,12 +149,15 @@ export class AuthController {
   ) {
     const name = asProvider(provider);
     const query = req.query as { code?: string; state?: string; error?: string };
+    // One use, whatever the outcome.
+    const binding = req.cookies[OAUTH_COOKIE];
+    reply.clearCookie(OAUTH_COOKIE, { path: flowCookieOptions().path });
 
     if (query.error) {
       // The user declined at the provider, which is not an error here.
       return reply.redirect(appUrl({ signin: "cancelled" }), 302);
     }
-    if (!verifyState(query.state, name)) {
+    if (!verifyState(query.state, name, binding)) {
       return reply.redirect(appUrl({ signin: "expired" }), 302);
     }
     if (!query.code) {
@@ -151,7 +165,7 @@ export class AuthController {
     }
 
     try {
-      const identity = await exchangeCode(name, query.code);
+      const identity = await exchangeCode(name, query.code, pkceVerifier(query.state!));
       const user = await findOrCreateUser(identity);
       const token = await issueSession(user.id, {
         userAgent: req.headers["user-agent"],

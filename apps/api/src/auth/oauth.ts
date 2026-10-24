@@ -10,7 +10,7 @@
  * `users` row holds an email address and a provider's subject.
  */
 
-import { createHmac, randomBytes, timingSafeEqual } from "node:crypto";
+import { createHash, createHmac, randomBytes, timingSafeEqual } from "node:crypto";
 
 import { cfg } from "../core/config.js";
 
@@ -64,6 +64,27 @@ export function redirectUri(provider: ProviderName): string {
 }
 
 /**
+ * The cookie that ties a sign-in to the browser that started it.
+ *
+ * A signed state alone proves this service issued it, not that *this browser*
+ * asked for it: an attacker could start a sign-in, approve it with their own
+ * account, and send the callback URL to a victim, who would land signed in to
+ * the attacker's workspace - and connect their AWS account into it. The state's
+ * MAC covers this cookie's value, so the callback verifies only in the browser
+ * holding it. Starting sign-in in a second tab replaces it; the first tab's
+ * callback then reads as expired, and trying again works.
+ */
+export const OAUTH_COOKIE = "sightline_oauth";
+
+export function newBinding(): string {
+  return randomBytes(32).toString("base64url");
+}
+
+function mac(body: string, binding: string): string {
+  return createHmac("sha256", secret()).update(`${body}.${binding}`).digest("base64url");
+}
+
+/**
  * CSRF protection for the round trip.
  *
  * Random and signed rather than stored, so the callback verifies it without a
@@ -71,23 +92,38 @@ export function redirectUri(provider: ProviderName): string {
  * of an old one fails on the timestamp. The provider is inside the signed body,
  * so a state issued for one provider cannot be presented to another.
  */
-export function createState(provider: ProviderName): string {
+export function createState(provider: ProviderName, binding: string): string {
   const body = `${provider}.${randomBytes(16).toString("base64url")}.${Date.now()}`;
-  return `${body}.${createHmac("sha256", secret()).update(body).digest("base64url")}`;
+  return `${body}.${mac(body, binding)}`;
 }
 
-export function verifyState(state: string | undefined, provider: ProviderName): boolean {
-  if (!state) return false;
+/**
+ * The PKCE verifier for a state, derived rather than stored.
+ *
+ * Someone who intercepts the callback URL has the code and the state, but not
+ * the secret, so cannot produce the verifier the token endpoint demands.
+ */
+export function pkceVerifier(state: string): string {
+  return createHmac("sha256", secret()).update(`pkce.${state}`).digest("base64url");
+}
+
+export function pkceChallenge(state: string): string {
+  return createHash("sha256").update(pkceVerifier(state)).digest("base64url");
+}
+
+export function verifyState(
+  state: string | undefined,
+  provider: ProviderName,
+  binding: string | undefined,
+): boolean {
+  if (!state || !binding) return false;
   const parts = state.split(".");
   if (parts.length !== 4) return false;
-  const [named, nonce, issuedAt, mac] = parts as [string, string, string, string];
+  const [named, nonce, issuedAt, signature] = parts as [string, string, string, string];
   if (named !== provider) return false;
 
-  const expected = Buffer.from(
-    createHmac("sha256", secret()).update(`${named}.${nonce}.${issuedAt}`).digest("base64url"),
-    "utf8",
-  );
-  const actual = Buffer.from(mac, "utf8");
+  const expected = Buffer.from(mac(`${named}.${nonce}.${issuedAt}`, binding), "utf8");
+  const actual = Buffer.from(signature, "utf8");
   // Length-checked first because `timingSafeEqual` throws on a mismatch, which
   // would itself be a timing signal.
   if (expected.length !== actual.length || !timingSafeEqual(expected, actual)) return false;

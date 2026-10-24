@@ -12,6 +12,7 @@
  * a tool against the scanned inventory and back as a cited answer.
  */
 
+import { createHash } from "node:crypto";
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
 
 export const E2E_USER = { id: 4242, login: "e2e-user", email: "e2e@sightline.test" };
@@ -30,20 +31,42 @@ function json(res: ServerResponse, value: unknown): void {
   res.end(JSON.stringify(value));
 }
 
-function github(url: URL, res: ServerResponse): void {
+/**
+ * The PKCE challenge each issued code was bound to, so the token exchange is
+ * held to it as GitHub holds it: a sign-in that stopped sending the verifier
+ * fails the journey rather than passing against a lenient stand-in.
+ */
+const challenges = new Map<string, string>();
+
+async function github(req: IncomingMessage, url: URL, res: ServerResponse): Promise<void> {
   switch (url.pathname) {
     case "/github/authorize": {
       // No consent screen: straight back with a code, as GitHub does for an
       // app the user has already authorised.
+      const challenge = url.searchParams.get("code_challenge");
+      if (!challenge || url.searchParams.get("code_challenge_method") !== "S256") {
+        res.writeHead(400).end("PKCE challenge missing");
+        return;
+      }
+      const code = `e2e-code-${challenges.size}`;
+      challenges.set(code, challenge);
       const back = new URL(url.searchParams.get("redirect_uri") ?? "");
-      back.searchParams.set("code", "e2e-code");
+      back.searchParams.set("code", code);
       back.searchParams.set("state", url.searchParams.get("state") ?? "");
       res.writeHead(302, { Location: back.toString() });
       res.end();
       return;
     }
-    case "/github/token":
+    case "/github/token": {
+      const form = new URLSearchParams(await body(req));
+      const challenge = challenges.get(form.get("code") ?? "");
+      const verifier = form.get("code_verifier") ?? "";
+      if (!challenge || createHash("sha256").update(verifier).digest("base64url") !== challenge) {
+        return json(res, { error: "bad_verification_code" });
+      }
+      challenges.delete(form.get("code") ?? "");
       return json(res, { access_token: "e2e-token", token_type: "bearer" });
+    }
     case "/github/user":
       return json(res, { id: E2E_USER.id, login: E2E_USER.login, name: "E2E User" });
     case "/github/emails":
@@ -128,7 +151,12 @@ async function anthropic(req: IncomingMessage, res: ServerResponse): Promise<voi
 export function startStubs(port: number): Promise<Server> {
   const server = createServer((req, res) => {
     const url = new URL(req.url ?? "/", "http://stub");
-    if (url.pathname.startsWith("/github/")) return github(url, res);
+    if (url.pathname.startsWith("/github/")) {
+      github(req, url, res).catch((err: unknown) => {
+        res.writeHead(500).end(String(err));
+      });
+      return;
+    }
     if (req.method === "POST" && url.pathname === "/v1/messages") {
       anthropic(req, res).catch((err: unknown) => {
         res.writeHead(500).end(String(err));

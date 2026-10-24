@@ -64,6 +64,16 @@ describe("the authorization URL", () => {
     expect(url.searchParams.get("scope")).toBe("read:user user:email");
     expect(url.searchParams.get("scope")).not.toContain("repo");
   });
+
+  it("sends a PKCE challenge derived from the state, to both providers", async () => {
+    const { authorizationUrl } = await load();
+    const { pkceChallenge } = await import("./oauth.js");
+    for (const provider of ["google", "github"] as const) {
+      const url = new URL(authorizationUrl(provider, "the-state"));
+      expect(url.searchParams.get("code_challenge_method")).toBe("S256");
+      expect(url.searchParams.get("code_challenge")).toBe(pkceChallenge("the-state"));
+    }
+  });
 });
 
 describe("Google's id token", () => {
@@ -136,8 +146,13 @@ describe("Google's id token", () => {
   it("exchanges a code for an identity", async () => {
     const { exchangeCode } = await load();
     const calls: string[] = [];
-    const identity = await exchangeCode("google", "the-code", ((url: string) => {
+    const verifiers: (string | null)[] = [];
+    const identity = await exchangeCode("google", "the-code", "the-verifier", ((
+      url: string,
+      init?: { body?: URLSearchParams },
+    ) => {
       calls.push(String(url));
+      verifiers.push(init?.body?.get("code_verifier") ?? null);
       return Promise.resolve(
         json({
           id_token: idToken({
@@ -153,12 +168,14 @@ describe("Google's id token", () => {
     }) as unknown as typeof fetch);
     expect(identity.subject).toBe("999");
     expect(calls).toEqual(["https://oauth2.googleapis.com/token"]);
+    // Without it, a code lifted from the callback URL would be redeemable.
+    expect(verifiers).toEqual(["the-verifier"]);
   });
 
   it("carries the provider's own diagnostic into the error", async () => {
     const { exchangeCode } = await load();
     await expect(
-      exchangeCode("google", "bad", () =>
+      exchangeCode("google", "bad", "v", () =>
         Promise.resolve(json({ error: "redirect_uri_mismatch" }, false)),
       ),
       // `redirect_uri_mismatch` is the difference between ten minutes and an
@@ -229,11 +246,13 @@ describe("GitHub", () => {
   it("exchanges a code using the token for both calls", async () => {
     const { exchangeCode } = await load();
     const seen: { url: string; auth: string | undefined }[] = [];
-    const identity = await exchangeCode("github", "code", ((
+    let sentVerifier: string | null = null;
+    const identity = await exchangeCode("github", "code", "gh-verifier", ((
       url: string,
-      init?: { headers?: Record<string, string> },
+      init?: { headers?: Record<string, string>; body?: URLSearchParams },
     ) => {
       const target = String(url);
+      if (init?.body) sentVerifier = init.body.get("code_verifier");
       seen.push({ url: target, auth: init?.headers?.["Authorization"] });
       if (target === "https://github.com/login/oauth/access_token") {
         return Promise.resolve(json({ access_token: "gho_token" }));
@@ -252,11 +271,12 @@ describe("GitHub", () => {
     });
     // The access token is never sent anywhere but GitHub, and never stored.
     expect(seen.filter((s) => s.auth === "Bearer gho_token")).toHaveLength(2);
+    expect(sentVerifier).toBe("gh-verifier");
   });
 
   it("still signs in a user whose addresses cannot be read", async () => {
     const { exchangeCode } = await load();
-    const identity = await exchangeCode("github", "code", ((url: string) => {
+    const identity = await exchangeCode("github", "code", "v", ((url: string) => {
       const target = String(url);
       if (target === "https://github.com/login/oauth/access_token") {
         return Promise.resolve(json({ access_token: "t" }));
