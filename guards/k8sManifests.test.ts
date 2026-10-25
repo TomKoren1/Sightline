@@ -18,7 +18,7 @@ import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import { parseAllDocuments, parse } from "yaml";
 
-import { hostedInvariantViolations, type Env } from "../apps/api/src/hostedMode.js";
+import { hostedInvariantViolations, type Env } from "../apps/api/src/core/hostedMode.js";
 
 const root = fileURLToPath(new URL("../", import.meta.url));
 const read = (p: string) => readFileSync(`${root}deploy/k8s/${p}`, "utf8");

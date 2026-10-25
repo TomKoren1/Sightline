@@ -7,7 +7,8 @@
  * where a change stops being local: neither side can be read, tested or
  * moved without the other. So the folder graph must stay acyclic, core/ must
  * import nothing else in src, and the mock AWS package - test tooling - may
- * be reached only from evals/ and cli/.
+ * be reached only from evals/ and cli/. NestJS lives in http/ and nowhere
+ * else (ADR-018), and only the entry points reach into it.
  */
 
 import { readdirSync, readFileSync, statSync } from "node:fs";
@@ -95,7 +96,8 @@ function cycles(graph: Map<string, Set<string>>): string[][] {
 describe("the API's layering", () => {
   it("reads the source tree", () => {
     expect(files.length).toBeGreaterThan(150);
-    expect(folders.size).toBeGreaterThan(15);
+    // Folders, not files: http/ now holds the Nest edge that was spread over six.
+    expect(folders.size).toBeGreaterThan(12);
   });
 
   it("has no folders that depend on each other, however indirectly", () => {
@@ -119,14 +121,24 @@ describe("the API's layering", () => {
     expect(users).toEqual([]);
   });
 
-  it("keeps NestJS at the HTTP edge (ADR-018)", () => {
-    const edge = /\.(controller|module|guard|interceptor|decorator|filter|service)\.ts$/;
-    const reasoned = new Set(["app.ts", "core/access.ts", "tenancy/requestScope.ts"]);
+  it("keeps NestJS in http/ (ADR-018)", () => {
+    // core/access.ts holds the route-metadata decorators, which domain code
+    // names when it describes who may do what.
     const outside = files
       .filter((f) => /from\s+"@nestjs\//.test(readFileSync(f, "utf8")))
       .map((f) => relative(src, f).split(sep).join("/"))
-      .filter((f) => !edge.test(f) && !reasoned.has(f));
+      .filter((f) => !f.startsWith("http/") && f !== "core/access.ts");
     expect(outside, "domain code importing Nest; see docs/adr/018").toEqual([]);
+  });
+
+  it("is reached from http/ only by the entry points", () => {
+    // The domain runs without a Nest application - in the worker and the CLIs
+    // - so a domain folder importing the edge would drag Nest in with it.
+    const users = [...folders]
+      .filter(([, to]) => to.has("http"))
+      .map(([from]) => from)
+      .filter((from) => from !== "(root)" && from !== "cli");
+    expect(users, "a domain folder importing http/").toEqual([]);
   });
 
   it("would catch a cycle", () => {

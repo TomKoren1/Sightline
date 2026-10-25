@@ -1,10 +1,10 @@
 /** HTTP server: builds the app, migrates, listens. */
 
-import { buildApp } from "./app.js";
+import { buildApp } from "./http/app.js";
 import { startTracing, stopTracing } from "./observability/tracing.js";
 import { cfg, migrateOnBoot, scanWorkerMode } from "./core/config.js";
 import { assertSchemaCurrent, connectedAsOwner, migrate, closePool } from "./db/postgres.js";
-import { apiPrivilegeWarnings, assertHostedInvariants } from "./hostedMode.js";
+import { apiPrivilegeWarnings, assertHostedInvariants } from "./core/hostedMode.js";
 import { watchCertificate } from "./aws/certificateWatch.js";
 import { ScanWorker } from "./jobs/worker.js";
 import { ensureLocalTenant } from "./tenancy/local.js";

@@ -3,7 +3,7 @@
   "info": {
     "title": "Sightline API",
     "version": "1",
-    "description": "Every route Sightline serves. Response shapes are the ones its contract test enforces; a route that test leaves out says why. Requests are authenticated by session cookie or, in hosted mode, an API token (`Authorization: Bearer`). Generated from apps/api/src/contract.ts."
+    "description": "Every route Sightline serves. Response shapes are the ones its contract test enforces; a route that test leaves out says why. Requests are authenticated by session cookie or, in hosted mode, an API token (`Authorization: Bearer`). Generated from apps/api/src/http/contract.ts."
   },
   "paths": {
     "/api/audit": {

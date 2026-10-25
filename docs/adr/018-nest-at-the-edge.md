@@ -21,9 +21,15 @@ and metadata model carries real weight here - the global auth guard with
 tracing interceptors, and the route table the enforcement and contract tests
 read. Rewriting that is risk for no product change.
 
-So: Nest imports stay in `*.controller.ts`, `*.module.ts`, `*.guard.ts`,
-`*.interceptor.ts`, `*.decorator.ts`, `*.filter.ts` and `*.service.ts`, plus
-three files with a reason each - `app.ts` (the composition root),
-`core/access.ts` (the route metadata decorators) and
-`tenancy/requestScope.ts` (it resolves an HTTP request's scope and answers
-with HTTP errors). `guards/apiLayers.test.ts` holds the line.
+So: everything that imports Nest lives in `src/http/` - the composition root
+(`app.ts`, `app.module.ts`), one folder per area holding its controller,
+module and service, the guard, the interceptors, the filter, and
+`tenancy/requestScope.ts`, which resolves an HTTP request's scope and answers
+with HTTP errors. The one exception is `core/access.ts`, the route-metadata
+decorators, which domain code names when it describes who may do what. Only
+the entry points (`server.ts`) and `cli/openapi.ts` import from `http/`.
+`guards/apiLayers.test.ts` holds both lines.
+
+The folders were once mixed - `scan/` beside `scans/`, `connection/` beside
+`tenancy/connections.ts` - with the boundary visible only as a file suffix.
+Under `http/` it is visible in the tree.
