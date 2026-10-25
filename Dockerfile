@@ -17,7 +17,7 @@
 # --- dependencies ----------------------------------------------------------
 # Workspace manifests are copied before the source so `npm ci` is cached and a
 # code change does not reinstall the tree.
-FROM node:22.23.3-alpine@sha256:0a7108bf6c7bf5de370ffb1a3ed6be93d405b43ff159f681a8d18c0e2bc2e402 AS deps
+FROM node:26.12.1-alpine@sha256:40cd011b55415bc894e45b02fdd5a5dfde056921b7d23a64c74f80497af48797 AS deps
 WORKDIR /app
 COPY package.json package-lock.json ./
 COPY packages/shared/package.json packages/shared/
@@ -42,7 +42,7 @@ RUN npm run build -w @sightline/api
 # The API's runtime dependencies and nothing else: no tsx, no esbuild, no
 # drizzle-kit, no vitest, and none of the frontend's. Workspace packages are
 # bundled into the build, so their links here are never followed.
-FROM node:22.23.3-alpine@sha256:0a7108bf6c7bf5de370ffb1a3ed6be93d405b43ff159f681a8d18c0e2bc2e402 AS apideps
+FROM node:26.12.1-alpine@sha256:40cd011b55415bc894e45b02fdd5a5dfde056921b7d23a64c74f80497af48797 AS apideps
 WORKDIR /app
 COPY package.json package-lock.json ./
 COPY packages/shared/package.json packages/shared/
@@ -56,7 +56,7 @@ RUN npm ci --omit=dev --workspace @sightline/api --include-workspace-root=false 
 # removed: nothing here runs through it - every command is `node <file>`,
 # which also delivers SIGTERM to the server rather than to an npm wrapper -
 # and a package manager in a production image is only attack surface.
-FROM node:22.23.3-alpine@sha256:0a7108bf6c7bf5de370ffb1a3ed6be93d405b43ff159f681a8d18c0e2bc2e402 AS api
+FROM node:26.12.1-alpine@sha256:40cd011b55415bc894e45b02fdd5a5dfde056921b7d23a64c74f80497af48797 AS api
 WORKDIR /app
 RUN rm -rf /usr/local/lib/node_modules/npm /usr/local/lib/node_modules/corepack       /usr/local/bin/npm /usr/local/bin/npx /usr/local/bin/corepack
 COPY --from=apideps /app/node_modules node_modules
