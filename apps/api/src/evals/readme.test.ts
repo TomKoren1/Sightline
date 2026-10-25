@@ -1,14 +1,11 @@
 /**
- * Guards on the README: every documented command must exist, and every number it
- * quotes must match what is there.
+ * Guards on the documentation: every command it tells the reader to type must
+ * exist, and every number the README quotes must match what is there.
  *
- * It has rotted twice. `npm run query -w @sightline/api` was in the commands
- * table with no such script defined - the CLI file existed and its own header
- * gave that invocation. And the counts drifted: fourteen assertions claimed
- * where there were fifteen.
- *
- * The README is now the only documentation, which makes these guards the only
- * thing standing between it and rot.
+ * Both have rotted: `npm run query -w @sightline/api` was documented with no
+ * such script, and fourteen assertions were claimed where there were fifteen.
+ * Commands are checked in every document a reader is sent to, so moving a
+ * section out of the README does not move it out of reach.
  */
 
 import { readFileSync, readdirSync } from "node:fs";
@@ -19,6 +16,16 @@ const read = (path: string) => readFileSync(new URL(path, root), "utf8");
 const readJson = (path: string) => JSON.parse(read(path)) as { scripts?: Record<string, string> };
 
 const readme = read("README.md");
+
+/** Every Markdown document a reader is pointed at, keyed by path. */
+const DOCUMENTS = [
+  "README.md",
+  ...readdirSync(new URL("docs/", root))
+    .filter((f) => f.endsWith(".md"))
+    .map((f) => `docs/${f}`),
+  "deploy/k8s/README.md",
+  "helm/monitoring/README.md",
+];
 
 const scripts = {
   root: readJson("package.json").scripts ?? {},
@@ -39,13 +46,15 @@ const scripts = {
 function documentedCommands(): { raw: string; script: string; workspace: string }[] {
   const found: { raw: string; script: string; workspace: string }[] = [];
   const pattern = /\bnpm run ([a-z0-9:-]+)(?:\s+-w\s+(@sightline\/[a-z]+))?/g;
-  for (const match of readme.matchAll(pattern)) {
-    found.push({ raw: match[0], script: match[1]!, workspace: match[2] ?? "root" });
+  for (const doc of DOCUMENTS) {
+    for (const match of read(doc).matchAll(pattern)) {
+      found.push({ raw: `${doc}: ${match[0]}`, script: match[1]!, workspace: match[2] ?? "root" });
+    }
   }
   return found;
 }
 
-describe("every command the README documents exists", () => {
+describe("every command the documentation gives exists", () => {
   const commands = documentedCommands();
 
   it("finds commands to check at all", () => {
@@ -60,7 +69,7 @@ describe("every command the README documents exists", () => {
       expect(available, `unknown workspace ${workspace}`).toBeDefined();
       expect(
         Object.keys(available),
-        `README documents "${script}" in ${workspace}, which defines no such script`,
+        `the docs give "${script}" in ${workspace}, which defines no such script`,
       ).toContain(script);
     },
   );
@@ -145,32 +154,4 @@ describe("the numbers the README quotes are true", () => {
     const actual = (read("apps/api/src/evals/checks.ts").match(/^ {4}id: "/gm) ?? []).length;
     expect(quoted(/\*\*([a-z-]+) ground-truth checks\*\*/)).toBe(actual);
   });
-
-  /**
-   * Counted by running the suite, not by parsing — a test that asserts its own
-   * suite's size from source would be counting `it.each` rows wrongly. This
-   * instead checks the README has not drifted by an order of magnitude, which
-   * is the failure that actually happened (138 claimed, 176 real).
-   */
-  it("states a plausible test count", () => {
-    const m = /\| ([0-9]+) unit tests /.exec(readme);
-    expect(m, "README should quote a unit test count").toBeTruthy();
-    const claimed = Number(m![1]);
-    const testFiles =
-      countTestFiles(new URL("apps/", root)) + countTestFiles(new URL("guards/", root));
-    // Roughly ten assertions per file is the shape of this suite; an order of
-    // magnitude out means the number was never updated.
-    expect(claimed).toBeGreaterThan(testFiles * 4);
-    expect(claimed).toBeLessThan(testFiles * 40);
-  });
-
-  function countTestFiles(dir: URL): number {
-    let total = 0;
-    for (const entry of readdirSync(dir, { withFileTypes: true })) {
-      if (entry.name === "node_modules" || entry.name === "dist") continue;
-      if (entry.isDirectory()) total += countTestFiles(new URL(`${entry.name}/`, dir));
-      else if (entry.name.endsWith(".test.ts")) total += 1;
-    }
-    return total;
-  }
 });

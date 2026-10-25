@@ -131,7 +131,8 @@ describe("the real-AWS override for the containerised app", () => {
   });
 
   it("is referenced by the documentation that tells people to use it", () => {
-    const readme = read("README.md");
+    // The section moved out of the README with the rest of the account setup.
+    const readme = read("docs/aws-account.md");
     expect(readme).toContain("COMPOSE_FILE=docker-compose.yml:deploy/compose.aws-profile.yml");
     /**
      * And the trap it avoids is stated, not only the command. Newlines are
