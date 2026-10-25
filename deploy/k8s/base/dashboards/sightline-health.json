@@ -1,6 +1,6 @@
 {
   "uid": "sightline-health",
-  "title": "Sightline \u2014 is it healthy?",
+  "title": "Sightline — is it healthy?",
   "description": "The four golden signals, then what the cluster says about the pods serving them.",
   "tags": ["sightline"],
   "timezone": "browser",
@@ -77,14 +77,15 @@
             "type": "prometheus",
             "uid": "Prometheus"
           },
-          "expr": "sum(rate(http_requests_total{namespace=\"sightline\", status=~\"5..\"}[5m])) / clamp_min(sum(rate(http_requests_total{namespace=\"sightline\"}[5m])), 0.001)",
+          "expr": "(sum(rate(http_requests_total{namespace=\"sightline\", status=~\"5..\"}[5m])) or vector(0)) / clamp_min(sum(rate(http_requests_total{namespace=\"sightline\"}[5m])), 0.001)",
           "legendFormat": "5xx ratio"
         }
       ],
       "fieldConfig": {
         "defaults": {
           "custom": {},
-          "unit": "percentunit"
+          "unit": "percentunit",
+          "noValue": "0"
         },
         "overrides": []
       },
@@ -361,6 +362,16 @@
       "options": {
         "showHeader": true
       }
+    }
+  ],
+  "links": [
+    {
+      "type": "dashboards",
+      "tags": ["sightline"],
+      "asDropdown": false,
+      "title": "Sightline",
+      "includeVars": false,
+      "keepTime": true
     }
   ]
 }

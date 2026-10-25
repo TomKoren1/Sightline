@@ -177,7 +177,7 @@ export const agentQuestions = new Counter({
 
 export const agentTokens = new Counter({
   name: "sightline_agent_tokens_total",
-  help: "Anthropic tokens consumed: input, output, and cache_read (the part of input served from the prompt cache).",
+  help: "Anthropic tokens consumed: input, output, and the parts of input read from (cache_read) and written to (cache_write) the prompt cache.",
   labelNames: ["kind"],
   registers: [registry],
 });
@@ -263,6 +263,32 @@ export const agentReadOnlyNoticeAdded = new Counter({
   help: "Answers where the guard had to add the read-only notice itself.",
   registers: [registry],
 });
+
+/**
+ * Every label value the agent's counters can take, at zero from startup.
+ *
+ * prom-client creates a labelled series on its first increment, and every
+ * deploy restarts the counters, so between a deploy and the first question
+ * the dashboard's ratios had nothing to divide and showed "No data" where the
+ * answer was 0 - and a refusal that has never happened looked like a broken
+ * panel rather than good news.
+ */
+export const AGENT_OUTCOMES = ["answered", "unsupported_citations", "tool_limit"] as const;
+export const AGENT_TOKEN_KINDS = ["input", "output", "cache_read", "cache_write"] as const;
+/** `GuardCause` in agent/sqlGuard.ts, plus the two refusals made outside the guard. */
+export const RAW_QUERY_REFUSALS = [
+  "hosted",
+  "execution",
+  "parse",
+  "multiple",
+  "not_select",
+  "parameter",
+  "table",
+  "function",
+] as const;
+for (const outcome of AGENT_OUTCOMES) agentQuestions.inc({ outcome }, 0);
+for (const kind of AGENT_TOKEN_KINDS) agentTokens.inc({ kind }, 0);
+for (const reason of RAW_QUERY_REFUSALS) agentRawQueryRefused.inc({ reason }, 0);
 
 // --- onboarding, which decides whether anyone ever uses this ----------------
 

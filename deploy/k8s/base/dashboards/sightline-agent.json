@@ -1,6 +1,6 @@
 {
   "uid": "sightline-agent",
-  "title": "Sightline \u2014 the agent",
+  "title": "Sightline — the agent",
   "description": "What the agent answers, whether the answers hold up, and what each one costs.",
   "tags": ["sightline"],
   "timezone": "browser",
@@ -18,25 +18,39 @@
         "name": "price_in",
         "type": "constant",
         "label": "$ per 1M input tokens",
-        "query": "3",
+        "query": "2",
         "current": {
-          "text": "3",
-          "value": "3"
+          "text": "2",
+          "value": "2"
         },
         "hide": 0,
-        "description": "Anthropic's input price for the configured model. Sonnet is 3."
+        "description": "List price per million input tokens of the deployed model (claude-sonnet-5: $2). Cache reads are charged at a tenth of it, cache writes at 1.25 times.",
+        "options": [
+          {
+            "selected": true,
+            "text": "2",
+            "value": "2"
+          }
+        ]
       },
       {
         "name": "price_out",
         "type": "constant",
         "label": "$ per 1M output tokens",
-        "query": "15",
+        "query": "10",
         "current": {
-          "text": "15",
-          "value": "15"
+          "text": "10",
+          "value": "10"
         },
         "hide": 0,
-        "description": "Output price. Sonnet is 15 - five times input, which is why the money split and the token split differ."
+        "description": "List price per million output tokens of the deployed model (claude-sonnet-5: $10).",
+        "options": [
+          {
+            "selected": true,
+            "text": "10",
+            "value": "10"
+          }
+        ]
       }
     ]
   },
@@ -82,7 +96,8 @@
       "fieldConfig": {
         "defaults": {
           "custom": {},
-          "decimals": 0
+          "decimals": 0,
+          "noValue": "0"
         },
         "overrides": []
       },
@@ -109,7 +124,7 @@
             "type": "prometheus",
             "uid": "Prometheus"
           },
-          "expr": "100 * sum(increase(sightline_agent_unsupported_citations_total[24h])) / clamp_min(sum(increase(sightline_agent_questions_total[24h])), 1)"
+          "expr": "100 * (sum(increase(sightline_agent_unsupported_citations_total[24h])) or vector(0)) / clamp_min(sum(increase(sightline_agent_questions_total[24h])), 1)"
         }
       ],
       "fieldConfig": {
@@ -133,7 +148,8 @@
                 "value": 10
               }
             ]
-          }
+          },
+          "noValue": "0"
         },
         "overrides": []
       },
@@ -160,7 +176,7 @@
             "type": "prometheus",
             "uid": "Prometheus"
           },
-          "expr": "100 * sum(increase(sightline_agent_questions_total{outcome=\"tool_limit\"}[24h])) / clamp_min(sum(increase(sightline_agent_questions_total[24h])), 1)"
+          "expr": "100 * (sum(increase(sightline_agent_questions_total{outcome=\"tool_limit\"}[24h])) or vector(0)) / clamp_min(sum(increase(sightline_agent_questions_total[24h])), 1)"
         }
       ],
       "fieldConfig": {
@@ -184,7 +200,8 @@
                 "value": 20
               }
             ]
-          }
+          },
+          "noValue": "0"
         },
         "overrides": []
       },
@@ -211,14 +228,15 @@
             "type": "prometheus",
             "uid": "Prometheus"
           },
-          "expr": "100 * sum(increase(sightline_agent_readonly_notice_added_total[24h])) / clamp_min(sum(increase(sightline_agent_questions_total[24h])), 1)"
+          "expr": "100 * (sum(increase(sightline_agent_readonly_notice_added_total[24h])) or vector(0)) / clamp_min(sum(increase(sightline_agent_questions_total[24h])), 1)"
         }
       ],
       "fieldConfig": {
         "defaults": {
           "custom": {},
           "unit": "percent",
-          "decimals": 1
+          "decimals": 1,
+          "noValue": "0"
         },
         "overrides": []
       },
@@ -259,7 +277,7 @@
     },
     {
       "id": 7,
-      "title": "Tool results the model never saw whole (24h)",
+      "title": "Tool results the model never saw whole, per hour",
       "type": "timeseries",
       "gridPos": {
         "h": 7,
@@ -278,7 +296,7 @@
             "type": "prometheus",
             "uid": "Prometheus"
           },
-          "expr": "increase(sightline_agent_truncated_results_total[24h])",
+          "expr": "sum(increase(sightline_agent_truncated_results_total[1h]))",
           "legendFormat": "truncated"
         }
       ],
@@ -325,14 +343,15 @@
             "type": "prometheus",
             "uid": "Prometheus"
           },
-          "expr": "(sum(rate(sightline_agent_tokens_total{kind=\"input\"}[1h])) * 3600 / 1e6 * $price_in) + (sum(rate(sightline_agent_tokens_total{kind=\"output\"}[1h])) * 3600 / 1e6 * $price_out)"
+          "expr": "(((sum(rate(sightline_agent_tokens_total{kind=\"input\"}[1h])) or vector(0)) - (sum(rate(sightline_agent_tokens_total{kind=\"cache_read\"}[1h])) or vector(0)) - (sum(rate(sightline_agent_tokens_total{kind=\"cache_write\"}[1h])) or vector(0))) * $price_in / 1e6 + (sum(rate(sightline_agent_tokens_total{kind=\"cache_read\"}[1h])) or vector(0)) * $price_in * 0.1 / 1e6 + (sum(rate(sightline_agent_tokens_total{kind=\"cache_write\"}[1h])) or vector(0)) * $price_in * 1.25 / 1e6 + (sum(rate(sightline_agent_tokens_total{kind=\"output\"}[1h])) or vector(0)) * $price_out / 1e6) * 3600"
         }
       ],
       "fieldConfig": {
         "defaults": {
           "custom": {},
           "unit": "currencyUSD",
-          "decimals": 3
+          "decimals": 3,
+          "noValue": "0"
         },
         "overrides": []
       },
@@ -359,14 +378,15 @@
             "type": "prometheus",
             "uid": "Prometheus"
           },
-          "expr": "(sum(increase(sightline_agent_tokens_total{kind=\"input\"}[24h])) / 1e6 * $price_in) + (sum(increase(sightline_agent_tokens_total{kind=\"output\"}[24h])) / 1e6 * $price_out)"
+          "expr": "(((sum(increase(sightline_agent_tokens_total{kind=\"input\"}[24h])) or vector(0)) - (sum(increase(sightline_agent_tokens_total{kind=\"cache_read\"}[24h])) or vector(0)) - (sum(increase(sightline_agent_tokens_total{kind=\"cache_write\"}[24h])) or vector(0))) * $price_in / 1e6 + (sum(increase(sightline_agent_tokens_total{kind=\"cache_read\"}[24h])) or vector(0)) * $price_in * 0.1 / 1e6 + (sum(increase(sightline_agent_tokens_total{kind=\"cache_write\"}[24h])) or vector(0)) * $price_in * 1.25 / 1e6 + (sum(increase(sightline_agent_tokens_total{kind=\"output\"}[24h])) or vector(0)) * $price_out / 1e6)"
         }
       ],
       "fieldConfig": {
         "defaults": {
           "custom": {},
           "unit": "currencyUSD",
-          "decimals": 3
+          "decimals": 3,
+          "noValue": "0"
         },
         "overrides": []
       },
@@ -393,14 +413,15 @@
             "type": "prometheus",
             "uid": "Prometheus"
           },
-          "expr": "((sum(increase(sightline_agent_tokens_total{kind=\"input\"}[24h])) / 1e6 * $price_in) + (sum(increase(sightline_agent_tokens_total{kind=\"output\"}[24h])) / 1e6 * $price_out)) / clamp_min(sum(increase(sightline_agent_questions_total[24h])), 1)"
+          "expr": "(((sum(increase(sightline_agent_tokens_total{kind=\"input\"}[24h])) or vector(0)) - (sum(increase(sightline_agent_tokens_total{kind=\"cache_read\"}[24h])) or vector(0)) - (sum(increase(sightline_agent_tokens_total{kind=\"cache_write\"}[24h])) or vector(0))) * $price_in / 1e6 + (sum(increase(sightline_agent_tokens_total{kind=\"cache_read\"}[24h])) or vector(0)) * $price_in * 0.1 / 1e6 + (sum(increase(sightline_agent_tokens_total{kind=\"cache_write\"}[24h])) or vector(0)) * $price_in * 1.25 / 1e6 + (sum(increase(sightline_agent_tokens_total{kind=\"output\"}[24h])) or vector(0)) * $price_out / 1e6) / clamp_min(sum(increase(sightline_agent_questions_total[24h])), 1)"
         }
       ],
       "fieldConfig": {
         "defaults": {
           "custom": {},
           "unit": "currencyUSD",
-          "decimals": 4
+          "decimals": 4,
+          "noValue": "0"
         },
         "overrides": []
       },
@@ -427,14 +448,15 @@
             "type": "prometheus",
             "uid": "Prometheus"
           },
-          "expr": "((sum(rate(sightline_agent_tokens_total{kind=\"input\"}[1h])) * 3600 / 1e6 * $price_in) + (sum(rate(sightline_agent_tokens_total{kind=\"output\"}[1h])) * 3600 / 1e6 * $price_out)) * 720"
+          "expr": "(((sum(rate(sightline_agent_tokens_total{kind=\"input\"}[1h])) or vector(0)) - (sum(rate(sightline_agent_tokens_total{kind=\"cache_read\"}[1h])) or vector(0)) - (sum(rate(sightline_agent_tokens_total{kind=\"cache_write\"}[1h])) or vector(0))) * $price_in / 1e6 + (sum(rate(sightline_agent_tokens_total{kind=\"cache_read\"}[1h])) or vector(0)) * $price_in * 0.1 / 1e6 + (sum(rate(sightline_agent_tokens_total{kind=\"cache_write\"}[1h])) or vector(0)) * $price_in * 1.25 / 1e6 + (sum(rate(sightline_agent_tokens_total{kind=\"output\"}[1h])) or vector(0)) * $price_out / 1e6) * 3600 * 720"
         }
       ],
       "fieldConfig": {
         "defaults": {
           "custom": {},
           "unit": "currencyUSD",
-          "decimals": 2
+          "decimals": 2,
+          "noValue": "0"
         },
         "overrides": []
       },
@@ -496,7 +518,7 @@
             "uid": "Prometheus"
           },
           "legendFormat": "input",
-          "expr": "sum(increase(sightline_agent_tokens_total{kind=\"input\"}[24h])) / 1e6 * $price_in"
+          "expr": "((sum(increase(sightline_agent_tokens_total{kind=\"input\"}[24h])) or vector(0)) - (sum(increase(sightline_agent_tokens_total{kind=\"cache_read\"}[24h])) or vector(0)) - (sum(increase(sightline_agent_tokens_total{kind=\"cache_write\"}[24h])) or vector(0))) * $price_in / 1e6"
         },
         {
           "refId": "B",
@@ -504,8 +526,26 @@
             "type": "prometheus",
             "uid": "Prometheus"
           },
+          "legendFormat": "cache read",
+          "expr": "(sum(increase(sightline_agent_tokens_total{kind=\"cache_read\"}[24h])) or vector(0)) * $price_in * 0.1 / 1e6"
+        },
+        {
+          "refId": "C",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "Prometheus"
+          },
+          "legendFormat": "cache write",
+          "expr": "(sum(increase(sightline_agent_tokens_total{kind=\"cache_write\"}[24h])) or vector(0)) * $price_in * 1.25 / 1e6"
+        },
+        {
+          "refId": "D",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "Prometheus"
+          },
           "legendFormat": "output",
-          "expr": "sum(increase(sightline_agent_tokens_total{kind=\"output\"}[24h])) / 1e6 * $price_out"
+          "expr": "(sum(increase(sightline_agent_tokens_total{kind=\"output\"}[24h])) or vector(0)) * $price_out / 1e6"
         }
       ],
       "fieldConfig": {
@@ -552,7 +592,8 @@
       "fieldConfig": {
         "defaults": {
           "custom": {},
-          "decimals": 0
+          "decimals": 0,
+          "noValue": "No questions in this window"
         },
         "overrides": []
       },
@@ -618,7 +659,8 @@
       "fieldConfig": {
         "defaults": {
           "custom": {},
-          "unit": "s"
+          "unit": "s",
+          "noValue": "No questions in this window"
         },
         "overrides": []
       },
@@ -707,7 +749,8 @@
       "fieldConfig": {
         "defaults": {
           "custom": {},
-          "decimals": 1
+          "decimals": 1,
+          "noValue": "No questions in this window"
         },
         "overrides": []
       },
@@ -741,7 +784,8 @@
       "fieldConfig": {
         "defaults": {
           "custom": {},
-          "decimals": 2
+          "decimals": 2,
+          "noValue": "No questions in this window"
         },
         "overrides": []
       },
@@ -880,6 +924,16 @@
         "overrides": []
       },
       "description": "hosted means the model reached for the raw-query escape hatch that ADR-016 switches off for hosted tenants - not an attack, a sign the curated tools have a gap. The other causes come from the SQL guard: not_select is the model attempting a write, table or function a reach outside the inventory views, and execution a query Postgres failed or timed out."
+    }
+  ],
+  "links": [
+    {
+      "type": "dashboards",
+      "tags": ["sightline"],
+      "asDropdown": false,
+      "title": "Sightline",
+      "includeVars": false,
+      "keepTime": true
     }
   ]
 }

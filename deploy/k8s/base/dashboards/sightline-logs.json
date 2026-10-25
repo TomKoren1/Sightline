@@ -1,6 +1,6 @@
 {
   "uid": "sightline-logs",
-  "title": "Sightline \u2014 logs",
+  "title": "Sightline — logs",
   "description": "What the processes said, over the structured pino output promtail is already collecting.",
   "tags": ["sightline"],
   "timezone": "browser",
@@ -68,14 +68,15 @@
             "type": "loki",
             "uid": "Loki"
           },
-          "expr": "sum by (app) (rate({namespace=\"sightline\"} | json | level >= 50 [5m])) * 60",
+          "expr": "sum by (app) (rate({namespace=\"sightline\"} | json | __error__=\"\" | level >= 50 [5m])) * 60",
           "queryType": "range",
           "legendFormat": "{{app}}"
         }
       ],
       "fieldConfig": {
         "defaults": {
-          "custom": {}
+          "custom": {},
+          "noValue": "No errors in this window"
         },
         "overrides": []
       },
@@ -102,14 +103,15 @@
             "type": "loki",
             "uid": "Loki"
           },
-          "expr": "topk(10, sum by (msg) (count_over_time({namespace=\"sightline\"} | json | level >= 50 [6h])))",
+          "expr": "topk(10, sum by (msg) (count_over_time({namespace=\"sightline\"} | json | __error__=\"\" | level >= 50 [6h])))",
           "queryType": "range",
           "legendFormat": "{{msg}}"
         }
       ],
       "fieldConfig": {
         "defaults": {
-          "custom": {}
+          "custom": {},
+          "noValue": "No errors in this window"
         },
         "overrides": []
       },
@@ -155,7 +157,8 @@
                 "value": 1
               }
             ]
-          }
+          },
+          "noValue": "0"
         },
         "overrides": []
       },
@@ -196,7 +199,8 @@
       ],
       "fieldConfig": {
         "defaults": {
-          "custom": {}
+          "custom": {},
+          "noValue": "No scan running: the worker logs only while it works"
         },
         "overrides": []
       },
@@ -207,6 +211,16 @@
         "sortOrder": "Descending",
         "enableLogDetails": true
       }
+    }
+  ],
+  "links": [
+    {
+      "type": "dashboards",
+      "tags": ["sightline"],
+      "asDropdown": false,
+      "title": "Sightline",
+      "includeVars": false,
+      "keepTime": true
     }
   ]
 }
