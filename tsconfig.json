@@ -13,7 +13,7 @@
     "experimentalDecorators": true
   }
   // No `files` or `include`. With an empty one esbuild treats every source as
-  // out of scope and silently ignores the options above, which is the same
-  // failure this file exists to fix (engineering log #55). Type-checking is
+  // out of scope and silently ignores the options above, so every decorator is
+  // refused when anything runs from the repository root. Type-checking is
   // per workspace, so nothing runs `tsc` against this config anyway.
 }
