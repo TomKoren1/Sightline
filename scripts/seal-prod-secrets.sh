@@ -19,10 +19,15 @@ cd "$(dirname "$0")/.."
 
 NAMESPACE=sightline
 OUT=deploy/k8s/prod/secrets.sealedsecret.yaml
+# This cluster's controller Service is `sealed-secrets`, not kubeseal's default
+# `sealed-secrets-controller`; with the default, every seal fails to fetch the cert.
+CONTROLLER="${SEALED_SECRETS_CONTROLLER_NAME:-sealed-secrets}"
+CONTROLLER_NS="${SEALED_SECRETS_CONTROLLER_NAMESPACE:-kube-system}"
 
 # What each Secret holds, and nothing else: a key left over from a removed
 # component (NEO4J_AUTH, from the graph database that was dropped) is a
-# credential kept for no reason.
+# credential kept for no reason. A listed key the live Secret lacks is skipped:
+# GITHUB_CLIENT_* are here for when GitHub sign-in is configured.
 declare -A KEYS=(
   [sightline-db]="POSTGRES_DB POSTGRES_USER POSTGRES_PASSWORD"
   [sightline-app]="DATABASE_URL DATABASE_URL_APP SESSION_SECRET PUBLIC_BASE_URL GOOGLE_CLIENT_ID GOOGLE_CLIENT_SECRET GITHUB_CLIENT_ID GITHUB_CLIENT_SECRET AWS_KMS_KEY_ID KMS_ACCESS_KEY_ID KMS_SECRET_ACCESS_KEY SCANNER_PRINCIPAL_ARN ROLE_TEMPLATE_URL ANTHROPIC_API_KEY"
@@ -38,7 +43,13 @@ done
 tmp="$(mktemp)"
 trap 'rm -f "$tmp"' EXIT
 
+# Fails here, before anything is read, if the controller cannot be reached.
+kubeseal --controller-name "$CONTROLLER" --controller-namespace "$CONTROLLER_NS" \
+  --fetch-cert >/dev/null
+
 for name in "${ORDER[@]}"; do
+  # Separators between documents only, so the file does not end in an empty one.
+  [ -s "$tmp" ] && echo "---" >>"$tmp"
   keys="$(printf '%s\n' ${KEYS[$name]} | jq -R . | jq -sc .)"
   # Only the name and namespace survive from the live object: its uid,
   # resourceVersion and managedFields would make the sealed copy unappliable.
@@ -48,8 +59,8 @@ for name in "${ORDER[@]}"; do
         metadata: { name: .metadata.name, namespace: .metadata.namespace },
         data: (.data | with_entries(select(.key as $k | $keep | index($k))))
       }' \
-    | kubeseal --format yaml >>"$tmp"
-  echo "---" >>"$tmp"
+    | kubeseal --controller-name "$CONTROLLER" --controller-namespace "$CONTROLLER_NS" \
+      --format yaml >>"$tmp"
   dropped="$(kubectl -n "$NAMESPACE" get secret "$name" -o json \
     | jq -r --argjson keep "$keys" '.data | keys - $keep | join(" ")')"
   echo "sealed $name${dropped:+ (dropped: $dropped)}"

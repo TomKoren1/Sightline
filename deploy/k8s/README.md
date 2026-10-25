@@ -187,7 +187,9 @@ Then uncomment the file in `prod/kustomization.yaml`, commit both, and sync.
 The script keeps only the keys the manifests use, so a key left from a removed
 component disappears from the live Secret when the controller adopts it.
 
-**Starting from nothing**, create each secret, seal it and commit the result:
+**Starting from nothing**, create each secret, seal it and commit the result.
+This cluster's controller Service is `sealed-secrets`, not kubeseal's default
+`sealed-secrets-controller`, so every `kubeseal` needs it named:
 
 Five secrets are needed (four while the tunnel is the quick one). Create each
 locally, seal it, commit the sealed version, and delete the plaintext. They are split by who needs what: only the
@@ -202,13 +204,15 @@ source of truth and a rebuilt cluster has to reproduce them; the secret names
 and keys are identical either way.
 
 ```bash
+KUBESEAL="--controller-name sealed-secrets --controller-namespace kube-system"
+
 # 1. The database's own credentials.
 kubectl -n sightline create secret generic sightline-db --dry-run=client -o yaml \
   --from-literal=POSTGRES_DB=sightline \
   --from-literal=POSTGRES_USER=sightline \
   --from-literal=POSTGRES_PASSWORD="$(openssl rand -base64 24)" \
 \
-  | kubeseal --format yaml > /tmp/db.sealed.yaml
+  | kubeseal $KUBESEAL --format yaml > /tmp/db.sealed.yaml
 
 # 2. What the API and the worker need. DATABASE_URL is the cross-tenant
 #    sightline_system role, not the owner: it reaches every tenant's rows for
@@ -230,13 +234,13 @@ kubectl -n sightline create secret generic sightline-app --dry-run=client -o yam
   --from-literal=SCANNER_PRINCIPAL_ARN=arn:aws:iam::...:user/SightlineScanner \
   --from-literal=ROLE_TEMPLATE_URL=https://.../readonly-role.yaml \
   --from-literal=ANTHROPIC_API_KEY=... \
-  | kubeseal --format yaml > /tmp/app.sealed.yaml
+  | kubeseal $KUBESEAL --format yaml > /tmp/app.sealed.yaml
 
 # 3. The owner, for the migrate Job only. Its DATABASE_URL overrides the one in
 #    sightline-app for that Job and nothing else.
 kubectl -n sightline create secret generic sightline-db-owner --dry-run=client -o yaml \
   --from-literal=DATABASE_URL="postgres://sightline:<password>@postgres:5432/sightline" \
-  | kubeseal --format yaml > /tmp/owner.sealed.yaml
+  | kubeseal $KUBESEAL --format yaml > /tmp/owner.sealed.yaml
 
 # 4. The scanner identity, for the worker only: the IAM user named by
 #    SCANNER_PRINCIPAL_ARN, allowed sts:AssumeRole on customers' roles. The
@@ -244,12 +248,12 @@ kubectl -n sightline create secret generic sightline-db-owner --dry-run=client -
 kubectl -n sightline create secret generic sightline-scanner --dry-run=client -o yaml \
   --from-literal=AWS_ACCESS_KEY_ID=... \
   --from-literal=AWS_SECRET_ACCESS_KEY=... \
-  | kubeseal --format yaml > /tmp/scanner.sealed.yaml
+  | kubeseal $KUBESEAL --format yaml > /tmp/scanner.sealed.yaml
 
 # 5. The tunnel token, from the Cloudflare dashboard.
 kubectl -n sightline create secret generic sightline-tunnel --dry-run=client -o yaml \
   --from-literal=TUNNEL_TOKEN=... \
-  | kubeseal --format yaml > /tmp/tunnel.sealed.yaml
+  | kubeseal $KUBESEAL --format yaml > /tmp/tunnel.sealed.yaml
 
 cat /tmp/*.sealed.yaml > deploy/k8s/prod/secrets.sealedsecret.yaml
 rm /tmp/db.sealed.yaml /tmp/app.sealed.yaml /tmp/owner.sealed.yaml \
