@@ -2,14 +2,16 @@
 # one tool owns what runs and drift shows as OutOfSync rather than going
 # unnoticed.
 #
-# Not applied by anything in this repository: `kubectl apply -f` it once.
-# Images come from ghcr.io: .github/workflows/deliver.yml builds them for each
-# commit on main that passes CI and pins this overlay to their digests, and
-# that pin commit is the change ArgoCD rolls out.
+# Not applied by anything in this repository: `kubectl apply -f` it after
+# changing it. Images come from ghcr.io: .github/workflows/deliver.yml builds
+# them for each commit on main that passes CI and pins this overlay to their
+# digests, and that pin commit is the change ArgoCD rolls out - on its own.
 #
-# Manual sync first, as with monitoring: look at the diff ArgoCD shows, sync
-# it, and only then consider `automated: { prune: true, selfHeal: true }`.
-# Prune on a namespace holding Postgres's volume deserves one careful look.
+# Prune cannot reach the data: the Postgres StatefulSet and the backups PVC
+# carry Prune=false and Delete=false (infra/argocdTracking.test.ts). A manual
+# sync must never use the `apply` strategy: it skips the migrate hook, and
+# ArgoCD keeps a strategy in status.operationState across operations, so it
+# went on skipping hooks for later syncs until removed by hand.
 apiVersion: argoproj.io/v1alpha1
 kind: Application
 metadata:
@@ -27,6 +29,7 @@ spec:
     server: https://kubernetes.default.svc
     namespace: sightline
   syncPolicy:
+    automated: { prune: true, selfHeal: true }
     syncOptions:
       - CreateNamespace=true
     retry:
