@@ -262,7 +262,7 @@ rm /tmp/db.sealed.yaml /tmp/app.sealed.yaml /tmp/owner.sealed.yaml \
 
 Then uncomment `secrets.sealedsecret.yaml` in `prod/kustomization.yaml`.
 
-The two database roles get their passwords from `npm run db:app-role`, run
+The two database roles get their passwords from `npm run db:app-role -w @sightline/api`, run
 once with the owner's `DATABASE_URL` plus `DATABASE_URL_APP` and
 `DATABASE_URL_SYSTEM` set to the URLs above. It also checks that each role has
 exactly the privileges it should.

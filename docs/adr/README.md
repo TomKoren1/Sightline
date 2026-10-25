@@ -5,6 +5,11 @@ later change can disagree with the reason rather than rediscover it. Earlier
 decisions live in commit messages and the comments where they apply; these
 are the ones the code cites by number.
 
+Numbering starts at 016 because 001–015 lived in a single `docs/DECISIONS.md`,
+removed in `21e06c4` and readable with `git show 21e06c4^:docs/DECISIONS.md`.
+That file also had an ADR-016 to ADR-019, which are different decisions from
+the ones here; a number cited in code means this directory.
+
 | ADR                                     | Decision                                                    |
 | --------------------------------------- | ----------------------------------------------------------- |
 | [016](016-no-raw-sql-in-hosted-mode.md) | Hosted mode does not offer the agent its raw-SQL tool       |
