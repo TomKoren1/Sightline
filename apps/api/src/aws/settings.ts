@@ -167,7 +167,7 @@ export function sourceCredentials(
 /**
  * The home directory of the user the container runs as, which is where the AWS
  * SDK resolves `~` from. `deploy/compose.aws-profile.yml` must mount the host
- * profile here; `infra/composeAwsProfile.test.ts` ties the two together.
+ * profile here; `guards/composeAwsProfile.test.ts` ties the two together.
  */
 export const CONTAINER_HOME = "/home/node";
 

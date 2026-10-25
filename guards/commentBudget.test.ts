@@ -36,7 +36,7 @@ const SOURCE = /\.(ts|tsx|mjs)$/;
  * missing directory rather than throwing. The floor assertion below is what
  * stops that tolerance from quietly measuring nothing.
  */
-const DIRS = ["apps", "packages", "infra", "evals", "scripts"];
+const DIRS = ["apps", "packages", "guards", "evals", "scripts"];
 
 function sources(dir: string, into: string[] = []): string[] {
   if (!existsSync(dir)) return into;

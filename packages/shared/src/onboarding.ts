@@ -18,7 +18,7 @@ export const STACK_NAME = "sightline-readonly";
 
 /**
  * The role the stack creates, matching `RoleName`'s default in
- * `infra/readonly-role.yaml`. A test asserts the two agree, because a drift here
+ * `cloudformation/readonly-role.yaml`. A test asserts the two agree, because a drift here
  * means the reader configures a role that does not exist and the connection test
  * reports `NoSuchEntity`.
  */
@@ -87,7 +87,7 @@ export function stackNameFor(tenantId: string): string {
 }
 
 /** Where the template lives, relative to the repository root. */
-export const TEMPLATE_PATH = "infra/readonly-role.yaml";
+export const TEMPLATE_PATH = "cloudformation/readonly-role.yaml";
 
 /**
  * Which published template a customer deployed.

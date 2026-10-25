@@ -17,7 +17,7 @@ import {
 import { COLLECTORS } from "../apps/api/src/scan/collectors/registry.js";
 
 const root = fileURLToPath(new URL("../", import.meta.url));
-const template = readFileSync(`${root}infra/readonly-role.yaml`, "utf8");
+const template = readFileSync(`${root}cloudformation/readonly-role.yaml`, "utf8");
 const STALE = "stale: run `npm run gen:collectors -w @sightline/api` and commit the result";
 
 describe("generated from the collector registry", () => {

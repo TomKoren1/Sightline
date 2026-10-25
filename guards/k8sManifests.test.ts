@@ -1,7 +1,7 @@
 /**
  * Guards on the Kubernetes manifests, which nothing in this repository runs.
  *
- * The same reasoning as `infra/template.test.ts`: these files are applied by a
+ * The same reasoning as `guards/template.test.ts`: these files are applied by a
  * human against a cluster, so no test exercises them, so the only things that
  * catch a mistake are a careful reader and a bad afternoon. The three checks
  * below are the ones where being wrong is *silent* - the manifests apply

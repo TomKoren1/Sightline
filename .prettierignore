@@ -12,7 +12,7 @@ package-lock.json
 # header from readonly-role.yaml. CloudFormation also uses short-form
 # intrinsics (!Ref, !Sub, !GetAtt) that are not portable YAML tags. Neither is
 # worth reformatting; both are worth not corrupting.
-infra/*.yaml
+cloudformation/*.yaml
 
 # Drizzle's generated migration metadata.
 #
@@ -30,7 +30,7 @@ LICENSE
 helm/*/templates/
 
 # Generated from the collector registry by `npm run gen:collectors`, and
-# compared byte for byte by infra/collectorsGenerated.test.ts: reformatting it
+# compared byte for byte by guards/collectorsGenerated.test.ts: reformatting it
 # would make the generated file stale by definition.
 apps/api/src/scan/collectors/README.md
 

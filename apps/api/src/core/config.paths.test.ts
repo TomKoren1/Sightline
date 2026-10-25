@@ -70,7 +70,7 @@ describe("no source file addresses the filesystem with URL.pathname", () => {
 
   it("uses fileURLToPath everywhere instead", () => {
     const offenders: string[] = [];
-    for (const dir of ["apps", "packages", "infra"]) {
+    for (const dir of ["apps", "packages", "guards"]) {
       const full = join(root, dir);
       if (!existsSync(full)) continue;
       for (const file of sourceFiles(full)) {

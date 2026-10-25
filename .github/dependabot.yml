@@ -48,7 +48,7 @@ updates:
     schedule:
       interval: monthly
 
-  # Every image is pinned to a version and digest (infra/imagePins.test.ts), so
+  # Every image is pinned to a version and digest (guards/imagePins.test.ts), so
   # nothing changes without a PR; these are what raise that PR. `docker` reads
   # the Dockerfile and the Kubernetes manifests, `docker-compose` the stack.
   - package-ecosystem: docker

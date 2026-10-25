@@ -10,7 +10,7 @@ appVersion: "1.0.0"
 # Pinned, and pinned to the *same* versions as the copy in the resume_builder
 # repository. Only one of the two is ever deployed, and identical pins are what
 # stops the inactive copy drifting into something that has never been run -
-# `infra/monitoringChart.test.ts` compares them when that repo is present.
+# `guards/monitoringChart.test.ts` compares them when that repo is present.
 dependencies:
   - name: prometheus
     version: 25.11.0

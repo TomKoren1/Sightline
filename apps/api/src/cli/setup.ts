@@ -490,7 +490,7 @@ async function runReal(current: string, opts: Options, extra: EnvEdit[]): Promis
         "    ssm:GetParameter or sqs:ReceiveMessage. A Deny cannot be overridden by any Allow.",
     ),
   );
-  console.log(dim(`\n    Reviewable first: ${bold("infra/readonly-role.yaml")}`));
+  console.log(dim(`\n    Reviewable first: ${bold("cloudformation/readonly-role.yaml")}`));
 
   if (opts.dryRun) {
     console.log(`\n${bold("  The command this would run")}`);

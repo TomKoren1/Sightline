@@ -9,7 +9,7 @@
 # no plaintext is written to disk, and nothing is printed but key names.
 #
 # The file name ends in `sealedsecret.yaml` because that is what
-# `.gitleaks.toml` exempts; `infra/k8sManifests.test.ts` holds it to being
+# `.gitleaks.toml` exempts; `guards/k8sManifests.test.ts` holds it to being
 # ciphertext. Changes nothing in the cluster - see deploy/k8s/README.md for
 # the one annotation each existing Secret needs before the controller will
 # take it over.

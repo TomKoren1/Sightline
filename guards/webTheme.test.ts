@@ -8,7 +8,7 @@
  * `text-ink-500` and `hover:text-ink-200` for shades the palette does not
  * define, all shipped that way - two of them before this test existed.
  *
- * Lives in `infra/` with the other cross-artefact checks because it compares
+ * Lives in `guards/` with the other cross-artefact checks because it compares
  * two files that have to agree and nothing else connected them. It is a string
  * scan rather than a render, which is the point: it needs no browser, no DOM
  * and no component to be mounted in the right state.

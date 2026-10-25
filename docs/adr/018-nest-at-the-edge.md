@@ -26,4 +26,4 @@ So: Nest imports stay in `*.controller.ts`, `*.module.ts`, `*.guard.ts`,
 three files with a reason each - `app.ts` (the composition root),
 `core/access.ts` (the route metadata decorators) and
 `tenancy/requestScope.ts` (it resolves an HTTP request's scope and answers
-with HTTP errors). `infra/apiLayers.test.ts` holds the line.
+with HTTP errors). `guards/apiLayers.test.ts` holds the line.

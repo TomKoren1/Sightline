@@ -157,7 +157,7 @@ describe("the numbers the README quotes are true", () => {
     expect(m, "README should quote a unit test count").toBeTruthy();
     const claimed = Number(m![1]);
     const testFiles =
-      countTestFiles(new URL("apps/", root)) + countTestFiles(new URL("infra/", root));
+      countTestFiles(new URL("apps/", root)) + countTestFiles(new URL("guards/", root));
     // Roughly ten assertions per file is the shape of this suite; an order of
     // magnitude out means the number was never updated.
     expect(claimed).toBeGreaterThan(testFiles * 4);

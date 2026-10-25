@@ -101,7 +101,7 @@ COPY tsconfig.base.json ./
 # Their absence failed this build and nothing else: `npm run build` locally has
 # the whole repository, so the import resolved, and only the image - which
 # copies directories deliberately rather than everything - could notice.
-# `infra/webBuildInputs.test.ts` now checks the two agree.
+# `guards/webBuildInputs.test.ts` now checks the two agree.
 COPY PRIVACY.md TERMS.md ./
 COPY packages/ packages/
 COPY apps/web/ apps/web/

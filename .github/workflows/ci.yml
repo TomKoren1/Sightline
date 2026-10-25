@@ -216,7 +216,7 @@ jobs:
           path: test-results/
           retention-days: 7
 
-  # The manifests and the chart against Kubernetes' own schemas. The infra/
+  # The manifests and the chart against Kubernetes' own schemas. The guards/
   # tests check what only this project knows - that two files agree; whether a
   # field exists at all is kubeconform's question, and it knows every one.
   manifests:
