@@ -58,7 +58,7 @@ jobs:
           # About 10 KB of heap a resource, measured: a million needs ~10 GB of
           # the runner's 16.
           NODE_OPTIONS: --max-old-space-size=13312
-        run: npx vitest run apps/api/src/load/largeAccount.test.ts --testTimeout=3600000 --hookTimeout=3600000
+        run: npx vitest run apps/api/test/load/largeAccount.test.ts --testTimeout=3600000 --hookTimeout=3600000
 
       - name: Service logs on failure
         if: failure()

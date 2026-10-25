@@ -119,7 +119,7 @@ jobs:
       - name: HTTP routing against the live stack
         # Proves the router reaches its handlers for a real, full-length ARN.
         # Needs the databases, so it cannot run in the unit job.
-        run: npx vitest run apps/api/src/graph/resourceArn.test.ts
+        run: npx vitest run apps/api/src/http/graph/resourceArn.test.ts
 
       - name: Verify the API serves what the scan produced
         run: |
@@ -158,7 +158,7 @@ jobs:
           # The scan copied into two more accounts, so queries filter tables
           # three times its size. The million-resource run is nightly.
           LOAD_ACCOUNTS: "3"
-        run: npx vitest run apps/api/src/load/largeAccount.test.ts
+        run: npx vitest run apps/api/test/load/largeAccount.test.ts
 
       - name: Service logs on failure
         if: failure()

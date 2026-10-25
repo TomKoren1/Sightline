@@ -4,7 +4,7 @@
  *
  * Everything between them is real - the callback, the session, the tenant, the
  * agent loop, its tools and its citation check. Hosted mode accepts these only
- * because PUBLIC_BASE_URL is loopback (`apps/api/src/hostedMode.ts`).
+ * because PUBLIC_BASE_URL is loopback (`apps/api/src/core/hostedMode.ts`).
  *
  * The model is scripted rather than clever: asked anything, it calls
  * `find_public_resources`, then answers naming the first ARN that tool

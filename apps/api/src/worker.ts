@@ -22,7 +22,7 @@ import pino from "pino";
 
 import { cfg, scanWorkerMode } from "./core/config.js";
 import { assertSchemaCurrent, closePool } from "./db/postgres.js";
-import { assertHostedInvariants } from "./hostedMode.js";
+import { assertHostedInvariants } from "./core/hostedMode.js";
 import { ScanWorker } from "./jobs/worker.js";
 import { loggerOptions } from "./observability/logging.js";
 import { recordBuild, startMetricsServer } from "./observability/metrics.js";

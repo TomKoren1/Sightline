@@ -4,7 +4,7 @@
 import { writeFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 
-import { openApiJson } from "../openapi.js";
+import { openApiJson } from "../http/openapi.js";
 
 const target = fileURLToPath(new URL("../../../../docs/openapi.json", import.meta.url));
 writeFileSync(target, openApiJson());

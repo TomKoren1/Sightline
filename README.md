@@ -517,7 +517,7 @@ library, with sessions as rows so one can actually be revoked. Matching is on th
 provider's subject and never on an email address, and the same address arriving from a
 second provider is refused rather than silently joined to the first account. Every route
 is protected by one global guard and escapes only by saying `@Public()`;
-[`enforcement.test.ts`](apps/api/src/auth/enforcement.test.ts) takes the real route table
+[`enforcement.test.ts`](apps/api/src/http/auth/enforcement.test.ts) takes the real route table
 from Fastify and checks both directions, so a route added later cannot quietly answer an
 unauthenticated request.
 
