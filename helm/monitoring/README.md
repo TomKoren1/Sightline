@@ -25,7 +25,7 @@ spare. So it is checked rather than remembered —
 To switch which copy is active: delete one ArgoCD Application, wait for the
 pods to go, then create the other. Never both at once.
 
-`infra/monitoringChart.test.ts` compares the two `Chart.yaml` files when the
+`guards/monitoringChart.test.ts` compares the two `Chart.yaml` files when the
 other repository is checked out, because the inactive copy is code nobody runs
 and identical pins are the only thing keeping it runnable.
 

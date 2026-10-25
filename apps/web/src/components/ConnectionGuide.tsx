@@ -319,8 +319,9 @@ export function ConnectionGuide() {
                 recommendation.
               </p>
               <p>
-                Read <code className="text-ink-300">infra/readonly-role.yaml</code> before deploying
-                it. Its own comments explain every permission it grants and every one it denies.
+                Read <code className="text-ink-300">cloudformation/readonly-role.yaml</code> before
+                deploying it. Its own comments explain every permission it grants and every one it
+                denies.
               </p>
             </Why>
           </Step>

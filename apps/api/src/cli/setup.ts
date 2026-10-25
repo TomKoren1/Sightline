@@ -31,7 +31,7 @@ import {
 } from "@sightline/shared";
 
 import { assumablePrincipalArn } from "../aws/principal.js";
-import { apiReachable } from "../setup/reachable.js";
+import { apiReachable, localApiUrl } from "../setup/reachable.js";
 import {
   applyEnvEdits,
   diffEnv,
@@ -296,8 +296,8 @@ async function apiContainerRunning(): Promise<boolean> {
  * said, and is exactly the wrong first impression.
  */
 async function hostApiRunning(port?: string): Promise<boolean> {
-  const p = port ?? readEnvValue(loadEnv(), "BACKEND_PORT") ?? "3000";
-  return apiReachable(`http://localhost:${p}/api/health`);
+  const p = port ?? readEnvValue(loadEnv(), "BACKEND_PORT");
+  return apiReachable(localApiUrl("BACKEND_PORT", p, 3000, "/api/health"));
 }
 
 async function restartApi(containerised: boolean, opts: Options): Promise<void> {
@@ -346,10 +346,14 @@ async function restartApi(containerised: boolean, opts: Options): Promise<void> 
 
 /** Ask the running API whether the connection works, if it is reachable. */
 async function verifyConnection(containerised: boolean): Promise<void> {
-  const port = containerised
-    ? (readEnvValue(loadEnv(), "APP_PORT") ?? "8080")
-    : (readEnvValue(loadEnv(), "BACKEND_PORT") ?? "3000");
-  const url = `http://localhost:${port}/api/connection/test`;
+  const url = containerised
+    ? localApiUrl("APP_PORT", readEnvValue(loadEnv(), "APP_PORT"), 8080, "/api/connection/test")
+    : localApiUrl(
+        "BACKEND_PORT",
+        readEnvValue(loadEnv(), "BACKEND_PORT"),
+        3000,
+        "/api/connection/test",
+      );
 
   // The API needs a moment after being recreated before it is listening.
   for (let attempt = 0; attempt < 12; attempt++) {
@@ -376,7 +380,7 @@ async function verifyConnection(containerised: boolean): Promise<void> {
     }
   }
   console.log(
-    `\n  ${dim(`API not reachable at localhost:${port}; start it and press Test connection in the UI.`)}`,
+    `\n  ${dim(`API not reachable at ${new URL(url).host}; start it and press Test connection in the UI.`)}`,
   );
 }
 
@@ -490,7 +494,7 @@ async function runReal(current: string, opts: Options, extra: EnvEdit[]): Promis
         "    ssm:GetParameter or sqs:ReceiveMessage. A Deny cannot be overridden by any Allow.",
     ),
   );
-  console.log(dim(`\n    Reviewable first: ${bold("infra/readonly-role.yaml")}`));
+  console.log(dim(`\n    Reviewable first: ${bold("cloudformation/readonly-role.yaml")}`));
 
   if (opts.dryRun) {
     console.log(`\n${bold("  The command this would run")}`);

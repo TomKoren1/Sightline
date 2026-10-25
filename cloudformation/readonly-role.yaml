@@ -1,0 +1,431 @@
+# =============================================================================
+# Sightline read-only inventory role.
+#
+# Everything below the comment block is the template. Everything inside it is
+# reasoning, and it lives in `#` comments rather than in `Description:` for a
+# concrete reason: CloudFormation caps a template's Description at 1024
+# characters and rejects the whole template with
+#
+#   Template format error: 'Description' length is greater than 1024
+#
+# at CreateChangeSet time - before anything is validated, so the error says
+# nothing about what is actually wrong. Comments have no such limit and are
+# stripped before the template is ever evaluated, so the explanation costs
+# nothing.
+#
+# -----------------------------------------------------------------------------
+# WHY THE ORIGINAL WAS CHANGED
+# -----------------------------------------------------------------------------
+#
+# This replaces the original template in this repository (kept alongside as
+# readonly-role.original.yaml). Two things changed, both narrowing access: the
+# trust policy no longer trusts an entire AWS account, and the permission set no
+# longer grants the ability to read customer data. The reasoning is in
+# the comments below.
+#
+# 1. `ReadOnlyAccess` is not read-only in the sense an inventory product needs.
+#
+#    The AWS-managed `ReadOnlyAccess` policy grants roughly 7,000 actions,
+#    including data-plane reads: `s3:GetObject`, `dynamodb:GetItem`,
+#    `sqs:ReceiveMessage`, `ssm:GetParameter`, `lambda:GetFunction` (which
+#    returns a presigned URL to the function's source), `kinesis:GetRecords`
+#    and more.
+#
+#    Sightline needs to know that a bucket exists, who can reach it, and how it
+#    is configured. It never needs to read an object out of it. Granting the
+#    ability to do so means a compromise of Sightline's platform account becomes
+#    a compromise of every customer's *data*, not just their inventory. That
+#    is a materially different blast radius, and it is not one the product
+#    needs to accept.
+#
+#    `sqs:ReceiveMessage` deserves a specific mention: it is not even read-only
+#    in the literal sense. Receiving a message starts its visibility timeout,
+#    hiding it from the consumer that should have processed it. A scanner
+#    holding that permission can disrupt a production queue by accident.
+#
+# 2. Trusting `:root` trusts every principal in Sightline's account.
+#
+#    `Principal: arn:aws:iam::<Sightline>:root` does not mean "the root user". It
+#    means "any principal in that account that IAM permits to call AssumeRole"
+#    - every role, every user, every CI job. The ExternalId condition prevents
+#    a third party from tricking Sightline into using its access (the
+#    confused-deputy problem it is designed for), but it does nothing to limit
+#    which *internal* principal can assume the role.
+#
+#    This version names the scanner role directly, so a compromise of some
+#    unrelated workload inside Sightline does not reach customer accounts.
+#
+# 3. There was no way for a customer to attribute activity to a person.
+#
+#    Adding `sts:SourceIdentity` to the trust policy means the customer's own
+#    CloudTrail records which Sightline operator or system triggered a scan, and
+#    that value cannot be changed for the life of the session. Customers
+#    auditing a third party with standing access should not have to take our
+#    word for who did what.
+#
+# -----------------------------------------------------------------------------
+# DEPLOYING
+# -----------------------------------------------------------------------------
+#
+#   aws cloudformation deploy \
+#     --template-file cloudformation/readonly-role.yaml \
+#     --stack-name sightline-readonly \
+#     --capabilities CAPABILITY_NAMED_IAM \
+#     --parameter-overrides \
+#         SightlineScannerRoleArn=arn:aws:iam::123456789012:role/SightlineScanner \
+#         ExternalId=<the value from your onboarding email>
+#
+# Then send Sightline the RoleArn output. Nothing else is required.
+#
+# Note the `iam` in that ARN. `aws sts get-caller-identity` reports the
+# *session* you are using, so it returns an `arn:aws:sts::...` ARN - either
+# `sts::<acct>:assumed-role/<Role>/<session>` or, on some endpoints,
+# `sts::<acct>:user/<name>`. Neither is a principal ARN, and IAM rejects both
+# here. The equivalent principal is the `iam` form: `assumed-role/Foo/session`
+# becomes `role/Foo`. The UI's connection guide does this conversion for you.
+#
+# TWO ROLES ARE INVOLVED AND CONFUSING THEM IS THE USUAL MISTAKE:
+#
+#   SightlineScannerRoleArn  an INPUT. The principal permitted to assume this
+#                         role. It already exists; this template does not
+#                         create it.
+#
+#   RoleArn (output)      what this template CREATES, in the account being
+#                         scanned. This is the value that belongs in
+#                         AWS_TARGET_ROLE_ARN.
+#
+# Pointing AWS_TARGET_ROLE_ARN at the scanner principal instead of at the
+# created role produces AccessDenied, or NoSuchEntity if it does not exist.
+# `sts:AssumeRole` can only ever assume a *role*, so a `:user/` ARN in
+# AWS_TARGET_ROLE_ARN cannot work no matter what the trust policy says. The API
+# refuses to start on one rather than failing later with a vaguer error.
+#
+# Running the project against your own account, both live in one account: the
+# scanner principal is your own identity, and the created SightlineReadOnlyRole is
+# what the scanner assumes.
+# =============================================================================
+
+AWSTemplateFormatVersion: "2010-09-09"
+
+# Kept short deliberately: CloudFormation rejects a Description over 1024
+# characters. The full reasoning is in the comment block above.
+Description: >
+  Sightline read-only inventory role. Grants metadata and configuration reads for
+  inventory, visualisation and security analysis; grants no writes and, by
+  default, explicitly denies reading the contents of objects, records,
+  parameters and secrets. Trusts one named principal rather than an account
+  root. Reasoning: the comments in this file.
+
+Parameters:
+  SightlineScannerRoleArn:
+    Type: String
+    Description: >
+      The ARN of the principal allowed to assume this role. Deliberately not an
+      account id: this role should be assumable by one principal, not by
+      everything in the calling account.
+
+      In production that is Sightline's scanner role, e.g.
+      arn:aws:iam::123456789012:role/SightlineScanner.
+
+      Running the project against your own account there is no separate Sightline
+      account, so this is whatever identity the backend runs as. A user ARN is
+      accepted for exactly this case - on a workstation the identity is commonly
+      an IAM user rather than a role.
+
+      `aws sts get-caller-identity` shows you who that is, but do not paste its
+      output here. It reports the *session*, so it returns an arn:aws:sts:: ARN
+      (assumed-role/Role/session, or user/name); this parameter needs the
+      arn:aws:iam:: identity behind it, which is why the pattern below rejects
+      the sts form. Convert assumed-role/Foo/session to role/Foo. The UI's
+      connection guide does this for you.
+    AllowedPattern: "^arn:aws:iam::[0-9]{12}:(role|user)/.+$"
+    ConstraintDescription: >
+      Must be a full IAM role or user ARN, not an account id.
+
+  ExternalId:
+    Type: String
+    Description: >
+      A unique, per-customer secret shared between Sightline and this account.
+      Sightline issues this at onboarding. Treat it as a credential.
+
+      Deliberately NOT NoEcho. Two reasons, and the second is the one that
+      decides it. First, NoEcho buys nothing here: the value ends up inside this
+      role's trust policy, where anyone in this account who can call
+      iam:GetRole reads it in plaintext - so hiding it from the CloudFormation
+      console hides it from nobody who could not already see it. Second,
+      CloudFormation's quick-create links silently ignore any parameter whose
+      NoEcho is true, so with it set the one-click link cannot pre-fill this
+      field and every customer has to copy it by hand into the console - which
+      is the step where they mistype it, and a mistyped ExternalId surfaces as
+      AccessDenied with both ends looking correct.
+    MinLength: 16
+    MaxLength: 128
+
+  RoleName:
+    Type: String
+    Description: Name of the IAM role to create.
+    Default: "SightlineReadOnlyRole"
+
+  AllowDataPlaneReads:
+    Type: String
+    Description: >
+      Leave as "false". Set to "true" only if a specific Sightline feature is
+      agreed to require reading object or record contents, and only for as
+      long as that feature is in use.
+    Default: "false"
+    AllowedValues: ["true", "false"]
+
+Conditions:
+  DenyDataPlane: !Equals [!Ref AllowDataPlaneReads, "false"]
+
+Resources:
+  SightlineReadOnlyRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Ref RoleName
+      Description: >
+        Allows Sightline to read AWS resource metadata and configuration for
+        inventory, visualisation and security analysis. Grants no write
+        permissions and, by default, no access to the contents of objects,
+        records, parameters or secrets.
+      # One hour is the maximum a role assumed by another role can hold anyway
+      # (role chaining caps at 3600s), so asking for more is misleading. The
+      # scanner renews its session rather than requesting a long one.
+      MaxSessionDuration: 3600
+
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Sid: AllowSightlineScannerToAssume
+            Effect: Allow
+            Principal:
+              # The scanner role specifically - not the whole account.
+              AWS: !Ref SightlineScannerRoleArn
+            Action: sts:AssumeRole
+            Condition:
+              StringEquals:
+                # Mitigates the confused-deputy pattern: knowing this role's
+                # ARN is not sufficient to assume it.
+                sts:ExternalId: !Ref ExternalId
+              "Null":
+                # Makes attribution mandatory rather than optional. Permitting
+                # SetSourceIdentity below allows a caller to send one; without
+                # this, a caller that simply omits it is still allowed, and the
+                # customer silently loses the attribution the policy appears to
+                # guarantee.
+                sts:SourceIdentity: "false"
+
+          - Sid: AllowSightlineScannerToSetSourceIdentity
+            Effect: Allow
+            Principal:
+              AWS: !Ref SightlineScannerRoleArn
+            Action: sts:SetSourceIdentity
+            # No sts:ExternalId condition here. That key is only in the request
+            # context of sts:AssumeRole, so on this action it is absent and a
+            # StringEquals on it never matches - every assume was refused with
+            # "not authorized to perform: sts:SetSourceIdentity". The ExternalId
+            # is still enforced: this action is only evaluated as part of an
+            # AssumeRole, which the statement above gates on it.
+            Condition:
+              StringLike:
+                # Attributes every session to a named Sightline operator or
+                # system, immutably, in this account's own CloudTrail.
+                #
+                # Hyphen, not colon. AWS restricts SourceIdentity to
+                # alphanumerics, underscore and +=,.@- so a colon is rejected
+                # outright: `sightline:*` was a pattern no legal value could ever
+                # match, and nothing caught it because nothing was sending a
+                # SourceIdentity at all.
+                sts:SourceIdentity: "sightline-*"
+
+      ManagedPolicyArns:
+        # SecurityAudit grants the configuration and policy reads that security
+        # analysis needs - IAM policy documents, security group rules, bucket
+        # policies, public access blocks.
+        - arn:aws:iam::aws:policy/SecurityAudit
+        # ViewOnlyAccess grants List/Describe across services so resources can
+        # be enumerated. Between them these cover everything this scanner
+        # calls, without the data-plane reads ReadOnlyAccess would add.
+        #
+        # Note the path: ViewOnlyAccess is a *job function* policy, so it lives
+        # under job-function/ rather than at the root like SecurityAudit. The
+        # obvious ARN does not exist and CloudFormation only says so at deploy
+        # time.
+        - arn:aws:iam::aws:policy/job-function/ViewOnlyAccess
+
+      Policies:
+        - PolicyName: SightlineInventoryGaps
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              # A handful of calls this scanner makes that sit outside
+              # SecurityAudit and ViewOnlyAccess. Enumerated rather than
+              # covered by a wildcard, so the permission set stays auditable.
+              - Sid: InventoryReadsNotCoveredByManagedPolicies
+                Effect: Allow
+                Action:
+                  - "s3:GetAccountPublicAccessBlock"
+                  # In a management account (or a delegated administrator),
+                  # how an organization connection finds its member accounts.
+                  - "organizations:ListAccounts"
+                  - "resource-explorer-2:ListIndexes"
+                  - "resource-explorer-2:Search"
+                  - "resource-explorer-2:GetIndex"
+                  - "ce:GetCostAndUsage"
+                  - "cloudwatch:GetMetricData"
+                  - "cloudwatch:GetMetricStatistics"
+                Resource: "*"
+
+              # Every action a collector calls, whatever the managed policies
+              # above happen to include this year: SecurityAudit grants
+              # ec2:Describe* but not ec2:SearchTransitGatewayRoutes, which went
+              # unnoticed until a scan was refused.
+              # BEGIN GENERATED: collector reads - from apps/api/src/scan/collectors/registry.ts
+              - Sid: EveryActionACollectorCalls
+                Effect: Allow
+                Action:
+                  - "apigateway:GET"
+                  - "autoscaling:DescribeAutoScalingGroups"
+                  - "cloudfront:ListDistributions"
+                  - "dynamodb:DescribeContinuousBackups"
+                  - "dynamodb:DescribeTable"
+                  - "dynamodb:ListTables"
+                  - "ec2:DescribeAddresses"
+                  - "ec2:DescribeInstances"
+                  - "ec2:DescribeInternetGateways"
+                  - "ec2:DescribeNatGateways"
+                  - "ec2:DescribeNetworkAcls"
+                  - "ec2:DescribeRouteTables"
+                  - "ec2:DescribeSecurityGroups"
+                  - "ec2:DescribeSubnets"
+                  - "ec2:DescribeTransitGatewayAttachments"
+                  - "ec2:DescribeTransitGatewayRouteTables"
+                  - "ec2:DescribeTransitGateways"
+                  - "ec2:DescribeVolumes"
+                  - "ec2:DescribeVpcEndpointServiceConfigurations"
+                  - "ec2:DescribeVpcEndpoints"
+                  - "ec2:DescribeVpcPeeringConnections"
+                  - "ec2:DescribeVpcs"
+                  - "ec2:SearchTransitGatewayRoutes"
+                  - "ecs:DescribeServices"
+                  - "ecs:DescribeTaskDefinition"
+                  - "ecs:ListClusters"
+                  - "ecs:ListServices"
+                  - "eks:DescribeCluster"
+                  - "eks:DescribeNodegroup"
+                  - "eks:DescribePodIdentityAssociation"
+                  - "eks:ListClusters"
+                  - "eks:ListNodegroups"
+                  - "eks:ListPodIdentityAssociations"
+                  - "elasticloadbalancing:DescribeListeners"
+                  - "elasticloadbalancing:DescribeLoadBalancers"
+                  - "elasticloadbalancing:DescribeTargetGroups"
+                  - "elasticloadbalancing:DescribeTargetHealth"
+                  - "iam:GenerateCredentialReport"
+                  - "iam:GetAccountAuthorizationDetails"
+                  - "iam:GetCredentialReport"
+                  - "iam:GetPolicy"
+                  - "iam:GetPolicyVersion"
+                  - "iam:ListRoles"
+                  - "iam:ListUsers"
+                  - "kms:DescribeKey"
+                  - "kms:GetKeyPolicy"
+                  - "kms:GetKeyRotationStatus"
+                  - "kms:ListKeys"
+                  - "lambda:ListFunctions"
+                  - "rds:DescribeDBInstances"
+                  - "rds:DescribeDBSubnetGroups"
+                  - "route53:ListHostedZones"
+                  - "route53:ListResourceRecordSets"
+                  - "s3:GetBucketAcl"
+                  - "s3:GetBucketLocation"
+                  - "s3:GetBucketPolicy"
+                  - "s3:GetBucketPolicyStatus"
+                  - "s3:GetBucketPublicAccessBlock"
+                  - "s3:GetBucketTagging"
+                  - "s3:ListAllMyBuckets"
+                  - "secretsmanager:GetResourcePolicy"
+                  - "secretsmanager:ListSecrets"
+                  - "sns:GetTopicAttributes"
+                  - "sns:ListTopics"
+                  - "sqs:GetQueueAttributes"
+                  - "sqs:ListQueues"
+                Resource: "*"
+              # END GENERATED: collector reads
+
+        - !If
+          - DenyDataPlane
+          - PolicyName: SightlineDenyDataPlaneReads
+            PolicyDocument:
+              Version: "2012-10-17"
+              Statement:
+                # An explicit Deny cannot be overridden by any Allow, including
+                # one a future managed-policy update might introduce. This is
+                # the load-bearing control: it is what makes "Sightline can see
+                # your infrastructure but not your data" a guarantee rather
+                # than a promise about which policies we attached today.
+                - Sid: NeverReadCustomerData
+                  Effect: Deny
+                  Action:
+                    # Object and record contents
+                    - "s3:GetObject"
+                    - "s3:GetObjectVersion"
+                    - "s3:GetObjectTorrent"
+                    - "dynamodb:GetItem"
+                    - "dynamodb:BatchGetItem"
+                    - "dynamodb:Query"
+                    - "dynamodb:Scan"
+                    - "kinesis:GetRecords"
+                    - "kinesis:GetShardIterator"
+                    # Secrets and configuration values
+                    - "secretsmanager:GetSecretValue"
+                    - "ssm:GetParameter"
+                    - "ssm:GetParameters"
+                    - "ssm:GetParametersByPath"
+                    - "kms:Decrypt"
+                    # Source code and deployment artefacts. GetFunction
+                    # returns a presigned URL to the function's code; the
+                    # configuration call we actually use is unaffected.
+                    - "lambda:GetFunction"
+                    - "codecommit:GetFile"
+                    - "codecommit:GetBlob"
+                    # Not read-only despite the name: receiving a message
+                    # starts its visibility timeout and can hide it from the
+                    # consumer that should have processed it.
+                    - "sqs:ReceiveMessage"
+                    # Console and instance access
+                    - "ec2:GetPasswordData"
+                    - "ec2-instance-connect:SendSSHPublicKey"
+                    - "ssm:StartSession"
+                  Resource: "*"
+          - !Ref AWS::NoValue
+
+      Tags:
+        - Key: ManagedBy
+          Value: Sightline
+        - Key: Purpose
+          Value: read-only-inventory
+        - Key: DataAccess
+          Value: !If [DenyDataPlane, "metadata-only", "includes-data-plane"]
+
+Outputs:
+  RoleArn:
+    Description: ARN of the role Sightline should assume. Share this with onboarding.
+    Value: !GetAtt SightlineReadOnlyRole.Arn
+    Export:
+      Name: !Sub "${AWS::StackName}-RoleArn"
+
+  DataAccessPosture:
+    Description: Whether this role can read the contents of customer data.
+    Value: !If
+      - DenyDataPlane
+      - "Metadata only. Reading object, record, parameter and secret contents is explicitly denied."
+      - "WARNING: data-plane reads are permitted. Set AllowDataPlaneReads=false unless a specific agreed feature requires them."
+
+  VerifyCommand:
+    Description: Confirm the deny actually works, from this account.
+    Value: !Sub >-
+      aws iam simulate-principal-policy
+      --policy-source-arn ${SightlineReadOnlyRole.Arn}
+      --action-names s3:GetObject s3:ListBucket
+      --query 'EvaluationResults[].{Action:EvalActionName,Decision:EvalDecision}'

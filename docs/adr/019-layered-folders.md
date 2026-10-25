@@ -12,7 +12,7 @@ scrubbing), branded ids, `Scope`, `ScanTarget`, the request and session types,
 the role and route-metadata decorators, paths and the version. The AWS side
 of configuration lives in `aws/settings.ts`, which builds on it.
 
-`infra/apiLayers.test.ts` requires the folder graph to be acyclic at every
+`guards/apiLayers.test.ts` requires the folder graph to be acyclic at every
 length, no import cycles between files, `core/` to stay a leaf, and the mock
 AWS package to be reached only from `evals/` and `cli/`. When a new import
 would close a cycle, the usual fix is the one used here: the thing both
