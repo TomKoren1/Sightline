@@ -8,7 +8,7 @@
 # digests, and that pin commit is the change ArgoCD rolls out - on its own.
 #
 # Prune cannot reach the data: the Postgres StatefulSet and the backups PVC
-# carry Prune=false and Delete=false (infra/argocdTracking.test.ts). A manual
+# carry Prune=false and Delete=false (guards/argocdTracking.test.ts). A manual
 # sync must never use the `apply` strategy: it skips the migrate hook, and
 # ArgoCD keeps a strategy in status.operationState across operations, so it
 # went on skipping hooks for later syncs until removed by hand.

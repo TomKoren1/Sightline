@@ -21,7 +21,7 @@ import { collectEstate } from "../scan/runner.js";
 import { asConnectionId } from "../core/ids.js";
 
 const root = fileURLToPath(new URL("../../../../", import.meta.url));
-const template = `${root}infra/readonly-role.yaml`;
+const template = `${root}cloudformation/readonly-role.yaml`;
 const docs = `${root}apps/api/src/scan/collectors/README.md`;
 
 writeFileSync(template, withTemplateBlock(readFileSync(template, "utf8"), COLLECTORS));

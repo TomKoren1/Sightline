@@ -11,7 +11,7 @@
  *    resolved deployed a stack whose shared secret was the text `generating…`
  *    - and that connection tests *green*, against a secret neither side meant
  *
- * Lives in `infra/` because the template contract belongs there and
+ * Lives in `guards/` because the template contract belongs there and
  * `vitest.config.ts` does not include `apps/web`.
  */
 

@@ -46,7 +46,7 @@ paths = [
   # including us on a rebuilt cluster - but it is long and base64, so every
   # entropy rule fires on it.
   #
-  # Allowlisted by path and held to it: `infra/monitoringChart.test.ts` asserts
+  # Allowlisted by path and held to it: `guards/monitoringChart.test.ts` asserts
   # every file matching this really is `kind: SealedSecret` with no plaintext
   # `stringData` or `data`, so the exemption cannot be borrowed by a plain
   # Secret that happens to be named like one.

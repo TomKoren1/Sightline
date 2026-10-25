@@ -15,8 +15,14 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 
-const template = readFileSync(new URL("./readonly-role.yaml", import.meta.url), "utf8");
-const original = readFileSync(new URL("./readonly-role.original.yaml", import.meta.url), "utf8");
+const template = readFileSync(
+  new URL("../cloudformation/readonly-role.yaml", import.meta.url),
+  "utf8",
+);
+const original = readFileSync(
+  new URL("../cloudformation/readonly-role.original.yaml", import.meta.url),
+  "utf8",
+);
 
 /**
  * Resolve a folded block scalar (`key: >`) to the string CloudFormation will

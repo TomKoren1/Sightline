@@ -68,7 +68,7 @@
 # -----------------------------------------------------------------------------
 #
 #   aws cloudformation deploy \
-#     --template-file infra/readonly-role.yaml \
+#     --template-file cloudformation/readonly-role.yaml \
 #     --stack-name sightline-readonly \
 #     --capabilities CAPABILITY_NAMED_IAM \
 #     --parameter-overrides \

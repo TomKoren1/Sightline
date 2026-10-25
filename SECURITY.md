@@ -20,7 +20,7 @@ deliberately broad pattern — anything env-shaped is ignored, and only
 which is a check added after one was.
 
 **Read-only by construction, not by convention.** The CloudFormation template
-in [`infra/readonly-role.yaml`](infra/readonly-role.yaml) deliberately does
+in [`cloudformation/readonly-role.yaml`](cloudformation/readonly-role.yaml) deliberately does
 **not** attach AWS's `ReadOnlyAccess`: that policy grants roughly 7,000 actions
 including data-plane reads — `s3:GetObject`, `dynamodb:GetItem`,
 `ssm:GetParameter` — which an inventory product has no business holding.

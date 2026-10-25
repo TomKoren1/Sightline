@@ -7,7 +7,7 @@
  *
  * Imported with Vite's `?raw` so there is exactly one copy of each document;
  * the same text in a `.tsx` is two copies, and the stale one is the one nobody
- * is looking at. `infra/legalPages.test.ts` holds the halves together.
+ * is looking at. `guards/legalPages.test.ts` holds the halves together.
  *
  * `dangerouslySetInnerHTML` is safe *here specifically*: two files from this
  * repository, resolved at build time, with no user content near it.

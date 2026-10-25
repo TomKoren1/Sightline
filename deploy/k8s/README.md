@@ -65,7 +65,7 @@ builds nothing, so import a commit's images before syncing it.
 Re-import the previous image tag and restart; do not roll the database back.
 Migrations only expand the schema - add tables, add nullable or defaulted
 columns - so the previous release runs on the new schema unchanged.
-`infra/migrationsExpand.test.ts` refuses a migration that drops, renames,
+`guards/migrationsExpand.test.ts` refuses a migration that drops, renames,
 retypes or tightens a column unless the file states, on a `-- contract:`
 line, why it is safe: the second half of expand-then-contract, shipped a
 release after nothing reads the old shape. Restoring a backup is for lost
@@ -547,7 +547,7 @@ by `base/kustomization.yaml`, and the backup job's push to the Pushgateway.
 
 The metrics port is deliberately not the application port and is not proxied by
 nginx, so it is unreachable through the tunnel by construction.
-`infra/metricsScrape.test.ts` holds those four files to one port number and
+`guards/metricsScrape.test.ts` holds those four files to one port number and
 fails if nginx ever starts routing it.
 
 ## Not in these manifests

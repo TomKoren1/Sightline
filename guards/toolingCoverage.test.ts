@@ -1,7 +1,7 @@
 /**
  * Every TypeScript file must be both type-checked and linted.
  *
- * It was not true: `npm run typecheck` runs `--workspaces`, and `infra/` is not
+ * It was not true: `npm run typecheck` runs `--workspaces`, and `guards/` is not
  * a workspace, so the guards in this directory were checked by nothing. Adding
  * a directory is how you reintroduce that, and nothing about adding one
  * suggests you should check — so the coverage is asserted rather than
@@ -91,13 +91,13 @@ describe("the code outside every workspace is type-checked", () => {
     const pkg = JSON.parse(read("package.json")) as { scripts: Record<string, string> };
     expect(
       pkg.scripts["typecheck"],
-      "`--workspaces` skips infra/, scripts/ and the root config files.",
+      "`--workspaces` skips guards/, scripts/ and the root config files.",
     ).toContain("tsconfig.tools.json");
   });
 
   it("covers each non-workspace directory that holds TypeScript", () => {
     const tools = read("tsconfig.tools.json");
-    expect(tools).toContain("infra/");
+    expect(tools).toContain("guards/");
     expect(tools).toContain("vitest.config.ts");
   });
 

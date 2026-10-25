@@ -17,7 +17,7 @@ import { fileURLToPath } from "node:url";
 import { SOURCE_IDENTITY_PREFIX, sourceIdentity, toSourceIdentity } from "./settings.js";
 
 const root = fileURLToPath(new URL("../../../../", import.meta.url));
-const template = readFileSync(`${root}infra/readonly-role.yaml`, "utf8");
+const template = readFileSync(`${root}cloudformation/readonly-role.yaml`, "utf8");
 
 /** Exactly the characters AWS documents as permitted. Anything else is rejected. */
 const AWS_ALLOWED = /^[A-Za-z0-9_+=,.@-]+$/;

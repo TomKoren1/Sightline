@@ -139,7 +139,7 @@ one states what it might break.
 **The role refuses `ReadOnlyAccess`.** That policy grants roughly 7,000 actions
 including data-plane reads — `s3:GetObject`, `secretsmanager:GetSecretValue`,
 `sqs:ReceiveMessage` — which an inventory product has no business holding.
-[`infra/readonly-role.yaml`](infra/readonly-role.yaml) uses `SecurityAudit` plus
+[`cloudformation/readonly-role.yaml`](cloudformation/readonly-role.yaml) uses `SecurityAudit` plus
 `job-function/ViewOnlyAccess`, an enumerated inline policy for the handful of calls
 those miss, and an explicit **Deny** on data-plane reads that is attached by default.
 A Deny cannot be overridden by any Allow, including one a future AWS update might add
@@ -190,7 +190,8 @@ apps/web              React frontend: graph, chat, findings, UX states
   src/api.ts          the only place that calls the API, so headers cannot be missed
 packages/shared       domain model shared by every package
 packages/mock-aws     the seeded customer account and its answer key
-infra/                the read-only role template, and guards on things nothing runs
+cloudformation/       the read-only role customers deploy, and the copy it started from
+guards/               tests that hold two files to each other, over things nothing runs
 deploy/k8s/           kustomize manifests for a hosted deployment, and their README
 deploy/               nginx config, and the AWS profile mount for containers
 helm/monitoring/      Prometheus, Grafana and Loki, with this project's dashboards
@@ -205,7 +206,7 @@ application, Helm deploys the platform.** The monitoring stack is three upstream
 community charts with pinned versions and hundreds of values, which is Helm's
 natural unit; re-expressing it in kustomize would mean vendoring rendered output.
 
-`infra/` deserves a word: it holds tests over artefacts **no test executes** — the
+`guards/` deserves a word: it holds tests over artefacts **no test executes** — the
 CloudFormation template, the Kubernetes manifests, the Dockerfile, the legal pages.
 Each guards an agreement between two files that nothing else connects, which is the
 defect class this repository keeps meeting.
@@ -269,10 +270,10 @@ Four things, because they are the ones that have actually gone wrong here:
   prevents, the alternative that was rejected, the AWS behaviour that is not in the
   docs. Not a restatement of the code, not a second example, not build-up. Roughly
   ten lines is the ceiling for a genuinely subtle module header; most want two.
-  `infra/commentBudget.test.ts` measures it, because this has drifted twice.
+  `guards/commentBudget.test.ts` measures it, because this has drifted twice.
 - **A guard for every agreement between two files.** If editing one file can
   silently invalidate another — a manifest and the code that reads it, a template
-  and the ARN derived from it — the test goes in `infra/`. Write it so that
+  and the ARN derived from it — the test goes in `guards/`. Write it so that
   _forgetting_ trips it, and break it once to watch it go red.
 - **Derive, don't enumerate.** Lists in code go stale: the leak test enumerates
   queries by reflection, the purge enumerates tenant-scoped tables from the schema,
@@ -330,7 +331,7 @@ would have changed which AWS account every other tenant on the process was looki
 The switcher sends a header instead, and the server validates that the connection is
 yours.
 
-By hand: deploy [`infra/readonly-role.yaml`](infra/readonly-role.yaml) and set
+By hand: deploy [`cloudformation/readonly-role.yaml`](cloudformation/readonly-role.yaml) and set
 
 ```bash
 AWS_MODE=real                 # drops the endpoint override
@@ -454,7 +455,7 @@ the API and nginx containers are left running against databases that no longer e
 | `npm run e2e`                                  | The browser suite, against the compose stack                                   |
 | `npm run lint`                                 | Prettier and ESLint, both in check mode                                        |
 | `npm run format`                               | Fix everything those two can fix automatically                                 |
-| `npm run typecheck`                            | `tsc` over every workspace, and over `infra/` and `scripts/`                   |
+| `npm run typecheck`                            | `tsc` over every workspace, and over `guards/` and `scripts/`                  |
 | `npm run verify`                               | Everything CI's static job runs — use before pushing                           |
 | `npm run evals:ground-truth -w @sightline/api` | Tier-1 evals — no API key needed                                               |
 | `npm run evals -w @sightline/api`              | Tier-2 agent evals — needs a key                                               |

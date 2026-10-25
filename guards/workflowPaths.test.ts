@@ -26,7 +26,7 @@ const workflowDir = `${root}.github/workflows`;
  * package names, and a check that reports those is a check people switch off.
  */
 const PATH_PATTERN =
-  /\b(?:apps|packages|infra|scripts|deploy|evals)\/[A-Za-z0-9_./-]+\.[a-z]{2,4}\b/g;
+  /\b(?:apps|packages|guards|cloudformation|scripts|deploy|evals)\/[A-Za-z0-9_./-]+\.[a-z]{2,4}\b/g;
 
 /**
  * Glob patterns are not paths. CI's exclusion glob contains the substring

@@ -1,6 +1,6 @@
 {
   // Type-checking for the code that is not in a workspace. `npm run typecheck`
-  // runs `--workspaces`, so `infra/`, `scripts/` and the root config files were
+  // runs `--workspaces`, so `guards/`, `scripts/` and the root config files were
   // checked by nothing: vitest transpiles them with esbuild, which strips types
   // without reading them.
   //
@@ -13,7 +13,7 @@
     "types": ["node"]
   },
   "include": [
-    "infra/**/*.ts",
+    "guards/**/*.ts",
     "e2e/**/*.ts",
     "scripts/**/*.mjs",
     "apps/api/build.mjs",

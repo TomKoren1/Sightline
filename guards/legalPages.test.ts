@@ -9,7 +9,7 @@
  * because both files look right on their own.
  *
  * A string scan rather than a render, because `apps/web` is not in the vitest
- * `include` - the same reason `infra/webTheme.test.ts` is a scan. It needs no
+ * `include` - the same reason `guards/webTheme.test.ts` is a scan. It needs no
  * browser and no DOM, which is also why it runs in CI's fast job.
  */
 
