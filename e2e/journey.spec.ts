@@ -10,16 +10,17 @@ import { expect, test } from "@playwright/test";
 import pg from "pg";
 
 import { expectAccessible } from "./a11y.js";
-import { E2E_USER } from "./stubs.js";
-import { e2eDatabase } from "./env.js";
+import { E2E_TEAMMATE, E2E_USER, TEAMMATE_COOKIE } from "./stubs.js";
+import { E2E_PORTS, e2eDatabase } from "./env.js";
 
 const db = new pg.Pool({ connectionString: e2eDatabase().owner, max: 1 });
 
-/** Every earlier run's tenant goes, so each run starts as a first visit. */
+/** Every earlier run's tenants go, so each run starts as a first visit. */
 async function forgetE2eUser(): Promise<void> {
-  await db.query(`DELETE FROM tenants WHERE id IN (SELECT tenant_id FROM users WHERE email = $1)`, [
-    E2E_USER.email,
-  ]);
+  await db.query(
+    `DELETE FROM tenants WHERE id IN (SELECT tenant_id FROM users WHERE email = ANY($1))`,
+    [[E2E_USER.email, E2E_TEAMMATE.email]],
+  );
 }
 
 test.beforeAll(forgetE2eUser);
@@ -28,7 +29,8 @@ test.afterAll(async () => {
   await db.end();
 });
 
-test("sign in, scan, read the findings, ask, and connect", async ({ page }) => {
+test("sign in, scan, read the findings, ask, invite, and connect", async ({ page, browser }) => {
+  let invite = "";
   await test.step("signs in with GitHub", async () => {
     await page.goto("/");
     await expect(page.getByText("What Sightline can see, and what it cannot")).toBeVisible();
@@ -96,13 +98,56 @@ test("sign in, scan, read the findings, ask, and connect", async ({ page }) => {
     await expect(page.getByRole("dialog").getByText(E2E_USER.email, { exact: true })).toBeVisible();
     await expectAccessible(page, "the team panel");
     await page.getByRole("button", { name: "Create link" }).click();
-    await expect(page.getByText(/\?join=[\w-]{20,}/)).toBeVisible();
+    const link = page.getByText(/\?join=[\w-]{20,}/);
+    await expect(link).toBeVisible();
+    invite = /\S*\?join=[\w-]+/.exec((await link.textContent()) ?? "")![0];
     // The scan they ran is in the activity log.
     await expect(page.getByText("POST /api/scans").first()).toBeVisible();
     await page.getByLabel("Token name").fill("ci");
     await page.getByRole("button", { name: "Create token" }).click();
     await expect(page.getByText(/^slt_[\w-]{40,}$/)).toBeVisible();
+  });
+
+  await test.step("sets up alerts, and is told when they cannot be delivered", async () => {
+    const url = page.getByLabel("Webhook URL");
+    await url.fill("http://hooks.sightline.test/alerts");
+    // Plain http is never sent, so it cannot even be saved.
+    await expect(page.getByRole("button", { name: "Save", exact: true })).toBeDisabled();
+    await url.fill("https://hooks.sightline.test/alerts");
+    await page.getByRole("button", { name: "Save", exact: true }).click();
+    await expect(page.getByText("hooks.sightline.test", { exact: true })).toBeVisible();
+    await expect(page.getByText(/nothing sent yet/)).toBeVisible();
+    // A name that resolves nowhere: the test goes through the real delivery
+    // path and has to come back as a failure the screen reports.
+    await page.getByRole("button", { name: "Send a test" }).click();
+    await expect(page.getByText(/^Test failed: /)).toBeVisible({ timeout: 15_000 });
+    await page.getByRole("button", { name: "Remove" }).click();
+    await expect(page.getByLabel("Webhook URL")).toBeVisible();
     await page.keyboard.press("Escape");
+  });
+
+  await test.step("a teammate follows the link and lands in the workspace", async () => {
+    const teammate = await browser.newContext();
+    await teammate.addCookies([
+      {
+        name: TEAMMATE_COOKIE.split("=")[0]!,
+        value: TEAMMATE_COOKIE.split("=")[1]!,
+        url: `http://127.0.0.1:${E2E_PORTS.stubs}`,
+      },
+    ]);
+    const other = await teammate.newPage();
+    await other.goto(invite);
+    await expect(other.getByText("You have been invited to a workspace")).toBeVisible();
+    await other.getByRole("link", { name: "Continue with GitHub" }).click();
+    await expect(other.getByRole("button", { name: E2E_TEAMMATE.email })).toBeVisible();
+    // The owner's account, not an empty workspace of their own.
+    await expect(other.getByText("demo", { exact: true }).first()).toBeVisible();
+    const { rows } = await db.query<{ same: boolean }>(
+      `SELECT count(DISTINCT tenant_id) = 1 AS same FROM users WHERE email = ANY($1)`,
+      [[E2E_USER.email, E2E_TEAMMATE.email]],
+    );
+    expect(rows[0]?.same).toBe(true);
+    await teammate.close();
   });
 
   await test.step("starts connecting an account of their own", async () => {

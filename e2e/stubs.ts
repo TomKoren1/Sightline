@@ -16,6 +16,13 @@ import { createHash } from "node:crypto";
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
 
 export const E2E_USER = { id: 4242, login: "e2e-user", email: "e2e@sightline.test" };
+/** Who follows the owner's invite link: a second GitHub account. */
+export const E2E_TEAMMATE = { id: 4343, login: "e2e-teammate", email: "teammate@sightline.test" };
+/** Set on the stand-in's own origin, it signs that browser in as the teammate. */
+export const TEAMMATE_COOKIE = "e2e_identity=teammate";
+
+const IDENTITIES = { owner: E2E_USER, teammate: E2E_TEAMMATE } as const;
+type Who = keyof typeof IDENTITIES;
 
 function body(req: IncomingMessage): Promise<string> {
   return new Promise((resolve, reject) => {
@@ -36,7 +43,15 @@ function json(res: ServerResponse, value: unknown): void {
  * held to it as GitHub holds it: a sign-in that stopped sending the verifier
  * fails the journey rather than passing against a lenient stand-in.
  */
-const challenges = new Map<string, string>();
+const challenges = new Map<string, { challenge: string; who: Who }>();
+let issued = 0;
+
+/** Who a request is for: by cookie at authorize, by the token after it. */
+function whoFrom(req: IncomingMessage): Who {
+  const token = req.headers.authorization?.replace(/^Bearer\s+/i, "");
+  if (token) return token.endsWith("teammate") ? "teammate" : "owner";
+  return (req.headers.cookie ?? "").includes(TEAMMATE_COOKIE) ? "teammate" : "owner";
+}
 
 async function github(req: IncomingMessage, url: URL, res: ServerResponse): Promise<void> {
   switch (url.pathname) {
@@ -48,8 +63,8 @@ async function github(req: IncomingMessage, url: URL, res: ServerResponse): Prom
         res.writeHead(400).end("PKCE challenge missing");
         return;
       }
-      const code = `e2e-code-${challenges.size}`;
-      challenges.set(code, challenge);
+      const code = `e2e-code-${(issued += 1)}`;
+      challenges.set(code, { challenge, who: whoFrom(req) });
       const back = new URL(url.searchParams.get("redirect_uri") ?? "");
       back.searchParams.set("code", code);
       back.searchParams.set("state", url.searchParams.get("state") ?? "");
@@ -59,18 +74,21 @@ async function github(req: IncomingMessage, url: URL, res: ServerResponse): Prom
     }
     case "/github/token": {
       const form = new URLSearchParams(await body(req));
-      const challenge = challenges.get(form.get("code") ?? "");
+      const issuedFor = challenges.get(form.get("code") ?? "");
       const verifier = form.get("code_verifier") ?? "";
-      if (!challenge || createHash("sha256").update(verifier).digest("base64url") !== challenge) {
+      const hashed = createHash("sha256").update(verifier).digest("base64url");
+      if (issuedFor?.challenge !== hashed) {
         return json(res, { error: "bad_verification_code" });
       }
       challenges.delete(form.get("code") ?? "");
-      return json(res, { access_token: "e2e-token", token_type: "bearer" });
+      return json(res, { access_token: `e2e-token-${issuedFor.who}`, token_type: "bearer" });
     }
-    case "/github/user":
-      return json(res, { id: E2E_USER.id, login: E2E_USER.login, name: "E2E User" });
+    case "/github/user": {
+      const user = IDENTITIES[whoFrom(req)];
+      return json(res, { id: user.id, login: user.login, name: user.login });
+    }
     case "/github/emails":
-      return json(res, [{ email: E2E_USER.email, primary: true, verified: true }]);
+      return json(res, [{ email: IDENTITIES[whoFrom(req)].email, primary: true, verified: true }]);
   }
   res.writeHead(404).end();
 }
