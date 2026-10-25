@@ -25,8 +25,8 @@ const MAX_BLOCK = 19;
 /** Files still holding a block over `TARGET_BLOCK`. Only ever fewer. */
 const OVER_TARGET = 113;
 
-/** Share of all non-blank lines that may be comment. */
-const MAX_RATIO = 0.275;
+/** Share of all non-blank lines that may be comment: 21.2% measured on 2026-10-25. Only ever lower. */
+const MAX_RATIO = 0.22;
 
 const SOURCE = /\.(ts|tsx|mjs)$/;
 
