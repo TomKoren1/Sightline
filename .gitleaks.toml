@@ -1,7 +1,7 @@
 # Secret-scanning rules.
 #
 # The default rule set did not flag a committed `.env.mock-backup` holding a
-# live Anthropic key and a per-customer ExternalId (engineering log #26), so
+# live Anthropic key and a per-customer ExternalId, so
 # both are covered explicitly here alongside the defaults.
 #
 # Note on regex syntax: gitleaks uses Go's RE2, which has **no lookarounds**.
@@ -63,8 +63,8 @@ paths = [
 #   b74f1d5  the positive controls of `setup/fixtures.test.ts`, which mirrors these
 #            rules in the unit suite. A test proving it detects credential-shaped
 #            strings needs one to detect, so it necessarily contained them.
-#   e07e702  engineering log #50, which quoted the CI pattern it was describing -
-#            a write-up of the bug reproducing the bug. Now described, not quoted.
+#   e07e702  a write-up of that bug, in a project log since deleted, which quoted
+#            the CI pattern it described - reproducing the bug. Now gone.
 #
 # Each was fixed in the tree and each still needed an entry, because gitleaks scans
 # a pull request's commit **range**: fixing forward is not the same as fixing. That
