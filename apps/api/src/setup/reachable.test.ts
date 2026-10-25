@@ -6,7 +6,7 @@
 import { createServer, type Server } from "node:http";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
-import { apiReachable } from "./reachable.js";
+import { apiReachable, localApiUrl } from "./reachable.js";
 
 let server: Server;
 let port = 0;
@@ -50,5 +50,23 @@ describe("apiReachable", () => {
     const started = Date.now();
     await expect(apiReachable("http://10.255.255.1:3000/api/health", 800)).resolves.toBe(false);
     expect(Date.now() - started).toBeLessThan(5000);
+  });
+});
+
+describe("the local API's URL", () => {
+  it("is loopback on the configured port, or the default", () => {
+    expect(localApiUrl("APP_PORT", "8081", 8080, "/api/health")).toBe(
+      "http://localhost:8081/api/health",
+    );
+    expect(localApiUrl("APP_PORT", undefined, 8080, "/api/health")).toBe(
+      "http://localhost:8080/api/health",
+    );
+    expect(localApiUrl("APP_PORT", " ", 8080, "/x")).toBe("http://localhost:8080/x");
+  });
+
+  it("refuses anything but a port, so .env cannot aim it at another host", () => {
+    for (const bad of ["80@elsewhere.example", "8080/../x", "0", "65536", "abc", "80 81"]) {
+      expect(() => localApiUrl("APP_PORT", bad, 8080, "/api/health"), bad).toThrow(/not a port/);
+    }
   });
 });

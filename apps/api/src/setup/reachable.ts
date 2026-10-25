@@ -14,3 +14,24 @@ export async function apiReachable(url: string, timeoutMs = 2500): Promise<boole
     return false;
   }
 }
+
+/**
+ * The local API's URL, from a port read out of `.env`.
+ *
+ * Refused unless it is a port number: interpolated as it stands, a value such
+ * as `80@elsewhere.example` would make `localhost` the userinfo and send the
+ * request, connection test and all, to another host.
+ */
+export function localApiUrl(
+  name: string,
+  port: string | null | undefined,
+  fallback: number,
+  path: string,
+): string {
+  const raw = port?.trim() || String(fallback);
+  const value = /^\d{1,5}$/.test(raw) ? Number(raw) : NaN;
+  if (!(value >= 1 && value <= 65535)) {
+    throw new Error(`${name} in .env is "${raw}", which is not a port number (1-65535).`);
+  }
+  return new URL(path, `http://localhost:${value}`).toString();
+}
