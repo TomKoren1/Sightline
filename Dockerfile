@@ -71,6 +71,10 @@ EXPOSE 3000
 # Non-root. The `node` user ships with the image and `/app` only needs to be
 # read; the server writes nothing at runtime.
 USER node
+# The commit this image was built from, for sightline_build_info. Last, so a
+# new commit invalidates no layer above it.
+ARG GIT_COMMIT=unknown
+ENV GIT_COMMIT=${GIT_COMMIT}
 # The server applies the Postgres schema on boot, so no migrate step is needed.
 # The worker, migrations and the restricted role's password are the other
 # entry points: node apps/api/dist/{worker,migrate,app-role}.js.

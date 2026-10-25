@@ -66,6 +66,7 @@ jobs:
           target: ${{ matrix.target }}
           load: true
           tags: ${{ env.IMAGE }}:scan
+          build-args: GIT_COMMIT=${{ inputs.ref }}
           cache-from: type=gha,scope=${{ matrix.target }}
           cache-to: type=gha,mode=max,scope=${{ matrix.target }}
 
@@ -85,6 +86,8 @@ jobs:
           target: ${{ matrix.target }}
           push: true
           tags: ${{ steps.meta.outputs.tags }}
+          # The same as the scanned build, or the image pushed is not the one scanned.
+          build-args: GIT_COMMIT=${{ inputs.ref }}
           labels: ${{ steps.meta.outputs.labels }}
           sbom: true
           provenance: mode=max

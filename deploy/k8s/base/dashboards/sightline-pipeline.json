@@ -223,7 +223,8 @@
       ],
       "fieldConfig": {
         "defaults": {
-          "custom": {}
+          "custom": {},
+          "noValue": "None in this window"
         },
         "overrides": []
       },
@@ -289,7 +290,8 @@
       ],
       "fieldConfig": {
         "defaults": {
-          "custom": {}
+          "custom": {},
+          "noValue": "None in this window"
         },
         "overrides": []
       },
@@ -327,6 +329,16 @@
         "overrides": []
       },
       "description": "Also the thing MAX_RESOURCES_PER_SCAN bounds. A number approaching it means a customer is about to be refused."
+    }
+  ],
+  "links": [
+    {
+      "type": "dashboards",
+      "tags": ["sightline"],
+      "asDropdown": false,
+      "title": "Sightline",
+      "includeVars": false,
+      "keepTime": true
     }
   ]
 }

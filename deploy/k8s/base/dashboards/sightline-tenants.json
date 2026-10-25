@@ -1,7 +1,7 @@
 {
   "uid": "sightline-tenants",
-  "title": "Sightline \u2014 customers and onboarding",
-  "description": "Who gets through onboarding, where they fall out, and what the limits turn away. What the agent costs is on 'Sightline \u2014 the agent'.",
+  "title": "Sightline — customers and onboarding",
+  "description": "Who gets through onboarding, where they fall out, and what the limits turn away. What the agent costs is on 'Sightline — the agent'.",
   "tags": ["sightline"],
   "timezone": "browser",
   "schemaVersion": 39,
@@ -73,7 +73,8 @@
       ],
       "fieldConfig": {
         "defaults": {
-          "custom": {}
+          "custom": {},
+          "noValue": "None in this window"
         },
         "overrides": []
       },
@@ -107,7 +108,8 @@
       "fieldConfig": {
         "defaults": {
           "custom": {},
-          "unit": "s"
+          "unit": "s",
+          "noValue": "None in this window"
         },
         "overrides": []
       },
@@ -135,12 +137,13 @@
             "uid": "Prometheus"
           },
           "expr": "sum by (kind, what) (increase(sightline_requests_refused_total[6h]))",
-          "legendFormat": "{{what}} \u2014 {{kind}}"
+          "legendFormat": "{{what}} — {{kind}}"
         }
       ],
       "fieldConfig": {
         "defaults": {
-          "custom": {}
+          "custom": {},
+          "noValue": "None in this window"
         },
         "overrides": []
       },
@@ -178,6 +181,16 @@
         "overrides": []
       },
       "description": "The fallback to the tenant's oldest connection is safe but it is also what made two resource panels answer about the wrong AWS account. A number climbing here means a client stopped sending the header."
+    }
+  ],
+  "links": [
+    {
+      "type": "dashboards",
+      "tags": ["sightline"],
+      "asDropdown": false,
+      "title": "Sightline",
+      "includeVars": false,
+      "keepTime": true
     }
   ]
 }

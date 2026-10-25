@@ -30,6 +30,7 @@ import { enforceReadOnlyNotice } from "./readOnlyGuard.js";
 import { errorMessage } from "@sightline/shared";
 import { fitRows, type Fitted } from "./fit.js";
 import {
+  AGENT_OUTCOMES,
   agentDuration,
   agentQuestions,
   agentReadOnlyNoticeAdded,
@@ -358,9 +359,12 @@ async function answer(options: AskOptions): Promise<AgentMessage> {
     spent = { inputTokens: usage?.inputTokens ?? 0, outputTokens: usage?.outputTokens ?? 0 };
     if (usage?.inputTokens) agentTokens.inc({ kind: "input" }, usage.inputTokens);
     if (usage?.outputTokens) agentTokens.inc({ kind: "output" }, usage.outputTokens);
-    // Part of the input above, read from the cache: whether caching pays.
-    const cached = usage?.inputTokenDetails?.cacheReadTokens;
-    if (cached) agentTokens.inc({ kind: "cache_read" }, cached);
+    // Parts of the input above, priced differently: a cache read costs a tenth
+    // of an input token and a cache write a quarter more.
+    const read = usage?.inputTokenDetails?.cacheReadTokens;
+    if (read) agentTokens.inc({ kind: "cache_read" }, read);
+    const written = usage?.inputTokenDetails?.cacheWriteTokens;
+    if (written) agentTokens.inc({ kind: "cache_write" }, written);
   } catch {
     // A question that answered is not a failure because accounting did not.
   }
@@ -390,7 +394,7 @@ async function answer(options: AskOptions): Promise<AgentMessage> {
    * measure, and it is already computed per answer for the user's benefit.
    */
   if (warnings.length > 0) agentUnsupportedCitations.inc(warnings.length);
-  const outcome = ranOut
+  const outcome: (typeof AGENT_OUTCOMES)[number] = ranOut
     ? "tool_limit"
     : warnings.length > 0
       ? "unsupported_citations"

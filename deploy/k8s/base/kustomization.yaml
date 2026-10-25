@@ -63,6 +63,7 @@ configMapGenerator:
       labels:
         grafana_dashboard: "1"
     files:
+      - dashboards/sightline-overview.json
       - dashboards/sightline-health.json
       - dashboards/sightline-pipeline.json
       - dashboards/sightline-tenants.json

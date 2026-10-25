@@ -11,7 +11,15 @@
 
 import { describe, expect, it } from "vitest";
 
-import { FORBIDDEN_LABELS, registry, startMetricsServer } from "./metrics.js";
+import type { GuardCause } from "../agent/sqlGuard.js";
+import {
+  AGENT_OUTCOMES,
+  AGENT_TOKEN_KINDS,
+  FORBIDDEN_LABELS,
+  RAW_QUERY_REFUSALS,
+  registry,
+  startMetricsServer,
+} from "./metrics.js";
 
 interface Described {
   name: string;
@@ -130,5 +138,29 @@ describe("the metrics registry", () => {
     } finally {
       server.close();
     }
+  });
+});
+
+describe("the agent's counters before anyone asks", () => {
+  it("expose every outcome, token kind and refusal at zero", async () => {
+    // A dashboard ratio over a series that does not exist yet shows "No data".
+    const text = await registry.metrics();
+    for (const outcome of AGENT_OUTCOMES) {
+      expect(text).toContain(`sightline_agent_questions_total{outcome="${outcome}"}`);
+    }
+    for (const kind of AGENT_TOKEN_KINDS) {
+      expect(text).toContain(`sightline_agent_tokens_total{kind="${kind}"}`);
+    }
+    for (const reason of RAW_QUERY_REFUSALS) {
+      expect(text).toContain(`sightline_agent_raw_query_refused_total{reason="${reason}"}`);
+    }
+  });
+
+  it("list every cause the SQL guard can refuse with", () => {
+    // Fails to compile, not just to run, when the guard gains a cause.
+    const covered: Exclude<GuardCause, (typeof RAW_QUERY_REFUSALS)[number]> extends never
+      ? true
+      : false = true;
+    expect(covered).toBe(true);
   });
 });

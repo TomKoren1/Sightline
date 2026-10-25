@@ -65,8 +65,10 @@ grafana:
       # its own repository; without this they would all have to live here.
       searchNamespace: ALL
 
-  # Community dashboards for the things already being scraped - node-exporter
-  # and kube-state-metrics - pulled by id rather than hand-authored.
+  # A community dashboard for what node-exporter scrapes, pulled by id rather
+  # than hand-authored. #315 (Kubernetes cluster monitoring) went: written for
+  # cAdvisor labels this Kubernetes no longer has, 27 of its 33 queries came
+  # back empty. The Sightline overview carries the cluster figures that matter.
   dashboardProviders:
     dashboardproviders.yaml:
       apiVersion: 1
@@ -84,10 +86,6 @@ grafana:
       node-exporter-full:
         gnetId: 1860
         revision: 37
-        datasource: Prometheus
-      kubernetes-cluster-monitoring:
-        gnetId: 315
-        revision: 3
         datasource: Prometheus
 
 prometheus:
@@ -262,7 +260,8 @@ prometheus:
             - alert: SightlineAgentSpendSpike
               # Wallet, not correctness. Without a chat quota the Anthropic key
               # is a free Claude proxy for anyone who signs up.
-              expr: sum(rate(sightline_agent_tokens_total[1h])) * 3600 > 2000000
+              # Input and output only: cache_read and cache_write are parts of input.
+              expr: sum(rate(sightline_agent_tokens_total{kind=~"input|output"}[1h])) * 3600 > 2000000
               for: 30m
               labels:
                 severity: warning
@@ -447,6 +446,13 @@ prometheus:
 
 loki-stack:
   enabled: true
+  # Its datasource ConfigMap is for a Grafana that reads datasources from a
+  # sidecar; this one takes them from `grafana.datasources` above, so the
+  # ConfigMap was never loaded - only a second "Loki" for a reader to puzzle over.
+  grafana:
+    sidecar:
+      datasources:
+        enabled: false
   loki:
     isDefault: false
     # Persistence, because the default is emptyDir and every pod restart
