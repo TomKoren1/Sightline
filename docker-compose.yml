@@ -46,7 +46,7 @@ services:
   # namespaces resources by the account ID carried in the credentials, so a
   # mismatch silently writes into a different account.
   moto:
-    image: motoserver/moto:5.2.3@sha256:91fd602a21f49cf9eb82fdf474015a3c131d40104c8297ea6a2ca920708ae32c
+    image: motoserver/moto:5.2.4@sha256:120b1589c6df7e35d2092935f6ff724486bb2c4189d0e36ce795baba1400ffd2
     container_name: sightline-moto
     restart: unless-stopped
     environment:
