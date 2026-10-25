@@ -20,7 +20,7 @@ resources:
   # values would deploy, start, and fail at the first sign-in with an error
   # about Google rather than about configuration. The name ends in
   # `sealedsecret.yaml` because that is the path `.gitleaks.toml` exempts.
-  #- secrets.sealedsecret.yaml
+  - secrets.sealedsecret.yaml
 
 # BEGIN pinned images - written by .github/workflows/deliver.yml, do not edit
 # commit: c3dd0733ac1a33dbb0184f5e3977271d9ef594f6
