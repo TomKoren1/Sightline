@@ -238,7 +238,8 @@ packages/shared       domain model shared by every package
 packages/mock-aws     the seeded customer account and its hand-written answer key
 cloudformation/       the read-only role customers deploy
 guards/               tests that hold two files to each other, over things nothing runs
-deploy/               kustomize manifests (k8s/), nginx, the AWS profile mount for compose
+deploy/               kustomize manifests (k8s/), the platform's AWS resources (terraform/),
+                      nginx, the AWS profile mount for compose
 helm/monitoring/      Prometheus, Grafana and Loki, with this project's dashboards
 argocd/               the ArgoCD Applications for the monitoring chart and each overlay
 e2e/                  the browser suite: the hosted product, signed in and driven

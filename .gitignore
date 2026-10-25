@@ -42,3 +42,11 @@ test-results/
 # mint a scanner identity: never commit it.
 roles-anywhere/
 *.key
+
+# Terraform: provider downloads, local state and override files never belong in git.
+# The lock file does: it pins provider checksums.
+deploy/terraform/.terraform/
+deploy/terraform/*.tfstate
+deploy/terraform/*.tfstate.*
+deploy/terraform/*_override.tf
+deploy/terraform/*.tfplan

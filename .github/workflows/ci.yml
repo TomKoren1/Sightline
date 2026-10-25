@@ -247,6 +247,26 @@ jobs:
         run: |
           docker run --rm -v "$PWD/rendered:/m"             ghcr.io/yannh/kubeconform:v0.8.0@sha256:faffaf43f95aa6425306e1ab8d6fcad72acb9049158f38e574c085ea1ec0f64e             -strict -summary -ignore-missing-schemas -kubernetes-version 1.33.0             /m/prod.yaml /m/staging.yaml /m/monitoring.yaml
 
+  # The platform's AWS resources as code (deploy/terraform). Formatting and
+  # validity only: a plan needs AWS credentials, which CI does not hold, and
+  # applying is done by hand after reading the plan.
+  terraform:
+    name: Terraform format and validate
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: deploy/terraform
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: opentofu/setup-opentofu@a1320f892987e89d278cc92dc5adc984fb93aca4 # v2.0.2
+        with:
+          tofu_version: 1.13.1
+          tofu_wrapper: false
+      - run: tofu fmt -check -diff
+      - run: tofu init -backend=false -input=false
+      - run: tofu validate
+
   # The README offers a second way to run the project. A documented path that CI
   # does not exercise is worse than no path at all, because it is a claim nobody
   # has checked - so this runs the exact command the README gives and drives the
