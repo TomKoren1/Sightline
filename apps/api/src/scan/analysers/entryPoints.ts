@@ -10,8 +10,16 @@
 
 import type { Relationship, Resource } from "@sightline/shared";
 
-/** `bucket.s3.amazonaws.com`, `bucket.s3.eu-west-1.amazonaws.com`, website endpoints. */
-const S3_DOMAIN = /^(.+?)\.s3(?:[.-][a-z0-9-]+)*\.amazonaws\.com$/i;
+/**
+ * `bucket.s3.amazonaws.com`, `bucket.s3.eu-west-1.amazonaws.com`, website endpoints.
+ *
+ * Each label after `s3` is one separator then letters and digits, so a suffix
+ * splits only one way. It once allowed `-` inside a label as well as before it,
+ * and an origin domain from the customer's account like `b.s3-a-a-...-a` then
+ * backtracked exponentially - about forty labels would hold the worker's event
+ * loop, and every tenant's scan behind it, for hours.
+ */
+const S3_DOMAIN = /^(.+?)\.s3(?:[.-][a-z0-9]+)*\.amazonaws\.com$/i;
 
 function hostOf(value: string | null | undefined): string | null {
   if (!value) return null;
