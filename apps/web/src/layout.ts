@@ -7,7 +7,7 @@
  * that relationship much harder to see.
  */
 
-import dagre from "dagre";
+import dagre from "@dagrejs/dagre";
 import type { Edge, Node } from "@xyflow/react";
 
 const NODE_WIDTH = 190;
