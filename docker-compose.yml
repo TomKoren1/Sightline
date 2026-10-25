@@ -44,7 +44,7 @@ services:
   #
   # MOTO_ACCOUNT_ID must match the account in AWS_TARGET_ROLE_ARN: moto
   # namespaces resources by the account ID carried in the credentials, so a
-  # mismatch silently writes into a different account. See ENGINEERING-LOG #2.
+  # mismatch silently writes into a different account.
   moto:
     image: motoserver/moto:5.2.3@sha256:91fd602a21f49cf9eb82fdf474015a3c131d40104c8297ea6a2ca920708ae32c
     container_name: sightline-moto
