@@ -50,6 +50,12 @@ jobs:
       - name: Seed the mock account
         run: npm run seed
 
+      # The test writes straight to the database, so nothing else would create
+      # the schema: CI's push job gets it from `npm run scan`, which this job
+      # does not run, and both nightly runs failed on "relation does not exist".
+      - name: Apply the migrations
+        run: npm run db:migrate -w @sightline/api
+
       - name: The load test
         env:
           LOAD_TEST: "1"
