@@ -48,8 +48,7 @@ kubeseal --controller-name "$CONTROLLER" --controller-namespace "$CONTROLLER_NS"
   --fetch-cert >/dev/null
 
 for name in "${ORDER[@]}"; do
-  # Separators between documents only, so the file does not end in an empty one.
-  [ -s "$tmp" ] && echo "---" >>"$tmp"
+  # No separator of ours: kubeseal starts every document with its own `---`.
   keys="$(printf '%s\n' ${KEYS[$name]} | jq -R . | jq -sc .)"
   # Only the name and namespace survive from the live object: its uid,
   # resourceVersion and managedFields would make the sealed copy unappliable.
