@@ -112,7 +112,7 @@ COPY apps/web/ apps/web/
 RUN npm run build -w @sightline/web
 
 # --- frontend runtime ------------------------------------------------------
-FROM nginx:1.30.6-alpine@sha256:47928bf67eb62a1863cb08d9ecb52d3e704304ba614eaee17884204677702951 AS web
+FROM nginx:1.31.8-alpine@sha256:785835ea65db4bba6f021acc0f3be91b0fef76a53fe41f8588c6698d2aed0606 AS web
 # Patched Alpine packages over the pinned base: fixes land in Alpine before a
 # new nginx image is cut (brotli-libs, CVE-2026-111497, did), and the release
 # scan fails on any fixable HIGH.
