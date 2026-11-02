@@ -67,7 +67,7 @@ spec:
               # client refuses to dump a newer server, which would present as
               # the backup having silently stopped working after an upgrade.
               # Debian, not Alpine: see the note on openssl at the top.
-              image: postgres:16.15-bookworm@sha256:d81f7b51697014367236d07ec58b54153fc28f828b72bf247fe5c7487520bcb0
+              image: postgres:16.15-bookworm@sha256:e8a07d2c7579b038938cdba6c539e580e5001caf9ea203d397b5cc83e76bd938
               env:
                 - name: PGHOST
                   value: postgres
