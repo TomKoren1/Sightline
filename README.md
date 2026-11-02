@@ -11,14 +11,47 @@ effectively an administrator, what changed since yesterday.
 It runs end to end against a mocked AWS account with no credentials and no cloud
 spend.
 
-```
-AWS (real or mock) ──▶ scanner ──▶ analysers ──▶ Postgres ──▶ agent ──▶ React UI
-                       assume-role  verdicts in   inventory,   curated   graph +
-                       per service  code, with    graph and    tools     chat
-                       per region   evidence      history
+![The production database: private, publiclyAccessible false, and still reachable from the internet](docs/images/exposed-database.png)
 
-                       a scan is a queued job; Postgres is the queue, and
-                       every row above is scoped to one tenant's connection
+_The production database is private and `publiclyAccessible: false`, and Sightline
+still marks it exposed: it walked the security groups, routes and ACLs and found
+the internet reaching it through the bastion and the app tier._
+
+### What makes it interesting
+
+- **Verdicts are computed, not generated.** Whether a bucket is public or a role is
+  effectively admin is decided in code, with evidence. The model picks the question
+  and explains the answer; it never decides it.
+- **The agent can't invent resources.** Every ARN in an answer is checked against
+  what its tools returned, and anything unsupported is flagged to the reader.
+- **Graded against an answer key written by hand.** 29 deterministic checks run on
+  every commit, and 21 agent cases score the live model, so an analyser bug can't
+  grade itself as correct.
+- **Tenants are isolated by the database.** Postgres row-level security under a
+  restricted role, with a leak test that finds every query by reflection.
+- **A supply chain you can audit.** SHA-pinned actions, digest-pinned images, signed
+  images with SBOMs, CodeQL, osv-scanner and gitleaks, and GitOps through ArgoCD.
+
+**Stack:** TypeScript · NestJS on Fastify · PostgreSQL + Drizzle · React + React
+Flow · Anthropic Claude · moto (mock AWS) · Docker · Kubernetes (k3s) · ArgoCD ·
+Prometheus, Grafana, Loki · OpenTelemetry · Terraform · GitHub Actions
+
+```mermaid
+flowchart LR
+  aws["AWS account<br/>(real or mock)"] -->|assume read-only role| worker
+  subgraph app [Sightline]
+    worker["Worker<br/>collectors per service and region<br/>analysers compute verdicts"]
+    pg[("PostgreSQL<br/>inventory + graph + job queue<br/>row-level security per tenant")]
+    api["API (NestJS)<br/>auth, tenancy, SSE"]
+    agent["Agent<br/>18 curated tools<br/>citation check"]
+    web["React UI<br/>graph, findings, chat"]
+    worker --> pg
+    api --> pg
+    api --> agent
+    agent -->|read-only, scan-pinned| pg
+    web --> api
+  end
+  agent <-->|tool use| claude["Anthropic Claude"]
 ```
 
 **Contents** — [Try it](#try-it) · [What it answers](#what-it-answers) ·
@@ -194,6 +227,8 @@ evaluating them would fall into. The split makes failures diagnosable — tier 1
 passing and tier 2 failing means the data is right and the agent misused it. The
 same checks run inside the product, under **Coverage**, for the demo account.
 
+![Coverage: what the last scan read per service and region, what Sightline never reads, and the data checks](docs/images/coverage.png)
+
 ---
 
 ## Deploying
@@ -256,16 +291,16 @@ defect class this repository keeps meeting.
 
 ## Documentation
 
-| Document                                                 | For                                                              |
-| -------------------------------------------------------- | ---------------------------------------------------------------- |
-| [`docs/development.md`](docs/development.md)             | running from source, house style, every command, troubleshooting |
-| [`docs/aws-account.md`](docs/aws-account.md)             | connecting a real account or an Organization, and the traps      |
-| [`docs/roadmap.md`](docs/roadmap.md)                     | what breaks first at scale, and what is not built yet            |
-| [`docs/adr/`](docs/adr/README.md)                        | decisions the code depends on, with the reason for each          |
-| [`docs/openapi.json`](docs/openapi.json)                 | every route, generated from the contract the tests enforce       |
-| [`deploy/k8s/README.md`](deploy/k8s/README.md)           | the hosted deployment: cluster, secrets, backups, restore        |
-| [`helm/monitoring/README.md`](helm/monitoring/README.md) | the monitoring stack and what its metrics may carry              |
-| [`SECURITY.md`](SECURITY.md)                             | the security properties, tenant isolation, known limitations     |
-| [`PRIVACY.md`](PRIVACY.md) · [`TERMS.md`](TERMS.md)      | what a hosted deployment holds, shares and deletes; the terms    |
+| Document                                                 | For                                                                                          |
+| -------------------------------------------------------- | -------------------------------------------------------------------------------------------- |
+| [`docs/development.md`](docs/development.md)             | running from source, house style, every command, troubleshooting                             |
+| [`docs/aws-account.md`](docs/aws-account.md)             | connecting a real account or an Organization, and the traps                                  |
+| [`docs/roadmap.md`](docs/roadmap.md)                     | what breaks first at scale, and what is not built yet                                        |
+| [`docs/adr/`](docs/adr/README.md)                        | decisions the code depends on, with the reason for each                                      |
+| [`docs/openapi.json`](docs/openapi.json)                 | every route, generated from the contract the tests enforce                                   |
+| [`deploy/k8s/README.md`](deploy/k8s/README.md)           | the hosted deployment: cluster, secrets, backups, restore                                    |
+| [`helm/monitoring/README.md`](helm/monitoring/README.md) | the monitoring stack and what its metrics may carry                                          |
+| [`SECURITY.md`](SECURITY.md)                             | the security properties, tenant isolation, known limitations                                 |
+| [`PRIVACY.md`](PRIVACY.md) · [`TERMS.md`](TERMS.md)      | what a hosted deployment holds, shares and deletes; the terms (Google sign-in requires both) |
 
 Licensed under [MIT](LICENSE).
