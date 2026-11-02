@@ -266,7 +266,12 @@ beforeAll(async () => {
 
 afterAll(async () => {
   if (!ENABLED || skipReason) return;
-  await system.delete(schema.tenants).where(eq(schema.tenants.id, tenantId));
+  // The cascade removes every copied estate, which outlasts the pool's 30 s
+  // statement timeout just as the copy does.
+  await system.transaction(async (tx) => {
+    await tx.execute(sql`SET LOCAL statement_timeout = 0`);
+    await tx.delete(schema.tenants).where(eq(schema.tenants.id, tenantId));
+  });
   const width = Math.max(...timings.map((t) => t.step.length));
   // Straight to stdout: vitest hides console output from passing tests, and
   // the numbers are the point of a passing run.
