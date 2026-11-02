@@ -298,10 +298,24 @@ spec:
     metadata:
       labels: { app.kubernetes.io/name: web }
     spec:
+      # nginx-unprivileged's own user. Writes only its pid and temp files, to
+      # /tmp, so the root filesystem can be read-only like the API's.
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 101
+        runAsGroup: 101
+        seccompProfile: { type: RuntimeDefault }
       containers:
         - name: web
           image: sightline-web
-          ports: [{ name: http, containerPort: 80 }]
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities: { drop: [ALL] }
+            readOnlyRootFilesystem: true
+          # The Service keeps port 80, so `http://web:80` still reaches this.
+          ports: [{ name: http, containerPort: 8080 }]
+          volumeMounts:
+            - { name: tmp, mountPath: /tmp }
           # `deploy/nginx.conf` proxies `/api/` to `http://api:3000`, which
           # resolves to the Service above unchanged - the same config serves
           # compose and this. nginx resolves that name once at startup, so a
@@ -319,6 +333,8 @@ spec:
           resources:
             requests: { cpu: 20m, memory: 32Mi }
             limits: { memory: 128Mi }
+      volumes:
+        - { name: tmp, emptyDir: { sizeLimit: 64Mi } }
 ---
 # Keep one of each serving through a node drain.
 #
