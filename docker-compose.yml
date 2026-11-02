@@ -11,7 +11,7 @@
 #
 # The `app` profile is additive and opt-in. Without it this file behaves exactly
 # as it always has, so the instructions in the README cannot be broken by the
-# containerised path misbehaving on a platform I cannot test.
+# containerised path misbehaving on a platform CI does not cover.
 #
 # Two services:
 #   postgres  - everything: scan runs, the resource graph, agent traces, the queue
