@@ -247,6 +247,11 @@ can, and until they do, the role it created still exists.
   it is a CLI that generates migration SQL — so the vulnerable code path is not
   reached. An npm `overrides` entry does not help: the tilde pin means npm
   records the override and keeps 0.18.20 anyway.
+- **One moderate dev-only advisory in minimatch** (GHSA-g3hv-75wg-m249), a
+  denial of service through a crafted glob pattern. It arrives through ESLint and
+  typescript-eslint, which only expand patterns written in this repository's own
+  lint config, so no outside input reaches it. Ignored until 2027-01-31, by
+  which time the linters are expected to have moved to a fixed release.
 - **One low advisory in production, held deliberately.** Fastify 5.12.5
   (GHSA-389g-gv7q-r4x8) lets a request bypass a route's JSON-schema header
   validation with differently-cased names. This application validates no headers

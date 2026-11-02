@@ -9,3 +9,8 @@ reason = "esbuild dev server, pinned by drizzle-kit's @esbuild-kit dependencies;
 id = "GHSA-389g-gv7q-r4x8"
 ignoreUntil = 2026-12-31
 reason = "Fastify header JSON-schema validation; this app validates requests with zod. Fixed with @nestjs/platform-fastify 12.2, taken once it is not days old."
+
+[[IgnoredVulns]]
+id = "GHSA-g3hv-75wg-m249"
+ignoreUntil = 2027-01-31
+reason = "minimatch, dev-only via eslint and typescript-eslint; it only ever expands glob patterns from this repository's own lint config, never input from anyone else."

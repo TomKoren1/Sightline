@@ -233,15 +233,20 @@ beforeAll(async () => {
           base.accountId,
           base.regions,
         );
-        await system.execute(sql`
-          INSERT INTO resource_snapshots
-                 (tenant_id, scan_id, arn, kind, name, region, account_id, tags, properties, derived, fingerprint, graph_group)
-          SELECT tenant_id, ${copy}, arn, kind, name, region, account_id, tags, properties, derived, fingerprint, graph_group
-            FROM resource_snapshots WHERE scan_id = ${scanId}`);
-        await system.execute(sql`
-          INSERT INTO relationship_snapshots (tenant_id, scan_id, from_arn, to_arn, rel_type, properties)
-          SELECT tenant_id, ${copy}, from_arn, to_arn, rel_type, properties
-            FROM relationship_snapshots WHERE scan_id = ${scanId}`);
+        // Fixture setup, not product code: copying a whole estate outlasts the
+        // pool's 30 s statement timeout, which guards requests, not this.
+        await system.transaction(async (tx) => {
+          await tx.execute(sql`SET LOCAL statement_timeout = 0`);
+          await tx.execute(sql`
+            INSERT INTO resource_snapshots
+                   (tenant_id, scan_id, arn, kind, name, region, account_id, tags, properties, derived, fingerprint, graph_group)
+            SELECT tenant_id, ${copy}, arn, kind, name, region, account_id, tags, properties, derived, fingerprint, graph_group
+              FROM resource_snapshots WHERE scan_id = ${scanId}`);
+          await tx.execute(sql`
+            INSERT INTO relationship_snapshots (tenant_id, scan_id, from_arn, to_arn, rel_type, properties)
+            SELECT tenant_id, ${copy}, from_arn, to_arn, rel_type, properties
+              FROM relationship_snapshots WHERE scan_id = ${scanId}`);
+        });
       }
       await refreshSnapshotStatistics();
     },
