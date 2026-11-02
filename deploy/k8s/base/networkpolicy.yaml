@@ -74,7 +74,6 @@ spec:
                 values: [api, worker, migrate, backup]
       ports:
         - { protocol: TCP, port: 5432 }
-        - { protocol: TCP, port: 7687 }
 ---
 # The API accepts requests from the web pods only.
 #
@@ -106,7 +105,9 @@ spec:
     - from:
         - podSelector:
             matchLabels: { app.kubernetes.io/name: cloudflared }
-      ports: [{ protocol: TCP, port: 80 }]
+      # The pod's port, not the Service's: a NetworkPolicy matches after the
+      # Service has translated 80 to the container's 8080.
+      ports: [{ protocol: TCP, port: 8080 }]
 ---
 # Egress is deliberately **not** restricted, and this is the one place in these
 # manifests where the permissive choice is the right one.

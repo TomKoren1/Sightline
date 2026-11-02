@@ -64,8 +64,14 @@ function configLiterals(): Env {
 }
 
 interface PodSpec {
+  securityContext?: { runAsNonRoot?: boolean };
   containers?: {
     name?: string;
+    securityContext?: {
+      allowPrivilegeEscalation?: boolean;
+      readOnlyRootFilesystem?: boolean;
+      capabilities?: { drop?: string[] };
+    };
     env?: { name: string; value?: string }[];
     envFrom?: { configMapRef?: { name: string }; secretRef?: { name: string } }[];
     resources?: { limits?: Record<string, string>; requests?: Record<string, string> };
@@ -141,6 +147,31 @@ describe("the Kubernetes manifests", () => {
       "`secretGenerator` builds a Secret from a local file, which is one `git add -A` away from " +
         "being committed. Use a SealedSecret.",
     ).toEqual([]);
+  });
+
+  it("runs every stateless workload unprivileged", () => {
+    /**
+     * The datastores' images start as root and drop to their own user, which
+     * needs CHOWN and SETUID on a volume they own; hardening them means a data
+     * migration on the live database, not a manifest edit.
+     */
+    const exempt = new Set(["postgres", "backup"]);
+    const weak = workloads()
+      .filter((w) => !exempt.has(w.name))
+      .flatMap((w) =>
+        (w.pod.containers ?? [])
+          .filter((c) => {
+            const sc = c.securityContext;
+            return (
+              w.pod.securityContext?.runAsNonRoot !== true ||
+              sc?.allowPrivilegeEscalation !== false ||
+              sc?.readOnlyRootFilesystem !== true ||
+              !sc?.capabilities?.drop?.includes("ALL")
+            );
+          })
+          .map((c) => `${w.kind}/${w.name}: ${c.name}`),
+      );
+    expect(weak).toEqual([]);
   });
 
   it("does not configure a hosted deployment the API would refuse to start", () => {

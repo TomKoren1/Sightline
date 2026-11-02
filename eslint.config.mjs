@@ -58,7 +58,7 @@ export default tseslint.config(
         { ignorePrimitives: { string: true } },
       ],
 
-      // Warn, not error: load-bearing at the AWS SDK and Neo4j boundaries,
+      // Warn, not error: load-bearing at the AWS SDK and database boundaries,
       // where responses are genuinely dynamic. Errors would buy a suppression
       // comment on every boundary.
       "@typescript-eslint/no-explicit-any": "warn",
