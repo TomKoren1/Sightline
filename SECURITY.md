@@ -252,14 +252,9 @@ can, and until they do, the role it created still exists.
   typescript-eslint, which only expand patterns written in this repository's own
   lint config, so no outside input reaches it. Ignored until 2027-01-31, by
   which time the linters are expected to have moved to a fixed release.
-- **One low advisory in production, held deliberately.** Fastify 5.12.5
-  (GHSA-389g-gv7q-r4x8) lets a request bypass a route's JSON-schema header
-  validation with differently-cased names. This application validates no headers
-  with Fastify schemas - request validation is zod - so the path is not reached.
-  The fix is in `@nestjs/platform-fastify` 12.2, which pins Fastify exactly and
-  needs `@nestjs/core` 12.2; both are days old, and are taken once they are not.
-  Every other production advisory was fixed on 2026-10-24, including zod's
-  high-severity memory exhaustion (moved to zod 4) and undici's.
+- **No production advisory is held open.** The last one, Fastify's
+  GHSA-389g-gv7q-r4x8, was fixed on 2026-11-02 by moving to NestJS 12.3, which
+  brings Fastify 5.12.7.
 - **The policy analyser is not a complete IAM evaluator.** It models identity
   policies, explicit Deny, permissions boundaries and known escalation paths, but
   not service control policies, session policies or resource policies, so

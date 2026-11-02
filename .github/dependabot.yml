@@ -41,6 +41,16 @@ updates:
       production:
         dependency-type: production
         update-types: ["minor", "patch"]
+    # OpenTelemetry is mid-migration: api 1.10 and the 0.300 exporters belong to
+    # a 3.x line whose trace SDK has not shipped, and sdk-trace 2.x declares
+    # api <1.10. Lift these once @opentelemetry/sdk-trace-base 3 is released.
+    ignore:
+      - dependency-name: "@opentelemetry/api"
+        versions: [">=1.10.0"]
+      - dependency-name: "@opentelemetry/exporter-trace-otlp-http"
+        versions: [">=0.300.0"]
+      - dependency-name: "@opentelemetry/resources"
+        versions: [">=3.0.0"]
 
   # Notices when a pinned action major goes end-of-life.
   - package-ecosystem: github-actions
