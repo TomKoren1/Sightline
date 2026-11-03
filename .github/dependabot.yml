@@ -67,6 +67,10 @@ updates:
       interval: monthly
     cooldown:
       default-days: 7
+    # init and analyze must be the same release; apart, each PR fails CodeQL.
+    groups:
+      codeql:
+        patterns: ["github/codeql-action*"]
 
   # Every image is pinned to a version and digest (guards/imagePins.test.ts), so
   # nothing changes without a PR; these are what raise that PR. `docker` reads
