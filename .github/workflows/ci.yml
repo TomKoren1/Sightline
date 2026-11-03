@@ -42,21 +42,10 @@ jobs:
         run: npm run lint
 
       - name: Unit tests
-        # The integration suite needs the compose stack and runs in the next
-        # job; this one must stay fast and dependency-free. SKIP_INTEGRATION
-        # also switches off the suites that issue real HTTP requests, which
-        # would otherwise spend thirty seconds per request timing out against
-        # databases that are not here.
-        #
-        # The exclusion names one file rather than the whole `evals/` directory.
-        # `**/evals/**` also excluded `readme.test.ts` and `summarise.test.ts`,
-        # which need no databases and no API key - so thirty-two assertions,
-        # including all twenty-five guarding the documentation against rot, ran
-        # nowhere at all. `groundTruth.test.ts` is the only one that needs the
-        # stack, and the integration job runs it explicitly.
-        env:
-          SKIP_INTEGRATION: "1"
-        run: npx vitest run --exclude '**/evals/groundTruth.test.ts'
+        # The same command `npm run verify` runs locally. `--mode unit` sets
+        # SKIP_INTEGRATION (vitest.config.ts), so the suites that need the
+        # compose stack skip here and run in the next job.
+        run: npm run test:unit
 
       - name: Build frontend
         run: npm run build -w @sightline/web

@@ -1,0 +1,19 @@
+name: Feature request
+description: A question Sightline should be able to answer, or something it should do.
+labels: ["enhancement"]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: The problem
+      description: What you are trying to find out or do, and why the current behaviour does not get you there.
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: What you would like
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives you considered

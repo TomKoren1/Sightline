@@ -1,0 +1,115 @@
+name: Dependabot auto-merge
+
+# Patch and minor updates merge themselves once every check is green; majors
+# wait for a person, because they are the ones that change behaviour.
+#
+#   Dependabot PR opened -> classify: label `automerge` if patch or minor
+#   CI / Security analysis completes -> merge: squash it if labelled and green
+#
+# Remove the label to hold one back; add it to a major to let it through.
+#
+# Merged by this workflow's own token, not by GitHub's auto-merge. A push made
+# with GITHUB_TOKEN starts no workflow, so an auto-merged PR would land on main
+# without CI running there, and Deliver - which waits for CI on main - would
+# never ship it. So the merge step dispatches CI and Security analysis on main
+# itself; workflow_dispatch is the one event GITHUB_TOKEN is allowed to start,
+# and Deliver accepts it.
+
+on:
+  pull_request:
+  workflow_run:
+    workflows: [CI, Security analysis]
+    types: [completed]
+
+permissions:
+  contents: read
+
+jobs:
+  classify:
+    name: Classify the update
+    if: github.event_name == 'pull_request' && github.event.pull_request.user.login == 'dependabot[bot]'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      pull-requests: write
+    steps:
+      - id: meta
+        uses: dependabot/fetch-metadata@25dd0e34f4fe68f24cc83900b1fe3fe149efef98 # v3.1.0
+
+      - name: Label patch and minor updates
+        if: >-
+          steps.meta.outputs.update-type == 'version-update:semver-patch' ||
+          steps.meta.outputs.update-type == 'version-update:semver-minor'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          PR: ${{ github.event.pull_request.number }}
+        run: gh pr edit "$PR" --add-label automerge
+
+  merge:
+    name: Merge when green
+    # Only a run that a Dependabot pull request started and that passed. The
+    # PR's own head commit is matched below, so a later push to the branch is
+    # never merged on an earlier commit's checks.
+    if: >-
+      github.event_name == 'workflow_run' &&
+      github.event.workflow_run.event == 'pull_request' &&
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.actor.login == 'dependabot[bot]'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    # Two PRs finishing together would both dispatch CI on main; one at a time.
+    concurrency:
+      group: dependabot-automerge
+      cancel-in-progress: false
+    permissions:
+      contents: write
+      pull-requests: write
+      actions: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+      HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
+      HEAD_BRANCH: ${{ github.event.workflow_run.head_branch }}
+    steps:
+      - name: Find the pull request
+        id: pr
+        run: |
+          pr="$(gh pr list --state open --head "$HEAD_BRANCH" \
+            --json number,headRefOid,author,labels \
+            --jq '.[] | select(.author.login == "app/dependabot")')"
+          if [ -z "$pr" ]; then echo "no open Dependabot PR for $HEAD_BRANCH"; exit 0; fi
+          if [ "$(jq -r .headRefOid <<<"$pr")" != "$HEAD_SHA" ]; then
+            echo "the branch has moved on since this run; its own run decides"; exit 0
+          fi
+          if ! jq -e '.labels | any(.name == "automerge")' <<<"$pr" >/dev/null; then
+            echo "not labelled automerge: left for review"; exit 0
+          fi
+          echo "number=$(jq -r .number <<<"$pr")" >> "$GITHUB_OUTPUT"
+
+      - name: Every check on the PR has passed
+        id: green
+        if: steps.pr.outputs.number
+        env:
+          PR: ${{ steps.pr.outputs.number }}
+        run: |
+          # Both workflows trigger this job; whichever finishes last sees all
+          # of them done. Anything pending or failed leaves the PR alone.
+          waiting="$(gh pr checks "$PR" --json name,bucket \
+            --jq '[.[] | select(.bucket != "pass" and .bucket != "skipping")
+                   | select(.name != "Merge when green")] | length')" || true
+          # `gh pr checks` exits non-zero while anything is pending; the count
+          # above is what decides.
+          if [ "${waiting:-x}" != "0" ]; then
+            echo "$waiting check(s) not passed yet"; exit 0
+          fi
+          echo "ok=true" >> "$GITHUB_OUTPUT"
+
+      - name: Squash-merge, then run CI and security analysis on main
+        if: steps.green.outputs.ok == 'true'
+        env:
+          PR: ${{ steps.pr.outputs.number }}
+        run: |
+          gh pr merge "$PR" --squash --match-head-commit "$HEAD_SHA"
+          gh workflow run ci.yml --ref main
+          gh workflow run security.yml --ref main

@@ -1,4 +1,4 @@
-# ADR-017: No decorator metadata; every Nest injection names its token
+# ADR-002: No decorator metadata; every Nest injection names its token
 
 **Status:** accepted
 

@@ -1,6 +1,6 @@
 import { defineConfig } from "vitest/config";
 
-export default defineConfig({
+export default defineConfig(({ mode }) => ({
   // The web app's JSX runtime, so its components render under test as in Vite.
   esbuild: { jsx: "automatic" },
   test: {
@@ -16,5 +16,9 @@ export default defineConfig({
     ],
     environment: "node",
     testTimeout: 30_000,
+    // `--mode unit` (npm run test:unit, which `verify` and CI's static job run)
+    // skips every suite that needs the compose stack, on any OS without a
+    // shell-specific `VAR=1` prefix.
+    env: mode === "unit" ? { SKIP_INTEGRATION: "1" } : {},
   },
-});
+}));

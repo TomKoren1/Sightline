@@ -7,8 +7,9 @@
 #   --target web     nginx serving the built SPA and proxying /api to the API
 #   --target tools   the whole workspace on tsx, for the mock seeder
 #
-# Used only by the optional `app` profile in docker-compose.yml. The documented
-# local-development path does not build these, so nothing here can break it.
+# Built by the optional `app` profile in docker-compose.yml, and by CI for the
+# images Kubernetes runs (.github/workflows/images.yml). The local-development
+# path (`npm run dev:*`) does not build them.
 #
 # Deliberately not a hot-reload dev container: this is for running the product,
 # not developing inside it, and a production-shaped image avoids mounting

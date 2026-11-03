@@ -1,4 +1,4 @@
-# ADR-019: `core/` underneath, and folders that depend one way only
+# ADR-004: `core/` underneath, and folders that depend one way only
 
 **Status:** accepted
 

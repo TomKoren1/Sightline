@@ -39,7 +39,8 @@ npm run e2e                       # starts its own API, worker and frontend
 Run `npm run verify` before pushing — it is everything CI's static job runs.
 
 The database-backed tests need the same stack, seeded and scanned: `npm test`
-skips them without a database rather than failing.
+runs them and fails without it. `npm run test:unit` (part of `verify`) skips
+them.
 
 ## Configuration
 
@@ -76,34 +77,35 @@ Four things, because they are the ones that have actually gone wrong here:
 
 ## Every command
 
-| Command                                        | What it does                                                                   |
-| ---------------------------------------------- | ------------------------------------------------------------------------------ |
-| `docker compose up -d`                         | Postgres and moto — just the dependencies                                      |
-| `docker compose --profile app up -d --build`   | The whole thing in Docker, served on `:8080`                                   |
-| `docker compose --profile app down -v`         | Tear it all down, volumes included                                             |
-| `npm run setup`                                | Connect an AWS account, or switch back to the demo one                         |
-| `npm run seed`                                 | Rebuild the mock account from scratch                                          |
-| `npm run scan`                                 | Scan, persist, project the graph                                               |
-| `npm run drift`                                | Change the mock account, so a second scan has a diff                           |
-| `npm run inspect -w @sightline/api`            | Scan and print findings without touching the databases                         |
-| `npm run query -w @sightline/api`              | Run every curated query against the graph                                      |
-| `npm run dev:worker`                           | Run scans in their own process, as a hosted deployment does                    |
-| `npm test`                                     | Unit and integration tests — integration ones skip without databases           |
-| `npm run e2e`                                  | The browser suite, against the compose stack                                   |
-| `npm run lint`                                 | Prettier and ESLint, both in check mode                                        |
-| `npm run format`                               | Fix everything those two can fix automatically                                 |
-| `npm run typecheck`                            | `tsc` over every workspace, and over `guards/` and `scripts/`                  |
-| `npm run verify`                               | Everything CI's static job runs — use before pushing                           |
-| `npm run evals:ground-truth -w @sightline/api` | Tier-1 evals — no API key needed                                               |
-| `npm run evals -w @sightline/api`              | Tier-2 agent evals — needs a key                                               |
-| `npm run gen:collectors -w @sightline/api`     | Regenerate the role template's grants and the collector list from the registry |
-| `npm run openapi -w @sightline/api`            | Rewrite `docs/openapi.json`, the API description, from the contract list       |
-| `npm run db:app-role -w @sightline/api`        | Set the restricted role's password, for row-level security                     |
-| `./scripts/backup-restore-test.sh`             | Back up, restore, and check an ExternalId still decrypts                       |
-| `helm template monitoring helm/monitoring`     | Render the monitoring stack without deploying it                               |
-| `npm run db:generate -w @sightline/api`        | Generate a migration after editing `src/db/schema.ts`                          |
-| `npm run db:migrate -w @sightline/api`         | Apply pending migrations — a clone also does this on boot                      |
-| `npm run db:studio -w @sightline/api`          | Browse the database in Drizzle Studio                                          |
+| Command                                        | What it does                                                                      |
+| ---------------------------------------------- | --------------------------------------------------------------------------------- |
+| `docker compose up -d`                         | Postgres and moto — just the dependencies                                         |
+| `docker compose --profile app up -d --build`   | The whole thing in Docker, served on `:8080`                                      |
+| `docker compose --profile app down -v`         | Tear it all down, volumes included                                                |
+| `npm run setup`                                | Connect an AWS account, or switch back to the demo one                            |
+| `npm run seed`                                 | Rebuild the mock account from scratch                                             |
+| `npm run scan`                                 | Scan, persist, project the graph                                                  |
+| `npm run drift`                                | Change the mock account, so a second scan has a diff                              |
+| `npm run inspect -w @sightline/api`            | Scan and print findings without touching the databases                            |
+| `npm run query -w @sightline/api`              | Run every curated query against the graph                                         |
+| `npm run dev:worker`                           | Run scans in their own process, as a hosted deployment does                       |
+| `npm test`                                     | Every test, unit and integration — needs the compose stack up, seeded and scanned |
+| `npm run test:unit`                            | The tests that need no databases — what `verify` and CI's static job run          |
+| `npm run e2e`                                  | The browser suite, against the compose stack                                      |
+| `npm run lint`                                 | Prettier and ESLint, both in check mode                                           |
+| `npm run format`                               | Fix everything those two can fix automatically                                    |
+| `npm run typecheck`                            | `tsc` over every workspace, and over `guards/` and `scripts/`                     |
+| `npm run verify`                               | Everything CI's static job runs — use before pushing                              |
+| `npm run evals:ground-truth -w @sightline/api` | Tier-1 evals — no API key needed                                                  |
+| `npm run evals -w @sightline/api`              | Tier-2 agent evals — needs a key                                                  |
+| `npm run gen:collectors -w @sightline/api`     | Regenerate the role template's grants and the collector list from the registry    |
+| `npm run openapi -w @sightline/api`            | Rewrite `docs/openapi.json`, the API description, from the contract list          |
+| `npm run db:app-role -w @sightline/api`        | Set the restricted role's password, for row-level security                        |
+| `./scripts/backup-restore-test.sh`             | Back up, restore, and check an ExternalId still decrypts                          |
+| `helm template monitoring helm/monitoring`     | Render the monitoring stack without deploying it                                  |
+| `npm run db:generate -w @sightline/api`        | Generate a migration after editing `src/db/schema.ts`                             |
+| `npm run db:migrate -w @sightline/api`         | Apply pending migrations — a clone also does this on boot                         |
+| `npm run db:studio -w @sightline/api`          | Browse the database in Drizzle Studio                                             |
 
 ## Troubleshooting
 

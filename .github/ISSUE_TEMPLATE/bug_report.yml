@@ -1,0 +1,41 @@
+name: Bug report
+description: Something does not work as documented.
+labels: ["bug"]
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: What you did, what you expected, and what you saw instead.
+    validations:
+      required: true
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: How to reproduce
+      description: Steps from a fresh clone if possible. Against the mock account, if it reproduces there.
+      placeholder: |
+        1. docker compose --profile app up -d --build
+        2. ...
+    validations:
+      required: true
+  - type: dropdown
+    id: mode
+    attributes:
+      label: Running against
+      options:
+        - The mock account (docker compose)
+        - A real AWS account
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Commit or version
+      description: "`git rev-parse --short HEAD`, or the image tag."
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs
+      description: Relevant output from `docker compose logs api worker`. Remove account IDs, ARNs and keys first.
+      render: text

@@ -1,4 +1,4 @@
-# ADR-016: Hosted mode does not offer the agent its raw-SQL tool
+# ADR-001: Hosted mode does not offer the agent its raw-SQL tool
 
 **Status:** accepted
 
