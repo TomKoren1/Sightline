@@ -47,8 +47,15 @@ describe("dependabot groups", () => {
      * A dev-tooling group that swept ESLint 9 -> 10 and TypeScript 5 -> 7 into
      * one PR failed all four CI jobs and could not be reviewed piecemeal.
      * Majors are worth looking at individually; patches are not.
+     *
+     * `codeql` is the exception: it is one action, github/codeql-action, used
+     * at two paths (init and analyze) that must be on the same release. Split,
+     * each major bump's PR fails CodeQL alone, so its major has to be one PR.
      */
-    const groups = [...config.matchAll(/^ {6}([a-z-]+):$/gm)].map((m) => m[1]!);
+    const ONE_DEPENDENCY = new Set(["codeql"]);
+    const groups = [...config.matchAll(/^ {6}([a-z-]+):$/gm)]
+      .map((m) => m[1]!)
+      .filter((name) => !ONE_DEPENDENCY.has(name));
     expect(groups.length, "no groups parsed out of dependabot.yml").toBeGreaterThan(3);
     for (const name of groups) {
       const block = new RegExp(`^ {6}${name}:\\n(?: {8}.*\\n)+`, "m").exec(config);
