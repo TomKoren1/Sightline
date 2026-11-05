@@ -89,6 +89,7 @@ watch the scan stream service by service.
    Two buckets get the same permissive policy and only one becomes
    public, because the other's access block neutralises it. Verdicts are computed,
    not read off a field.
+
 3. **Open Coverage.** What the last scan could see, the data checks against the demo
    account's answer key, and the last agent eval.
 
