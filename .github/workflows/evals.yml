@@ -20,8 +20,30 @@ permissions:
   contents: read
 
 jobs:
+  # Without ANTHROPIC_API_KEY there is nothing to evaluate, and a weekly red
+  # run would only teach people to ignore this workflow. A job-level `if`
+  # cannot read secrets, hence a job of its own.
+  key:
+    name: Is there an API key
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    outputs:
+      present: ${{ steps.check.outputs.present }}
+    steps:
+      - id: check
+        env:
+          KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: |
+          if [ -n "$KEY" ]; then
+            echo "present=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "::notice::ANTHROPIC_API_KEY is not set; skipping the agent evals."
+          fi
+
   evals:
     name: Agent answer quality
+    needs: key
+    if: needs.key.outputs.present == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:

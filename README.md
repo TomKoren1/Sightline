@@ -79,10 +79,17 @@ watch the scan stream service by service.
 
 1. **Run the first scan.** Nearly two hundred resources across three regions, in
    seconds.
-2. **Change the account and rescan** — `npm run drift && npm run scan` — then open
-   **Changes**. Two buckets get the same permissive policy and only one becomes
+2. **Change the account and rescan.** Drift the mock account, press **Rescan**,
+   then open **Changes**:
+
+   ```bash
+   docker compose --profile app run --rm seed npm run drift
+   ```
+
+   Two buckets get the same permissive policy and only one becomes
    public, because the other's access block neutralises it. Verdicts are computed,
    not read off a field.
+
 3. **Open Coverage.** What the last scan could see, the data checks against the demo
    account's answer key, and the last agent eval.
 
