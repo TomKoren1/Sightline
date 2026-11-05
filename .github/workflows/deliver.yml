@@ -42,7 +42,9 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
-      contents: read
+      # Write, for the push below while DEPLOY_KEY is not set: checkout then
+      # falls back to this token. Once the key exists the push goes over SSH.
+      contents: write
       packages: read
     env:
       COMMIT: ${{ github.event.workflow_run.head_sha }}
