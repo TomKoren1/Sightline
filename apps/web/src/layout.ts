@@ -38,7 +38,7 @@ export function layoutGraph(nodes: Node[], edges: Edge[]): Node[] {
   dagre.layout(graph);
 
   return nodes.map((node) => {
-    const positioned = graph.node(node.id);
+    const positioned = graph.node(node.id) as { x: number; y: number } | undefined;
     return {
       ...node,
       position: positioned

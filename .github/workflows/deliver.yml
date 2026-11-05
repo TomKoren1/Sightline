@@ -42,16 +42,21 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
-      contents: write
+      contents: read
       packages: read
     env:
       COMMIT: ${{ github.event.workflow_run.head_sha }}
       FILE: deploy/k8s/prod/kustomization.yaml
     steps:
+      # Pushed with a deploy key, not GITHUB_TOKEN: main's ruleset requires a
+      # pull request and green checks, and on a personal repository the
+      # GitHub Actions app cannot be exempted from that - a deploy key can.
+      # DEPLOY_KEY is the private half of the repository's write deploy key.
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: main
           fetch-depth: 0
+          ssh-key: ${{ secrets.DEPLOY_KEY }}
 
       # A new package starts private on GitHub even in a public repository;
       # logging in reads it either way.

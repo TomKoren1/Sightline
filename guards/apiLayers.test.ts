@@ -8,7 +8,7 @@
  * moved without the other. So the folder graph must stay acyclic, core/ must
  * import nothing else in src, and the mock AWS package - test tooling - may
  * be reached only from evals/ and cli/. NestJS lives in http/ and nowhere
- * else (ADR-018), and only the entry points reach into it.
+ * else (ADR-003), and only the entry points reach into it.
  */
 
 import { readdirSync, readFileSync, statSync } from "node:fs";
@@ -121,14 +121,14 @@ describe("the API's layering", () => {
     expect(users).toEqual([]);
   });
 
-  it("keeps NestJS in http/ (ADR-018)", () => {
+  it("keeps NestJS in http/ (ADR-003)", () => {
     // core/access.ts holds the route-metadata decorators, which domain code
     // names when it describes who may do what.
     const outside = files
       .filter((f) => /from\s+"@nestjs\//.test(readFileSync(f, "utf8")))
       .map((f) => relative(src, f).split(sep).join("/"))
       .filter((f) => !f.startsWith("http/") && f !== "core/access.ts");
-    expect(outside, "domain code importing Nest; see docs/adr/018").toEqual([]);
+    expect(outside, "domain code importing Nest; see docs/adr/003").toEqual([]);
   });
 
   it("is reached from http/ only by the entry points", () => {

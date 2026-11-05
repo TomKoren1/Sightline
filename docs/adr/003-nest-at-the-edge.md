@@ -1,4 +1,4 @@
-# ADR-018: NestJS is the HTTP edge only; the domain is plain modules
+# ADR-003: NestJS is the HTTP edge only; the domain is plain modules
 
 **Status:** accepted
 

@@ -923,7 +923,7 @@
         },
         "overrides": []
       },
-      "description": "hosted means the model reached for the raw-query escape hatch that ADR-016 switches off for hosted tenants - not an attack, a sign the curated tools have a gap. The other causes come from the SQL guard: not_select is the model attempting a write, table or function a reach outside the inventory views, and execution a query Postgres failed or timed out."
+      "description": "hosted means the model reached for the raw-query escape hatch that ADR-001 switches off for hosted tenants - not an attack, a sign the curated tools have a gap. The other causes come from the SQL guard: not_select is the model attempting a write, table or function a reach outside the inventory views, and execution a query Postgres failed or timed out."
     }
   ],
   "links": [

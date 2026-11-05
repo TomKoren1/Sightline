@@ -5,7 +5,7 @@
     // tsx and vitest both transpile with esbuild, which cannot emit it because
     // it needs type information. Nest does not fail loudly on that — it
     // injects `undefined` and the handler throws at request time — so every
-    // injection in this package names its token explicitly. See ADR-017.
+    // injection in this package names its token explicitly. See ADR-002.
     "experimentalDecorators": true
   },
   "include": ["src/**/*.ts", "test/**/*.ts", "drizzle.config.ts"]

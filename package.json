@@ -4,7 +4,7 @@
   "version": "0.1.0",
   "type": "module",
   "engines": {
-    "node": ">=20"
+    "node": ">=22"
   },
   "workspaces": [
     "packages/*",
@@ -13,6 +13,7 @@
   "scripts": {
     "typecheck": "node scripts/deps.mjs && npm run typecheck --workspaces --if-present && tsc -p tsconfig.tools.json",
     "test": "node scripts/deps.mjs && vitest run",
+    "test:unit": "node scripts/deps.mjs && vitest run --mode unit --exclude \"**/evals/groundTruth.test.ts\"",
     "test:watch": "node scripts/deps.mjs && vitest",
     "lint": "node scripts/deps.mjs && prettier --check . && eslint .",
     "format": "node scripts/deps.mjs && prettier --write . && eslint --fix .",
@@ -22,7 +23,7 @@
     "dev:worker": "node scripts/deps.mjs && npm run worker:dev -w @sightline/api",
     "dev:web": "node scripts/deps.mjs && npm run dev -w @sightline/web",
     "evals": "node scripts/deps.mjs && npm run evals -w @sightline/api",
-    "verify": "node scripts/deps.mjs && npm run typecheck && npm run lint && vitest run --exclude '**/evals/groundTruth.test.ts' && npm run build -w @sightline/web",
+    "verify": "node scripts/deps.mjs && npm run typecheck && npm run lint && npm run test:unit && npm run build -w @sightline/web",
     "drift": "node scripts/deps.mjs && npm run drift -w @sightline/mock-aws",
     "setup": "node scripts/deps.mjs && tsx apps/api/src/cli/setup.ts",
     "e2e": "node scripts/deps.mjs && playwright test -c e2e/playwright.config.ts",

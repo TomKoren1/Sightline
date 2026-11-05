@@ -159,7 +159,7 @@ function buildTools(ctx: {
 }): ToolSet {
   return Object.fromEntries(
     // `availableTools()`, not the whole list: hosted mode does not offer the
-    // raw-SQL escape hatch at all (ADR-016), and the dispatch refuses it too.
+    // raw-SQL escape hatch at all (ADR-001), and the dispatch refuses it too.
     availableTools().map((definition) => [
       definition.name,
       tool({
