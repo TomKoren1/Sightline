@@ -3,7 +3,7 @@
  *
  * `motoserver/moto:latest` let a moto release change what the ground-truth
  * suite runs against without a commit, and the base images floated the same
- * way. Dependabot raises the bumps as reviewable PRs instead.
+ * way. A bump is now a reviewed commit instead.
  */
 
 import { readdirSync, readFileSync } from "node:fs";

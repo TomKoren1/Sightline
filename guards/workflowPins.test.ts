@@ -5,7 +5,7 @@
  * A tag can be moved to different code by whoever controls the action's
  * repository, and a workflow's default token can write to this one; a pinned
  * SHA and `contents: read` close both. The version stays as a comment so a
- * reader, and dependabot, can see what the SHA is.
+ * reader can see what the SHA is.
  */
 
 import { readdirSync, readFileSync } from "node:fs";

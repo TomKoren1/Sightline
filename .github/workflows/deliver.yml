@@ -26,11 +26,7 @@ jobs:
   images:
     name: Images
     # A push to main that passed, not a PR's run that happens to target main.
-    # workflow_dispatch too: Dependabot auto-merge lands with GITHUB_TOKEN,
-    # which starts no push run, so it dispatches CI on main instead.
-    if: >-
-      github.event.workflow_run.conclusion == 'success' &&
-      (github.event.workflow_run.event == 'push' || github.event.workflow_run.event == 'workflow_dispatch')
+    if: github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push'
     uses: ./.github/workflows/images.yml
     permissions:
       contents: read
