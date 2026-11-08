@@ -72,6 +72,8 @@ export function AccountSwitcher({
     <div className="relative flex items-center gap-1.5">
       <button
         onClick={() => setOpen((v) => !v)}
+        aria-label={`Switch account (${selected.label})`}
+        aria-expanded={open}
         className="flex items-center gap-1.5 rounded border border-ink-700 bg-ink-800 px-2 py-1 text-[11px] text-ink-100 transition hover:border-ink-600"
         title={selected.roleArn ?? selected.label}
       >

@@ -15,20 +15,17 @@ ExternalId already in use rather than rotating a working secret.
 | `npm run setup -- --profile work` | use a named AWS CLI profile                     |
 | `npm run setup -- --yes`          | no confirmations, for scripting                 |
 
-**A whole AWS Organization** connects once, in the hosted product: choose
-_An AWS Organization_ when connecting, deploy the stack in the management account
-(or a delegated administrator for Organizations), and run the StackSet the screen
-gives you to put the same role in every member account, including ones added later.
-Checking the organization lists its accounts with `organizations:ListAccounts` and
-makes each active one an account of its own under it: scanned, pinned and isolated
-like one connected by hand. Accounts that leave are marked disconnected. Paths
-_between_ accounts are not modelled yet.
+**Several accounts** are connected one at a time, in the hosted product, from
+**Connect another account…** in the account switcher. Each is scanned, pinned and
+isolated on its own. The connect screen no longer offers a whole AWS Organization:
+the API still supports it, and organizations connected before keep working, but
+new connections are single accounts. Paths _between_ accounts are not modelled yet.
 
 It needs the AWS CLI, which is also what creates the role. The demo account needs
 neither it nor Node.
 
-The UI's **Connection** panel walks through the same thing by hand, and the **account
-switcher** in the header moves between accounts at runtime without restarting or
+The **account switcher** in the header opens the same walkthrough by hand from
+**Connect another account…**, and moves between accounts at runtime without restarting or
 rewriting `.env` — a clone has two, the demo fixture and whatever `.env` points at.
 Switching does not rescan, so the graph keeps showing the previous account until you run
 one, and the banner says so rather than letting you read one account's inventory under

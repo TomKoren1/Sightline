@@ -301,7 +301,7 @@ defect class this repository keeps meeting.
 | Document                                                 | For                                                                                          |
 | -------------------------------------------------------- | -------------------------------------------------------------------------------------------- |
 | [`docs/development.md`](docs/development.md)             | running from source, house style, every command, troubleshooting                             |
-| [`docs/aws-account.md`](docs/aws-account.md)             | connecting a real account or an Organization, and the traps                                  |
+| [`docs/aws-account.md`](docs/aws-account.md)             | connecting a real account, or several, and the traps                                         |
 | [`docs/roadmap.md`](docs/roadmap.md)                     | what breaks first at scale, and what is not built yet                                        |
 | [`docs/adr/`](docs/adr/README.md)                        | decisions the code depends on, with the reason for each                                      |
 | [`docs/openapi.json`](docs/openapi.json)                 | every route, generated from the contract the tests enforce                                   |

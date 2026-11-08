@@ -151,7 +151,9 @@ test("sign in, scan, read the findings, ask, invite, and connect", async ({ page
   });
 
   await test.step("starts connecting an account of their own", async () => {
-    await page.getByRole("button", { name: "Connection" }).click();
+    // The account switcher is the only way in now; the header's own button is gone.
+    await page.getByRole("button", { name: /^Switch account/ }).click();
+    await page.getByRole("button", { name: "Connect another account…" }).click();
     await page.getByPlaceholder("Production").fill("Production");
     await page.getByRole("button", { name: "Continue" }).click();
     // The plan carries an ExternalId, minted and encrypted under KMS.
