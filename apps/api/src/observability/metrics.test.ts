@@ -11,12 +11,22 @@
 
 import { describe, expect, it } from "vitest";
 
+import { SCANNABLE_SERVICES } from "@sightline/shared";
+
 import type { GuardCause } from "../agent/sqlGuard.js";
+import type { JobStatus } from "../jobs/queue.js";
+import { failureCause } from "../scan/runner.js";
+import type { RefusalKind } from "../tenancy/limits.js";
 import {
   AGENT_OUTCOMES,
   AGENT_TOKEN_KINDS,
+  ASSUME_ROLE_REASONS,
   FORBIDDEN_LABELS,
   RAW_QUERY_REFUSALS,
+  REFUSAL_KINDS,
+  REFUSED_WHATS,
+  SCAN_JOB_OUTCOMES,
+  UNIT_FAILURE_CAUSES,
   registry,
   startMetricsServer,
 } from "./metrics.js";
@@ -162,5 +172,54 @@ describe("the agent's counters before anyone asks", () => {
       ? true
       : false = true;
     expect(covered).toBe(true);
+  });
+});
+
+describe("the scan, onboarding and limit counters before anything happens", () => {
+  it("expose every known label value at zero", async () => {
+    // `increase()` cannot see a series go from absent to one, so a label value
+    // that is not already at zero loses its first event after every restart.
+    const text = await registry.metrics();
+    for (const outcome of SCAN_JOB_OUTCOMES) {
+      expect(text).toContain(`sightline_scan_jobs_total{outcome="${outcome}"} 0`);
+    }
+    for (const cause of UNIT_FAILURE_CAUSES) {
+      expect(text).toContain(`sightline_scan_unit_failure_causes_total{cause="${cause}"} 0`);
+    }
+    for (const service of SCANNABLE_SERVICES) {
+      expect(text).toContain(`sightline_aws_throttles_total{service="${service}"} 0`);
+    }
+    for (const reason of ASSUME_ROLE_REASONS) {
+      expect(text).toContain(`sightline_assume_role_failures_total{reason="${reason}"} 0`);
+    }
+    for (const kind of REFUSAL_KINDS) {
+      for (const what of REFUSED_WHATS) {
+        expect(text).toContain(`sightline_requests_refused_total{kind="${kind}",what="${what}"} 0`);
+      }
+    }
+  });
+
+  it("list every terminal job status and every refusal kind", () => {
+    // Fails to compile when either type gains a value the lists do not have.
+    const jobs: Exclude<
+      Exclude<JobStatus, "queued" | "running">,
+      (typeof SCAN_JOB_OUTCOMES)[number]
+    > extends never
+      ? true
+      : false = true;
+    const refusals: Exclude<RefusalKind, (typeof REFUSAL_KINDS)[number]> extends never
+      ? true
+      : false = true;
+    expect([jobs, refusals]).toEqual([true, true]);
+  });
+
+  it("sorts a unit failure into its cause", () => {
+    expect(failureCause("AccessDeniedException")).toBe("access_denied");
+    expect(failureCause("ThrottlingException")).toBe("throttled");
+    expect(failureCause("OptInRequired")).toBe("not_enabled");
+    expect(failureCause("ExpiredToken")).toBe("credentials");
+    expect(failureCause("EAI_AGAIN")).toBe("network");
+    expect(failureCause("ValidationException")).toBe("other");
+    expect(failureCause(undefined)).toBe("other");
   });
 });

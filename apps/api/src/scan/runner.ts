@@ -30,6 +30,7 @@ import { resolveRegions } from "../aws/regions.js";
 import { discoverActiveRegions, narrowRegions } from "../aws/resourceExplorer.js";
 import { runWithConcurrency } from "./limiter.js";
 import { inSpan } from "../observability/tracing.js";
+import type { UnitFailureCause } from "../observability/metrics.js";
 import { mergeOutputs, type CollectorOutput } from "./collectors/types.js";
 import { COLLECTORS } from "./collectors/registry.js";
 import { annotate } from "./pipeline.js";
@@ -52,9 +53,17 @@ export interface ScanOptions {
 /** Pull a usable error code out of whatever the SDK threw. */
 function errorCodeOf(err: unknown): string | undefined {
   if (typeof err !== "object" || err === null) return undefined;
-  const e = err as { name?: string; Code?: string; $metadata?: { httpStatusCode?: number } };
+  const e = err as {
+    name?: string;
+    Code?: string;
+    code?: unknown;
+    $metadata?: { httpStatusCode?: number };
+  };
+  // Node's network failures are all named "Error"; the code says which one.
+  const system = typeof e.code === "string" && /^E[A-Z_]+$/.test(e.code) ? e.code : undefined;
   return (
     e.Code ??
+    system ??
     e.name ??
     (e.$metadata?.httpStatusCode ? `HTTP ${e.$metadata.httpStatusCode}` : undefined)
   );
@@ -93,6 +102,41 @@ function explainFailure(
       return `Credentials were rejected reading ${where}. The assumed session may have expired.`;
     default:
       return `Failed to read ${where}: ${message}`;
+  }
+}
+
+const NETWORK_CODES = new Set([
+  "EAI_AGAIN",
+  "ENOTFOUND",
+  "ECONNRESET",
+  "ECONNREFUSED",
+  "ETIMEDOUT",
+  "EPIPE",
+  "TimeoutError",
+  "RequestTimeout",
+]);
+
+/** A unit failure's cause, from the fixed list the dashboard counts. */
+export function failureCause(code: string | undefined): UnitFailureCause {
+  switch (code) {
+    case "UnauthorizedOperation":
+    case "AccessDenied":
+    case "AccessDeniedException":
+      return "access_denied";
+    case "Throttling":
+    case "ThrottlingException":
+    case "RequestLimitExceeded":
+      return "throttled";
+    case "OptInRequired":
+    case "AuthFailure":
+      return "not_enabled";
+    case "UnrecognizedClientException":
+    case "InvalidClientTokenId":
+    case "ExpiredToken":
+    case "ExpiredTokenException":
+      return "credentials";
+    default:
+      return code && NETWORK_CODES.has(code) ? "network" : "other";
   }
 }
 

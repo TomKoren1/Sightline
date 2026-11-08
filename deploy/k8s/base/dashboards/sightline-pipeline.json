@@ -217,8 +217,8 @@
             "type": "prometheus",
             "uid": "Prometheus"
           },
-          "expr": "sum by (reason) (increase(sightline_scan_unit_failures_total[6h]))",
-          "legendFormat": "{{reason}}"
+          "expr": "sum by (cause) (increase(sightline_scan_unit_failure_causes_total[6h]))",
+          "legendFormat": "{{cause}}"
         }
       ],
       "fieldConfig": {
@@ -228,7 +228,7 @@
         },
         "overrides": []
       },
-      "description": "AWS's own error code, which is a closed set. UnauthorizedOperation is a permission; Throttling is us competing with the customer's own workloads."
+      "description": "access_denied is a permission the role lacks; throttled is us competing with the customer's own workloads; network is DNS or a connection failing before AWS answered. For the AWS error code, query sightline_scan_unit_failures_total by reason in Explore."
     },
     {
       "id": 8,
