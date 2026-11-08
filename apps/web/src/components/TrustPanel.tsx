@@ -139,8 +139,8 @@ export function TrustPanel({ scan, demo }: { scan: ScanRun | null; demo: boolean
         </section>
       )}
 
-      {/* Shown when a run exists: hosted deployments do not record one. */}
-      {agent && (
+      {/* The evals ask about the demo account, so they mean nothing beside a real one. */}
+      {demo && agent && (
         <section>
           <h3 className="text-[12px] font-semibold text-ink-100">Agent answer quality</h3>
           <p className="mb-2 text-[11px] text-ink-400">
@@ -223,7 +223,7 @@ export function TrustPanel({ scan, demo }: { scan: ScanRun | null; demo: boolean
         </section>
       )}
 
-      {(demo || agent) && (
+      {demo && (
         <p className="border-t border-ink-800 pt-3 text-[11px] leading-relaxed text-ink-400">
           What none of this catches: an answer that cites exactly the right resources and describes
           them wrongly. The data checks and the citation validator between them make that unlikely,

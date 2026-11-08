@@ -26,7 +26,6 @@ type Alternative = "console" | "cli" | "terraform";
 
 export function ConnectAccount({ onConnected }: { onConnected: (id: string) => void }) {
   const [label, setLabel] = useState("");
-  const [kind, setKind] = useState<"real" | "organization">("real");
   const [connectionId, setConnectionId] = useState<string | null>(null);
   const [accountId, setAccountId] = useState("");
   const [alternative, setAlternative] = useState<Alternative>("console");
@@ -34,7 +33,9 @@ export function ConnectAccount({ onConnected }: { onConnected: (id: string) => v
   const [polling, setPolling] = useState(false);
 
   const create = useMutation({
-    mutationFn: () => api.createConnection({ label: label.trim(), kind }),
+    // Single accounts only. The API still accepts `organization`, and existing
+    // organization connections keep working; the form just no longer offers it.
+    mutationFn: () => api.createConnection({ label: label.trim(), kind: "real" }),
     onSuccess: (created) => setConnectionId(created.id),
   });
 
@@ -97,30 +98,8 @@ export function ConnectAccount({ onConnected }: { onConnected: (id: string) => v
           if (label.trim()) create.mutate();
         }}
       >
-        <fieldset className="flex flex-col gap-1.5">
-          <legend className="mb-1 text-[12px] text-ink-300">What are you connecting?</legend>
-          {(
-            [
-              ["real", "One AWS account"],
-              ["organization", "An AWS Organization: every account in it"],
-            ] as const
-          ).map(([value, text]) => (
-            <label key={value} className="flex items-center gap-2 text-[12px] text-ink-100">
-              <input
-                type="radio"
-                name="kind"
-                checked={kind === value}
-                onChange={() => setKind(value)}
-                className="accent-accent"
-              />
-              {text}
-            </label>
-          ))}
-        </fieldset>
         <label className="flex flex-col gap-1.5">
-          <span className="text-[12px] text-ink-300">
-            What should this {kind === "organization" ? "organization" : "account"} be called?
-          </span>
+          <span className="text-[12px] text-ink-300">What should this account be called?</span>
           <input
             autoFocus
             value={label}

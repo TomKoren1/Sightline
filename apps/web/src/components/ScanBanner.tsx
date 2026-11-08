@@ -41,7 +41,10 @@ export interface ScanBannerProps {
   liveUnits: ScanUnit[];
   error: string | null;
   onScan: () => void;
+  /** Coverage: from the header for the demo account, from the partial-scan warning for any. */
   onOpenTrust: () => void;
+  /** The seeded demo account, whose Coverage also carries the data checks and evals. */
+  demo: boolean;
   /** Every computed fix, to choose from and download. Offered once there is a scan. */
   onOpenFixPlan: () => void;
   onOpenConnection: () => void;
@@ -74,6 +77,7 @@ export function ScanBanner({
   error,
   onScan,
   onOpenTrust,
+  demo,
   onOpenFixPlan,
   onOpenConnection,
   connections,
@@ -152,18 +156,15 @@ export function ScanBanner({
             </button>
           )}
           <span className="mx-0.5 h-4 w-px bg-ink-700" aria-hidden />
-          <button
-            onClick={onOpenConnection}
-            className="rounded border border-ink-700 bg-ink-800 px-2 py-1 text-[11px] text-ink-300 transition hover:border-ink-600 hover:text-ink-100"
-          >
-            Connection
-          </button>
-          <button
-            onClick={onOpenTrust}
-            className="rounded border border-ink-700 bg-ink-800 px-2 py-1 text-[11px] text-ink-300 transition hover:border-ink-600 hover:text-ink-100"
-          >
-            Coverage
-          </button>
+          {/* A real account reaches Coverage from the partial-scan warning below. */}
+          {demo && (
+            <button
+              onClick={onOpenTrust}
+              className="rounded border border-ink-700 bg-ink-800 px-2 py-1 text-[11px] text-ink-300 transition hover:border-ink-600 hover:text-ink-100"
+            >
+              Coverage
+            </button>
+          )}
           {scan && (
             <button
               onClick={onOpenFixPlan}
@@ -216,7 +217,13 @@ export function ScanBanner({
         <div className="border-t border-warn/30 bg-warn/10 px-3 py-1.5">
           <p className="text-[11px] font-medium text-warn">
             Partial scan — {failed.length} of {units.length} services failed. Results below are
-            incomplete.
+            incomplete.{" "}
+            <button
+              onClick={onOpenTrust}
+              className="font-medium underline underline-offset-2 hover:text-ink-100"
+            >
+              See details
+            </button>
           </p>
           <ul className="mt-0.5 space-y-0.5">
             {failed.map((unit) => (
