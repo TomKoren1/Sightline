@@ -38,7 +38,7 @@ import {
 } from "../db/repository.js";
 import { syncFindings } from "../db/findings.js";
 import { notifyNewFindings } from "../integrations/notify.js";
-import { runScan } from "../scan/runner.js";
+import { failureCause, runScan } from "../scan/runner.js";
 import { markScanned, markVerified } from "../tenancy/connections.js";
 import { resolveScanTarget } from "../tenancy/scanTarget.js";
 import type { ScanId } from "../core/ids.js";
@@ -48,6 +48,7 @@ import {
   scanDuration,
   scanResources,
   scanUnitDuration,
+  scanUnitFailureCauses,
   scanUnitFailures,
 } from "../observability/metrics.js";
 import { listConnections } from "../tenancy/connections.js";
@@ -185,6 +186,7 @@ export async function runScanJob(options: RunScanJobOptions): Promise<ScanJobOut
           scanUnitDuration.observe(where, unit.durationMs / 1000);
           if (unit.status === "failed") {
             scanUnitFailures.inc({ ...where, reason: unit.errorCode ?? "unknown" });
+            scanUnitFailureCauses.inc({ cause: failureCause(unit.errorCode) });
           }
           persist(async () => {
             if (scanId) await recordScanUnit(scope, scanId, unit);

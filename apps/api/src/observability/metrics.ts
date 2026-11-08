@@ -14,6 +14,8 @@
 import { createServer, type Server } from "node:http";
 import { Registry, Counter, Gauge, Histogram, collectDefaultMetrics } from "prom-client";
 
+import { SCANNABLE_SERVICES } from "@sightline/shared";
+
 export const registry = new Registry();
 
 /**
@@ -127,6 +129,30 @@ export const scanUnitFailures = new Counter({
   name: "sightline_scan_unit_failures_total",
   help: "Units that failed, by service, region and cause.",
   labelNames: ["service", "region", "reason"],
+  registers: [registry],
+});
+
+/**
+ * The same failures, by a cause from a fixed list, for the dashboard.
+ *
+ * The detailed counter's labels are an open set, so its series cannot exist
+ * before the first failure, and `increase()` cannot see the step from nothing
+ * to one: the first failure after every deploy went uncounted.
+ */
+export const UNIT_FAILURE_CAUSES = [
+  "access_denied",
+  "throttled",
+  "not_enabled",
+  "credentials",
+  "network",
+  "other",
+] as const;
+export type UnitFailureCause = (typeof UNIT_FAILURE_CAUSES)[number];
+
+export const scanUnitFailureCauses = new Counter({
+  name: "sightline_scan_unit_failure_causes_total",
+  help: "Units that failed, by cause from a fixed list.",
+  labelNames: ["cause"],
   registers: [registry],
 });
 
@@ -327,6 +353,38 @@ export const requestsRefused = new Counter({
   labelNames: ["kind", "what"],
   registers: [registry],
 });
+
+/**
+ * The other counters' known label values, at zero from startup, for the same
+ * reason as the agent's above. Without them a panel read "None in this window"
+ * after a scan that had failures, because each pod restart hid the first event.
+ * `diagnose()` can still return an AWS error name not listed here; only the
+ * first of those after a restart goes uncounted.
+ */
+export const SCAN_JOB_OUTCOMES = [
+  "succeeded",
+  "partial",
+  "failed",
+  "cancelled",
+  "abandoned",
+] as const;
+export const REFUSAL_KINDS = ["throttled", "paused"] as const;
+export const REFUSED_WHATS = ["chat", "scan"] as const;
+export const ASSUME_ROLE_REASONS = [
+  "AccessDenied",
+  "NoSuchEntity",
+  "InvalidClientTokenId",
+  "UnrecognizedClientException",
+  "CredentialsProviderError",
+  "CredentialsError",
+] as const;
+for (const outcome of SCAN_JOB_OUTCOMES) scanJobs.inc({ outcome }, 0);
+for (const cause of UNIT_FAILURE_CAUSES) scanUnitFailureCauses.inc({ cause }, 0);
+for (const service of SCANNABLE_SERVICES) awsThrottles.inc({ service }, 0);
+for (const reason of ASSUME_ROLE_REASONS) assumeRoleFailures.inc({ reason }, 0);
+for (const kind of REFUSAL_KINDS) {
+  for (const what of REFUSED_WHATS) requestsRefused.inc({ kind, what }, 0);
+}
 
 /**
  * Requests that named no connection and fell back to the tenant's oldest.
