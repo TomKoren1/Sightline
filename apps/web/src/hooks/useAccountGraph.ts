@@ -18,6 +18,8 @@ export function useAccountGraph(conn: string | null, hasScan: boolean) {
    * A large account opens on its groups rather than on everything, and is
    * drawn a group, or a neighbourhood, at a time. `group` is which: null is
    * the whole graph or the overview, FOCUS is only what has been expanded.
+   * Any account goes to FOCUS when a neighbourhood is asked for: drawn inside
+   * the whole graph, a resource's neighbours sit too far apart to read.
    */
   const large = totalResources > LARGE_ACCOUNT;
   const [group, setGroup] = useState<string | null>(null);
@@ -29,7 +31,7 @@ export function useAccountGraph(conn: string | null, hasScan: boolean) {
   const graph = useQuery({
     queryKey: ["graph", conn, group],
     queryFn: () => api.graph(group ? { group, limit: 300 } : {}),
-    enabled: hasScan && summary.isSuccess && (!large || (group !== null && group !== FOCUS)),
+    enabled: hasScan && summary.isSuccess && group !== FOCUS && (!large || group !== null),
   });
   const groups = useQuery({
     queryKey: ["graph-groups", conn],
@@ -37,13 +39,15 @@ export function useAccountGraph(conn: string | null, hasScan: boolean) {
     enabled: hasScan && large,
   });
   const shown = useMemo(() => mergeGraphs([graph.data, ...expanded]), [graph.data, expanded]);
+  /** Draws the neighbourhoods of these resources, and returns what they hold. */
   const expand = useCallback(
-    async (arns: string[]) => {
+    async (arns: string[]): Promise<GraphData[]> => {
       const found = await Promise.all(arns.slice(0, 8).map((arn) => api.graphNeighbours(arn)));
-      if (large && group === null) setGroup(FOCUS);
+      if (group === null) setGroup(FOCUS);
       setExpanded((prev) => [...prev, ...found]);
+      return found;
     },
-    [large, group],
+    [group],
   );
   const findings = useQuery({
     queryKey: ["findings", conn],

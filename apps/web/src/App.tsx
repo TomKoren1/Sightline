@@ -34,6 +34,7 @@ import { ResourceSearch } from "./components/ResourceSearch.js";
 import { ScanBanner } from "./components/ScanBanner.js";
 import { useScanSession } from "./hooks/useScanSession.js";
 import { useAccountGraph } from "./hooks/useAccountGraph.js";
+import { FOCUS } from "./graphViews.js";
 import { useTeamJoin } from "./hooks/useTeamJoin.js";
 import { SignIn } from "./components/SignIn.js";
 
@@ -398,7 +399,9 @@ export function App() {
               The scan completed but found no resources.
             </div>
           ) : (
-            <ReactFlowProvider>
+            // Remounted when the view changes, so it frames what it now draws
+            // rather than keeping the viewport of the last one.
+            <ReactFlowProvider key={group ?? "whole"}>
               <GraphView
                 nodes={nodes}
                 edges={edges}
@@ -412,12 +415,12 @@ export function App() {
 
           {hasScan && nodes.length > 0 && (
             <div className="absolute left-2.5 top-2.5 z-10 flex items-center gap-1.5">
-              {large && (
+              {(large || group === FOCUS) && (
                 <button
                   onClick={backToGroups}
                   className="rounded border border-ink-700 bg-ink-850/95 px-2 py-1 text-[11px] text-ink-300 backdrop-blur transition hover:border-ink-600"
                 >
-                  ← All groups
+                  {large ? "← All groups" : "← Whole graph"}
                 </button>
               )}
               <button
@@ -503,7 +506,13 @@ export function App() {
               arn={selectedArn}
               onClose={() => setSelectedArn(null)}
               onSelect={setSelectedArn}
-              onExpand={(arn) => void expand([arn])}
+              onExpand={(arn) =>
+                // Highlighted as well as drawn, so the view frames them: in an
+                // account drawn whole, drawing alone changed nothing on screen.
+                void expand([arn]).then((found) =>
+                  setCitedArns([arn, ...found.flatMap((g) => g.nodes.map((n) => n.arn))]),
+                )
+              }
             />
           </aside>
         )}
