@@ -33,6 +33,37 @@ describe("errorMessage", () => {
     class TimeoutError extends Error {}
     expect(errorMessage(new TimeoutError("timed out"))).toBe("timed out");
   });
+
+  /**
+   * The real failure this branch was added for.
+   *
+   * Node throws exactly this when a dual-stack connect exhausts every address,
+   * and a scan unit reported it as `Failed to read secretsmanager in
+   * ap-southeast-1:` - a sentence that stops at the colon, because the detail
+   * is in `errors` and `message` is empty.
+   */
+  it("reaches into an AggregateError, whose own message is empty", () => {
+    const err = new AggregateError([
+      new Error("connect ENETUNREACH 2406:da18:141:ab02::1:443"),
+      new Error("connect ETIMEDOUT 52.221.68.114:443"),
+    ]);
+    expect(err.message).toBe("");
+    expect(errorMessage(err)).toBe("connect ENETUNREACH 2406:da18:141:ab02::1:443");
+  });
+
+  it("skips an inner error that has nothing to say", () => {
+    const err = new AggregateError([new Error(""), new Error("connect ETIMEDOUT")]);
+    expect(errorMessage(err)).toBe("connect ETIMEDOUT");
+  });
+
+  it("names an empty Error rather than returning an empty string", () => {
+    expect(errorMessage(new Error(""))).toBe("Error");
+    expect(errorMessage(new AggregateError([]))).toBe("AggregateError");
+    class TimeoutError extends Error {
+      override name = "TimeoutError";
+    }
+    expect(errorMessage(new TimeoutError(""))).toBe("TimeoutError");
+  });
 });
 
 describe("asText", () => {
