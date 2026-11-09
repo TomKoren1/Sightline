@@ -3,6 +3,7 @@
 import { buildApp } from "./http/app.js";
 import { startTracing, stopTracing } from "./observability/tracing.js";
 import { cfg, migrateOnBoot, scanWorkerMode } from "./core/config.js";
+import { configureEgress } from "./core/egress.js";
 import { assertSchemaCurrent, connectedAsOwner, migrate, closePool } from "./db/postgres.js";
 import { apiPrivilegeWarnings, assertHostedInvariants } from "./core/hostedMode.js";
 import { watchCertificate } from "./aws/certificateWatch.js";
@@ -22,6 +23,9 @@ import { VERSION } from "./core/version.js";
  * ready, which is what a cluster should see.
  */
 assertHostedInvariants();
+// The API scans too when SCAN_WORKER runs in-process, and reaches AWS for
+// connection checks either way. Same reason as worker.ts.
+configureEgress();
 await startTracing("sightline-api", VERSION);
 
 const app = await buildApp();

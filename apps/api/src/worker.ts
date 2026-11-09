@@ -21,6 +21,7 @@
 import pino from "pino";
 
 import { cfg, scanWorkerMode } from "./core/config.js";
+import { configureEgress } from "./core/egress.js";
 import { assertSchemaCurrent, closePool } from "./db/postgres.js";
 import { assertHostedInvariants } from "./core/hostedMode.js";
 import { ScanWorker } from "./jobs/worker.js";
@@ -36,6 +37,10 @@ import { watchCertificate } from "./aws/certificateWatch.js";
 // security property. A worker with them unchecked would scan with the API's
 // guarantees absent.
 assertHostedInvariants();
+
+// Before any AWS client exists: this is the process that connects to every
+// region, and the furthest ones do not answer inside Node's default window.
+configureEgress();
 
 // The same redaction the API uses. A second configuration would be a second
 // thing to forget, and this process is the one that holds assumed AWS

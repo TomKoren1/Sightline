@@ -74,8 +74,11 @@ function errorCodeOf(err: unknown): string | undefined {
  *
  * The raw SDK message for a missing permission is accurate and useless; what
  * the user needs to know is which permission to add.
+ *
+ * Exported for its own tests: it is the one piece of the scan whose output a
+ * human reads directly, and every branch is a sentence that has to stay true.
  */
-function explainFailure(
+export function explainFailure(
   service: string,
   region: string | null,
   err: unknown,
@@ -100,6 +103,23 @@ function explainFailure(
     case "UnrecognizedClientException":
     case "InvalidClientTokenId":
       return `Credentials were rejected reading ${where}. The assumed session may have expired.`;
+    /**
+     * Not AWS refusing us - the request never arrived.
+     *
+     * Worth a branch of its own because every other case here reads as a fault
+     * in the account or the role, and an engineer who believes that will go and
+     * audit a role that was fine all along. These codes say the opposite: the
+     * problem is egress from wherever the scan runs, and the regions that fail
+     * are the ones furthest away.
+     */
+    case "ETIMEDOUT":
+    case "ENETUNREACH":
+    case "ECONNREFUSED":
+    case "ECONNRESET":
+    case "EAI_AGAIN":
+    case "ENOTFOUND":
+    case "TimeoutError":
+      return `Could not reach ${where} over the network after exhausting retries: ${message}. The account and the role are not implicated; this is connectivity from wherever the scan runs.`;
     default:
       return `Failed to read ${where}: ${message}`;
   }

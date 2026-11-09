@@ -170,6 +170,17 @@ const schema = z.object({
   SCAN_CONCURRENCY: blankAsUnset(z.coerce.number().int().positive().default(6)),
 
   /**
+   * How long one address gets to complete a TCP connect, in ms (core/egress.ts).
+   *
+   * Node's default is 250ms, which is below the round trip to a distant AWS
+   * region: ap-southeast-1 answers in ~290ms from Europe, so every attempt was
+   * abandoned mid-handshake and the whole connect failed even though the
+   * endpoint was healthy. Raising it costs nothing when a path is genuinely
+   * dead, because an unroutable address fails instantly rather than waiting.
+   */
+  NET_CONNECT_ATTEMPT_TIMEOUT_MS: blankAsUnset(z.coerce.number().int().positive().default(2000)),
+
+  /**
    * AWS requests a second per account, service and region (aws/pace.ts).
    * Below what AWS allows for describe and list calls on most services, so a
    * scan stays out of the customer's own throttling budget.
