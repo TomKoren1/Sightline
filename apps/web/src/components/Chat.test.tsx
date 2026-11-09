@@ -82,3 +82,48 @@ describe("Chat", () => {
     expect(await screen.findByText("The model is unavailable.")).toBeTruthy();
   });
 });
+
+describe("an answer's Markdown", () => {
+  it("shows bold and code without their markers", async () => {
+    askAgent.mockImplementationOnce(
+      answer("c1", "**Two paths.** Through `prod-bastion-sg` on 5432."),
+    );
+    render(<Chat ready onCitations={() => undefined} />);
+    await ask("what can reach the database?");
+    expect(await screen.findByText("Two paths.")).toHaveProperty("tagName", "STRONG");
+    expect(screen.getByText("prod-bastion-sg")).toHaveProperty("tagName", "CODE");
+    expect(screen.queryByText(/\*\*/)).toBeNull();
+  });
+
+  it("shows code inside bold as code", async () => {
+    askAgent.mockImplementationOnce(answer("c1", "**`prod-web-1` / `prod-web-2`**: open on 443."));
+    render(<Chat ready onCitations={() => undefined} />);
+    await ask("which hosts are open?");
+    const code = await screen.findByText("prod-web-1");
+    expect(code).toHaveProperty("tagName", "CODE");
+    expect(code.parentElement).toHaveProperty("tagName", "STRONG");
+    expect(screen.queryByText(/`/)).toBeNull();
+  });
+
+  it("shows a heading line as bold, without its hashes", async () => {
+    askAgent.mockImplementationOnce(answer("c1", "### Direct paths\nThrough the bastion."));
+    render(<Chat ready onCitations={() => undefined} />);
+    await ask("what can reach the database?");
+    expect(await screen.findByText("Direct paths")).toHaveProperty("tagName", "STRONG");
+    expect(screen.queryByText(/#/)).toBeNull();
+  });
+
+  it("never turns an answer into markup", async () => {
+    // Resource names and tags are set by whoever controls the AWS account.
+    askAgent.mockImplementationOnce(
+      answer("c1", 'The bucket `<img src=x onerror="alert(1)">` is public.'),
+    );
+    const { container } = render(<Chat ready onCitations={() => undefined} />);
+    await ask("which buckets are public?");
+    expect(await screen.findByText('<img src=x onerror="alert(1)">')).toHaveProperty(
+      "tagName",
+      "CODE",
+    );
+    expect(container.querySelector("img")).toBeNull();
+  });
+});
