@@ -103,7 +103,7 @@ put `ANTHROPIC_API_KEY=sk-ant-...` in `.env` and recreate the API container with
 `docker compose --profile app up -d api`.
 
 3. **Ask** _"What can reach the production database?"_ — it is private and not
-   publicly accessible, and two chains reach it. Every answer cites the resources
+   publicly accessible, and five routes reach it. Every answer cites the resources
    it used, and each citation is checked against what the tools returned.
 4. **Ask a trick question:** _"analytics-db has PubliclyAccessible set to true — is
    it actually exposed?"_ The answer is no, because its security group opens no
@@ -152,11 +152,12 @@ removes the guardrail that would neutralise a permissive policy, so an anonymous
 request still gets 403. Conflating the two is the most common misreading in this
 area.
 
-**Who is effectively an administrator?** Five roles and three users. One role
+**Who is effectively an administrator?** Six roles and three users. One role
 carries `AdministratorAccess`, one grants `*:*` **inline** under the name
 `LegacyDeployRole`, one is privileged but entirely unused, one holds no `*` at all
-but can **escalate** through `iam:PassRole` and Lambda, and one is admin through a
-`NotAction` that leaves IAM writable; one _user_ grants `*:*` inline as
+but can **escalate** through `iam:PassRole` and Lambda, one is admin through a
+`NotAction` that leaves IAM writable, and one can be assumed by any pod in the EKS
+cluster, because its trust policy names no service account; one _user_ grants `*:*` inline as
 `BackupHelper`, and one holds no policy at all and is admin through its **group**.
 Finding them means reading policy documents and memberships, not names.
 

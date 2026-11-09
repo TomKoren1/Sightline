@@ -9,8 +9,8 @@ when something here gets built, this file changes in the same pull request.
 1. **Writing the graph.** Each scan writes its whole inventory and graph into
    a scope of its own, and `scan_runs.projected_at` makes it current once
    everything is in, so a reader never sees half a scan. Commits are batched
-   and heap use is flat - the nightly load test holds 50,000 resources to a
-   time and memory budget - but the work is still proportional to the whole
+   and heap use is flat - the load test holds 50,000 resources to a time and
+   memory budget on every commit, and a million nightly - but the work is still proportional to the whole
    account, every scan, and the superseded scope has to be swept afterwards.
    _Fix:_ diff against the previous snapshot, which is already stored, and
    write only what changed. That is also what would make scans cheap enough
@@ -35,8 +35,8 @@ saying what was cut.
 
 - **Scheduled scans.** A scan runs when someone asks for one, so _"what changed
   overnight?"_ is only answerable if someone scanned last night.
-- **Paths between accounts.** An AWS Organization connects with each member
-  account scanned on its own, and each scan shows who outside the account can
+- **Paths between accounts.** Each connected account is scanned on its own, and
+  each scan shows who outside the account can
   get in - roles another account may assume, policies granting one. What the
   other account can then reach is in its own scan; a path is not followed from
   one account's graph into the next.
@@ -59,4 +59,5 @@ Choices that cost nothing today and are deliberate gaps rather than oversights:
 - **One node.** Postgres, its backups and the application share one machine.
   The backups are encrypted to a key the cluster does not hold, and the restore
   is tested (`scripts/backup-restore-test.sh`), but they are on the same disk
-  as the database they protect.
+  as the database they protect. `scripts/backup-pull.sh` copies them to another
+  machine, and only does so where something runs it.

@@ -24,11 +24,11 @@ tells you to attack an estate you are not responsible for, ends your access and
 is not something I will help with.
 
 **Not treat it as a security control.** It is an inventory and a set of
-heuristics. The policy analyser is not an IAM evaluator: it does not model
-permission boundaries, service control policies or session policies, so
+heuristics. The policy analyser is not a complete IAM evaluator: it does not
+model service control policies, session policies or resource policies, so
 "effectively an administrator" is a strong hint and not a proof. The
-reachability analysis reads security groups and route tables, not your actual
-network. A finding is a thing to go and check.
+reachability analysis reads security groups, network ACLs and route tables, not
+your actual network. A finding is a thing to go and check.
 
 **Not rely on its availability.** One node, one replica of each datastore, a
 home internet connection, and a backup whose restore is tested but which still
@@ -42,8 +42,8 @@ data-plane reads, so this is a property of the role rather than a promise about
 my behaviour — but it is also a promise about my behaviour.
 
 **Not sell or share your inventory.** See [`PRIVACY.md`](PRIVACY.md) for the
-three mechanical exceptions: AWS, your identity provider, and Anthropic when you
-use the assistant.
+four mechanical exceptions: AWS, your identity provider, Anthropic when you use
+the assistant, and Cloudflare, which carries the traffic.
 
 **Delete it when you ask.** `DELETE /api/me`, immediately, including the
 encrypted ExternalIds. The caveats — your CloudFormation stack, and encrypted

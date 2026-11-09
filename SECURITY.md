@@ -116,7 +116,7 @@ a call site reading data without saying whose. A resource's identity is
 node — are the same constant for every customer, and a graph read keyed on the
 ARN alone would attach one customer's relationships to another's resources.
 
-**The database refuses anyway.** Row-level security policies on the nine tables
+**The database refuses anyway.** Row-level security policies on the thirteen tables
 holding customer data compare every row against the tenant on the connection,
 with `WITH CHECK` as well as `USING`, so an insert carrying another tenant's id
 is refused rather than accepted and hidden. The application connects as a
@@ -270,6 +270,7 @@ can, and until they do, the role it created still exists.
   takes itself down rather than the API; the real fix is streaming collection.
 - **Chat and scan quotas are per tenant and per hour**, which bounds cost but
   not a determined single request. The agent's own loop is capped at eight steps.
-- **Backups do not leave the machine.** The nightly encrypted dump goes to a
-  volume on the same node as the database, which survives a lost database and
-  not a lost disk.
+- **Backups stay on the machine unless copied off.** The nightly encrypted dump
+  goes to a volume on the same node as the database, which survives a lost
+  database and not a lost disk. `scripts/backup-pull.sh` copies the dumps to
+  another machine; the protection depends on something running it.
