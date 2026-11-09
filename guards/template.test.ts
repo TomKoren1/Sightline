@@ -19,10 +19,6 @@ const template = readFileSync(
   new URL("../cloudformation/readonly-role.yaml", import.meta.url),
   "utf8",
 );
-const original = readFileSync(
-  new URL("../cloudformation/readonly-role.original.yaml", import.meta.url),
-  "utf8",
-);
 
 /**
  * Resolve a folded block scalar (`key: >`) to the string CloudFormation will
@@ -91,8 +87,6 @@ describe("the permissions the template claims", () => {
 
   it("does not grant ReadOnlyAccess, which is the whole point of replacing it", () => {
     expect(template).not.toContain("arn:aws:iam::aws:policy/ReadOnlyAccess");
-    // The original did, and is kept for comparison.
-    expect(original).toContain("arn:aws:iam::aws:policy/ReadOnlyAccess");
   });
 
   it("explicitly denies every data-plane read the README names", () => {
@@ -126,8 +120,6 @@ describe("the trust model the template claims", () => {
   it("scopes trust to a named principal rather than an account root", () => {
     expect(template).toContain("AWS: !Ref SightlineScannerRoleArn");
     expect(template).not.toMatch(/:root"/);
-    // The original trusted the whole account, which is what was changed.
-    expect(original).toMatch(/:root"/);
   });
 
   it("requires the external id", () => {
@@ -149,7 +141,7 @@ describe("the trust model the template claims", () => {
  */
 describe("the reasoning survives", () => {
   it.each([
-    ["the rationale header", "WHY THE ORIGINAL WAS CHANGED"],
+    ["the rationale header", "WHY IT IS NARROWER THAN THE USUAL READ-ONLY ROLE"],
     ["the sqs:ReceiveMessage argument", "visibility timeout"],
     ["the :root explanation", "does not mean"],
     ["the two-role warning", "TWO ROLES ARE INVOLVED"],
@@ -196,7 +188,7 @@ describe("the limits CloudFormation enforces", () => {
   it("documents deployment in comments, which have no length limit", () => {
     // The prose lives above the template body now. If it migrates back into
     // Description the guard above fails, but this says why it must not.
-    expect(template).toMatch(/^# .*WHY THE ORIGINAL WAS CHANGED/m);
+    expect(template).toMatch(/^# .*WHY IT IS NARROWER THAN THE USUAL READ-ONLY ROLE/m);
     expect(template).toMatch(/^#.*cloudformation deploy/m);
   });
 });

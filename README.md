@@ -75,7 +75,7 @@ databases and a mock AWS account, seeds a fictional customer, and serves the app
 You arrive at an empty graph with a prompt to run the first scan — press it, and
 watch the scan stream service by service.
 
-**Three things worth doing straight away**, none of which need anything else:
+**Two things worth doing straight away**, neither of which needs anything else:
 
 1. **Run the first scan.** Nearly two hundred resources across three regions, in
    seconds.
@@ -90,9 +90,6 @@ watch the scan stream service by service.
    public, because the other's access block neutralises it. Verdicts are computed,
    not read off a field.
 
-3. **Open Coverage.** What the last scan could see, the data checks against the demo
-   account's answer key, and the last agent eval.
-
 **Then add an Anthropic key to talk to it:**
 
 ```bash
@@ -103,10 +100,10 @@ That writes it and restarts the API. If you would rather not install Node for it
 put `ANTHROPIC_API_KEY=sk-ant-...` in `.env` and recreate the API container with
 `docker compose --profile app up -d api`.
 
-4. **Ask** _"What can reach the production database?"_ — it is private and not
+3. **Ask** _"What can reach the production database?"_ — it is private and not
    publicly accessible, and two chains reach it. Every answer cites the resources
    it used, and each citation is checked against what the tools returned.
-5. **Ask a trick question:** _"analytics-db has PubliclyAccessible set to true — is
+4. **Ask a trick question:** _"analytics-db has PubliclyAccessible set to true — is
    it actually exposed?"_ The answer is no, because its security group opens no
    ports. A tool that read the flag would get this wrong.
 
@@ -173,6 +170,8 @@ cannot grade itself as correct.
 
 ## How it works
 
+![The workflow: connect a read-only role, scan every service and region, compute verdicts in code, ask in plain language, check every citation](docs/images/workflow.png)
+
 **One database.** Each scan's resources and relationships are rows in Postgres, and
 that is the graph: lookups and findings are SQL over computed verdicts, and the path
 questions — _"what can reach the production database?"_ — load the scan's
@@ -231,10 +230,7 @@ against the hand-written answer key, needing no model and no API key, running in
 on every commit; and **twenty-one cases** against the live agent, scored on the
 resources each answer cites, with traps that a tool reading flags rather than
 evaluating them would fall into. The split makes failures diagnosable — tier 1
-passing and tier 2 failing means the data is right and the agent misused it. The
-same checks run inside the product, under **Coverage**, for the demo account.
-
-![Coverage: what the last scan read per service and region, what Sightline never reads, and the data checks](docs/images/coverage.png)
+passing and tier 2 failing means the data is right and the agent misused it.
 
 ---
 
@@ -270,6 +266,12 @@ apps/api              backend: scanner, analysers, graph, agent, HTTP API
   src/auth/           OIDC against Google and GitHub, sessions, teams, API tokens
   src/tenancy/        tenants, connections, onboarding, limits, secrets
   src/jobs/           the Postgres queue, the worker's jobs, scan progress
+  src/audit/          the per-tenant audit log, append-only for requests
+  src/integrations/   a tenant's webhook, told when a scan opens new findings
+  src/observability/  structured logs, Prometheus metrics, OpenTelemetry traces
+  src/operator/       every tenant's health, for whoever runs the deployment
+  src/setup/          what `npm run setup` does: the role, the ExternalId, the .env
+  src/cli/            the command-line entry points: scan, migrate, evals, query
   src/remediation/    generated fix commands, never executed
   src/evals/          tier-1 ground truth, tier-2 cases and grading
   src/http/           the NestJS edge: one folder per area, a controller over a service
