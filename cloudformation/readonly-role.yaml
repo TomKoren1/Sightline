@@ -14,14 +14,14 @@
 # nothing.
 #
 # -----------------------------------------------------------------------------
-# WHY THE ORIGINAL WAS CHANGED
+# WHY IT IS NARROWER THAN THE USUAL READ-ONLY ROLE
 # -----------------------------------------------------------------------------
 #
-# This replaces the original template in this repository (kept alongside as
-# readonly-role.original.yaml). Two things changed, both narrowing access: the
-# trust policy no longer trusts an entire AWS account, and the permission set no
-# longer grants the ability to read customer data. The reasoning is in
-# the comments below.
+# The usual shape for a role like this - `ReadOnlyAccess`, trusting an entire
+# AWS account - is what this template replaced. Two things are different, both
+# narrowing access: the trust policy names one principal rather than an account,
+# and the permission set cannot read customer data. The reasoning is in the
+# comments below.
 #
 # 1. `ReadOnlyAccess` is not read-only in the sense an inventory product needs.
 #

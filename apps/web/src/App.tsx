@@ -171,7 +171,6 @@ export function App() {
         error={scanError}
         onScan={() => void runScan()}
         onOpenTrust={() => setModal("trust")}
-        demo={connections.find((c) => c.id === conn)?.kind === "demo"}
         onOpenFixPlan={() => setModal("fixplan")}
         onOpenConnection={() => setModal("connection")}
         connections={connections}

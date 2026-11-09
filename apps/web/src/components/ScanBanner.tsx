@@ -41,10 +41,8 @@ export interface ScanBannerProps {
   liveUnits: ScanUnit[];
   error: string | null;
   onScan: () => void;
-  /** Coverage: from the header for the demo account, from the partial-scan warning for any. */
+  /** Coverage: what the last scan read and what failed, opened from the partial-scan warning. */
   onOpenTrust: () => void;
-  /** The seeded demo account, whose Coverage also carries the data checks and evals. */
-  demo: boolean;
   /** Every computed fix, to choose from and download. Offered once there is a scan. */
   onOpenFixPlan: () => void;
   onOpenConnection: () => void;
@@ -77,7 +75,6 @@ export function ScanBanner({
   error,
   onScan,
   onOpenTrust,
-  demo,
   onOpenFixPlan,
   onOpenConnection,
   connections,
@@ -156,15 +153,6 @@ export function ScanBanner({
             </button>
           )}
           <span className="mx-0.5 h-4 w-px bg-ink-700" aria-hidden />
-          {/* A real account reaches Coverage from the partial-scan warning below. */}
-          {demo && (
-            <button
-              onClick={onOpenTrust}
-              className="rounded border border-ink-700 bg-ink-800 px-2 py-1 text-[11px] text-ink-300 transition hover:border-ink-600 hover:text-ink-100"
-            >
-              Coverage
-            </button>
-          )}
           {scan && (
             <button
               onClick={onOpenFixPlan}
