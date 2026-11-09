@@ -11,11 +11,12 @@ effectively an administrator, what changed since yesterday.
 It runs end to end against a mocked AWS account with no credentials and no cloud
 spend.
 
-![The production database: private, publiclyAccessible false, and still reachable from the internet](docs/images/exposed-database.png)
+![A scan of the demo account streaming service by service, then the production database: private, publiclyAccessible false, and still reachable from the internet](docs/images/demo.gif)
 
-_The production database is private and `publiclyAccessible: false`, and Sightline
-still marks it exposed: it walked the security groups, routes and ACLs and found
-the internet reaching it through the bastion and the app tier._
+_A scan of the demo account, then its production database. It is private and
+`publiclyAccessible: false`, and Sightline still marks it exposed: it walked the
+security groups, routes and ACLs and found the internet reaching it through the
+bastion and the app tier._
 
 ### What makes it interesting
 
