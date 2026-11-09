@@ -275,6 +275,7 @@ async function answer(options: AskOptions): Promise<AgentMessage> {
   const askedAt = Date.now();
   let answer = "";
   let steps = 0;
+  let providerError: unknown;
 
   const result = streamText({
     model: options.model ?? configuredModel(),
@@ -303,6 +304,15 @@ async function answer(options: AskOptions): Promise<AgentMessage> {
     // recovers within the few seconds this spends. The SDK's default is 2.
     maxRetries: 4,
 
+    /**
+     * The stream does not throw a provider's error: it ends, and only this
+     * hears why. Unheard, a refused key read as an empty answer and was
+     * reported to the user as running out of tool calls.
+     */
+    onError({ error }) {
+      providerError = error;
+    },
+
     onStepEnd({ text, toolCalls: calls }) {
       steps += 1;
       if (calls.length > 0) {
@@ -319,6 +329,10 @@ async function answer(options: AskOptions): Promise<AgentMessage> {
   // arrive, including during tool-calling steps, which is what it did before.
   for await (const delta of result.textStream) {
     emit({ type: "agent.token", text: delta });
+  }
+  // Thrown, so the caller says what failed - see failure.ts.
+  if (providerError !== undefined) {
+    throw providerError instanceof Error ? providerError : new Error(errorMessage(providerError));
   }
 
   /**
