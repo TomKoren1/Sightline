@@ -162,14 +162,16 @@ export function GraphView({
   }, [flowNodes, flowEdges, setNodes, setEdges]);
 
   // Re-frame when the agent cites something, so the answer is on screen
-  // instead of somewhere off the current viewport.
+  // instead of somewhere off the current viewport - and when nodes are added
+  // around a citation, which moves it without changing what is cited.
+  const drawn = flowNodes.length;
   useEffect(() => {
     if (citedArns.length === 0) return;
     const timer = setTimeout(() => {
       void fitView({ nodes: citedArns.map((id) => ({ id })), duration: 600, padding: 0.35 });
     }, 80);
     return () => clearTimeout(timer);
-  }, [citedArns, fitView]);
+  }, [citedArns, fitView, drawn]);
 
   const handleNodeClick = useCallback(
     (_: unknown, node: Node) => onSelect(node.id === selectedArn ? null : node.id),

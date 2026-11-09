@@ -11,12 +11,13 @@ effectively an administrator, what changed since yesterday.
 It runs end to end against a mocked AWS account with no credentials and no cloud
 spend.
 
-![A scan of the demo account streaming service by service, then the production database: private, publiclyAccessible false, and still reachable from the internet](docs/images/demo.gif)
+![A scan of the demo account, its production database and its neighbours, then the agent asked what can reach it, answering with every path, each cited resource highlighted in the graph](docs/images/demo.gif)
 
-_A scan of the demo account, then its production database. It is private and
-`publiclyAccessible: false`, and Sightline still marks it exposed: it walked the
-security groups, routes and ACLs and found the internet reaching it through the
-bastion and the app tier._
+_A scan of the demo account, then its production database: private,
+`publiclyAccessible: false`, and still marked exposed. Its neighbours show three
+groups admitting it on 5432. Asked what can reach it, the agent walks the paths
+from the internet - through the bastion, the app tier, the load balancer,
+CloudFront and an API - and every resource it cites is highlighted in the graph._
 
 ### What makes it interesting
 

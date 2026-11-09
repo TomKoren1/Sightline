@@ -13,6 +13,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import type { AgentEvent, Citation, ToolCallTrace } from "@sightline/shared";
 
 import { askAgent } from "../api.js";
+import { inlineMarkdown } from "./inlineMarkdown.js";
 import { errorMessage } from "@sightline/shared";
 
 interface ChatMessage {
@@ -237,7 +238,7 @@ export function Chat({ ready, onCitations }: ChatProps) {
             </div>
             {streamed && (
               <p className="mt-1.5 whitespace-pre-wrap text-[12px] leading-relaxed text-ink-400">
-                {streamed}
+                {inlineMarkdown(streamed)}
               </p>
             )}
           </div>
@@ -304,7 +305,7 @@ function MessageBubble({
           message.error ? "text-danger" : "text-ink-100"
         }`}
       >
-        {message.content}
+        {message.error ? message.content : inlineMarkdown(message.content)}
       </p>
 
       {/*
