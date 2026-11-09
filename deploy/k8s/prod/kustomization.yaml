@@ -23,12 +23,12 @@ resources:
   - secrets.sealedsecret.yaml
 
 # BEGIN pinned images - written by .github/workflows/deliver.yml, do not edit
-# commit: 84c28aa514bf8a2c08ccc8bb538922ae9ec81cd8
+# commit: 88e1150d2ae7fbc1fce10d6fdf1aac5afa753491
 images:
   - name: sightline-api
     newName: ghcr.io/tomkoren1/sightline-api
-    digest: sha256:0f4460f752a7943e518fec889593a380c75d77a21a122d47dfd3fcb81a26f268
+    digest: sha256:10488d4cdfeb4363d6f08f8074decbd9a97d9d4deb960ebb4c6f811e6ef0e3e0
   - name: sightline-web
     newName: ghcr.io/tomkoren1/sightline-web
-    digest: sha256:cc85b041b68d97a19ef053eb5469fe77732d27abef5e52895b81f56ded24e367
+    digest: sha256:db05a6fb46bb84017c4720856653dd9f3e93f2af026e268f096588c9ddad996e
 # END pinned images
