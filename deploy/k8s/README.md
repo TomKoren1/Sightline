@@ -28,8 +28,15 @@ analysed, so a very large account needs its limit raised in `base/app.yaml`.
 
 ## Images
 
-This cluster has no registry (`/etc/rancher/k3s/registries.yaml` does not
-exist), so images are built locally and imported into containerd directly:
+**Prod pulls from ghcr.io.** Every commit on `main` that passes CI is built,
+scanned and signed by `.github/workflows/deliver.yml`, which pushes the images
+to `ghcr.io/tomkoren1/sightline-api` and `-web` and commits a
+`deploy: <sha> [skip ci]` change pinning `prod/kustomization.yaml` to their
+digests. Nothing is built or imported by hand for prod.
+
+**Staging, and a cluster without that pipeline, use local images.** The base
+names `sightline-api` and `sightline-web` without a registry, so they are built
+locally and imported into containerd directly:
 
 ```bash
 docker build --target api -t sightline-api:dev .
@@ -56,13 +63,17 @@ image has no `dist/` and the pods fail with "Cannot find module".
 
 `argocd/sightline-prod.yaml` and `argocd/sightline-staging.yaml` reconcile the
 two overlays the way `argocd/monitoring-application.yaml` does the chart. Apply
-each once with `kubectl apply -f`; both sync by hand until you have watched a
-sync work, then automated sync can be turned on. ArgoCD applies manifests and
-builds nothing, so import a commit's images before syncing it.
+each once with `kubectl apply -f`. Prod syncs automatically: a `deploy:` pin
+commit on `main` is a deploy, with the migrate Job as a PreSync hook. Staging
+syncs by hand, and ArgoCD builds nothing, so import its images before syncing
+it.
 
 ### Rolling back
 
-Re-import the previous image tag and restart; do not roll the database back.
+For prod, point `prod/kustomization.yaml` back at the previous digests -
+reverting the latest `deploy:` commit does exactly that - and ArgoCD rolls the
+pods. For staging, re-import the previous image tag and restart. Either way, do
+not roll the database back.
 Migrations only expand the schema - add tables, add nullable or defaulted
 columns - so the previous release runs on the new schema unchanged.
 `guards/migrationsExpand.test.ts` refuses a migration that drops, renames,
@@ -106,11 +117,8 @@ ssh -L 8081:localhost:8081 <server>        # from your machine; open http://loca
 
 To rehearse against real data, restore prod's newest backup into staging's
 Postgres with the steps under [Restoring](#restoring), using
-`-n sightline-staging`. When the candidate is good, promote the same image
-rather than rebuilding it — `docker tag sightline-api:staging sightline-api:dev`
-(and the web image), import both, rerun prod's migrations with
-`kubectl -n sightline delete job sightline-migrate && kubectl apply -k deploy/k8s/prod`,
-then `kubectl -n sightline rollout restart deploy/api deploy/worker deploy/web`.
+`-n sightline-staging`. When the candidate is good, merge it: CI builds and
+pins the images prod runs, and ArgoCD deploys them with their migrations.
 
 Staging holds memory while idle, so pause it between releases with
 `kubectl -n sightline-staging scale deploy,statefulset --all --replicas=0`.
@@ -553,10 +561,10 @@ fails if nginx ever starts routing it.
 ## Not in these manifests
 
 - **Cloudflare WAF and rate limits** on `/api/auth/*` and `/api/scans`, and
-  Access on `/admin`. These are dashboard or Terraform configuration against
+  Access on `/api/operator`. These are dashboard or Terraform configuration against
   Cloudflare's API, not Kubernetes objects, so they are not here — and the
   application's own per-tenant limits are in `apps/api/src/tenancy/limits.ts`
   rather than relying on the edge for correctness.
 - **A second node.** Every StatefulSet here is one replica, and that is honest
-  rather than hidden: neither datastore is replicated, so this is a single point
+  rather than hidden: Postgres is not replicated, so this is a single point
   of failure whose mitigation is a tested restore.

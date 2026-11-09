@@ -49,7 +49,7 @@ trackers, no advertising identifiers, no profile built from other sources.
 
 ## Who it is shared with
 
-Nobody, with three exceptions that are all mechanical rather than commercial:
+Nobody, with four exceptions that are all mechanical rather than commercial:
 
 | Who                  | What reaches them                                                   | Why                     |
 | -------------------- | ------------------------------------------------------------------- | ----------------------- |
@@ -79,11 +79,14 @@ Your data is not sold, rented, or used to train anything.
 
 In one place: Sightline's own database, on a server Sightline operates rather
 than a cloud provider's managed database. Backups are encrypted, and are kept
-only on that server and on other machines Sightline owns. Nothing is replicated
-anywhere else. ExternalIds are encrypted with a key held in AWS KMS,
+on that server, and any copy goes only to another machine Sightline owns. Nothing
+is replicated anywhere else. ExternalIds are encrypted with a key held in AWS KMS,
 so decrypting one needs both that database and Sightline's AWS account.
 
-What leaves it: a question's context to Anthropic, as above, and nothing else.
+What leaves it: a question's context to Anthropic, as above, and - only if your
+workspace's admin sets up an alert webhook - a short summary of new exposed or
+admin findings (counts, up to five resource names and kinds, and a link), sent to
+the address they chose. Nothing else.
 Scans read your account through AWS's regional APIs and the results come back
 to that one database; nothing is written into your account.
 

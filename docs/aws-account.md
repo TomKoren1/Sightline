@@ -27,9 +27,9 @@ neither it nor Node.
 The **account switcher** in the header opens the same walkthrough by hand from
 **Connect another account…**, and moves between accounts at runtime without restarting or
 rewriting `.env` — a clone has two, the demo fixture and whatever `.env` points at.
-Switching does not rescan, so the graph keeps showing the previous account until you run
-one, and the banner says so rather than letting you read one account's inventory under
-another's name.
+Switching does not rescan: each account shows its own latest scan, and the banner says
+how old it is, or that the account has no scan yet. One account's inventory never
+appears under another's name.
 
 It replaced a demo/real toggle that flipped a module-level variable. That was honest for
 one operator and would have been a shared surprise for many: one person clicking it
