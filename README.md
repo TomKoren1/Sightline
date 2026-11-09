@@ -11,7 +11,7 @@ effectively an administrator, what changed since yesterday.
 It runs end to end against a mocked AWS account with no credentials and no cloud
 spend.
 
-![A scan of the demo account, its production database and its neighbours, then the question "What can reach the production database?" answered with every path, each cited resource highlighted in the graph](docs/images/demo.gif)
+![A scan of the demo account, its production database and its neighbours, then the agent asked what can reach it, answering with every path, each cited resource highlighted in the graph](docs/images/demo.gif)
 
 _A scan of the demo account, then its production database: private,
 `publiclyAccessible: false`, and still marked exposed. Its neighbours show three
