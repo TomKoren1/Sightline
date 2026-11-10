@@ -6,6 +6,8 @@
  * ask, and then carry it out; everything judgemental lives here.
  */
 
+import { randomBytes } from "node:crypto";
+
 import {
   CONNECTION_ENV_KEYS,
   LEGACY_SINGLE_TENANT,
@@ -13,10 +15,10 @@ import {
   readOnlyRoleArn,
 } from "@sightline/shared";
 
-import type { EnvEdit } from "./envFile.js";
+import { readEnvValue, type EnvEdit } from "./envFile.js";
 
 /** Keys whose values must never be printed, even to the user's own terminal. */
-const SECRET_KEYS = new Set<string>(["AWS_EXTERNAL_ID", "ANTHROPIC_API_KEY"]);
+const SECRET_KEYS = new Set<string>(["AWS_EXTERNAL_ID", "ANTHROPIC_API_KEY", "SECRETS_LOCAL_KEY"]);
 
 /**
  * Show enough to confirm which value is which, and no more.
@@ -116,6 +118,23 @@ export function composeMountEdits(): EnvEdit[] {
 
 export function anthropicKeyEdits(key: string): EnvEdit[] {
   return [{ key: "ANTHROPIC_API_KEY", value: key }];
+}
+
+/**
+ * A key for the ExternalIds of accounts connected through the UI.
+ *
+ * `createConnection` stores a per-connection ExternalId encrypted, so without
+ * this the form fails on the last step. Written here rather than by the server:
+ * `.env` is the operator's, and this script is the only thing that edits it.
+ *
+ * **Never rotated.** Every stored ExternalId is encrypted under this value, so
+ * replacing it would strand them - which is why an existing key, or KMS, means
+ * no edit rather than a new one.
+ */
+export function secretsKeyEdits(current: string): EnvEdit[] {
+  const has = (key: string) => (readEnvValue(current, key) ?? "") !== "";
+  if (has("SECRETS_LOCAL_KEY") || has("AWS_KMS_KEY_ID")) return [];
+  return [{ key: "SECRETS_LOCAL_KEY", value: randomBytes(32).toString("base64") }];
 }
 
 /**

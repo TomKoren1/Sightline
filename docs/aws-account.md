@@ -133,17 +133,18 @@ with a CLI profile for the account being added, and then asks for the account id
 tests the role. Each connection carries its own ExternalId and role, and the account
 menu switches between them.
 
-One prerequisite: a connection created this way stores its ExternalId encrypted, so
-`.env` needs a key.
+A connection created this way stores its ExternalId encrypted, so `.env` needs a key.
+`npm run setup` generates `SECRETS_LOCAL_KEY` when it configures a real account, so
+there is normally nothing to do — and it never replaces an existing one.
 
-```bash
-SECRETS_LOCAL_KEY=$(openssl rand -base64 32)
-```
+**Back that key up along with `.env`.** Every ExternalId stored through the form is
+encrypted under it, so losing it means reconnecting those accounts. The account `.env`
+names is unaffected: its ExternalId is in `.env` in plain sight, which is why encrypting
+a copy of it would protect nothing.
 
-Then `docker compose --profile app up -d api worker`. **Keep that value.** Every stored
-ExternalId is encrypted under it, so losing it means reconnecting the accounts added
-this way — the `.env` account is unaffected, since its ExternalId is in `.env` already.
-The form says so if the key is missing rather than failing obscurely.
+If the key is missing — an install that only ever ran the demo, say — the form says so
+and names the variable rather than failing obscurely. Add it, then
+`docker compose --profile app up -d api worker`.
 
 There is no quick-create link or Terraform snippet here, only the CLI command: those are
 built from a _published_ template URL, and a clone has the template in its own checkout
