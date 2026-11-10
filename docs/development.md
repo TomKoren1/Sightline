@@ -113,8 +113,12 @@ Four things, because they are the ones that have actually gone wrong here:
 process has to be **replaced**, not restarted:
 
 ```bash
-docker compose --profile app up -d api     # recreates it with the new values
+docker compose --profile app up -d api worker   # recreates them with the new values
 ```
+
+Both, because both read `.env`: the API serves the connection test and the worker runs
+the scan. Naming only the API is how a real account ended up with a passing connection
+test and a worker that failed every scan on credentials.
 
 `docker compose restart api` is the command you would reach for and it does **not**
 work: it restarts the existing container, whose environment was resolved when the

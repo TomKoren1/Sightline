@@ -115,6 +115,28 @@ export const SIGHTLINE_PREFIX = "sightline-";
 export const MOCK_ACCESS_KEY_PLACEHOLDER = "mock";
 
 /**
+ * The containers that read `.env`, and so must be replaced when it changes.
+ *
+ * Both, because both matter: the api serves the connection test and the worker
+ * runs the scan. Naming only the api left the worker on its previous
+ * environment and mounts, so the test passed and every scan failed on
+ * credentials - and `deploy/compose.aws-profile.yml` has to mount the profile
+ * into exactly this list. A guard asserts it does.
+ */
+export const RECREATE_SERVICES = ["api", "worker"] as const;
+
+/**
+ * `up -d`, never `restart`: restart reuses the environment resolved when the
+ * container was created, so it ignores the edit and exits zero.
+ */
+export function recreateCommand(services: readonly string[] = RECREATE_SERVICES): string {
+  return `docker compose --profile app up -d ${services.join(" ")}`;
+}
+
+/** The whole-deployment form, which is the one the documentation shows. */
+export const RECREATE_COMMAND = recreateCommand();
+
+/**
  * The ARN of the role the stack creates, given an account id.
  *
  * Used to pre-fill `AWS_TARGET_ROLE_ARN`, and by the setup script to check the

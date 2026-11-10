@@ -102,6 +102,22 @@ missing credentials with those two lines already set, the mount is arriving some
 else — the message names the path it actually read, and
 `docker exec sightline-api ls -l ~/.aws` confirms it.
 
+The profile goes into **both** the API and the worker, and that matters more than it
+looks. With `SCAN_WORKER=separate` — which the `app` profile sets — the API only
+enqueues work and the worker is the process that calls `sts:AssumeRole`. Giving the
+profile to the API alone produces the most misleading failure in this setup: the
+connection test passes, and every scan fails with _"Could not load credentials from
+any providers"_, which reads as a broken role rather than a missing mount. For the
+same reason, recreate both after editing `.env`:
+
+```bash
+docker compose --profile app up -d api worker
+```
+
+A passing connection test is not proof that scans can authenticate. The test runs in
+the API; the scan runs in the worker. `docker compose exec -T worker ls /home/node/.aws`
+is the direct check, and the worker's log is where a credentials failure appears.
+
 The mount is preferable to real keys in `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY`:
 it keeps long-lived credentials out of a file sitting next to the code, and it carries
 the SSO token cache, so `aws sso login` on the host works inside the container too.

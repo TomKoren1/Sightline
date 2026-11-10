@@ -15,6 +15,8 @@ import { existsSync, readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 
+import { RECREATE_SERVICES } from "@sightline/shared";
+
 const root = fileURLToPath(new URL("../", import.meta.url));
 const read = (p: string) => readFileSync(root + p, "utf8");
 
@@ -98,11 +100,33 @@ describe("the real-AWS override for the containerised app", () => {
     expect(containerHome()).not.toBe("/root");
   });
 
-  it("only touches the api service", () => {
-    // If this ever grew a second service, the seeder is the dangerous one: it
-    // writes to whatever account its credentials resolve to.
+  it("mounts into exactly the services the recreate command replaces", () => {
+    /**
+     * The two halves of the original bug, pinned together. The override gave
+     * the profile to the api only, and `npm run setup` recreated the api only -
+     * so the worker, which is the process that assumes the role, had neither
+     * the mount nor the new environment. Every scan failed on credentials while
+     * the api's own connection test passed, which reads as a broken role.
+     *
+     * Either half alone leaves a fresh clone broken, so neither may drift from
+     * the other. The seeder must never join this list: it writes to whatever
+     * account its credentials resolve to.
+     */
     const services = [...override.matchAll(/^ {2}([a-z][a-z0-9-]*):$/gm)].map((m) => m[1]);
-    expect(services).toEqual(["api"]);
+    expect(services.slice().sort()).toEqual([...RECREATE_SERVICES].sort());
+    expect(services).not.toContain("seed");
+  });
+
+  it("gives the worker the same mount as the api, not merely a mount", () => {
+    /**
+     * Whole specs compared, not counted. The assertion above that the target is
+     * the path the SDK reads uses `toContain`, which one correct mount
+     * satisfies - so a worker mount landing somewhere else would have passed it
+     * while reproducing the original bug in a second container.
+     */
+    const mounts = [...override.matchAll(/^\s*- (\$\{AWS_PROFILE_DIR.*:ro)$/gm)].map((m) => m[1]);
+    expect(mounts).toHaveLength(2);
+    expect(mounts[0]).toBe(mounts[1]);
   });
 
   it("resolves a path on a shell with no HOME, which Windows PowerShell is", () => {
