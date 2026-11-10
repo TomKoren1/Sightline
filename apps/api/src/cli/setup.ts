@@ -26,11 +26,14 @@ import { promisify } from "node:util";
 import {
   LEGACY_SINGLE_TENANT,
   READ_ONLY_ROLE_NAME,
+  RECREATE_SERVICES,
   SIGHTLINE_PREFIX,
   formatDeployCommand,
+  recreateCommand,
 } from "@sightline/shared";
 
 import { assumablePrincipalArn } from "../aws/principal.js";
+import { CONTAINER_HOME } from "../aws/settings.js";
 import { apiReachable, localApiUrl } from "../setup/reachable.js";
 import {
   applyEnvEdits,
@@ -300,12 +303,32 @@ async function hostApiRunning(port?: string): Promise<boolean> {
   return apiReachable(localApiUrl("BACKEND_PORT", p, 3000, "/api/health"));
 }
 
-async function restartApi(containerised: boolean, opts: Options): Promise<void> {
+/**
+ * Replace the processes that read `.env`, because configuration is read once.
+ *
+ * `api` alone was the original, from when the api did its own scanning. With
+ * `SCAN_WORKER=separate` the worker is the process that assumes the role, so
+ * recreating only the api left it on the previous environment and the previous
+ * mounts: the connection test passed in the api and every scan failed on
+ * credentials in the worker.
+ *
+ * `api` stays an option because an Anthropic key changes nothing the worker
+ * reads, and recreating it would abandon a scan in progress for no reason.
+ */
+async function restartServices(
+  containerised: boolean,
+  opts: Options,
+  which: "both" | "api" = "both",
+): Promise<void> {
+  const services = which === "both" ? RECREATE_SERVICES : ["api"];
+  const command = recreateCommand(services);
   if (!containerised) {
     if (await hostApiRunning()) {
       console.log(
         `\n  ${yellow("→")} Restart the API so it re-reads .env: stop ${bold("npm run dev:api")} and start it again.\n` +
-          dim("    (configuration is read once at startup)"),
+          dim(
+            "    (configuration is read once at startup; also `npm run dev:worker`, if you run one)",
+          ),
       );
     } else {
       // Nothing is up, so "restart" would be advice about a process that does
@@ -321,23 +344,26 @@ async function restartApi(containerised: boolean, opts: Options): Promise<void> 
     return;
   }
   if (opts.dryRun) {
-    console.log(`\n  ${dim("--dry-run: would run docker compose --profile app up -d api")}`);
+    console.log(`\n  ${dim(`--dry-run: would run ${command}`)}`);
     return;
   }
-  if (!(await confirm("Recreate the API container so it picks this up?", opts))) {
+  const subject = which === "both" ? "API and worker containers" : "API container";
+  if (!(await confirm(`Recreate the ${subject} so it picks this up?`, opts))) {
     console.log(
-      `  ${yellow("skipped")} — run ${bold("docker compose --profile app up -d api")} when ready.\n` +
+      `  ${yellow("skipped")} — run ${bold(command)} when ready.\n` +
         dim("    Not `restart`: that reuses the environment from when the container was created."),
     );
     return;
   }
-  console.log(`  ${dim("docker compose --profile app up -d api")}`);
+  console.log(`  ${dim(command)}`);
   try {
-    await exec("docker", ["compose", "--profile", "app", "up", "-d", "api"], {
+    // The worker waits on the api's healthcheck, so this can take a minute on a
+    // cold start even though neither image is being rebuilt.
+    await exec("docker", ["compose", "--profile", "app", "up", "-d", ...services], {
       cwd: repoRoot,
       timeout: 300_000,
     });
-    console.log(`  ${green("✓")} API recreated`);
+    console.log(`  ${green("✓")} ${which === "both" ? "API and worker" : "API"} recreated`);
     // Deliberately not `--build`: this step exists to re-read `.env`, and
     // rebuilding the image would turn a configuration prompt into a multi-minute
     // build for every operator who never touched the source. The people who do
@@ -347,6 +373,33 @@ async function restartApi(containerised: boolean, opts: Options): Promise<void> 
     const e = err as { stderr?: string; message?: string };
     console.log(`  ${red("✗")} could not recreate it: ${(e.stderr || e.message || "").trim()}`);
   }
+}
+
+/**
+ * Does the worker have the profile the scan will need?
+ *
+ * The connection test below runs in the api, so it proves nothing about the
+ * process that actually scans. Best-effort and never fatal: this is a hint
+ * aimed at the one failure it cannot otherwise see coming.
+ */
+async function checkWorkerProfile(): Promise<void> {
+  try {
+    const { stdout } = await exec(
+      "docker",
+      ["compose", "--profile", "app", "exec", "-T", "worker", "ls", `${CONTAINER_HOME}/.aws`],
+      { cwd: repoRoot, timeout: 30_000 },
+    );
+    if (stdout.trim()) return;
+  } catch {
+    // The worker may not be up yet, or docker may not answer. Either way this
+    // is not the place to fail - the scan will say so, loudly.
+    return;
+  }
+  console.log(
+    `\n  ${yellow("!")} The worker has no AWS profile at ${CONTAINER_HOME}/.aws, so scans will\n` +
+      dim("    fail on credentials even if the connection test above passes. Check that\n") +
+      dim(`    COMPOSE_FILE names deploy/compose.aws-profile.yml, then ${recreateCommand()}.`),
+  );
 }
 
 /** Ask the running API whether the connection works, if it is reachable. */
@@ -397,7 +450,7 @@ async function runMock(current: string, opts: Options, extra: EnvEdit[]): Promis
   const edits = [...mockConnectionEdits(), ...extra];
   if (!(await writeEnv(current, edits, opts))) return;
   const containerised = await apiContainerRunning();
-  await restartApi(containerised, opts);
+  await restartServices(containerised, opts);
   console.log(
     `\n  ${dim("Then run a scan from the UI's empty state, or `npm run seed && npm run scan`.")}`,
   );
@@ -427,7 +480,7 @@ async function runDisconnect(current: string, opts: Options): Promise<void> {
   }
   console.log(`  ${green("✓")} delete requested (CloudFormation completes it in the background)`);
   await writeEnv(loadEnv(), mockConnectionEdits(), opts);
-  await restartApi(await apiContainerRunning(), opts);
+  await restartServices(await apiContainerRunning(), opts);
 }
 
 async function runReal(current: string, opts: Options, extra: EnvEdit[]): Promise<void> {
@@ -604,14 +657,16 @@ async function runReal(current: string, opts: Options, extra: EnvEdit[]): Promis
   ];
   if (containerised) {
     console.log(
-      dim("\n    The API is in a container, so .env will also mount your ~/.aws into it:"),
+      dim("\n    The API is in a container, so .env will also mount your ~/.aws into it"),
     );
+    console.log(dim("    and into the worker, which is the process that runs the scan:"));
     console.log(dim("    the credential chain finds it on this machine, a container has no such"));
     console.log(dim("    directory unless it is given one."));
   }
   if (!(await writeEnv(current, edits, opts))) return;
 
-  await restartApi(containerised, opts);
+  await restartServices(containerised, opts);
+  if (containerised) await checkWorkerProfile();
   await verifyConnection(containerised);
 }
 
@@ -682,7 +737,8 @@ try {
      */
     console.log(`\n${bold("Agent key")}`);
     if (await writeEnv(current, extra, opts)) {
-      await restartApi(await apiContainerRunning(), opts);
+      // Chat runs in the api; the worker has no use for this key.
+      await restartServices(await apiContainerRunning(), opts, "api");
     }
   } else {
     console.log(`\n${bold("Which AWS account?")}`);

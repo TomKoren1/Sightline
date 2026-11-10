@@ -1,4 +1,4 @@
-# Gives the containerised API the host's AWS profile, for AWS_MODE=real.
+# Gives the containerised API and worker the host's AWS profile, for AWS_MODE=real.
 #
 #   docker compose -f docker-compose.yml -f deploy/compose.aws-profile.yml \
 #     --profile app up -d
@@ -39,4 +39,16 @@ services:
       # SDK resolves `~` from HOME, which is /home/node - and could not have
       # been, since /root is 0700 and node cannot traverse it. That shipped, and
       # the failure read as "no profile was mounted".
+      - ${AWS_PROFILE_DIR:-${HOME:-${USERPROFILE}}/.aws}:/home/node/.aws:ro
+
+  # The scan runs here, not in the api: with SCAN_WORKER=separate the api only
+  # enqueues, and this is the process that calls sts:AssumeRole. Mounting into
+  # the api alone made the connection test pass and every scan fail with "Could
+  # not load credentials from any providers" - a wiring fault wearing the
+  # costume of a broken role. Same image and same `USER node`, so same target.
+  #
+  # `seed` is deliberately absent: it writes to whatever account its credentials
+  # resolve to, and it has no business reaching a real one.
+  worker:
+    volumes:
       - ${AWS_PROFILE_DIR:-${HOME:-${USERPROFILE}}/.aws}:/home/node/.aws:ro

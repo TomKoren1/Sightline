@@ -15,6 +15,8 @@ import { existsSync, readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 
+import { RECREATE_COMMAND } from "@sightline/shared";
+
 import { inContainer } from "../aws/settings.js";
 
 const root = fileURLToPath(new URL("../../../../", import.meta.url));
@@ -42,7 +44,14 @@ describe("the guide renders one restart instruction, matched to the runtime", ()
   });
 
   it("gives the recreate command for a container, and warns off restart", () => {
-    expect(guide).toContain("docker compose --profile app up -d api");
+    // Via the shared constant, so the guide, the setup script and the API's own
+    // diagnosis cannot drift. Naming `api` alone is the bug this pins: the
+    // worker is the process that assumes the role and runs the scan.
+    expect(guide, "the copyable command no longer comes from the constant").toContain(
+      "c.containerised ? RECREATE_COMMAND",
+    );
+    expect(guide, "the prose no longer renders the constant").toContain("{RECREATE_COMMAND}");
+    expect(RECREATE_COMMAND, "the command must name the process that scans").toContain("worker");
     // The trap is the whole reason this branch exists.
     expect(guide).toMatch(/docker compose restart api/);
   });

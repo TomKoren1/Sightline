@@ -15,7 +15,12 @@
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { useState } from "react";
 
-import { LEGACY_SINGLE_TENANT, formatDeployCommand, readOnlyRoleArn } from "@sightline/shared";
+import {
+  LEGACY_SINGLE_TENANT,
+  RECREATE_COMMAND,
+  formatDeployCommand,
+  readOnlyRoleArn,
+} from "@sightline/shared";
 
 import { api, type Connection, type ConnectionTest } from "../api.js";
 import { Copyable } from "./Copyable.js";
@@ -188,9 +193,7 @@ export function ConnectionGuide() {
     ...(c.containerised ? CONTAINER_PROFILE_MOUNT : []),
   ].join("\n");
 
-  const restartCommand = c.containerised
-    ? "docker compose --profile app up -d api"
-    : "restart npm run dev:api";
+  const restartCommand = c.containerised ? RECREATE_COMMAND : "restart npm run dev:api";
 
   return (
     <div className="space-y-4">
@@ -444,7 +447,7 @@ export function ConnectionGuide() {
           </Step>
 
           {/* ---- 4. restart ---------------------------------------------- */}
-          <Step n={4} title={c.containerised ? "Recreate the API" : "Restart the API"}>
+          <Step n={4} title={c.containerised ? "Recreate the containers" : "Restart the API"}>
             <p className="text-[11px] leading-relaxed text-ink-400">
               Configuration is read once at startup, so an edit with no restart changes nothing.
             </p>
@@ -456,8 +459,8 @@ export function ConnectionGuide() {
               </p>
             ) : (
               <p className="text-[10px] leading-relaxed text-ink-400">
-                In the containerised setup it is <code>docker compose --profile app up -d api</code>{" "}
-                instead — recreated, not restarted.
+                In the containerised setup it is <code>{RECREATE_COMMAND}</code> instead —
+                recreated, not restarted. Both: the worker is what runs the scan.
               </p>
             )}
           </Step>
