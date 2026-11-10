@@ -380,11 +380,16 @@ export const onboardingPlan = z
     connection: connectionSummary,
     externalId: z.string(),
     scannerPrincipalArn: z.string(),
-    templateUrl: z.string(),
+    /**
+     * Optional because a self-hosted clone has no *published* template, only
+     * the copy in its checkout. `cliCommand` deploys that copy and is always
+     * present; everything derived from a URL is absent together.
+     */
+    templateUrl: z.string().optional(),
     templateVersion: z.string(),
-    launchUrl: z.string(),
+    launchUrl: z.string().optional(),
     cliCommand: z.string(),
-    terraform: z.string(),
+    terraform: z.string().optional(),
     roleArnPattern: z.string(),
     /** For an organization: the StackSet that puts the role in every member. */
     stackSet: z.string().optional(),
