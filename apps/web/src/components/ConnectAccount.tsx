@@ -181,22 +181,38 @@ export function ConnectAccount({ onConnected }: { onConnected: (id: string) => v
     );
   }
 
+  /**
+   * The routes this deployment can actually offer.
+   *
+   * A self-hosted clone has no published template, so the one-click link and
+   * the Terraform snippet point at nothing - only the CLI command, which
+   * deploys the template from the checkout, works. Rendering all three and
+   * letting two fail is how "Connect another account" became a dead end.
+   */
+  const offered = (
+    [
+      ["console", "One click"],
+      ["cli", "AWS CLI"],
+      ["terraform", "Terraform"],
+    ] as const
+  ).filter(([key]) => key === "cli" || plan.data.templateUrl);
+
+  // Falls back rather than trusting the selection: `console` is the initial
+  // state and is the tab a clone does not have.
+  const shown: Alternative = offered.some(([key]) => key === alternative)
+    ? alternative
+    : (offered[0]?.[0] ?? "cli");
+
   // --- steps 2 and 3: deploy, then tell us the account id ------------------
   return (
     <div className="flex flex-col gap-4">
       <div className="flex gap-1 border-b border-ink-800 text-[11px]">
-        {(
-          [
-            ["console", "One click"],
-            ["cli", "AWS CLI"],
-            ["terraform", "Terraform"],
-          ] as const
-        ).map(([key, title]) => (
+        {offered.map(([key, title]) => (
           <button
             key={key}
             onClick={() => setAlternative(key)}
             className={`-mb-px border-b px-2 py-1.5 transition ${
-              alternative === key
+              shown === key
                 ? "border-accent text-ink-100"
                 : "border-transparent text-ink-400 hover:text-ink-100"
             }`}
@@ -206,7 +222,7 @@ export function ConnectAccount({ onConnected }: { onConnected: (id: string) => v
         ))}
       </div>
 
-      {alternative === "console" && (
+      {shown === "console" && plan.data.launchUrl && (
         <div className="flex flex-col gap-2">
           <a
             href={plan.data.launchUrl}
@@ -225,16 +241,18 @@ export function ConnectAccount({ onConnected }: { onConnected: (id: string) => v
         </div>
       )}
 
-      {alternative === "cli" && (
+      {shown === "cli" && (
         <div className="flex flex-col gap-1.5">
           <p className="text-[11px] text-ink-400">
-            Runs anywhere the AWS CLI is configured, including CloudShell.
+            {plan.data.templateUrl
+              ? "Runs anywhere the AWS CLI is configured, including CloudShell."
+              : "Run this from the repository, with a CLI profile for the account you are adding: it deploys the template from your own checkout."}
           </p>
           <Copyable value={plan.data.cliCommand} />
         </div>
       )}
 
-      {alternative === "terraform" && (
+      {shown === "terraform" && plan.data.terraform && (
         <div className="flex flex-col gap-1.5">
           <p className="text-[11px] text-ink-400">The same stack, for an estate managed as code.</p>
           <Copyable value={plan.data.terraform} />

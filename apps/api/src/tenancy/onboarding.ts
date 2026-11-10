@@ -25,10 +25,10 @@ import {
   terraformSnippet,
 } from "@sightline/shared";
 
-import { cfg } from "../core/config.js";
+import { cfg, isHosted } from "../core/config.js";
 import { sourceCredentials } from "../aws/settings.js";
 import { assumablePrincipalArn } from "../aws/principal.js";
-import { getSession, resetSession } from "../aws/credentials.js";
+import { getSession, resetSession, scannerIdentityArn } from "../aws/credentials.js";
 import { diagnose, type Diagnosis } from "../aws/diagnose.js";
 import {
   externalIdFor,
@@ -62,13 +62,18 @@ export interface OnboardingPlan {
    */
   externalId: string;
   scannerPrincipalArn: string;
-  templateUrl: string;
+  /**
+   * Absent on a clone, which has no published template - only the copy in the
+   * checkout. Everything derived from a URL goes with it, so the screen offers
+   * what can actually be run rather than a link to nowhere.
+   */
+  templateUrl?: string;
   templateVersion: string;
-  /** The one-click link, parameters pre-filled. */
-  launchUrl: string;
+  /** The one-click link, parameters pre-filled. Needs a published template. */
+  launchUrl?: string;
   /** For an estate where creating a stack from the console is not allowed. */
   cliCommand: string;
-  terraform: string;
+  terraform?: string;
   /** What the role ARN will be, once they tell us the account id. */
   roleArnPattern: string;
   /** For an organization: the StackSet that puts the role in every member. */
@@ -76,23 +81,36 @@ export interface OnboardingPlan {
 }
 
 /**
- * Configuration onboarding cannot be built without.
+ * What onboarding needs, and where a clone gets it instead.
  *
- * Hosted mode refuses to start without either of these, so reaching this in a
- * hosted deployment is impossible; a self-hosted operator who wants the link
- * gets a sentence saying what to set rather than a half-built screen.
+ * Hosted mode refuses to start without both, so reaching the throw there is
+ * impossible. A self-hosted clone has neither by default and used to get the
+ * same refusal, which is what made the UI's "Connect another account" lead
+ * nowhere: the principal is simply whoever this process authenticates as, and
+ * the template is in the checkout rather than published.
  */
-function published(): { scannerPrincipalArn: string; templateUrl: string } {
-  const scannerPrincipalArn = cfg.SCANNER_PRINCIPAL_ARN;
-  const templateUrl = cfg.ROLE_TEMPLATE_URL;
-  if (!scannerPrincipalArn || !templateUrl) {
+async function published(): Promise<{ scannerPrincipalArn: string; templateUrl: string | null }> {
+  const configured = cfg.SCANNER_PRINCIPAL_ARN;
+  const templateUrl = cfg.ROLE_TEMPLATE_URL ?? null;
+
+  if (isHosted() && (!configured || !templateUrl)) {
     throw new Error(
       "This deployment cannot generate a connection link: set SCANNER_PRINCIPAL_ARN (the " +
         "principal every customer's trust policy will name) and ROLE_TEMPLATE_URL (where the " +
         "role template is published).",
     );
   }
-  return { scannerPrincipalArn, templateUrl };
+  // Configured wins even self-hosted: an operator who named a principal meant
+  // it, and deriving one would quietly disagree with the stacks they deployed.
+  if (configured) return { scannerPrincipalArn: configured, templateUrl };
+
+  // Self-hosted by construction: hosted with no configured principal threw
+  // above, which is the precondition `scannerIdentityArn` documents.
+  const derived = await scannerIdentityArn();
+  if (!derived.ok) {
+    throw new Error(`This deployment cannot name a principal to trust: ${derived.reason}`);
+  }
+  return { scannerPrincipalArn: derived.principalArn, templateUrl };
 }
 
 export async function onboardingPlan(scope: Scope): Promise<OnboardingPlan> {
@@ -102,7 +120,7 @@ export async function onboardingPlan(scope: Scope): Promise<OnboardingPlan> {
     throw new Error("The demo account needs no connecting - it is already there.");
   }
 
-  const { scannerPrincipalArn, templateUrl } = published();
+  const { scannerPrincipalArn, templateUrl } = await published();
   const externalId = await externalIdFor(scope);
 
   /**
@@ -125,53 +143,67 @@ export async function onboardingPlan(scope: Scope): Promise<OnboardingPlan> {
   const principal = resolved.principalArn;
   const region = cfg.AWS_REGION;
 
+  /**
+   * Everything a published template makes possible, omitted without one.
+   *
+   * `cliCommand` is deliberately outside this: it deploys `TEMPLATE_PATH` from
+   * the checkout, so it is the one route that works on a clone - and the only
+   * one the self-hosted screen can offer.
+   */
+  const fromTemplate = templateUrl
+    ? {
+        templateUrl,
+        /**
+         * All of these carry the tenant, so the role and stack they name are
+         * this tenant's own.
+         *
+         * Without it two tenants connecting one AWS account would name one
+         * role, and a role has one trust policy and therefore one ExternalId -
+         * so the second to deploy owned it and the first was refused
+         * permanently.
+         */
+        launchUrl: quickCreateUrl({
+          templateUrl,
+          scannerPrincipalArn: principal,
+          externalId,
+          region,
+          tenantId: scope.tenantId,
+        }),
+        terraform: terraformSnippet({
+          templateUrl,
+          scannerPrincipalArn: principal,
+          externalId,
+          tenantId: scope.tenantId,
+        }),
+        ...(connection.kind === "organization"
+          ? {
+              stackSet: stackSetCommands({
+                templateUrl,
+                scannerPrincipalArn: principal,
+                externalId,
+                region,
+                tenantId: scope.tenantId,
+              }),
+            }
+          : {}),
+      }
+    : {};
+
   return {
     connection,
     externalId,
     scannerPrincipalArn: principal,
-    templateUrl,
     templateVersion: TEMPLATE_VERSION,
-    /**
-     * All three carry the tenant, so the role and stack they name are this
-     * tenant's own.
-     *
-     * Without it two tenants connecting one AWS account would name one role,
-     * and a role has one trust policy and therefore one ExternalId - so the
-     * second to deploy owned it and the first was refused permanently.
-     */
-    launchUrl: quickCreateUrl({
-      templateUrl,
-      scannerPrincipalArn: principal,
-      externalId,
-      region,
-      tenantId: scope.tenantId,
-    }),
     cliCommand: formatDeployCommand({
       scannerPrincipalArn: principal,
       externalId,
       region,
       tenantId: scope.tenantId,
     }),
-    terraform: terraformSnippet({
-      templateUrl,
-      scannerPrincipalArn: principal,
-      externalId,
-      tenantId: scope.tenantId,
-    }),
     // Shown so the customer can see what we will derive, rather than being
     // asked to paste it.
     roleArnPattern: readOnlyRoleArn("<your account id>", scope.tenantId),
-    ...(connection.kind === "organization"
-      ? {
-          stackSet: stackSetCommands({
-            templateUrl,
-            scannerPrincipalArn: principal,
-            externalId,
-            region,
-            tenantId: scope.tenantId,
-          }),
-        }
-      : {}),
+    ...fromTemplate,
   };
 }
 

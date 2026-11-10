@@ -122,6 +122,33 @@ The mount is preferable to real keys in `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS
 it keeps long-lived credentials out of a file sitting next to the code, and it carries
 the SSO token cache, so `aws sso login` on the host works inside the container too.
 
+## A second account
+
+The account `.env` names is the deployment's own: `npm run setup` writes it, and
+running setup again against a different account **replaces** it rather than adding one.
+
+To add an account alongside it, use **Connect another account…** in the account menu.
+That form names the connection, shows the `aws cloudformation deploy` command to run
+with a CLI profile for the account being added, and then asks for the account id and
+tests the role. Each connection carries its own ExternalId and role, and the account
+menu switches between them.
+
+One prerequisite: a connection created this way stores its ExternalId encrypted, so
+`.env` needs a key.
+
+```bash
+SECRETS_LOCAL_KEY=$(openssl rand -base64 32)
+```
+
+Then `docker compose --profile app up -d api worker`. **Keep that value.** Every stored
+ExternalId is encrypted under it, so losing it means reconnecting the accounts added
+this way — the `.env` account is unaffected, since its ExternalId is in `.env` already.
+The form says so if the key is missing rather than failing obscurely.
+
+There is no quick-create link or Terraform snippet here, only the CLI command: those are
+built from a _published_ template URL, and a clone has the template in its own checkout
+instead.
+
 ## In the hosted product
 
 **Connecting an account** is one link and one field. A quick-create CloudFormation link

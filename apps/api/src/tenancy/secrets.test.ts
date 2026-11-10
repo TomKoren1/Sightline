@@ -99,12 +99,19 @@ describe("secrets at rest", () => {
     delete process.env["SECRETS_LOCAL_KEY"];
     vi.resetModules();
     const { encryptSecret } = await load();
-    // The rule is enforced where it bites - here, and in the startup
-    // invariants for hosted mode. There is deliberately no exported
-    // "is the configuration OK?" predicate: on this project's previous
-    // attempt that function existed, read well, and was called by nothing
-    // but its own tests.
-    await expect(encryptSecret("value")).rejects.toThrow(/AWS_KMS_KEY_ID.*SECRETS_LOCAL_KEY/s);
+    /**
+     * The rule is enforced where it bites - here, and in the startup
+     * invariants for hosted mode. There is deliberately no exported "is the
+     * configuration OK?" predicate: on this project's previous attempt that
+     * function existed, read well, and was called by nothing but its own
+     * tests.
+     *
+     * Both keys, in no particular order. Self-hosted is the reader who hits
+     * this, so its variable leads the message; naming only one would leave
+     * half the audience with nothing to set.
+     */
+    await expect(encryptSecret("value")).rejects.toThrow(/AWS_KMS_KEY_ID/);
+    await expect(encryptSecret("value")).rejects.toThrow(/SECRETS_LOCAL_KEY/);
   });
 
   describe("masking", () => {

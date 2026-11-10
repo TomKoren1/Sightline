@@ -315,23 +315,35 @@ export function App() {
           onClose={() => setModal(null)}
         >
           {/*
-            `ConnectionGuide` describes the one connection a *process* has and
-            reads endpoints a hosted deployment refuses by design, so hosted
-            gets the per-connection flow instead. A self-hosted clone keeps the
-            guide: its connection genuinely is a property of the deployment, and
-            the guide explains the `.env` values that describe it.
+            Both modes get the per-connection flow, because both can hold more
+            than one account: a clone's backend has been multi-connection all
+            along - `resolveScope` honours an explicit connection, and each row
+            carries its own role and ExternalId - while this modal offered a
+            clone only the `.env` guide. The account menu said "Connect another
+            account" and led to instructions that *replace* the one account
+            there is, which is the complaint this answers.
+
+            `ConnectionGuide` stays, folded away: the `.env` connection
+            genuinely is a property of the deployment, and repointing it is
+            still a thing people do.
           */}
-          {me.data?.hosted ? (
-            <ConnectAccount
-              onConnected={(id) => {
-                // The new connection is not in `me` yet, and it is almost
-                // certainly what they now want to be looking at.
-                void queryClient.invalidateQueries({ queryKey: ["me"] });
-                switchConnection(id);
-              }}
-            />
-          ) : (
-            <ConnectionGuide />
+          <ConnectAccount
+            onConnected={(id) => {
+              // The new connection is not in `me` yet, and it is almost
+              // certainly what they now want to be looking at.
+              void queryClient.invalidateQueries({ queryKey: ["me"] });
+              switchConnection(id);
+            }}
+          />
+          {!me.data?.hosted && (
+            <details className="mt-4 border-t border-ink-800 pt-3">
+              <summary className="cursor-pointer text-[11px] text-ink-400 hover:text-ink-100">
+                Or change the account configured in .env
+              </summary>
+              <div className="mt-3">
+                <ConnectionGuide />
+              </div>
+            </details>
           )}
         </Modal>
       )}

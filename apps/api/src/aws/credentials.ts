@@ -18,11 +18,12 @@
  * stampede protection that used to be global is kept, per key.
  */
 
-import { STSClient, AssumeRoleCommand } from "@aws-sdk/client-sts";
+import { STSClient, AssumeRoleCommand, GetCallerIdentityCommand } from "@aws-sdk/client-sts";
 import type { AwsCredentialIdentity } from "@aws-sdk/types";
 
 import { cfg } from "../core/config.js";
 import { sourceCredentials, sourceIdentity } from "./settings.js";
+import { assumablePrincipalArn, type PrincipalResolution } from "./principal.js";
 import type { ScanTarget } from "../core/scanTarget.js";
 
 /**
@@ -119,6 +120,54 @@ async function assume(target: ScanTarget): Promise<AssumedSession> {
     // moto does not always echo an expiry; assume the SDK maximum.
     expiresAt: creds.Expiration ?? new Date(Date.now() + 3600_000),
   };
+}
+
+/**
+ * Who this process authenticates as, in a form a trust policy can name.
+ *
+ * The principal a customer's role must trust. Hosted deployments configure it
+ * as `SCANNER_PRINCIPAL_ARN`, because the api and the worker there hold
+ * *different* identities on purpose - `deploy/k8s/base/app.yaml` gives the
+ * scanner secret to the worker alone. A self-hosted clone has one topology,
+ * docker-compose, where both read the same `.env` and the same mounted
+ * `~/.aws`, so either process answers the same thing and this is safe to ask
+ * here. That precondition is why callers must restrict it to self-hosted.
+ *
+ * `endpoint` exists only so a test can answer this. `config.ts` deliberately
+ * deletes `AWS_ENDPOINT_URL_STS` from the environment - an SDK-wide override
+ * would redirect `sts:AssumeRole` too - so there is no other way to point the
+ * client at a stand-in. Production passes nothing.
+ */
+let identityCache: string | null = null;
+
+export async function scannerIdentityArn(endpoint?: string): Promise<PrincipalResolution> {
+  if (identityCache) return assumablePrincipalArn(identityCache);
+  let arn: string | undefined;
+  try {
+    const sts = new STSClient({
+      region: cfg.AWS_REGION,
+      credentials: sourceCredentials(false),
+      ...(endpoint ? { endpoint } : {}),
+    });
+    arn = (await sts.send(new GetCallerIdentityCommand({}))).Arn;
+  } catch (err) {
+    // Only a success is cached: an operator who runs `aws sso login` after
+    // seeing this should get a different answer without restarting.
+    return {
+      ok: false,
+      reason:
+        "no AWS credentials were found, so there is no principal for the trust policy to name. " +
+        `Mount a profile or set SCANNER_PRINCIPAL_ARN. (${(err as Error).message})`,
+    };
+  }
+  if (!arn) return { ok: false, reason: "sts:GetCallerIdentity returned no ARN" };
+  identityCache = arn;
+  return assumablePrincipalArn(arn);
+}
+
+/** Forget the cached identity, for tests and for `resetSession`'s callers. */
+export function resetScannerIdentity(): void {
+  identityCache = null;
 }
 
 /**

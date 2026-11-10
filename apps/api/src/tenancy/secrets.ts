@@ -46,8 +46,11 @@ function passphrase(): string {
   const value = cfg.SECRETS_LOCAL_KEY;
   if (!value) {
     throw new Error(
-      "No secret encryption is configured. Set AWS_KMS_KEY_ID (hosted) or " +
-        "SECRETS_LOCAL_KEY (self-hosted) before storing a tenant secret.",
+      "No secret encryption is configured, so this account's ExternalId cannot be stored. " +
+        "Set SECRETS_LOCAL_KEY in .env (self-hosted) or AWS_KMS_KEY_ID (hosted) and recreate " +
+        "the containers. Generate one with `openssl rand -base64 32`, and keep it: every " +
+        "stored ExternalId is encrypted under it, so losing it means reconnecting those " +
+        "accounts.",
     );
   }
   return value;

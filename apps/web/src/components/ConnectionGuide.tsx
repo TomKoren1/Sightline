@@ -253,6 +253,11 @@ export function ConnectionGuide() {
           <code>npm run setup -- --dry-run</code> prints the plan and changes nothing;{" "}
           <code>--disconnect</code> deletes the role again.
         </p>
+        <p className="mt-1 text-[10px] leading-relaxed text-warn">
+          This describes the one account <code>.env</code> names: running it against a different
+          account <strong>replaces</strong> that one rather than adding another. To add an account,
+          use the form above.
+        </p>
       </div>
 
       {/* ---- the long way, for anyone who would rather see every step --- */}
