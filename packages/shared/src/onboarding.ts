@@ -345,6 +345,7 @@ export const OTHER_MANAGED_ENV_KEYS = [
   "ANTHROPIC_API_KEY",
   "COMPOSE_FILE",
   "COMPOSE_PATH_SEPARATOR",
+  "SECRETS_LOCAL_KEY",
 ] as const;
 
 /**
