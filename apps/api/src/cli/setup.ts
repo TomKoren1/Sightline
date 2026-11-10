@@ -47,6 +47,7 @@ import {
   anthropicKeyEdits,
   chooseExternalId,
   composeMountEdits,
+  secretsKeyEdits,
   maskForDisplay,
   mockConnectionEdits,
   realConnectionEdits,
@@ -554,6 +555,23 @@ async function runReal(current: string, opts: Options, extra: EnvEdit[]): Promis
   );
   console.log(dim(`\n    Reviewable first: ${bold("cloudformation/readonly-role.yaml")}`));
 
+  /**
+   * The whole edit set, built once.
+   *
+   * `--dry-run` previewed a shorter list than the real run writes - it omitted
+   * the compose mount lines, and would have omitted the secrets key - so the
+   * preview described a different operation from the one it was previewing.
+   * Generated once rather than per call, because the key is random: a preview
+   * showing a value other than the one written would be worse than no preview.
+   */
+  const keyEdits = secretsKeyEdits(current);
+  const envEdits = (): EnvEdit[] => [
+    ...realConnectionEdits({ accountId: identity.account, region, externalId, scanRegions }),
+    ...extra,
+    ...(containerised ? composeMountEdits() : []),
+    ...keyEdits,
+  ];
+
   if (opts.dryRun) {
     console.log(`\n${bold("  The command this would run")}`);
     console.log(
@@ -570,11 +588,7 @@ async function runReal(current: string, opts: Options, extra: EnvEdit[]): Promis
           .join("\n"),
       ),
     );
-    const edits = [
-      ...realConnectionEdits({ accountId: identity.account, region, externalId, scanRegions }),
-      ...extra,
-    ];
-    await writeEnv(current, edits, opts);
+    await writeEnv(current, envEdits(), opts);
     console.log(`\n  ${dim("--dry-run: no AWS calls that change anything were made")}`);
     return;
   }
@@ -646,15 +660,10 @@ async function runReal(current: string, opts: Options, extra: EnvEdit[]): Promis
    * One write, one confirmation, one backup.
    *
    * The mount lines were originally written separately, after the connection - so
-   * a single setup asked twice and left two backup files. They are folded in here
-   * instead, which means deciding whether the API is containerised *before*
-   * writing rather than after.
+   * a single setup asked twice and left two backup files. They are folded into
+   * `envEdits` instead, which means deciding whether the API is containerised
+   * *before* writing rather than after.
    */
-  const edits = [
-    ...realConnectionEdits({ accountId: identity.account, region, externalId, scanRegions }),
-    ...extra,
-    ...(containerised ? composeMountEdits() : []),
-  ];
   if (containerised) {
     console.log(
       dim("\n    The API is in a container, so .env will also mount your ~/.aws into it"),
@@ -663,7 +672,19 @@ async function runReal(current: string, opts: Options, extra: EnvEdit[]): Promis
     console.log(dim("    the credential chain finds it on this machine, a container has no such"));
     console.log(dim("    directory unless it is given one."));
   }
-  if (!(await writeEnv(current, edits, opts))) return;
+  if (keyEdits.length > 0) {
+    /**
+     * Said plainly, because it is the one value here that cannot be
+     * regenerated. The account above is unaffected - its ExternalId is in
+     * `.env` in plain sight - but any account added later through the UI holds
+     * one encrypted under this.
+     */
+    console.log(dim("\n    A SECRETS_LOCAL_KEY will also be generated, which is what lets you"));
+    console.log(dim("    add further accounts from the UI later. Keep it: the ExternalId of"));
+    console.log(dim("    every account added that way is encrypted under it, so losing it"));
+    console.log(dim("    means reconnecting them."));
+  }
+  if (!(await writeEnv(current, envEdits(), opts))) return;
 
   await restartServices(containerised, opts);
   if (containerised) await checkWorkerProfile();

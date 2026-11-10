@@ -21,6 +21,7 @@ import {
   mockConnectionEdits,
   PLACEHOLDER_EXTERNAL_ID,
   realConnectionEdits,
+  secretsKeyEdits,
   undeclaredEdits,
   WRITABLE_KEYS,
 } from "./plan.js";
@@ -189,5 +190,45 @@ describe("the writable allow-list", () => {
     expect([...WRITABLE_KEYS].sort()).toEqual(
       [...CONNECTION_ENV_KEYS, ...OTHER_MANAGED_ENV_KEYS].sort(),
     );
+  });
+});
+
+/**
+ * The key that lets further accounts be connected from the UI.
+ *
+ * One property matters more than the rest: it is **never** rotated. Every
+ * ExternalId stored through the form is encrypted under this value, so a second
+ * run that generated a new one would strand every account added with the old.
+ */
+describe("the local secrets key", () => {
+  it("is generated when there is nothing to encrypt with", () => {
+    const [edit, ...rest] = secretsKeyEdits("AWS_MODE=real\n");
+    expect(rest).toEqual([]);
+    expect(edit?.key).toBe("SECRETS_LOCAL_KEY");
+    // 32 bytes of base64. Length rather than the value: it is random.
+    expect(edit?.value).toMatch(/^[A-Za-z0-9+/]{43}=$/);
+  });
+
+  it("never replaces one that already exists", () => {
+    expect(secretsKeyEdits("SECRETS_LOCAL_KEY=already-chosen\n")).toEqual([]);
+  });
+
+  it("treats an empty assignment as nothing, because that is what it is", () => {
+    // `.env.example` ships `# SECRETS_LOCAL_KEY=`, and an uncommented-but-empty
+    // line would otherwise look like a key worth preserving.
+    expect(secretsKeyEdits("SECRETS_LOCAL_KEY=\n")).toHaveLength(1);
+  });
+
+  it("writes nothing when KMS is doing the encrypting", () => {
+    // Hosted deployments hold the key in KMS; a local passphrase beside it
+    // would be a second backend nothing reads.
+    expect(secretsKeyEdits("AWS_KMS_KEY_ID=arn:aws:kms:us-east-1:1:key/x\n")).toEqual([]);
+  });
+
+  it("is declared, and is never printed", () => {
+    expect(undeclaredEdits(secretsKeyEdits(""))).toEqual([]);
+    const masked = maskForDisplay("SECRETS_LOCAL_KEY", "a".repeat(44));
+    expect(masked).not.toContain("aaaaaaaaaaaa");
+    expect(masked).toContain("•");
   });
 });
