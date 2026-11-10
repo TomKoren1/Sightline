@@ -338,6 +338,11 @@ async function restartApi(containerised: boolean, opts: Options): Promise<void> 
       timeout: 300_000,
     });
     console.log(`  ${green("✓")} API recreated`);
+    // Deliberately not `--build`: this step exists to re-read `.env`, and
+    // rebuilding the image would turn a configuration prompt into a multi-minute
+    // build for every operator who never touched the source. The people who do
+    // touch it are the ones who need telling.
+    console.log(dim("    (the existing image is reused - after a code change, add `--build`)"));
   } catch (err) {
     const e = err as { stderr?: string; message?: string };
     console.log(`  ${red("✗")} could not recreate it: ${(e.stderr || e.message || "").trim()}`);

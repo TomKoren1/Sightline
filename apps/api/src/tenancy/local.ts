@@ -11,7 +11,7 @@
  * the CLIs can address a connection without first looking one up.
  */
 
-import { and, eq, ne } from "drizzle-orm";
+import { and, eq, isNull, ne, or } from "drizzle-orm";
 
 import { cfg, isHosted } from "../core/config.js";
 import { configuredMode, targetRoleProblem } from "../aws/settings.js";
@@ -116,8 +116,9 @@ export async function ensureLocalTenant(): Promise<void> {
     .onConflictDoNothing();
 
   /**
-   * Keep the role ARN in step with `.env`, because editing it there is how a
-   * self-hosted operator repoints the connection.
+   * Keep the role ARN in step with `.env`: editing it there is how a
+   * self-hosted operator repoints the connection, and it is how the null
+   * `role_arn` migration 0001 leaves behind is finally filled.
    *
    * A changed ARN also invalidates the previous verification and clears the
    * pinned account: the connection is unproven again until it is tested, and
@@ -137,7 +138,10 @@ export async function ensureLocalTenant(): Promise<void> {
     .where(
       and(
         eq(connections.id, LOCAL_REAL_CONNECTION_ID),
-        ne(connections.roleArn, cfg.AWS_TARGET_ROLE_ARN),
+        // `IS DISTINCT FROM`, spelled out: `<>` alone never matches a null
+        // `role_arn`, so the row the migration leaves unfilled was the one
+        // row this statement could not see.
+        or(isNull(connections.roleArn), ne(connections.roleArn, cfg.AWS_TARGET_ROLE_ARN)),
       ),
     );
 }
