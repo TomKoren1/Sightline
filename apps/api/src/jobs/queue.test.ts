@@ -30,7 +30,7 @@ import { pool, system } from "../db/postgres.js";
 import { connections, scanJobs, tenants } from "../db/schema.js";
 import { asConnectionId, asTenantId } from "../core/ids.js";
 import type { Scope } from "../core/scope.js";
-import { lockQueueForTest } from "./queueTestLock.js";
+import { lockQueueForTest, QUEUE_LOCK_TIMEOUT_MS } from "./queueTestLock.js";
 import {
   cancelQueuedJob,
   claimNextJob,
@@ -96,7 +96,7 @@ beforeAll(async () => {
       externalIdSource: "demo",
     });
   }
-});
+}, QUEUE_LOCK_TIMEOUT_MS);
 
 afterAll(async () => {
   if (available) {

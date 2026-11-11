@@ -32,6 +32,21 @@ const ignore = (): void => undefined;
 const QUEUE_TEST_LOCK = 0x51_4e_45_55; // "QNEU"
 
 /**
+ * How long a hook may wait for the lock.
+ *
+ * Vitest's default `hookTimeout` is 10s, and the holder's whole suite runs
+ * before the lock comes back: the waiter then fails in `beforeAll` with "Hook
+ * timed out in 10000ms" while nothing is wrong. `testTimeout` is already
+ * 30s in `vitest.config.ts`, so one holder can legitimately occupy the lock
+ * for minutes, and CI stays green only because its runners are fast.
+ *
+ * Generous on purpose: the release is in `afterAll`, so the only way to reach
+ * this is a holder that has genuinely hung, and failing fast on a wait that is
+ * correct by design costs more than waiting on one that is not.
+ */
+export const QUEUE_LOCK_TIMEOUT_MS = 120_000;
+
+/**
  * Take the lock, returning the release.
  *
  * Returns a no-op release when the database is unreachable, so a suite that

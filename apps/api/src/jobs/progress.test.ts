@@ -36,7 +36,7 @@ import { connections, scanJobs, scanRuns, scanUnits, tenants } from "../db/schem
 import { asConnectionId, asJobId, asTenantId } from "../core/ids.js";
 import type { Scope } from "../core/scope.js";
 import { streamScanEvents } from "./progress.js";
-import { lockQueueForTest } from "./queueTestLock.js";
+import { lockQueueForTest, QUEUE_LOCK_TIMEOUT_MS } from "./queueTestLock.js";
 
 const HAS_INFRA = !process.env["SKIP_INTEGRATION"];
 
@@ -79,7 +79,7 @@ beforeAll(async () => {
       externalIdSource: "demo",
     });
   }
-});
+}, QUEUE_LOCK_TIMEOUT_MS);
 
 afterAll(async () => {
   if (available) {
