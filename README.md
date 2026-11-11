@@ -114,6 +114,48 @@ tier-1 eval suite do not.
 
 ---
 
+## Connect your own AWS account
+
+Optional — the mock exercises the same code paths, and the scanner cannot tell it is
+talking to a mock. Two different things get called this, and they are not the same path.
+
+**Point this deployment at your own account.** `npm run setup` does all of it: it
+deploys the read-only role with the AWS CLI, writes the `.env` keys it names, and
+restarts whatever is running.
+
+```bash
+npm run setup
+```
+
+It prints the plan and asks before anything changes, backs `.env` up first, and
+rewrites **only** the keys it names. It never asks for an access key and cannot write
+one. Re-running is a no-op, and it reuses an ExternalId already in use rather than
+rotating a working secret.
+
+|                                       |                                                 |
+| ------------------------------------- | ----------------------------------------------- |
+| `npm run setup -- --dry-run`          | show the plan, change nothing                   |
+| `npm run setup -- --profile work`     | use a named AWS CLI profile                     |
+| `npm run setup -- --region eu-west-1` | where to create the stack (default `us-east-1`) |
+| `npm run setup -- --disconnect`       | delete the role and return to the demo account  |
+| `npm run setup -- --mock`             | stay on the demo account                        |
+
+This path needs the AWS CLI — which is also what creates the role — and Node. The demo
+account above needs neither.
+
+**Add a second account alongside the first** from **Connect another account…** in the
+header's account switcher, which also moves between accounts at runtime without
+restarting or rewriting `.env`. Self-hosted, that needs two things the Docker-only demo
+never sets up: a `SECRETS_LOCAL_KEY` in `.env` to encrypt the connection's secret, and
+AWS credentials mounted into **both** the `api` and `worker` containers. Both are in
+[`docs/aws-account.md`](docs/aws-account.md) — see [A second account](docs/aws-account.md#a-second-account)
+and [Getting credentials into the container](docs/aws-account.md#getting-credentials-into-the-container).
+
+Before either, read [the three things that are easy to get wrong](docs/aws-account.md#three-things-that-are-easy-to-get-wrong):
+each of them cost a real deployment.
+
+---
+
 ## What it answers
 
 Each of these needs reasoning rather than a field lookup, which is the point of
