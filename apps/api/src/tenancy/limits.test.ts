@@ -30,7 +30,7 @@ import { eq, sql } from "drizzle-orm";
 import { system } from "../db/postgres.js";
 import { connections, conversations, messages, scanJobs, scanRuns, tenants } from "../db/schema.js";
 import { asConnectionId, asTenantId } from "../core/ids.js";
-import { lockQueueForTest } from "../jobs/queueTestLock.js";
+import { lockQueueForTest, QUEUE_LOCK_TIMEOUT_MS } from "../jobs/queueTestLock.js";
 import type { Scope } from "../core/scope.js";
 
 const HAS_INFRA = !process.env["SKIP_INTEGRATION"];
@@ -73,7 +73,7 @@ beforeAll(async () => {
       externalIdSource: "demo",
     });
   }
-});
+}, QUEUE_LOCK_TIMEOUT_MS);
 
 afterAll(async () => {
   if (available) await system.delete(tenants).where(eq(tenants.id, tenantId));
