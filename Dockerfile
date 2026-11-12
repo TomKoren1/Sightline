@@ -125,7 +125,15 @@ FROM nginxinc/nginx-unprivileged:1.31.7-alpine@sha256:b5047b9b76845eac124358373c
 # new nginx image is cut (brotli-libs, CVE-2026-111497, did), and the release
 # scan fails on any fixable HIGH. Root for this step only.
 USER root
-RUN apk upgrade --no-cache
+# GIT_COMMIT is in the command so this layer's cache key changes every commit.
+# Without it the layer is reused from `cache-from` indefinitely - `--no-cache`
+# is apk's index cache, not Docker's - so the upgrade silently stops running
+# and the scan starts failing on a fix that is published but never applied.
+# libxslt (CVE-2026-87636, CVE-2026-9947) is what caught this. Within one
+# commit the layer still caches, which the scan and push builds depend on:
+# they must produce the same image.
+ARG GIT_COMMIT
+RUN echo "packages patched for ${GIT_COMMIT}" && apk upgrade --no-cache
 COPY deploy/nginx.conf /etc/nginx/conf.d/default.conf
 COPY --from=webbuild /app/apps/web/dist /usr/share/nginx/html
 USER 101
