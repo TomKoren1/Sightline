@@ -21,16 +21,22 @@ metadata:
   name: cloudflared
   labels: { app.kubernetes.io/name: cloudflared }
 spec:
-  # 0 until the named tunnel's token is sealed into sightline-tunnel. Today a
-  # hand-run quick tunnel (pod quicktunnel) serves the public URL; at 2 without
-  # the secret, both pods would sit in CreateContainerConfigError. Raise this in
-  # the same commit that adds the sealed token.
-  replicas: 0
+  replicas: 2
   selector:
     matchLabels: { app.kubernetes.io/name: cloudflared }
   template:
     metadata:
-      labels: { app.kubernetes.io/name: cloudflared }
+      # Both labels, spelled out. `web-from-tunnel-only` selects the tunnel on
+      # `name` *and* `part-of`, and with only the first every request through
+      # the tunnel is a 502 - it registers with Cloudflare, then cannot reach
+      # the web pods. The base's `labels` transformer adds `part-of` with
+      # includeSelectors, but it cannot reach this file: cloudflared.yaml is a
+      # resource of the prod overlay, not of the base it composes. Setting it
+      # here rather than adding a transformer to the overlay keeps the
+      # Deployment's selector alone, which is immutable once applied.
+      labels:
+        app.kubernetes.io/name: cloudflared
+        app.kubernetes.io/part-of: sightline
     spec:
       # The image's distroless `nonroot` user; cloudflared writes nothing.
       securityContext:
