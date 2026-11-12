@@ -33,8 +33,13 @@ declare -A KEYS=(
   [sightline-app]="DATABASE_URL DATABASE_URL_APP SESSION_SECRET PUBLIC_BASE_URL GOOGLE_CLIENT_ID GOOGLE_CLIENT_SECRET GITHUB_CLIENT_ID GITHUB_CLIENT_SECRET AWS_KMS_KEY_ID KMS_ACCESS_KEY_ID KMS_SECRET_ACCESS_KEY SCANNER_PRINCIPAL_ARN ROLE_TEMPLATE_URL ANTHROPIC_API_KEY"
   [sightline-db-owner]="DATABASE_URL"
   [sightline-scanner]="AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY"
+  # The named tunnel's token. Listed here so a re-seal keeps it: this script
+  # rewrites the whole file, so a secret missing from these tables is dropped
+  # from it, and cloudflared would come back to CreateContainerConfigError on
+  # the next sync.
+  [sightline-tunnel]="TUNNEL_TOKEN"
 )
-ORDER=(sightline-db sightline-app sightline-db-owner sightline-scanner)
+ORDER=(sightline-db sightline-app sightline-db-owner sightline-scanner sightline-tunnel)
 
 for tool in kubectl kubeseal jq; do
   command -v "$tool" >/dev/null || { echo "needs $tool on PATH" >&2; exit 1; }

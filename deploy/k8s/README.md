@@ -147,8 +147,11 @@ Two things about it that are easy to lose an hour to:
   permits ingress to the web pods only from pods matching its `from` selector -
   and `commonLabels` injects `app.kubernetes.io/part-of: sightline` into that
   selector as well, so it matches on _both_ labels. The deployed `cloudflared`
-  gets both from kustomize; a pod created by hand gets only what `--labels`
-  passes, which replaces the default `run=` label rather than adding to it. With
+  sets both itself, in its own pod template: the base's `labels` transformer
+  cannot reach `prod/cloudflared.yaml`, because that is a resource of the
+  overlay rather than of the base it composes. A pod created by hand gets only
+  what `--labels` passes, which replaces the default `run=` label rather than
+  adding to it. With
   one label the tunnel registers with Cloudflare and every request is a 502.
   Read the tunnel's own log first: k3s's policy controller REJECTs rather than
   drops, so a denial appears as `connect: connection refused`, which is how you
