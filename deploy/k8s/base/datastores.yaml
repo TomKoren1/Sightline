@@ -49,6 +49,25 @@ spec:
         # group-owned correctly on first creation - local-path hands over a
         # root-owned directory otherwise and initdb refuses to start in it.
         fsGroup: 999
+        # Unconfined because the node's containerd AppArmor profile denies
+        # signals between processes of the same container, and Postgres cannot
+        # start without them. Two separate places need them:
+        #
+        #   - the image's entrypoint drops root via `gosu`, a Go binary, and
+        #     Go applies setuid across every thread with SIGURG. Denied, the
+        #     runtime spins in sched_yield at 100% CPU and never execs
+        #     postgres - so the container logs nothing at all and the liveness
+        #     probe kills it at 160s, forever.
+        #   - Postgres 16 latches are SIGURG too, so recovery dies with
+        #     `could not signal for checkpoint: Permission denied`.
+        #
+        # Seen after this node rebooted onto kernel 7.0.0-43, whose AppArmor
+        # converts the container's `unconfined` change_profile into a *stacked*
+        # label (`cri-containerd.apparmor.d//&unconfined`); the profile's
+        # signal rules only match the unstacked peer, so same-container
+        # signals are denied. Revisit when the host kernel carries a fix:
+        # this is a host regression, not something Postgres needs.
+        appArmorProfile: { type: Unconfined }
       containers:
         - name: postgres
           image: postgres:16.15-alpine@sha256:0cefaabd882e42bcb2a2f3dc56d3ce4770560ba62fd7f197f1a2e008fd5731ab
